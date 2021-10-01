@@ -45,14 +45,6 @@ public protocol SHServerAPI {
     
     func getHiResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHEncryptedAsset], Error>) -> ())
     
-//    func getLowResAssets(excludingAssetIdentifiers: [String],
-//                         excludingLocalAssetIdentifiers localAssetIdsToExclude: [String],
-//                         completionHandler: @escaping (Swift.Result<[Asset], Error>) -> ())
-//
-//    func getHiResAssets(excludingAssetIdentifiers: [String],
-//                        excludingLocalAssetIdentifiers localAssetIdsToExclude: [String],
-//                        completionHandler: @escaping (Swift.Result<[Asset], Error>) -> ())
-    
     // MARK: Assets Write
     
     /// Store encrypted assets as data to the CDN.
