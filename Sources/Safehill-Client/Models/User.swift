@@ -72,10 +72,20 @@ public struct SHLocalUser: SHServerUser {
         try SHUserContext(user: self.shUser).decrypt(data, usingEncryptedSecret: encryptedSecret, receivedFrom: user)
     }
     
-    public mutating func regenerateKeys(savingToKeychainLabel keychainLabel: String) {
+    public mutating func regenerateKeys(savingToKeychainLabel keychainLabel: String) throws {
         // TODO: Should remove old?
         self.shUser = SHLocalCryptoUser()
-        try? self.shUser.saveToKeychain(withLabel: keychainLabel)
+        do {
+            try self.shUser.saveToKeychain(withLabel: keychainLabel)
+        } catch SHKeychain.Error.unexpectedStatus(let status) {
+            print(status)
+            if status == -25299 {
+                // keychain item exists
+                try self.shUser.updateKeysInKeychain(withLabel: keychainLabel)
+            } else {
+                throw SHKeychain.Error.unexpectedStatus(status)
+            }
+        }
     }
 }
 

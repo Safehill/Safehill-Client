@@ -53,13 +53,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 }
                 
                 // Call the delegate again using Assets, populating the data field this time
-                serverProxy.getLowResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) {
+                serverProxy.getHiResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) {
                     result in
                     switch result {
-                    case .success(let assets):
-                        if assets.count > 0 {
+                    case .success(let assetsDict):
+                        if assetsDict.count > 0 {
                             var decryptedAssets = [SHDecryptedAsset]()
-                            for asset in assets {
+                            for (_, asset) in assetsDict {
                                 do {
                                     let descriptorIdx = descriptors.firstIndex { $0.globalIdentifier == asset.globalIdentifier }
                                     let descriptor = descriptors[descriptorIdx!]

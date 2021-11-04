@@ -7,14 +7,20 @@
 
 import Foundation
 
+public protocol SHAssetUploaderDelegate {
+    func didUpload(itemWithLocalIdentifier: String, globalIdentifier: String)
+}
+
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let limit: Int?
     public let user: SHLocalUser
+    public let delegate: SHAssetUploaderDelegate?
     
-    public init(user: SHLocalUser, limitPerRun limit: Int? = nil) {
+    public init(user: SHLocalUser, delegate: SHAssetUploaderDelegate? = nil, limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
+        self.delegate = delegate
     }
     
     public var serverProxy: SHServerProxy {
