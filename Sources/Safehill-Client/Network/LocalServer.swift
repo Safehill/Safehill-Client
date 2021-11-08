@@ -177,7 +177,7 @@ struct LocalServer : SHServerAPI {
     
     private func getAssets(withIdentifiers assetIdentifiers: [String],
                            prefix: String,
-                           completionHandler: @escaping (Swift.Result<[SHEncryptedAsset], Error>) -> ()) {
+                           completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         let prefixCondition = KBGenericCondition(.beginsWith, value: `prefix` + "::")
         var assetCondition = KBGenericCondition(value: true)
         for assetIdentifier in assetIdentifiers {
@@ -192,10 +192,10 @@ struct LocalServer : SHServerAPI {
                     return
                 }
                 
-                var assets = [SHEncryptedAsset]()
+                var assets = [String: SHEncryptedAsset]()
                 for value in values {
                     if let asset = try? SHGenericEncryptedAsset.fromDict(value) {
-                        assets.append(asset)
+                        assets[asset.globalIdentifier] = asset
                     } else {
                         print("Unexpected value \(value)")
                     }
@@ -207,13 +207,13 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func getLowResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHEncryptedAsset], Error>) -> ()) {
+    func getLowResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         getAssets(withIdentifiers: assetIdentifiers,
                   prefix: "low",
                   completionHandler: completionHandler)
     }
     
-    func getHiResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHEncryptedAsset], Error>) -> ()) {
+    func getHiResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         getAssets(withIdentifiers: assetIdentifiers,
                   prefix: "hi",
                   completionHandler: completionHandler)
@@ -259,6 +259,38 @@ struct LocalServer : SHServerAPI {
             case .failure(let err):
                 completionHandler(.failure(err))
                 return
+            }
+        }
+    }
+    
+    func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
+        var condition = KBGenericCondition(value: true)
+        for globalIdentifier in globalIdentifiers {
+            condition = condition.or(
+                KBGenericCondition(.equal, value: "low::" + globalIdentifier)
+            ).or(
+                KBGenericCondition(.equal, value: "hi::" + globalIdentifier)
+            ).or(
+                KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
+            ).or(
+                KBGenericCondition(.beginsWith, value: "receiver::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
+            )
+        }
+        
+        assetStore.removeValues(forKeysMatching: condition) { result in
+            switch result {
+            case .failure(let err):
+                completionHandler(.failure(err))
+            case .success(let keysRemoved):
+                var removedGids = Set<String>()
+                for key in keysRemoved {
+                    if key.contains("low::") {
+                        removedGids.insert(String(key.suffix(key.count - 5)))
+                    } else if key.contains("hi::") {
+                        removedGids.insert(String(key.suffix(key.count - 4)))
+                    }
+                }
+                completionHandler(.success(Array(removedGids)))
             }
         }
     }

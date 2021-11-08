@@ -41,9 +41,9 @@ public protocol SHServerAPI {
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
     
-    func getLowResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHEncryptedAsset], Error>) -> ())
+    func getLowResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
     
-    func getHiResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHEncryptedAsset], Error>) -> ())
+    func getHiResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
     
     // MARK: Assets Write
     
@@ -55,4 +55,11 @@ public protocol SHServerAPI {
     func storeAsset(lowResAsset: SHEncryptedAsset,
                     hiResAsset: SHEncryptedAsset,
                     completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    
+    
+    /// Removes assets from the CDN
+    /// - Parameters:
+    ///   - withGlobalIdentifiers: the global identifier
+    ///   - completionHandler: the callback method. Returns the list of global identifiers removed
+    func deleteAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ())
 }
