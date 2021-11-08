@@ -14,7 +14,7 @@ public protocol SHServerUser : SHCryptoUser {
     var phoneNumber: String? { get }
 }
 
-public struct SHRemoteUser : SHServerUser {
+public struct SHRemoteUser : SHServerUser, Codable {
     public let identifier: String
     public let name: String?
     public let phoneNumber: String?
@@ -27,6 +27,17 @@ public struct SHRemoteUser : SHServerUser {
         self.publicSignatureData = publicSignatureData
         self.name = name
         self.phoneNumber = phoneNumber
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identifier = try container.decode(String.self, forKey: .identifier)
+        name = try container.decode(String.self, forKey: .name)
+        phoneNumber = try container.decode(String.self, forKey: .phoneNumber)
+        let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
+        publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
+        let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
+        publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
     }
 }
 

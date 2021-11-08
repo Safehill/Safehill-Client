@@ -1,24 +1,24 @@
 //
-//  AssetUploader.swift
-//  Safehill-Client
+//  AssetEncrypter.swift
+//  
 //
-//  Created by Gennaro Frazzingaro on 8/26/21.
+//  Created by Gennaro on 06/11/21.
 //
 
 import Foundation
 
-public protocol SHAssetUploaderDelegate {
-    func didStartUploading(itemWithLocalIdentifier: String, globalIdentifier: String)
-    func didUpload(itemWithLocalIdentifier: String, globalIdentifier: String)
+public protocol SHAssetEncrypterDelegate {
+    func didStartEncryption(itemWithLocalIdentifier: String)
+    func didEncrypt(itemWithLocalIdentifier: String, globalIdentifier: String)
 }
 
-open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let limit: Int?
     public let user: SHLocalUser
-    public let delegate: SHAssetUploaderDelegate?
+    public let delegate: SHAssetEncrypterDelegate?
     
-    public init(user: SHLocalUser, delegate: SHAssetUploaderDelegate? = nil, limitPerRun limit: Int? = nil) {
+    public init(user: SHLocalUser, delegate: SHAssetEncrypterDelegate? = nil, limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
         self.delegate = delegate
@@ -33,9 +33,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     }
 }
 
-public class SHAssetsUploadQueueProcessor : SHOperationQueueProcessor<SHUploadOperation> {
+public class SHAssetsEncrypterQueueProcessor : SHOperationQueueProcessor<SHEncryptionOperation> {
     /// Singleton (with private initializer)
-    public static var shared = SHAssetsUploadQueueProcessor(
+    public static var shared = SHAssetsEncrypterQueueProcessor(
         delayedStartInSeconds: 5,
         dispatchIntervalInSeconds: 10
     )

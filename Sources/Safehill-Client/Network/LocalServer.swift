@@ -27,7 +27,7 @@ struct LocalServer : SHServerAPI {
                 if let value = value as? [String: Any] {
                     guard value["publicKey"] as? Data == requestor.publicKeyData,
                           value["publicSignature"] as? Data == requestor.publicSignatureData else {
-                              completionHandler(.failure(SHServer5xxError.outdatedKeys))
+                              completionHandler(.failure(SHHTTPError.ServerError.outdatedKeys))
                               return
                           }
                     
@@ -58,11 +58,11 @@ struct LocalServer : SHServerAPI {
     }
     
     func sendAuthenticationCode(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHServer5xxError.notImplemented))
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func validateAuthenticationCode(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHServer5xxError.notImplemented))
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
@@ -176,9 +176,9 @@ struct LocalServer : SHServerAPI {
     }
     
     private func getAssets(withIdentifiers assetIdentifiers: [String],
-                           prefix: String,
+                           quality: String,
                            completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        let prefixCondition = KBGenericCondition(.beginsWith, value: `prefix` + "::")
+        let prefixCondition = KBGenericCondition(.beginsWith, value: quality + "::")
         var assetCondition = KBGenericCondition(value: true)
         for assetIdentifier in assetIdentifiers {
             assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
@@ -209,13 +209,13 @@ struct LocalServer : SHServerAPI {
     
     func getLowResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         getAssets(withIdentifiers: assetIdentifiers,
-                  prefix: "low",
+                  quality: "low",
                   completionHandler: completionHandler)
     }
     
     func getHiResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         getAssets(withIdentifiers: assetIdentifiers,
-                  prefix: "hi",
+                  quality: "hi",
                   completionHandler: completionHandler)
     }
     

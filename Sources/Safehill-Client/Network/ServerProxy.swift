@@ -7,65 +7,92 @@
 
 import Foundation
 
-public enum SHServer4xxError : Error {
-    case badRequest(String)
-    
-    public func toCode() -> Int {
-        return 400
-    }
-}
-
-public enum SHServer5xxError : Error {
-    case notImplemented
-    case outdatedKeys
-    
-    public func toCode() -> Int {
-        if self == .notImplemented {
-            return 501
+public enum SHHTTPError{
+    public enum ClientError : Error {
+        case badRequest(String)
+        
+        public func toCode() -> Int {
+            return 400
         }
-        return 500
+    }
+    
+    public enum ServerError : Error {
+        case generic(String)
+        case notImplemented
+        case outdatedKeys
+        case noData
+        
+        public func toCode() -> Int {
+            switch self {
+            case .notImplemented:
+                return 501
+            default:
+                return 500
+            }
+        }
+    }
+    
+    public enum TransportError : Error {
+        case generic(Error)
     }
 }
 
 public struct SHServerProxy {
     
-    let cachedApi: SHServerAPI
-    let serverApi: SHServerAPI
+    let localServer: LocalServer
+    let remoteServer: SHServerHTTPAPI
     
     public init(user: SHLocalUser) {
-        self.cachedApi = LocalServer(requestor: user)
-        self.serverApi = LocalServer(requestor: user)
+        self.localServer = LocalServer(requestor: user)
+        self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
     
     public func createUser(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
-        self.serverApi.createUser(completionHandler: completionHandler)
+        self.remoteServer.createUser { result in
+            switch result {
+            case .success(_):
+                self.localServer.createUser(completionHandler: completionHandler)
+            case .failure(let err):
+                // TODO: Remove this fallback when the server API is implemented
+                if case SHHTTPError.ServerError.notImplemented = err {
+                    self.localServer.createUser(completionHandler: completionHandler)
+                } else {
+                    completionHandler(.failure(err))
+                }
+            }
+        }
     }
     
     public func sendAuthenticationCode(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.serverApi.sendAuthenticationCode(completionHandler: completionHandler)
+        self.remoteServer.sendAuthenticationCode(completionHandler: completionHandler)
     }
     
     public func validateAuthenticationCode(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.serverApi.validateAuthenticationCode(completionHandler: completionHandler)
+        self.remoteServer.validateAuthenticationCode(completionHandler: completionHandler)
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
-        self.serverApi.getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
+        self.remoteServer.getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
+    }
+    
+    public func getLocalAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        self.localServer.getAssetDescriptors(completionHandler: completionHandler)
     }
     
     public func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         
         var serverDescriptors = [SHAssetDescriptor]()
         
-        self.serverApi.getAssetDescriptors { serverResult in
+        self.remoteServer.getAssetDescriptors { serverResult in
             switch serverResult {
             case .failure(let err):
-                completionHandler(.failure(err))
+                print("Failed to get descriptors from server. Using local descriptors\n \(err)")
+                self.getLocalAssetDescriptors(completionHandler: completionHandler)
             case .success(let descriptors):
                 serverDescriptors = descriptors
                 completionHandler(.success(descriptors))
                 
-                self.cachedApi.getAssetDescriptors { localResult in
+                self.getLocalAssetDescriptors { localResult in
                     if case .success(let descriptors) = localResult {
                         guard descriptors.count == serverDescriptors.count,
                               descriptors.map({ d in d.globalIdentifier }).elementsEqual(
@@ -86,7 +113,7 @@ public struct SHServerProxy {
             return
         }
         
-        self.cachedApi.getLowResAssets(withGlobalIdentifiers: assetIdentifiers) { localResult in
+        self.localServer.getLowResAssets(withGlobalIdentifiers: assetIdentifiers) { localResult in
             let localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
@@ -98,7 +125,7 @@ public struct SHServerProxy {
                 }
             }
          
-            self.serverApi.getLowResAssets(withGlobalIdentifiers: assetIdentifiersToFetch) { serverResult in
+            self.remoteServer.getLowResAssets(withGlobalIdentifiers: assetIdentifiersToFetch) { serverResult in
                 if assetIdentifiersToFetch == assetIdentifiers {
                     completionHandler(serverResult)
                     return
@@ -119,7 +146,7 @@ public struct SHServerProxy {
             return
         }
         
-        self.cachedApi.getHiResAssets(withGlobalIdentifiers: assetIdentifiers) { localResult in
+        self.localServer.getHiResAssets(withGlobalIdentifiers: assetIdentifiers) { localResult in
             let localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
@@ -131,7 +158,7 @@ public struct SHServerProxy {
                 }
             }
          
-            self.serverApi.getHiResAssets(withGlobalIdentifiers: assetIdentifiersToFetch) { serverResult in
+            self.remoteServer.getHiResAssets(withGlobalIdentifiers: assetIdentifiersToFetch) { serverResult in
                 if assetIdentifiersToFetch == assetIdentifiers {
                     completionHandler(serverResult)
                     return
@@ -146,19 +173,25 @@ public struct SHServerProxy {
         }
     }
     
+    public func storeAssetLocally(lowResAsset: SHEncryptedAsset,
+                                  hiResAsset: SHEncryptedAsset,
+                                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.localServer.storeAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset, completionHandler: completionHandler)
+    }
+    
     public func storeAsset(lowResAsset: SHEncryptedAsset,
                            hiResAsset: SHEncryptedAsset,
                            completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         guard lowResAsset.globalIdentifier == hiResAsset.globalIdentifier &&
                 lowResAsset.localIdentifier == hiResAsset.localIdentifier else {
-            completionHandler(.failure(SHServer4xxError.badRequest("identifiers for both low and hi resolution assets need to match")))
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("identifiers for both low and hi resolution assets need to match")))
             return
         }
         
-        self.serverApi.storeAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
+        self.remoteServer.storeAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
             completionHandler(result)
             if case .success() = result {
-                self.cachedApi.storeAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
+                self.storeAssetLocally(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
                     if case .failure(let err) = result {
                         print("Asset was stored to server but not in the local cache: \(err)")
                     }
@@ -168,10 +201,10 @@ public struct SHServerProxy {
     }
     
     public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
-        self.serverApi.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
+        self.remoteServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
             completionHandler(result)
             if case .success(_) = result {
-                self.cachedApi.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
+                self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
                     if case .failure(let err) = result {
                         print("Asset was deleted on server but not from the local cache: \(err)")
                     }

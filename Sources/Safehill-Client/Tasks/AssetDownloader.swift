@@ -7,12 +7,14 @@
 
 import Foundation
 import Safehill_Crypto
+import KnowledgeBase
 
 public protocol SHAssetDownloaderDelegate {
     func localIdentifiersInCache() -> [String]
     func globalIdentifiersInCache() -> [String]
     func handleAssetDescriptorResults(for: [SHAssetDescriptor])
-    func handleAssetResults(for: [SHDecryptedAsset])
+    func handleLowResAssetResults(for: [SHDecryptedAsset])
+    func handleHiResAssetResults(for: [SHDecryptedAsset])
     func completionHandler(_: Swift.Result<Void, Error>) -> Void
 }
 
@@ -24,6 +26,28 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     public init(user: SHLocalUser, delegate: SHAssetDownloaderDelegate) {
         self.user = user
         self.delegate = delegate
+    }
+    
+    private func decrypt(encryptedAssetsByIdentifier: [String: SHEncryptedAsset], descriptors: [SHAssetDescriptor]) -> [SHDecryptedAsset] {
+        var decryptedAssets = [SHDecryptedAsset]()
+        for (_, asset) in encryptedAssetsByIdentifier {
+            do {
+                let descriptorIdx = descriptors.firstIndex { $0.globalIdentifier == asset.globalIdentifier }
+                let descriptor = descriptors[descriptorIdx!]
+                let user: SHServerUser
+                if descriptor.sharedByUserIdentifier == self.user.identifier {
+                    user = self.user
+                } else {
+                    // TODO: Get the keys for this user, either from local cache or from server
+                    user = self.user
+                }
+                let decryptedAsset = try self.user.decrypt(asset, receivedFrom: user)
+                decryptedAssets.append(decryptedAsset)
+            } catch {
+                print("failed to decrypt asset: \(error)")
+            }
+        }
+        return decryptedAssets
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
@@ -52,38 +76,47 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     return
                 }
                 
-                // Call the delegate again using Assets, populating the data field this time
-                serverProxy.getHiResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) {
-                    result in
+                let dispatch = KBTimedDispatch()
+                
+                dispatch.group.enter()
+                serverProxy.getLowResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) { result in
                     switch result {
                     case .success(let assetsDict):
                         if assetsDict.count > 0 {
-                            var decryptedAssets = [SHDecryptedAsset]()
-                            for (_, asset) in assetsDict {
-                                do {
-                                    let descriptorIdx = descriptors.firstIndex { $0.globalIdentifier == asset.globalIdentifier }
-                                    let descriptor = descriptors[descriptorIdx!]
-                                    let user: SHServerUser
-                                    if descriptor.sharedByUserIdentifier == self.user.identifier {
-                                        user = self.user
-                                    } else {
-                                        // TODO: Get the keys for this user, either from local cache or from server
-                                        user = self.user
-                                    }
-                                    let decryptedAsset = try self.user.decrypt(asset, receivedFrom: user)
-                                    decryptedAssets.append(decryptedAsset)
-                                } catch {
-                                    print("failed to decrypt asset: \(error)")
-                                }
-                            }
-                            self.delegate.handleAssetResults(for: decryptedAssets)
+                            let decryptedAssets = self.decrypt(encryptedAssetsByIdentifier: assetsDict, descriptors: descriptors)
+                            // Call the delegate again using low res Assets, populating the data field this time
+                            self.delegate.handleLowResAssetResults(for: decryptedAssets)
                         }
-                        completionHandler(.success(()))
+                        dispatch.group.leave()
                     case .failure(let err):
-                        print("Unable to download low rez assets \(globalIdentifiers) from server: \(err)")
-                        completionHandler(.failure(err))
+                        print("Unable to download LOW rez assets \(globalIdentifiers) from server: \(err)")
+                        dispatch.interrupt(err)
                     }
                 }
+                
+                dispatch.group.enter()
+                serverProxy.getHiResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) { result in
+                    switch result {
+                    case .success(let assetsDict):
+                        if assetsDict.count > 0 {
+                            let decryptedAssets = self.decrypt(encryptedAssetsByIdentifier: assetsDict, descriptors: descriptors)
+                            // Call the delegate again using hi res Assets, populating the data field this time
+                            self.delegate.handleHiResAssetResults(for: decryptedAssets)
+                        }
+                        dispatch.group.leave()
+                    case .failure(let err):
+                        print("Unable to download HI rez assets \(globalIdentifiers) from server: \(err)")
+                        dispatch.interrupt(err)
+                    }
+                }
+                
+                do {
+                    try dispatch.wait()
+                    completionHandler(.success(()))
+                } catch {
+                    completionHandler(.failure(error))
+                }
+                
             case .failure(let err):
                 print("Unable to download descriptors from server: \(err)")
                 completionHandler(.failure(err))

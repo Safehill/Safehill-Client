@@ -16,12 +16,34 @@ public protocol SHAssetDescriptor {
     var sharedWithUserIdentifiers: [String] { get }
 }
 
-public struct SHGenericAssetDescriptor : SHAssetDescriptor {
+public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let creationDate: Date?
     public let sharedByUserIdentifier: String
     public let sharedWithUserIdentifiers: [String]
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
+        localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
+        sharedByUserIdentifier = try container.decode(String.self, forKey: .sharedByUserIdentifier)
+        sharedWithUserIdentifiers = try container.decode([String].self, forKey: .sharedWithUserIdentifiers)
+        let dateString = try container.decode(String.self, forKey: .creationDate)
+        creationDate = dateString.iso8601withFractionalSeconds
+    }
+    
+    public init(globalIdentifier: String,
+                localIdentifier: String?,
+                creationDate: Date?,
+                sharedByUserIdentifier: String,
+                sharedWithUserIdentifiers: [String]) {
+        self.globalIdentifier = globalIdentifier
+        self.localIdentifier = localIdentifier
+        self.creationDate = creationDate
+        self.sharedByUserIdentifier = sharedByUserIdentifier
+        self.sharedWithUserIdentifiers = sharedWithUserIdentifiers
+    }
 }
 
 public protocol SHDecryptedAsset {
@@ -48,7 +70,7 @@ public protocol SHEncryptedAsset {
     var creationDate: Date? { get }
 }
 
-public struct SHGenericEncryptedAsset : SHEncryptedAsset {
+public struct SHGenericEncryptedAsset : SHEncryptedAsset, Codable {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let encryptedData: Data
@@ -56,6 +78,22 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let publicKeyData: Data
     public let publicSignatureData: Data
     public let creationDate: Date?
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
+        localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
+        let encryptedDataBase64 = try container.decode(String.self, forKey: .encryptedData)
+        encryptedData = Data(base64Encoded: encryptedDataBase64)!
+        let encryptedSecretBase64 = try container.decode(String.self, forKey: .encryptedSecret)
+        encryptedSecret = Data(base64Encoded: encryptedSecretBase64)!
+        let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
+        publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
+        let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
+        publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
+        let dateString = try container.decode(String.self, forKey: .creationDate)
+        creationDate = dateString.iso8601withFractionalSeconds
+    }
     
     public init(globalIdentifier: String,
                 localIdentifier: String?,
