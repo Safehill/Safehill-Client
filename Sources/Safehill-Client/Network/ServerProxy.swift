@@ -202,11 +202,24 @@ public struct SHServerProxy {
     
     public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
         self.remoteServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
-            completionHandler(result)
-            if case .success(_) = result {
+            switch result {
+            case .success(_):
                 self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
                     if case .failure(let err) = result {
                         print("Asset was deleted on server but not from the local cache: \(err)")
+                    }
+                }
+                completionHandler(result)
+            
+            // TODO: Remove this when API for deletion is implemented
+            case .failure(let err):
+                if case SHHTTPError.ServerError.notImplemented = err {
+                    self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
+                        if case .failure(let err) = result {
+                            print("Asset was deleted on server but not from the local cache: \(err)")
+                        } else {
+                            completionHandler(result)
+                        }
                     }
                 }
             }
