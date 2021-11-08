@@ -79,22 +79,6 @@ public struct SHServerProxy {
         }
     }
     
-//    public func getLowResAssets(excludingAssetIdentifiers assetIdsToExclude: [String],
-//                         excludingLocalAssetIdentifiers localAssetIdsToExclude: [String],
-//                         completionHandler: @escaping (Swift.Result<[Asset], Error>) -> ()) {
-//        self.api.getLowResAssets(excludingAssetIdentifiers: assetIdsToExclude,
-//                                 excludingLocalAssetIdentifiers: localAssetIdsToExclude,
-//                                 completionHandler: completionHandler)
-//    }
-//
-//    public func getHiResAssets(excludingAssetIdentifiers assetIdsToExclude: [String],
-//                        excludingLocalAssetIdentifiers localAssetIdsToExclude: [String],
-//                        completionHandler: @escaping (Swift.Result<[Asset], Error>) -> ()) {
-//        self.api.getHiResAssets(excludingAssetIdentifiers: assetIdsToExclude,
-//                                excludingLocalAssetIdentifiers: localAssetIdsToExclude,
-//                                completionHandler: completionHandler)
-//    }
-    
     public func storeAsset(lowResAsset: SHEncryptedAsset,
                     hiResAsset: SHEncryptedAsset,
                     completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
