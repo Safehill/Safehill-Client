@@ -81,7 +81,6 @@ struct SHServerHTTPAPI : SHServerAPI {
                 break
             case 400..<500:
                 var message = "Bad or malformed request"
-                let json = try! JSONDecoder().decode(GenericFailureResponse.self, from: data!)
                 if let data = data,
                    let decoded = try? JSONDecoder().decode(GenericFailureResponse.self, from: data),
                    let reason = decoded.reason {
@@ -91,8 +90,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             default:
                 var message = "A server error occurred"
                 if let data = data,
-                   let decoded = try? JSONDecoder().decode(type, from: data) as? [String: String],
-                   let reason = decoded["reason"] {
+                   let decoded = try? JSONDecoder().decode(GenericFailureResponse.self, from: data),
+                   let reason = decoded.reason {
                     message = reason
                 }
                 return completionHandler(.failure(SHHTTPError.ServerError.generic(message)))
@@ -183,7 +182,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "authorizationCode": authorizationCode.base64EncodedString(),
             "identityToken": authorizationCode.base64EncodedString(),
         ] as [String : Any]
-        self.post("signin/apple", parameters: parameters, completionHandler: completionHandler)
+        self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
     
     func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
@@ -191,7 +190,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "identifier": self.requestor.identifier,
             "password": password
         ] as [String : Any]
-        self.post("signin", parameters: parameters, completionHandler: completionHandler)
+        self.post("signin", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
 
     func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {

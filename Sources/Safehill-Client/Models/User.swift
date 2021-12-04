@@ -21,6 +21,14 @@ public struct SHRemoteUser : SHServerUser, Codable {
     public let publicKeyData: Data
     public let publicSignatureData: Data
     
+    enum CodingKeys: String, CodingKey {
+        case identifier
+        case name
+        case email
+        case publicKeyData = "publicKey"
+        case publicSignatureData = "publicSignature"
+    }
+    
     init(identifier: String,
          name: String,
          email: String,
