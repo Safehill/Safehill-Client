@@ -27,6 +27,11 @@ struct GenericSuccessResponse: Decodable {
     let status: String
 }
 
+struct GenericFailureResponse: Decodable {
+    let error: Bool
+    let reason: String?
+}
+
 struct DeleteConfirmationSuccessResponse: Decodable {
     let status: String
     let deletedAssetGlobalIdentifiers: [String]
@@ -42,9 +47,10 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
         var components = URLComponents()
-        components.scheme = "https"
-        components.host = "api.safehill.com"
-        components.path = "/v1/\(route)"
+        components.scheme = "http"
+        components.host = "localhost"
+        components.port = 8080
+        components.path = "/\(route)"
         var queryItems = [URLQueryItem]()
         
         // URL parameters
@@ -63,8 +69,6 @@ struct SHServerHTTPAPI : SHServerAPI {
     func makeRequest<T: Decodable>(request: URLRequest,
                                    decodingResponseAs type: T.Type,
                                    completionHandler: @escaping (Result<T, Error>) -> Void) {
-        return completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-        
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard error == nil else {
                 completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
@@ -76,11 +80,22 @@ struct SHServerHTTPAPI : SHServerAPI {
             case 200..<300:
                 break
             case 400..<500:
-                return completionHandler(.failure(SHHTTPError.ClientError.badRequest("Bad Request")))
-            case 500..<600:
-                return completionHandler(.failure(SHHTTPError.ServerError.generic("Server Error")))
+                var message = "Bad or malformed request"
+                let json = try! JSONDecoder().decode(GenericFailureResponse.self, from: data!)
+                if let data = data,
+                   let decoded = try? JSONDecoder().decode(GenericFailureResponse.self, from: data),
+                   let reason = decoded.reason {
+                    message = reason
+                }
+                return completionHandler(.failure(SHHTTPError.ClientError.badRequest(message)))
             default:
-                return completionHandler(.failure(SHHTTPError.ServerError.generic("Server Error")))
+                var message = "A server error occurred"
+                if let data = data,
+                   let decoded = try? JSONDecoder().decode(type, from: data) as? [String: String],
+                   let reason = decoded["reason"] {
+                    message = reason
+                }
+                return completionHandler(.failure(SHHTTPError.ServerError.generic(message)))
             }
             
             guard let data = data else {
@@ -102,13 +117,22 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func post<T: Decodable>(_ route: String,
                             parameters: [String: Any]?,
+                            requiresAuthentication: Bool = true,
                             completionHandler: @escaping (Result<T, Error>) -> Void) {
+        
         let url = requestURL(route: route)
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        if requiresAuthentication {
+            guard let bearerToken = self.requestor.authToken else {
+                completionHandler(.failure(SHHTTPError.ClientError.unauthenticated))
+                return
+            }
+            request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        }
         
         if let parameters = parameters {
             do {
@@ -123,15 +147,19 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
-    func createUser(completionHandler: @escaping (Result<SHServerUser?, Error>) -> ()) {
+    func createUser(email: String,
+                    name: String,
+                    password: String,
+                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let parameters = [
             "identifier": requestor.identifier,
             "publicKey": requestor.publicKeyData.base64EncodedString(),
             "publicSignature": requestor.publicSignatureData.base64EncodedString(),
-            "name": requestor.name!,
-            "phoneNumber": requestor.phoneNumber!,
+            "email": email,
+            "name": name,
+            "password": password,
         ] as [String : Any]
-        self.post("user/create", parameters: parameters) { (result: Result<SHRemoteUser, Error>) in
+        self.post("users/create", parameters: parameters, requiresAuthentication: false) { (result: Result<SHRemoteUser, Error>) in
             switch result {
             case .success(let user):
                 return completionHandler(.success(user))
@@ -141,19 +169,36 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func sendAuthenticationCode(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    func signInWithApple(email: String,
+                         name: String,
+                         authorizationCode: Data,
+                         identityToken: Data,
+                         completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+        let parameters = [
+            "identifier": requestor.identifier,
+            "email": email,
+            "name": name,
+            "publicKey": requestor.publicKeyData.base64EncodedString(),
+            "publicSignature": requestor.publicSignatureData.base64EncodedString(),
+            "authorizationCode": authorizationCode.base64EncodedString(),
+            "identityToken": authorizationCode.base64EncodedString(),
+        ] as [String : Any]
+        self.post("signin/apple", parameters: parameters, completionHandler: completionHandler)
     }
-
-    func validateAuthenticationCode(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    
+    func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+        let parameters = [
+            "identifier": self.requestor.identifier,
+            "password": password
+        ] as [String : Any]
+        self.post("signin", parameters: parameters, completionHandler: completionHandler)
     }
 
     func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
         let parameters = [
             "identifiers": userIdentifiers
         ] as [String : Any]
-        self.post("user/retrieve", parameters: parameters) { (result: Result<[SHRemoteUser], Error>) in
+        self.post("users/retrieve", parameters: parameters) { (result: Result<[SHRemoteUser], Error>) in
             switch result {
             case .success(let users):
                 return completionHandler(.success(users))
@@ -164,7 +209,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
 
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.post("asset/descriptor/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
                 return completionHandler(.success(descriptors))
@@ -181,7 +226,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "identifiers": assetIdentifiers,
             "quality": quality
         ] as [String : Any]
-        self.post("asset/retrieve", parameters: parameters) { (result: Result<[SHGenericEncryptedAsset], Error>) in
+        self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHGenericEncryptedAsset], Error>) in
             switch result {
             case .success(let assets):
                 var dictionary = [String: SHEncryptedAsset]()
@@ -228,7 +273,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "creationDate": hiResAsset.creationDate?.iso8601withFractionalSeconds
         ]
         
-        self.post("asset/create", parameters: ["low": lowResDict, "hi": hiResDict]) { (result: Result<GenericSuccessResponse, Error>) in
+        self.post("assets/create", parameters: ["low": lowResDict, "hi": hiResDict]) { (result: Result<GenericSuccessResponse, Error>) in
             switch result {
             case .success(_):
                 return completionHandler(.success(()))
@@ -250,7 +295,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         let parameters = [
             "identifiers": globalIdentifiers
         ] as [String : Any]
-        self.post("asset/delete", parameters: parameters) { (result: Result<DeleteConfirmationSuccessResponse, Error>) in
+        self.post("assets/delete", parameters: parameters) { (result: Result<DeleteConfirmationSuccessResponse, Error>) in
             switch result {
             case .success(let deleteConfirmation):
                 return completionHandler(.success(deleteConfirmation.deletedAssetGlobalIdentifiers))

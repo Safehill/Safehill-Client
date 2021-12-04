@@ -19,7 +19,7 @@ struct LocalServer : SHServerAPI {
         self.requestor = requestor
     }
     
-    func createUser(completionHandler: @escaping (Result<SHServerUser?, Error>) -> ()) {
+    private func createUser(email: String, name: String, password: String? = nil, ssoIdentifier: String?, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let key = requestor.identifier
         userStore.value(for: key) { getResult in
             switch getResult {
@@ -35,13 +35,17 @@ struct LocalServer : SHServerAPI {
                     return
                 }
                 
-                userStore.set(value: [
+                var value = [
                     "identifier": key,
                     "publicKey": requestor.publicKeyData,
                     "publicSignature": requestor.publicSignatureData,
-                    "name": requestor.name!,
-                    "phoneNumber": requestor.phoneNumber!,
-                ], for: key) { (postResult: Swift.Result) in
+                    "name": name,
+                    "email": email,
+                ] as [String : Any]
+                if let ssoIdentifier = ssoIdentifier {
+                    value["ssoIdentifier"] = ssoIdentifier
+                }
+                userStore.set(value: value, for: key) { (postResult: Swift.Result) in
                     switch postResult {
                     case .success:
                         completionHandler(.success(requestor))
@@ -57,11 +61,28 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func sendAuthenticationCode(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    func createUser(email: String, name: String, password: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+        self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
-    func validateAuthenticationCode(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func signInWithApple(email: String,
+                         name: String,
+                         authorizationCode: Data,
+                         identityToken: Data,
+                         completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+        let ssoIdentifier = identityToken.base64EncodedString()
+        self.createUser(email: email, name: name, password: "", ssoIdentifier: ssoIdentifier) { result in
+            switch result {
+            case .success(let user):
+                let authResponse = SHAuthResponse(user: user as! SHRemoteUser, bearerToken: "")
+                completionHandler(.success(authResponse))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    public func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -74,12 +95,12 @@ struct LocalServer : SHServerAPI {
                     for res in resList {
                         if let identifier = res["identifier"] as? String,
                            let name = res["name"] as? String,
-                           let phoneNumber = res["phoneNumber"] as? String,
+                           let email = res["email"] as? String,
                            let publicKeyData = res["publicKey"] as? Data,
                            let publicSignatureData = res["publicSignature"] as? Data {
                             if let user = try? SHRemoteUser(identifier: identifier,
                                                           name: name,
-                                                           phoneNumber: phoneNumber,
+                                                           email: email,
                                                            publicKeyData: publicKeyData,
                                                             publicSignatureData: publicSignatureData) {
                                 userList.append(user)

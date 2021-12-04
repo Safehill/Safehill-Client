@@ -7,12 +7,21 @@
 
 import Foundation
 
-public enum SHHTTPError{
+public enum SHHTTPError {
     public enum ClientError : Error {
         case badRequest(String)
+        case unauthenticated
+        case notFound
         
         public func toCode() -> Int {
-            return 400
+            switch self {
+            case .unauthenticated:
+                return 401
+            case .notFound:
+                return 405
+            default:
+                return 400
+            }
         }
     }
     
@@ -21,6 +30,7 @@ public enum SHHTTPError{
         case notImplemented
         case outdatedKeys
         case noData
+        case unexpectedResponse(String)
         
         public func toCode() -> Int {
             switch self {
@@ -47,32 +57,82 @@ public struct SHServerProxy {
         self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
     
-    public func createUser(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
-        self.remoteServer.createUser { result in
+    public func createUser(email: String,
+                           name: String,
+                           password: String,
+                           completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        self.localServer.createUser(email: email, name: name, password: "") { result in
             switch result {
             case .success(_):
-                self.localServer.createUser(completionHandler: completionHandler)
+                self.remoteServer.createUser(email: email, name: name, password: password, completionHandler: completionHandler)
             case .failure(let err):
-                // TODO: Remove this fallback when the server API is implemented
-                if case SHHTTPError.ServerError.notImplemented = err {
-                    self.localServer.createUser(completionHandler: completionHandler)
-                } else {
-                    completionHandler(.failure(err))
-                }
+                completionHandler(.failure(err))
             }
         }
     }
     
-    public func sendAuthenticationCode(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.sendAuthenticationCode(completionHandler: completionHandler)
+    public func signInWithApple(email: String,
+                                name: String,
+                                authorizationCode: Data,
+                                identityToken: Data,
+                                completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+        self.remoteServer.signInWithApple(email: email,
+                                          name: name,
+                                          authorizationCode: authorizationCode,
+                                          identityToken: identityToken) { result in
+            switch result {
+            case .success(let authResponse):
+                self.localServer.getUsers(withIdentifiers: [self.localServer.requestor.identifier]) { result in
+                    switch result {
+                    case .success(let users):
+                        guard users.count == 0 || users.count == 1 else {
+                            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("Multiple users returned for identifier \(self.localServer.requestor.identifier)")))
+                            return
+                        }
+                        
+                        if users.count == 0 {
+                            self.localServer.signInWithApple(email: email, name: name, authorizationCode: authorizationCode, identityToken: identityToken, completionHandler: completionHandler)
+                        } else {
+                            completionHandler(.success(authResponse))
+                        }
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+                
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
     }
     
-    public func validateAuthenticationCode(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.validateAuthenticationCode(completionHandler: completionHandler)
+    public func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+        self.remoteServer.signIn(password: password, completionHandler: completionHandler)
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
         self.remoteServer.getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
+    }
+    
+    /// Fetch the local user details to get from remote. If fails fall back to local cache
+    /// - Parameters:
+    ///   - completionHandler: the callback method
+    public func getUserDetails(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
+        self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
+            switch result {
+            case .success(let users):
+                completionHandler(.success(users.first))
+            case .failure(let err):
+                self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
+                    switch result {
+                    case .success(let users):
+                        completionHandler(.success(users.first))
+                    case .failure(_):
+                        completionHandler(.failure(err))
+                    }
+                }                        
+            }
+        }
     }
     
     public func getLocalAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {

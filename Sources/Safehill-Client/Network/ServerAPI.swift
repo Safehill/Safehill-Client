@@ -13,23 +13,32 @@ public protocol SHServerAPI {
     
     // MARK: User Management
     
-    /// Creates a User entry on the server given name, phone number, public key and public signature
+    /// Creates a new user on the server given credentials, their public key and public signature
     /// - Parameters:
-    ///   - user: the User object
+    ///   - email  the user email
+    ///   - name  the user name
+    ///   - password  the user password
     ///   - completionHandler: the callback method
-    func createUser(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ())
+    func createUser(email: String,
+                    name: String,
+                    password: String,
+                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
-    /// Sends a validation code to the user's phone number
+    /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
     /// - Parameters:
-    ///   - user: the User object
+    ///   - email  the user email
+    ///   - name  the user name
+    ///   - authorizationCode  the data containing the auth code  to validate
+    ///   - identityToken  the data containing the identity token to validate
     ///   - completionHandler: the callback method
-    func sendAuthenticationCode(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func signInWithApple(email: String,
+                         name: String,
+                         authorizationCode: Data,
+                         identityToken: Data,
+                         completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
-    /// Validates the user's phone number via code
-    /// - Parameters:
-    ///   - user: the User object
-    ///   - completionHandler: the callback method
-    func validateAuthenticationCode(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    /// Logs the current user, aka the requestor
+    func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
