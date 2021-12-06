@@ -65,6 +65,23 @@ struct LocalServer : SHServerAPI {
         self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
+    func destroyAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        userStore.removeAll { result in
+            if case .failure(let err) = result {
+                completionHandler(.failure(err))
+                return
+            }
+            
+            assetStore.removeAll { result in
+                if case .failure(let err) = result {
+                    completionHandler(.failure(err))
+                } else {
+                    completionHandler(.success(()))
+                }
+            }
+        }
+    }
+    
     func signInWithApple(email: String,
                          name: String,
                          authorizationCode: Data,

@@ -23,6 +23,8 @@ extension String {
     var iso8601withFractionalSeconds: Date? { return Formatter.iso8601withFractionalSeconds.date(from: self) }
 }
 
+struct NoReply: Decodable {}
+
 struct GenericSuccessResponse: Decodable {
     let status: String
 }
@@ -79,6 +81,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             switch httpResponse.statusCode {
             case 200..<300:
                 break
+            case 401:
+                return completionHandler(.failure(SHHTTPError.ClientError.unauthenticated))
             case 400..<500:
                 var message = "Bad or malformed request"
                 if let data = data,
@@ -100,6 +104,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             guard let data = data else {
                 completionHandler(.failure(SHHTTPError.ServerError.noData))
                 return
+            }
+            
+            if type is NoReply.Type {
+                completionHandler(.success(NoReply() as! T))
             }
             
             do {
@@ -168,6 +176,17 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func destroyAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.post("users/delete", parameters: nil, requiresAuthentication: false) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                return completionHandler(.success(()))
+            case .failure(let error):
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
     func signInWithApple(email: String,
                          name: String,
                          authorizationCode: Data,
@@ -208,7 +227,10 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
 
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+        let parameters = [
+            "userIdentifiers": [self.requestor.identifier]
+        ] as [String : Any]
+        self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
                 return completionHandler(.success(descriptors))

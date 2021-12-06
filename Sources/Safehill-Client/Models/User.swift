@@ -53,6 +53,8 @@ public struct SHRemoteUser : SHServerUser, Codable {
     }
 }
 
+/// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name, email).
+/// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHServerUser {
     public var identifier: String {
         SHHash.stringDigest(for: publicSignatureData)
@@ -83,6 +85,13 @@ public struct SHLocalUser: SHServerUser {
         "\(keychainPrefix).auth"
     }
     
+    public var identityTokenKeychainLabel: String {
+        "\(authKeychainLabel).identityToken"
+    }
+    public var authTokenKeychainLabel: String {
+        "\(authKeychainLabel).token"
+    }
+    
     static func == (lhs: SHLocalUser, rhs: SHLocalUser) -> Bool {
         return lhs.publicKeyData == rhs.publicKeyData
         && lhs.publicSignatureData == rhs.publicSignatureData
@@ -96,11 +105,12 @@ public struct SHLocalUser: SHServerUser {
         
         // Asymmetric keys
         self.keychainPrefix = keychainPrefix
-        if let shUser = try? SHLocalCryptoUser(usingKeychainEntryWithLabel: SHLocalUser.keysKeychainLabel(withPrefix: keychainPrefix)) {
+        let keysKeychainLabel = SHLocalUser.keysKeychainLabel(withPrefix: keychainPrefix)
+        if let shUser = try? SHLocalCryptoUser(usingKeychainEntryWithLabel: keysKeychainLabel) {
             self.shUser = shUser
         } else {
             self.shUser = SHLocalCryptoUser()
-            try? self.shUser.saveKeysToKeychain(withLabel: "\(keychainPrefix).keys")
+            try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
         }
         
         self.publicKeyData = shUser.publicKeyData
@@ -108,37 +118,52 @@ public struct SHLocalUser: SHServerUser {
         
         // SSO identifier (if any)
         do {
-            self._ssoIdentifier = try SHKeychain.retrieveValue(from: "\(authKeychainLabel).identityToken")
+            self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
         } catch {
-            try? SHKeychain.deleteValue(account: "\(authKeychainLabel).identityToken")
-            // TODO: Do not swallow this log
+            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
+            // TODO: Do not swallow this exception
             self._ssoIdentifier = nil
         }
         
         // Bearer token
         do {
-            self._authToken = try SHKeychain.retrieveValue(from: "\(authKeychainLabel).token")
+            self._authToken = try SHKeychain.retrieveValue(from: authTokenKeychainLabel)
         } catch {
-            try? SHKeychain.deleteValue(account: "\(authKeychainLabel).token")
-            // TODO: Do not swallow this log
+            try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+            // TODO: Do not swallow this exception
             self._authToken = nil
         }
     }
     
+    public mutating func updateUserDetails(given user: SHServerUser?) {
+        if let user = user {
+            self.name = user.name
+            self.email = user.email
+        } else {
+            self.name = nil
+            self.email = nil
+        }
+    }
+    
     public mutating func authenticate(_ user: SHServerUser, bearerToken: String, ssoIdentifier: String?) throws {
-        self.name = user.name
-        self.email = user.email
+        self.updateUserDetails(given: user)
         self._ssoIdentifier = ssoIdentifier
         self._authToken = bearerToken
         
         do {
             if let ssoIdentifier = ssoIdentifier {
-                try SHKeychain.storeValue(ssoIdentifier, account: self.authKeychainLabel + ".identityToken")
+                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
             }
-            try SHKeychain.storeValue(bearerToken, account: self.authKeychainLabel + ".token")
+            try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
         } catch {
-            try SHKeychain.deleteValue(account: "\(authKeychainLabel).identityToken")
-            try SHKeychain.deleteValue(account: "\(authKeychainLabel).token")
+            // Re-try after deleting items in the keychain
+            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
+            try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+            
+            if let ssoIdentifier = ssoIdentifier {
+                try? SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
+            }
+            try? SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
             
             throw error
         }
@@ -147,8 +172,9 @@ public struct SHLocalUser: SHServerUser {
     public mutating func deauthenticate() {
         self._ssoIdentifier = nil
         self._authToken = nil
-        self.name = nil
-        self.email = nil
+        
+        try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
+        try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
     }
     
     public func shareable(data: Data, with user: SHCryptoUser) throws -> SHShareablePayload {

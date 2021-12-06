@@ -13,7 +13,7 @@ public protocol SHServerAPI {
     
     // MARK: User Management
     
-    /// Creates a new user on the server given credentials, their public key and public signature
+    /// Creates a new user given their credentials, their public key and public signature (store in the `requestor` object)
     /// - Parameters:
     ///   - email  the user email
     ///   - name  the user name
@@ -23,6 +23,11 @@ public protocol SHServerAPI {
                     name: String,
                     password: String,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
+    
+    /// Delete the user making the request and all related assets, metadata and sharing information
+    /// - Parameters:
+    ///   - completionHandler: the callback method
+    func destroyAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
     /// - Parameters:

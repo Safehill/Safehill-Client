@@ -7,46 +7,6 @@
 
 import Foundation
 
-public enum SHHTTPError {
-    public enum ClientError : Error {
-        case badRequest(String)
-        case unauthenticated
-        case notFound
-        
-        public func toCode() -> Int {
-            switch self {
-            case .unauthenticated:
-                return 401
-            case .notFound:
-                return 405
-            default:
-                return 400
-            }
-        }
-    }
-    
-    public enum ServerError : Error {
-        case generic(String)
-        case notImplemented
-        case outdatedKeys
-        case noData
-        case unexpectedResponse(String)
-        
-        public func toCode() -> Int {
-            switch self {
-            case .notImplemented:
-                return 501
-            default:
-                return 500
-            }
-        }
-    }
-    
-    public enum TransportError : Error {
-        case generic(Error)
-    }
-}
-
 public struct SHServerProxy {
     
     let localServer: LocalServer
@@ -114,29 +74,51 @@ public struct SHServerProxy {
         self.remoteServer.getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
     }
     
-    /// Fetch the local user details to get from remote. If fails fall back to local cache
+    /// Fetch the local user details. If fails fall back to local cache if the server is unreachable or the token is expired
     /// - Parameters:
     ///   - completionHandler: the callback method
-    public func getUserDetails(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
+    public func getUserDetails(completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
         self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                completionHandler(.success(users.first))
+                completionHandler(.success(users.first!))
             case .failure(let err):
-                self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
-                    switch result {
-                    case .success(let users):
-                        completionHandler(.success(users.first))
-                    case .failure(_):
-                        completionHandler(.failure(err))
-                    }
-                }                        
+                switch err {
+                case is SHHTTPError.TransportError:
+                    // Can't connect to the server, get details from local cache
+                    print("Failed to get user details from server. Using local cache\n \(err)")
+                    self.getLocalUserDetails(originalServerError: err, completionHandler: completionHandler)
+                default:
+                    completionHandler(.failure(err))
+                }
             }
         }
     }
     
-    public func getLocalAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.localServer.getAssetDescriptors(completionHandler: completionHandler)
+    public func getLocalUserDetails(originalServerError: Error? = nil,
+                                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
+            switch result {
+            case .success(let users):
+                completionHandler(.success(users.first!))
+            case .failure(let err):
+                completionHandler(.failure(originalServerError ?? err))
+            }
+        }
+    }
+    
+    public func deleteLocalUser(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.localServer.destroyAccount(completionHandler: completionHandler)
+    }
+    
+    public func getLocalAssetDescriptors(originalServerError: Error? = nil,
+                                         completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        self.localServer.getAssetDescriptors { result in
+            if case .failure(let err) = result {
+                completionHandler(.failure(originalServerError ?? err))
+            }
+            completionHandler(result)
+        }
     }
     
     public func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
@@ -146,8 +128,14 @@ public struct SHServerProxy {
         self.remoteServer.getAssetDescriptors { serverResult in
             switch serverResult {
             case .failure(let err):
-                print("Failed to get descriptors from server. Using local descriptors\n \(err)")
-                self.getLocalAssetDescriptors(completionHandler: completionHandler)
+                switch err {
+                case is SHHTTPError.TransportError:
+                    // Can't connect to the server, get descriptors from local cache
+                    print("Failed to get descriptors from server. Using local descriptors\n \(err)")
+                    self.getLocalAssetDescriptors(originalServerError: err, completionHandler: completionHandler)
+                default:
+                    completionHandler(.failure(err))
+                }
             case .success(let descriptors):
                 serverDescriptors = descriptors
                 completionHandler(.success(descriptors))
