@@ -10,15 +10,21 @@ import Foundation
 public enum SHHTTPError {
     public enum ClientError : Error {
         case badRequest(String)
-        case unauthenticated
+        case unauthorized
         case notFound
+        case methodNotAllowed
+        case conflict
         
         public func toCode() -> Int {
             switch self {
-            case .unauthenticated:
+            case .unauthorized:
                 return 401
             case .notFound:
+                return 404
+            case .methodNotAllowed:
                 return 405
+            case .conflict:
+                return 409
             default:
                 return 400
             }
@@ -28,7 +34,6 @@ public enum SHHTTPError {
     public enum ServerError : Error {
         case generic(String)
         case notImplemented
-        case outdatedKeys
         case noData
         case unexpectedResponse(String)
         

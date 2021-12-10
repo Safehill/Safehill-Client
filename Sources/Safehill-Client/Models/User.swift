@@ -57,12 +57,16 @@ public struct SHRemoteUser : SHServerUser, Codable {
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHServerUser {
     public var identifier: String {
-        SHHash.stringDigest(for: publicSignatureData)
+        self.shUser.identifier
     }
     
     var shUser: SHLocalCryptoUser
-    public let publicKeyData: Data
-    public let publicSignatureData: Data
+    public var publicKeyData: Data {
+        self.shUser.publicKeyData
+    }
+    public var publicSignatureData: Data {
+        self.shUser.publicSignatureData
+    }
         
     public var name: String?
     public var email: String?
@@ -113,8 +117,6 @@ public struct SHLocalUser: SHServerUser {
             try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
         }
         
-        self.publicKeyData = shUser.publicKeyData
-        self.publicSignatureData = shUser.publicSignatureData
         
         // SSO identifier (if any)
         do {
@@ -173,8 +175,12 @@ public struct SHLocalUser: SHServerUser {
         self._ssoIdentifier = nil
         self._authToken = nil
         
-        try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
-        try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+        guard (try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)) != nil,
+              (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil
+        else {
+            log.fault("auth and identity token could not be removed from the keychain")
+            return
+        }
     }
     
     public func shareable(data: Data, with user: SHCryptoUser) throws -> SHShareablePayload {
@@ -186,16 +192,16 @@ public struct SHLocalUser: SHServerUser {
     }
     
     public mutating func regenerateKeys() throws {
-        // TODO: Should remove old?
         self.shUser = SHLocalCryptoUser()
         do {
             try self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
         } catch SHKeychain.Error.unexpectedStatus(let status) {
-            print(status)
             if status == -25299 {
                 // keychain item exists
-                try self.shUser.updateKeysInKeychain(withLabel: keysKeychainLabel)
+                try self.shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
+                try self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
             } else {
+                print("error saving to the keychain. status=\(status)")
                 throw SHKeychain.Error.unexpectedStatus(status)
             }
         }
@@ -248,15 +254,21 @@ extension SHKeychain {
         guard status == errSecSuccess else {
             throw SHKeychain.Error.unexpectedStatus(status)
         }
+        
+#if DEBUG
+        log.info("Successfully saved value \(token) in account \(account)")
+#endif
     }
     
     static func deleteValue(account: String) throws {
         let query = [kSecClass: kSecClassGenericPassword,
-                     kSecAttrAccount: account,
-                     kSecUseDataProtectionKeychain: true,
-                     kSecReturnData: true] as [String: Any]
+                     kSecAttrAccount: account] as [String: Any]
         
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw SHKeychain.Error.unexpectedStatus(status) }
+        
+#if DEBUG
+        log.info("Successfully deleted account \(account)")
+#endif
     }
 }

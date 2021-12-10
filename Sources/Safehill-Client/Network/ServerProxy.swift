@@ -31,6 +31,20 @@ public struct SHServerProxy {
         }
     }
     
+    public func updateUser(email: String? = nil,
+                           name: String? = nil,
+                           password: String? = nil,
+                           completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        self.localServer.updateUser(email: email, name: name, password: "") { result in
+            switch result {
+            case .success(_):
+                self.remoteServer.updateUser(email: email, name: name, password: password, completionHandler: completionHandler)
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     public func signInWithApple(email: String,
                                 name: String,
                                 authorizationCode: Data,
@@ -77,17 +91,18 @@ public struct SHServerProxy {
     /// Fetch the local user details. If fails fall back to local cache if the server is unreachable or the token is expired
     /// - Parameters:
     ///   - completionHandler: the callback method
-    public func getUserDetails(completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+    public func fetchUserAccount(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
         self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                completionHandler(.success(users.first!))
+                completionHandler(.success(users.first))
             case .failure(let err):
                 switch err {
                 case is SHHTTPError.TransportError:
                     // Can't connect to the server, get details from local cache
                     print("Failed to get user details from server. Using local cache\n \(err)")
-                    self.getLocalUserDetails(originalServerError: err, completionHandler: completionHandler)
+                    self.fetchLocalUserAccount(originalServerError: err,
+                                              completionHandler: completionHandler)
                 default:
                     completionHandler(.failure(err))
                 }
@@ -95,20 +110,24 @@ public struct SHServerProxy {
         }
     }
     
-    public func getLocalUserDetails(originalServerError: Error? = nil,
-                                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+    public func fetchLocalUserAccount(originalServerError: Error? = nil,
+                                      completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
         self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                completionHandler(.success(users.first!))
+                if users.count == 0 {
+                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                } else {
+                    completionHandler(.success(users.first))
+                }
             case .failure(let err):
                 completionHandler(.failure(originalServerError ?? err))
             }
         }
     }
     
-    public func deleteLocalUser(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.localServer.destroyAccount(completionHandler: completionHandler)
+    public func deleteLocalAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.localServer.deleteAccount(completionHandler: completionHandler)
     }
     
     public func getLocalAssetDescriptors(originalServerError: Error? = nil,

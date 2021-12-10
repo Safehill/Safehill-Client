@@ -19,15 +19,20 @@ struct LocalServer : SHServerAPI {
         self.requestor = requestor
     }
     
-    private func createUser(email: String, name: String, password: String? = nil, ssoIdentifier: String?, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+    private func createUser(email: String,
+                            name: String,
+                            password: String? = nil,
+                            ssoIdentifier: String?,
+                            completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let key = requestor.identifier
         userStore.value(for: key) { getResult in
             switch getResult {
             case .success(let value):
+                // User already exists. Return it
                 if let value = value as? [String: Any] {
                     guard value["publicKey"] as? Data == requestor.publicKeyData,
                           value["publicSignature"] as? Data == requestor.publicSignatureData else {
-                              completionHandler(.failure(SHHTTPError.ServerError.outdatedKeys))
+                              completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
                               return
                           }
                     
@@ -35,6 +40,7 @@ struct LocalServer : SHServerAPI {
                     return
                 }
                 
+                // User doesn't exist. Create it
                 var value = [
                     "identifier": key,
                     "publicKey": requestor.publicKeyData,
@@ -51,7 +57,6 @@ struct LocalServer : SHServerAPI {
                         completionHandler(.success(requestor))
                     case .failure(let err):
                         completionHandler(.failure(err))
-                        return
                     }
                 }
             case .failure(let err):
@@ -61,11 +66,60 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func updateUser(email: String?,
+                    name: String?,
+                    password: String?,
+                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        guard email != nil || name != nil || password != nil else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
+            return
+        }
+        
+        let key = requestor.identifier
+        userStore.value(for: key) { getResult in
+            switch getResult {
+            case .success(let user):
+                // User already exists. Return it
+                if let user = user as? [String: Any] {
+                    guard user["publicKey"] as? Data == requestor.publicKeyData,
+                          user["publicSignature"] as? Data == requestor.publicSignatureData else {
+                              completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
+                              return
+                          }
+                    
+                    let value = [
+                        "identifier": key,
+                        "publicKey": requestor.publicKeyData,
+                        "publicSignature": requestor.publicSignatureData,
+                        "name": name ?? user["name"]!,
+                        "email": email ?? user["email"]!,
+                    ] as [String : Any]
+                    userStore.set(value: value, for: key) { (postResult: Swift.Result) in
+                        switch postResult {
+                        case .success:
+                            completionHandler(.success(requestor))
+                        case .failure(let err):
+                            completionHandler(.failure(err))
+                        }
+                    }
+                    
+                    completionHandler(.success(requestor))
+                    return
+                }
+            case .failure(let err):
+                completionHandler(.failure(err))
+                return
+            }
+        }
+
+    }
+    
     func createUser(email: String, name: String, password: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
-    func destroyAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        // TODO: Delete also the queues?
         userStore.removeAll { result in
             if case .failure(let err) = result {
                 completionHandler(.failure(err))

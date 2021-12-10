@@ -24,10 +24,21 @@ public protocol SHServerAPI {
                     password: String,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
+    /// Updates an existing user details or credentials
+    /// - Parameters:
+    ///   - email  the user email
+    ///   - name  the user name
+    ///   - password  the user password
+    ///   - completionHandler: the callback method
+    func updateUser(email: String?,
+                    name: String?,
+                    password: String?,
+                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
+    
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
     ///   - completionHandler: the callback method
-    func destroyAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
     /// - Parameters:

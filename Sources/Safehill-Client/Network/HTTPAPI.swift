@@ -82,7 +82,11 @@ struct SHServerHTTPAPI : SHServerAPI {
             case 200..<300:
                 break
             case 401:
-                return completionHandler(.failure(SHHTTPError.ClientError.unauthenticated))
+                return completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+            case 404:
+                return completionHandler(.failure(SHHTTPError.ClientError.notFound))
+            case 405:
+                return completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
             case 400..<500:
                 var message = "Bad or malformed request"
                 if let data = data,
@@ -135,7 +139,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         if requiresAuthentication {
             guard let bearerToken = self.requestor.authToken else {
-                completionHandler(.failure(SHHTTPError.ClientError.unauthenticated))
+                completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
                 return
             }
             request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
@@ -149,7 +153,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        print("Making HTTP Request \(request.httpMethod!) \(request.url!)") // with parameters \(parameters ?? [:])")
+        print("Making HTTP Request \(request.httpMethod!) \(request.url!)")
+        #if DEBUG
+            print("with parameters \(parameters ?? [:])")
+        #endif
         
         self.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
@@ -176,7 +183,35 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func destroyAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func updateUser(email: String?,
+                    name: String?,
+                    password: String?,
+                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        guard email != nil || name != nil || password != nil else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
+            return
+        }
+        var parameters = [String : Any]()
+        if let email = email {
+            parameters["email"] = email
+        }
+        if let name = name {
+            parameters["name"] = name
+        }
+        if let password = password {
+            parameters["password"] = password
+        }
+        self.post("users/update", parameters: parameters, requiresAuthentication: false) { (result: Result<SHRemoteUser, Error>) in
+            switch result {
+            case .success(let user):
+                return completionHandler(.success(user))
+            case .failure(let error):
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.post("users/delete", parameters: nil, requiresAuthentication: false) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
@@ -214,7 +249,7 @@ struct SHServerHTTPAPI : SHServerAPI {
 
     func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
         let parameters = [
-            "identifiers": userIdentifiers
+            "userIdentifiers": userIdentifiers
         ] as [String : Any]
         self.post("users/retrieve", parameters: parameters) { (result: Result<[SHRemoteUser], Error>) in
             switch result {
