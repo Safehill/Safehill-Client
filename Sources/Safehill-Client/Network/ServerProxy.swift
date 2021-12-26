@@ -180,7 +180,7 @@ public struct SHServerProxy {
             return
         }
         
-        self.localServer.getLowResAssets(withGlobalIdentifiers: assetIdentifiers) { localResult in
+        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers, quality: .lowResolution) { localResult in
             let localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
@@ -192,7 +192,7 @@ public struct SHServerProxy {
                 }
             }
          
-            self.remoteServer.getLowResAssets(withGlobalIdentifiers: assetIdentifiersToFetch) { serverResult in
+            self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch, quality: .lowResolution) { serverResult in
                 if assetIdentifiersToFetch == assetIdentifiers {
                     completionHandler(serverResult)
                     return
@@ -213,7 +213,7 @@ public struct SHServerProxy {
             return
         }
         
-        self.localServer.getHiResAssets(withGlobalIdentifiers: assetIdentifiers) { localResult in
+        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers, quality: .hiResolution) { localResult in
             let localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
@@ -225,7 +225,7 @@ public struct SHServerProxy {
                 }
             }
          
-            self.remoteServer.getHiResAssets(withGlobalIdentifiers: assetIdentifiersToFetch) { serverResult in
+            self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch, quality: .hiResolution) { serverResult in
                 if assetIdentifiersToFetch == assetIdentifiers {
                     completionHandler(serverResult)
                     return
@@ -278,17 +278,9 @@ public struct SHServerProxy {
                 }
                 completionHandler(result)
             
-            // TODO: Remove this when API for deletion is implemented
             case .failure(let err):
-                if case SHHTTPError.ServerError.notImplemented = err {
-                    self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
-                        if case .failure(let err) = result {
-                            print("Asset was deleted on server but not from the local cache: \(err)")
-                        } else {
-                            completionHandler(result)
-                        }
-                    }
-                }
+                log.error("asset deletion failed. Error: \(err.localizedDescription)")
+                completionHandler(.failure(err))
             }
         }
     }

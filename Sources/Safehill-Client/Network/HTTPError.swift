@@ -31,7 +31,7 @@ public enum SHHTTPError {
         }
     }
     
-    public enum ServerError : Error {
+    public enum ServerError : Error, LocalizedError {
         case generic(String)
         case notImplemented
         case noData
@@ -43,6 +43,19 @@ public enum SHHTTPError {
                 return 501
             default:
                 return 500
+            }
+        }
+        
+        public var errorDescription: String? {
+            switch self {
+            case .generic(let message):
+                return message
+            case .unexpectedResponse(let message):
+                return "Unexpected response from server: \(message)"
+            case .noData:
+                return "Server returned no data"
+            case .notImplemented:
+                return "This functionality is not implemented yet"
             }
         }
     }

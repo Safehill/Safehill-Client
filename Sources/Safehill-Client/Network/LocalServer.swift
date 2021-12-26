@@ -119,20 +119,31 @@ struct LocalServer : SHServerAPI {
     }
     
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        // TODO: Delete also the queues?
+        let dispatch = KBTimedDispatch()
+        
+        dispatch.group.enter()
         userStore.removeAll { result in
             if case .failure(let err) = result {
-                completionHandler(.failure(err))
-                return
+                dispatch.interrupt(err)
+            } else {
+                dispatch.group.leave()
             }
-            
-            assetStore.removeAll { result in
-                if case .failure(let err) = result {
-                    completionHandler(.failure(err))
-                } else {
-                    completionHandler(.success(()))
-                }
+        }
+        
+        dispatch.group.enter()
+        assetStore.removeAll { result in
+            if case .failure(let err) = result {
+                dispatch.interrupt(err)
+            } else {
+                dispatch.group.leave()
             }
+        }
+        
+        do {
+            try dispatch.wait()
+            completionHandler(.success(()))
+        } catch {
+            completionHandler(.failure(error))
         }
     }
     
@@ -267,10 +278,8 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    private func getAssets(withIdentifiers assetIdentifiers: [String],
-                           quality: String,
-                           completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        let prefixCondition = KBGenericCondition(.beginsWith, value: quality + "::")
+    func getAssets(withGlobalIdentifiers assetIdentifiers: [String], quality: SHAssetQuality, completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+        let prefixCondition = KBGenericCondition(.beginsWith, value: quality.rawValue + "::")
         var assetCondition = KBGenericCondition(value: true)
         for assetIdentifier in assetIdentifiers {
             assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
@@ -297,18 +306,6 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(err))
             }
         }
-    }
-    
-    func getLowResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        getAssets(withIdentifiers: assetIdentifiers,
-                  quality: "low",
-                  completionHandler: completionHandler)
-    }
-    
-    func getHiResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        getAssets(withIdentifiers: assetIdentifiers,
-                  quality: "hi",
-                  completionHandler: completionHandler)
     }
     
     func storeAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<Void, Error>) -> ()) {

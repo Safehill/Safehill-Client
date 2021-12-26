@@ -62,13 +62,11 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getUsers(withIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
     
-    // MARK: Assets Read
+    // MARK: Assets Fetch
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
     
-    func getLowResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
-    
-    func getHiResAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
+    func getAssets(withGlobalIdentifiers: [String], quality: SHAssetQuality, completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
     
     // MARK: Assets Write
     

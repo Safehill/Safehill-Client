@@ -163,11 +163,9 @@ public struct SHLocalUser: SHServerUser {
             try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
             
             if let ssoIdentifier = ssoIdentifier {
-                try? SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
+                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
             }
-            try? SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
-            
-            throw error
+            try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
         }
     }
     

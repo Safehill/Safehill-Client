@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import KnowledgeBase
 
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
@@ -32,11 +33,6 @@ struct GenericSuccessResponse: Decodable {
 struct GenericFailureResponse: Decodable {
     let error: Bool
     let reason: String?
-}
-
-struct DeleteConfirmationSuccessResponse: Decodable {
-    let status: String
-    let deletedAssetGlobalIdentifiers: [String]
 }
 
 struct SHServerHTTPAPI : SHServerAPI {
@@ -68,9 +64,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         return components.url!
     }
     
-    func makeRequest<T: Decodable>(request: URLRequest,
-                                   decodingResponseAs type: T.Type,
-                                   completionHandler: @escaping (Result<T, Error>) -> Void) {
+    static func makeRequest<T: Decodable>(request: URLRequest,
+                                          decodingResponseAs type: T.Type,
+                                          completionHandler: @escaping (Result<T, Error>) -> Void) {
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard error == nil else {
                 completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
@@ -82,11 +78,14 @@ struct SHServerHTTPAPI : SHServerAPI {
             case 200..<300:
                 break
             case 401:
-                return completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+                completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+                return
             case 404:
-                return completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                return
             case 405:
-                return completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
+                completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
+                return
             case 400..<500:
                 var message = "Bad or malformed request"
                 if let data = data,
@@ -94,7 +93,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                    let reason = decoded.reason {
                     message = reason
                 }
-                return completionHandler(.failure(SHHTTPError.ClientError.badRequest(message)))
+                completionHandler(.failure(SHHTTPError.ClientError.badRequest(message)))
+                return
             default:
                 var message = "A server error occurred"
                 if let data = data,
@@ -102,7 +102,9 @@ struct SHServerHTTPAPI : SHServerAPI {
                    let reason = decoded.reason {
                     message = reason
                 }
-                return completionHandler(.failure(SHHTTPError.ServerError.generic(message)))
+                log.error("\(request.url!.absoluteString) failed with code \(httpResponse.statusCode): \(message)")
+                completionHandler(.failure(SHHTTPError.ServerError.generic(message)))
+                return
             }
             
             guard let data = data else {
@@ -127,10 +129,9 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func post<T: Decodable>(_ route: String,
-                            parameters: [String: Any]?,
+                            parameters: [String: Any?]?,
                             requiresAuthentication: Bool = true,
                             completionHandler: @escaping (Result<T, Error>) -> Void) {
-        
         let url = requestURL(route: route)
         
         var request = URLRequest(url: url)
@@ -153,12 +154,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        print("Making HTTP Request \(request.httpMethod!) \(request.url!)")
-        #if DEBUG
-            print("with parameters \(parameters ?? [:])")
-        #endif
+        log.info("Making HTTP Request \(request.httpMethod!) \(request.url!)")
+        log.debug("with parameters \(parameters ?? [:])")
         
-        self.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
+        SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
     func createUser(email: String,
@@ -262,10 +261,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
 
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        let parameters = [
-            "userIdentifiers": [self.requestor.identifier]
-        ] as [String : Any]
-        self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
                 return completionHandler(.success(descriptors))
@@ -275,73 +271,118 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func getAssets(withIdentifiers assetIdentifiers: [String],
-                   quality: String,
+    func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
+                   quality: SHAssetQuality,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         let parameters = [
-            "identifiers": assetIdentifiers,
-            "quality": quality
+            "globalIdentifiers": assetIdentifiers,
         ] as [String : Any]
-        self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHGenericEncryptedAsset], Error>) in
+        self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
                 var dictionary = [String: SHEncryptedAsset]()
+                
+                let dispatch = KBTimedDispatch()
+                
                 for asset in assets {
-                    dictionary[asset.globalIdentifier] = asset
+                    for version in asset.versions {
+                        if version.versionName != quality.rawValue {
+                            continue
+                        }
+                        S3Proxy.retrieve(asset, version) { result in
+                            switch result {
+                            case .success(let encryptedAsset):
+                                dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
+                            case .failure(let error):
+                                dispatch.interrupt(error)
+                            }
+                        }
+                    }
                 }
-                return completionHandler(.success(dictionary))
+                
+                do {
+                    try dispatch.wait()
+                    completionHandler(.success(dictionary))
+                } catch {
+                    completionHandler(.failure(error))
+                }
+                
             case .failure(let error):
                 return completionHandler(.failure(error))
             }
         }
     }
 
-    func getLowResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        getAssets(withIdentifiers: assetIdentifiers,
-                  quality: "low",
-                  completionHandler: completionHandler)
-    }
-    
-    func getHiResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        getAssets(withIdentifiers: assetIdentifiers,
-                  quality: "hi",
-                  completionHandler: completionHandler)
-    }
-
     func storeAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-
-        let lowResDict: [String: Any?] = [
-            "assetIdentifier": lowResAsset.globalIdentifier,
-            "applePhotosAssetIdentifier": lowResAsset.localIdentifier,
-            "encryptedData": lowResAsset.encryptedData.base64EncodedString(),
-            "encryptedSecret": lowResAsset.encryptedSecret.base64EncodedString(),
-            "publicKey": lowResAsset.publicKeyData.base64EncodedString(),
-            "publicSignature": lowResAsset.publicSignatureData.base64EncodedString(),
-            "creationDate": lowResAsset.creationDate?.iso8601withFractionalSeconds
-        ]
-        let hiResDict: [String: Any?] = [
-            "assetIdentifier": hiResAsset.globalIdentifier,
-            "applePhotosAssetIdentifier": hiResAsset.localIdentifier,
-            "encryptedData": hiResAsset.encryptedData.base64EncodedString(),
-            "encryptedSecret": hiResAsset.encryptedSecret.base64EncodedString(),
-            "publicKey": hiResAsset.publicKeyData.base64EncodedString(),
-            "publicSignature": hiResAsset.publicSignatureData.base64EncodedString(),
-            "creationDate": hiResAsset.creationDate?.iso8601withFractionalSeconds
+        
+        let createDict: [String: Any?] = [
+            "globalIdentifier": lowResAsset.globalIdentifier,
+            "localIdentifier": lowResAsset.localIdentifier,
+            "creationDate": lowResAsset.creationDate?.iso8601withFractionalSeconds,
+            "versions": [
+                [
+                    "versionName": SHAssetQuality.lowResolution.rawValue,
+                    "encryptedSecret": lowResAsset.encryptedSecret.base64EncodedString(),
+                    "publicKey": lowResAsset.publicKeyData.base64EncodedString(),
+                    "publicSignature": lowResAsset.publicSignatureData.base64EncodedString(),
+                ],
+                [
+                    "versionName": SHAssetQuality.hiResolution.rawValue,
+                    "encryptedSecret": hiResAsset.encryptedSecret.base64EncodedString(),
+                    "publicKey": hiResAsset.publicKeyData.base64EncodedString(),
+                    "publicSignature": hiResAsset.publicSignatureData.base64EncodedString()
+                ]
+            ]
         ]
         
-        self.post("assets/create", parameters: ["low": lowResDict, "hi": hiResDict]) { (result: Result<GenericSuccessResponse, Error>) in
+        self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
             switch result {
-            case .success(_):
-                return completionHandler(.success(()))
-            case .failure(let error):
-                if case .notImplemented = error as? SHHTTPError.ServerError {
-                    // TODO: Remove this once the API is implemented
-                    print("Mocking success create even though there was an error")
-                    DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .seconds(2)) {
-                        completionHandler(.success(()))
+            case .success(let serverAsset):
+                let dispatch = KBTimedDispatch(timeoutInMilliseconds: 120000)
+                
+                log.info("server asset \(lowResAsset.globalIdentifier) created. uploading versions to S3")
+                
+                for version in serverAsset.versions {
+                    let asset: SHEncryptedAsset
+                    if version.versionName == SHAssetQuality.lowResolution.rawValue {
+                        asset = lowResAsset
+                    } else if version.versionName == SHAssetQuality.hiResolution.rawValue {
+                        asset = hiResAsset
+                    } else {
+                        self.deleteAssets(withGlobalIdentifiers: [lowResAsset.globalIdentifier]) { _ in
+                            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("version names don't match")))
+                        }
+                        return
                     }
-                    return
+                    
+                    guard let url = URL(string: version.presignedURL) else {
+                        completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid")))
+                        return
+                    }
+                    
+                    dispatch.group.enter()
+                    S3Proxy.save(asset.encryptedData, usingPresignedURL: url) { result in
+                        switch result {
+                        case .success(_):
+                            dispatch.group.leave()
+                        case .failure(let error):
+                            log.error("error uploading asset= \(asset.globalIdentifier) version=\(version.versionName). deleting asset from server")
+                            self.deleteAssets(withGlobalIdentifiers: [lowResAsset.globalIdentifier]) { _ in
+                                dispatch.interrupt(error)
+                            }
+                        }
+                    }
                 }
+                
+                do {
+                    try dispatch.wait()
+                    completionHandler(.success(()))
+                }
+                catch {
+                    completionHandler(.failure(error))
+                }
+                
+            case .failure(let error):
                 return completionHandler(.failure(error))
             }
         }
@@ -349,14 +390,15 @@ struct SHServerHTTPAPI : SHServerAPI {
 
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
         let parameters = [
-            "identifiers": globalIdentifiers
+            "globalIdentifiers": globalIdentifiers
         ] as [String : Any]
-        self.post("assets/delete", parameters: parameters) { (result: Result<DeleteConfirmationSuccessResponse, Error>) in
+        self.post("assets/delete", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
-            case .success(let deleteConfirmation):
-                return completionHandler(.success(deleteConfirmation.deletedAssetGlobalIdentifiers))
+            case .success(_):
+                completionHandler(.success(globalIdentifiers))
             case .failure(let error):
-                return completionHandler(.failure(error))
+                log.error("asset deletion failed. Error: \(error.localizedDescription)")
+                completionHandler(.failure(error))
             }
         }
     }

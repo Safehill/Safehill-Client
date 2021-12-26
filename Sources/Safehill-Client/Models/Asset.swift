@@ -8,6 +8,10 @@
 import Foundation
 import Safehill_Crypto
 
+public enum SHAssetQuality: String {
+    case lowResolution = "low", hiResolution = "hi"
+}
+
 public protocol SHAssetDescriptor {
     var globalIdentifier: String { get }
     var localIdentifier: String? { get }
@@ -60,6 +64,56 @@ public struct SHGenericDecryptedAsset : SHDecryptedAsset {
     public let creationDate: Date?
 }
 
+public struct SHServerAssetVersion : Codable {
+    let versionName: String
+    let publicKeyData: Data
+    let publicSignatureData: Data
+    let encryptedSecret: Data
+    let presignedURL: String
+    let presignedURLExpiresInMinutes: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case versionName
+        case publicKeyData = "publicKey"
+        case publicSignatureData = "publicSignature"
+        case encryptedSecret
+        case presignedURL
+        case presignedURLExpiresInMinutes
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        versionName = try container.decode(String.self, forKey: .versionName)
+        let encryptedSecretBase64 = try container.decode(String.self, forKey: .encryptedSecret)
+        encryptedSecret = Data(base64Encoded: encryptedSecretBase64)!
+        let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
+        publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
+        let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
+        publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
+        
+        presignedURL = try container.decode(String.self, forKey: .presignedURL)
+        presignedURLExpiresInMinutes = try container.decode(Int.self, forKey: .presignedURLExpiresInMinutes)
+    }
+}
+
+public struct SHServerAsset : Codable {
+    let globalIdentifier: String
+    let localIdentifier: String?
+    let creationDate: Date?
+    let versions: [SHServerAssetVersion]
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
+        localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
+        let dateString = try container.decode(String.self, forKey: .creationDate)
+        creationDate = dateString.iso8601withFractionalSeconds
+        versions = try container.decode([SHServerAssetVersion].self, forKey: .versions)
+    }
+}
+
 public protocol SHEncryptedAsset {
     var globalIdentifier: String { get }
     var localIdentifier: String? { get }
@@ -70,7 +124,7 @@ public protocol SHEncryptedAsset {
     var creationDate: Date? { get }
 }
 
-public struct SHGenericEncryptedAsset : SHEncryptedAsset, Codable {
+public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let encryptedData: Data
@@ -78,22 +132,6 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset, Codable {
     public let publicKeyData: Data
     public let publicSignatureData: Data
     public let creationDate: Date?
-    
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
-        localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
-        let encryptedDataBase64 = try container.decode(String.self, forKey: .encryptedData)
-        encryptedData = Data(base64Encoded: encryptedDataBase64)!
-        let encryptedSecretBase64 = try container.decode(String.self, forKey: .encryptedSecret)
-        encryptedSecret = Data(base64Encoded: encryptedSecretBase64)!
-        let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
-        publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
-        let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
-        publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
-        let dateString = try container.decode(String.self, forKey: .creationDate)
-        creationDate = dateString.iso8601withFractionalSeconds
-    }
     
     public init(globalIdentifier: String,
                 localIdentifier: String?,
