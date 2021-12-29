@@ -8,7 +8,7 @@
 import Foundation
 
 public enum SHHTTPError {
-    public enum ClientError : Error {
+    public enum ClientError : Error, LocalizedError {
         case badRequest(String)
         case unauthorized
         case notFound
@@ -27,6 +27,17 @@ public enum SHHTTPError {
                 return 409
             default:
                 return 400
+            }
+        }
+        
+        public var errorDescription: String? {
+            switch self {
+            case .badRequest(let message):
+                return message
+            case .unauthorized:
+                return "Invalid credentials"
+            default:
+                return "Error \(self.toCode())"
             }
         }
     }

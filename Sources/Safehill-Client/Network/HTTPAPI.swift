@@ -48,6 +48,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         components.scheme = "http"
         components.host = "localhost"
         components.port = 8080
+//        components.scheme = "https"
+//        components.host = "safehill.herokuapp.com"
+//        components.port = 443
         components.path = "/\(route)"
         var queryItems = [URLQueryItem]()
         
@@ -74,6 +77,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
             
             let httpResponse = response as! HTTPURLResponse
+            log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+            
             switch httpResponse.statusCode {
             case 200..<300:
                 break
@@ -85,6 +90,9 @@ struct SHServerHTTPAPI : SHServerAPI {
                 return
             case 405:
                 completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
+                return
+            case 409:
+                completionHandler(.failure(SHHTTPError.ClientError.conflict))
                 return
             case 400..<500:
                 var message = "Bad or malformed request"
@@ -238,11 +246,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
     
-    func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
             "identifier": self.requestor.identifier,
+            "email": email,
             "password": password
-        ] as [String : Any]
+        ] as [String : Any?]
         self.post("signin", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
 

@@ -80,8 +80,8 @@ public struct SHServerProxy {
         }
     }
     
-    public func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
-        self.remoteServer.signIn(password: password, completionHandler: completionHandler)
+    public func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+        self.remoteServer.signIn(email: email, password: password, completionHandler: completionHandler)
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {

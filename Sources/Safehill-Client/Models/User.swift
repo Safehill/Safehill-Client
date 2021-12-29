@@ -61,6 +61,7 @@ public struct SHLocalUser: SHServerUser {
     }
     
     var shUser: SHLocalCryptoUser
+    
     public var publicKeyData: Data {
         self.shUser.publicKeyData
     }
@@ -204,6 +205,11 @@ public struct SHLocalUser: SHServerUser {
             }
         }
     }
+    
+    public func shareablePrivateKeys() throws -> Data {
+        let encoder = JSONEncoder()
+        return try encoder.encode(self.shUser)
+    }
 }
 
 // MARK: Initialize SHUserContext from SHLocalUser
@@ -253,9 +259,7 @@ extension SHKeychain {
             throw SHKeychain.Error.unexpectedStatus(status)
         }
         
-#if DEBUG
-        log.info("Successfully saved value \(token) in account \(account)")
-#endif
+        log.debug("Successfully saved value \(token, privacy: .private) in account \(account)")
     }
     
     static func deleteValue(account: String) throws {

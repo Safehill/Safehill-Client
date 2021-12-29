@@ -28,8 +28,10 @@ struct S3Proxy {
                                     decodingResponseAs: GenericSuccessResponse.self) { result in
             switch result {
             case .success(_):
+                log.info("successfully uploaded to S3")
                 completionHandler(.success(()))
             case .failure(let err):
+                log.error("error uploading to S3: \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }

@@ -54,7 +54,7 @@ public protocol SHServerAPI {
                          completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
+    func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
