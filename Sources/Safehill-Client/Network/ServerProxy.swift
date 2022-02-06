@@ -126,7 +126,18 @@ public struct SHServerProxy {
         }
     }
     
+    public func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.deleteAccount(email: email, password: password) { result in
+            if case .failure(let err) = result {
+                completionHandler(.failure(err))
+                return
+            }
+            self.localServer.deleteAccount(completionHandler: completionHandler)
+        }
+    }
+    
     public func deleteLocalAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        // No need to check email and password for local accounts
         self.localServer.deleteAccount(completionHandler: completionHandler)
     }
     
@@ -135,6 +146,7 @@ public struct SHServerProxy {
         self.localServer.getAssetDescriptors { result in
             if case .failure(let err) = result {
                 completionHandler(.failure(originalServerError ?? err))
+                return
             }
             completionHandler(result)
         }

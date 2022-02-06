@@ -8,6 +8,8 @@
 import Foundation
 import KnowledgeBase
 
+public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
+
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
         self.init()
@@ -122,6 +124,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             if type is NoReply.Type {
                 completionHandler(.success(NoReply() as! T))
+                return
             }
             
             do {
@@ -218,8 +221,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.post("users/delete", parameters: nil, requiresAuthentication: false) { (result: Result<NoReply, Error>) in
+    func deleteAccount(email: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.post("users/delete", parameters: [
+            "email": email,
+            "password": password
+        ], requiresAuthentication: false) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 return completionHandler(.success(()))
@@ -347,7 +353,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
             switch result {
             case .success(let serverAsset):
-                let dispatch = KBTimedDispatch(timeoutInMilliseconds: 120000)
+                let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHUploadTimeoutInMilliseconds)
                 
                 log.info("server asset \(lowResAsset.globalIdentifier) created. uploading versions to S3")
                 
@@ -357,6 +363,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                         asset = lowResAsset
                     } else if version.versionName == SHAssetQuality.hiResolution.rawValue {
                         asset = hiResAsset
+                        continue
                     } else {
                         self.deleteAssets(withGlobalIdentifiers: [lowResAsset.globalIdentifier]) { _ in
                             completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("version names don't match")))

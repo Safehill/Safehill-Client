@@ -24,8 +24,14 @@ struct S3Proxy {
         
         log.info("S3Proxy request \(request.httpMethod!) \(request.url!)")
         
+        let bcf = ByteCountFormatter()
+        bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
+        bcf.countStyle = .file
+        let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
+        log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
+        
         SHServerHTTPAPI.makeRequest(request: request,
-                                    decodingResponseAs: GenericSuccessResponse.self) { result in
+                                    decodingResponseAs: NoReply.self) { result in
             switch result {
             case .success(_):
                 log.info("successfully uploaded to S3")

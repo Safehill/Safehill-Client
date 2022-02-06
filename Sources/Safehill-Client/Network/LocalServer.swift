@@ -118,7 +118,7 @@ struct LocalServer : SHServerAPI {
         self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
-    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func deleteAccount(email: String = "", password: String = "", completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let dispatch = KBTimedDispatch()
         
         dispatch.group.enter()

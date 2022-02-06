@@ -38,7 +38,7 @@ public protocol SHServerAPI {
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
     ///   - completionHandler: the callback method
-    func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
     /// - Parameters:
