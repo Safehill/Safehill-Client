@@ -328,7 +328,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func storeAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func createAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
         
         let createDict: [String: Any?] = [
             "globalIdentifier": lowResAsset.globalIdentifier,
@@ -350,58 +350,30 @@ struct SHServerHTTPAPI : SHServerAPI {
             ]
         ]
         
-        self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
-            switch result {
-            case .success(let serverAsset):
-                let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHUploadTimeoutInMilliseconds)
-                
-                log.info("server asset \(lowResAsset.globalIdentifier) created. uploading versions to S3")
-                
-                for version in serverAsset.versions {
-                    let asset: SHEncryptedAsset
-                    if version.versionName == SHAssetQuality.lowResolution.rawValue {
-                        asset = lowResAsset
-                    } else if version.versionName == SHAssetQuality.hiResolution.rawValue {
-                        asset = hiResAsset
-                        continue
-                    } else {
-                        self.deleteAssets(withGlobalIdentifiers: [lowResAsset.globalIdentifier]) { _ in
-                            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("version names don't match")))
-                        }
-                        return
-                    }
-                    
-                    guard let url = URL(string: version.presignedURL) else {
-                        completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid")))
-                        return
-                    }
-                    
-                    dispatch.group.enter()
-                    S3Proxy.save(asset.encryptedData, usingPresignedURL: url) { result in
-                        switch result {
-                        case .success(_):
-                            dispatch.group.leave()
-                        case .failure(let error):
-                            log.error("error uploading asset= \(asset.globalIdentifier) version=\(version.versionName). deleting asset from server")
-                            self.deleteAssets(withGlobalIdentifiers: [lowResAsset.globalIdentifier]) { _ in
-                                dispatch.interrupt(error)
-                            }
-                        }
-                    }
-                }
-                
-                do {
-                    try dispatch.wait()
-                    completionHandler(.success(()))
-                }
-                catch {
-                    completionHandler(.failure(error))
-                }
-                
-            case .failure(let error):
-                return completionHandler(.failure(error))
-            }
+        self.post("assets/create", parameters: createDict, completionHandler: completionHandler)
+    }
+    
+    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
+                           encryptedAsset: SHEncryptedAsset,
+                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.uploadAssetData(assetVersion: serverAssetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
+    }
+    
+    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
+                          encryptedAsset: SHEncryptedAsset,
+                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.uploadAssetData(assetVersion: serverAssetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
+    }
+    
+    func uploadAssetData(assetVersion: SHServerAssetVersion,
+                         encryptedAsset: SHEncryptedAsset,
+                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        guard let url = URL(string: assetVersion.presignedURL) else {
+            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid")))
+            return
         }
+        
+        S3Proxy.save(encryptedAsset.encryptedData, usingPresignedURL: url, completionHandler: completionHandler)
     }
 
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

@@ -70,14 +70,24 @@ public protocol SHServerAPI {
     
     // MARK: Assets Write
     
-    /// Store encrypted assets as data to the CDN.
+    /// Create encrypted asset and versions (low res and hi res)
     /// - Parameters:
     ///   - lowResAsset: the low resolution version of the encrypted data
     ///   - hiResAsset: the high resolution version of the encrypted data
     ///   - completionHandler: the callback method
-    func storeAsset(lowResAsset: SHEncryptedAsset,
-                    hiResAsset: SHEncryptedAsset,
-                    completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func createAsset(lowResAsset: SHEncryptedAsset,
+                     hiResAsset: SHEncryptedAsset,
+                     completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ())
+    
+    /// Upload encrypted low res asset version data to the CDN.
+    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
+                           encryptedAsset: SHEncryptedAsset,
+                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    
+    /// Upload encrypted hi res asset version data to the CDN.
+    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
+                          encryptedAsset: SHEncryptedAsset,
+                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     
     /// Removes assets from the CDN

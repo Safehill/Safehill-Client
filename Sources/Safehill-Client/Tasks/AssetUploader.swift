@@ -8,9 +8,9 @@
 import Foundation
 
 public protocol SHAssetUploaderDelegate {
-    func didStartUploading(itemWithLocalIdentifier: String, globalIdentifier: String)
-    func didUpload(itemWithLocalIdentifier: String, globalIdentifier: String)
-    func didFailUpload(itemWithLocalIdentifier: String, globalIdentifier: String)
+    func didStartUploading(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
+    func didUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
+    func didFailUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
 }
 
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {

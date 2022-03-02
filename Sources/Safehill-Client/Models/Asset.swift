@@ -65,7 +65,7 @@ public struct SHGenericDecryptedAsset : SHDecryptedAsset {
 }
 
 public struct SHServerAssetVersion : Codable {
-    let versionName: String
+    public let versionName: String
     let publicKeyData: Data
     let publicSignatureData: Data
     let encryptedSecret: Data
@@ -95,13 +95,22 @@ public struct SHServerAssetVersion : Codable {
         presignedURL = try container.decode(String.self, forKey: .presignedURL)
         presignedURLExpiresInMinutes = try container.decode(Int.self, forKey: .presignedURLExpiresInMinutes)
     }
+    
+    public init(versionName: String, publicKeyData: Data, publicSignatureData: Data, encryptedSecret: Data, presignedURL: String, presignedURLExpiresInMinutes: Int) {
+        self.versionName = versionName
+        self.publicKeyData = publicKeyData
+        self.publicSignatureData = publicSignatureData
+        self.encryptedSecret = encryptedSecret
+        self.presignedURL = presignedURL
+        self.presignedURLExpiresInMinutes = presignedURLExpiresInMinutes
+    }
 }
 
 public struct SHServerAsset : Codable {
-    let globalIdentifier: String
-    let localIdentifier: String?
-    let creationDate: Date?
-    let versions: [SHServerAssetVersion]
+    public let globalIdentifier: String
+    public let localIdentifier: String?
+    public let creationDate: Date?
+    public let versions: [SHServerAssetVersion]
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -111,6 +120,13 @@ public struct SHServerAsset : Codable {
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
         versions = try container.decode([SHServerAssetVersion].self, forKey: .versions)
+    }
+    
+    public init(globalIdentifier: String, localIdentifier: String?, creationDate: Date?, versions: [SHServerAssetVersion]) {
+        self.globalIdentifier = globalIdentifier
+        self.localIdentifier = localIdentifier
+        self.creationDate = creationDate
+        self.versions = versions
     }
 }
 

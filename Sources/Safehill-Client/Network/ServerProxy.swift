@@ -255,21 +255,29 @@ public struct SHServerProxy {
     public func storeAssetLocally(lowResAsset: SHEncryptedAsset,
                                   hiResAsset: SHEncryptedAsset,
                                   completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.localServer.storeAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset, completionHandler: completionHandler)
+        self.localServer.createAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) {
+            result in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
     }
     
-    public func storeAsset(lowResAsset: SHEncryptedAsset,
-                           hiResAsset: SHEncryptedAsset,
-                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func createAsset(lowResAsset: SHEncryptedAsset,
+                            hiResAsset: SHEncryptedAsset,
+                            completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ()) {
         guard lowResAsset.globalIdentifier == hiResAsset.globalIdentifier &&
                 lowResAsset.localIdentifier == hiResAsset.localIdentifier else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("identifiers for both low and hi resolution assets need to match")))
             return
         }
         
-        self.remoteServer.storeAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
+        self.remoteServer.createAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
             completionHandler(result)
-            if case .success() = result {
+            if case .success(_) = result {
                 self.storeAssetLocally(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
                     if case .failure(let err) = result {
                         print("Asset was stored to server but not in the local cache: \(err)")
@@ -277,6 +285,18 @@ public struct SHServerProxy {
                 }
             }
         }
+    }
+    
+    public func uploadLowResAsset(assetVersion: SHServerAssetVersion,
+                                  encryptedAsset: SHEncryptedAsset,
+                                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.uploadLowResAsset(serverAssetVersion: assetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
+    }
+    
+    public func uploadHiResAsset(assetVersion: SHServerAssetVersion,
+                                 encryptedAsset: SHEncryptedAsset,
+                                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.uploadHiResAsset(serverAssetVersion: assetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
     }
     
     public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

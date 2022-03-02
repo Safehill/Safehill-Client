@@ -308,7 +308,9 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func storeAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func createAsset(lowResAsset: SHEncryptedAsset,
+                     hiResAsset: SHEncryptedAsset,
+                     completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
         
         let lowResDict: [String: Any?] = [
             "assetIdentifier": lowResAsset.globalIdentifier,
@@ -344,12 +346,41 @@ struct LocalServer : SHServerAPI {
         writeBatch.write { (result: Swift.Result) in
             switch result {
             case .success():
-                completionHandler(.success(()))
+                let lowRes = SHServerAssetVersion(versionName: SHAssetQuality.lowResolution.rawValue,
+                                                  publicKeyData: lowResAsset.publicKeyData,
+                                                  publicSignatureData: lowResAsset.publicSignatureData,
+                                                  encryptedSecret: lowResAsset.encryptedSecret,
+                                                  presignedURL: "",
+                                                  presignedURLExpiresInMinutes: 0)
+                let hiRes = SHServerAssetVersion(versionName: SHAssetQuality.hiResolution.rawValue,
+                                                 publicKeyData: hiResAsset.publicKeyData,
+                                                 publicSignatureData: hiResAsset.publicSignatureData,
+                                                 encryptedSecret: hiResAsset.encryptedSecret,
+                                                 presignedURL: "",
+                                                 presignedURLExpiresInMinutes: 0)
+                let serverAsset = SHServerAsset(globalIdentifier: lowResAsset.globalIdentifier,
+                                                localIdentifier: lowResAsset.localIdentifier,
+                                                creationDate: lowResAsset.creationDate,
+                                                versions: [lowRes, hiRes])
+                
+                completionHandler(.success(serverAsset))
             case .failure(let err):
                 completionHandler(.failure(err))
                 return
             }
         }
+    }
+    
+    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
+                           encryptedAsset: SHEncryptedAsset,
+                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        completionHandler(.success(()))
+    }
+    
+    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
+                          encryptedAsset: SHEncryptedAsset,
+                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        completionHandler(.success(()))
     }
     
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

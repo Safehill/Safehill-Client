@@ -30,17 +30,20 @@ struct S3Proxy {
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
         log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
         
-        SHServerHTTPAPI.makeRequest(request: request,
-                                    decodingResponseAs: NoReply.self) { result in
-            switch result {
-            case .success(_):
-                log.info("successfully uploaded to S3")
-                completionHandler(.success(()))
-            case .failure(let err):
-                log.error("error uploading to S3: \(err.localizedDescription)")
-                completionHandler(.failure(err))
-            }
-        }
+        completionHandler(.success(()))
+        return
+        
+//        SHServerHTTPAPI.makeRequest(request: request,
+//                                    decodingResponseAs: NoReply.self) { result in
+//            switch result {
+//            case .success(_):
+//                log.info("successfully uploaded to S3")
+//                completionHandler(.success(()))
+//            case .failure(let err):
+//                log.error("error uploading to S3: \(err.localizedDescription)")
+//                completionHandler(.failure(err))
+//            }
+//        }
     }
     
     static func retrieve(_ asset: SHServerAsset,

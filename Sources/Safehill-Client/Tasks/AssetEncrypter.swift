@@ -8,9 +8,9 @@
 import Foundation
 
 public protocol SHAssetEncrypterDelegate {
-    func didStartEncryption(itemWithLocalIdentifier: String)
-    func didEncrypt(itemWithLocalIdentifier: String, globalIdentifier: String)
-    func didFailEncryption(itemWithLocalIdentifier: String)
+    func didStartEncryption(itemWithLocalIdentifier: String, groupId: String)
+    func didEncrypt(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
+    func didFailEncryption(itemWithLocalIdentifier: String, groupId: String)
 }
 
 open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
