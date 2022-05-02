@@ -17,12 +17,16 @@ struct S3Proxy {
     
     static func save(_ data: Data,
                      usingPresignedURL presignedURL: URL,
+                     headers: [String: String]? = nil,
                      completionHandler: @escaping (Result<Void, Error>) -> ()) {
         var request = URLRequest(url: presignedURL)
         request.httpMethod = "PUT"
         request.httpBody = data
+        for (headerField, headerValue) in headers ?? [:] {
+            request.addValue(headerValue, forHTTPHeaderField: headerField)
+        }
         
-        log.info("S3Proxy request \(request.httpMethod!) \(request.url!)")
+        log.info("S3Proxy request \(request.httpMethod!) \(request.url!) with headers \(String(describing: request.allHTTPHeaderFields))")
         
         let bcf = ByteCountFormatter()
         bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
@@ -30,20 +34,17 @@ struct S3Proxy {
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
         log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
         
-        completionHandler(.success(()))
-        return
-        
-//        SHServerHTTPAPI.makeRequest(request: request,
-//                                    decodingResponseAs: NoReply.self) { result in
-//            switch result {
-//            case .success(_):
-//                log.info("successfully uploaded to S3")
-//                completionHandler(.success(()))
-//            case .failure(let err):
-//                log.error("error uploading to S3: \(err.localizedDescription)")
-//                completionHandler(.failure(err))
-//            }
-//        }
+        SHServerHTTPAPI.makeRequest(request: request,
+                                    decodingResponseAs: NoReply.self) { result in
+            switch result {
+            case .success(_):
+                log.info("successfully uploaded to S3")
+                completionHandler(.success(()))
+            case .failure(let err):
+                log.error("error uploading to S3: \(err.localizedDescription)")
+                completionHandler(.failure(err))
+            }
+        }
     }
     
     static func retrieve(_ asset: SHServerAsset,
