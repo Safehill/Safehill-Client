@@ -37,8 +37,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
 public class SHAssetsEncrypterQueueProcessor : SHOperationQueueProcessor<SHEncryptionOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsEncrypterQueueProcessor(
-        delayedStartInSeconds: 5,
-        dispatchIntervalInSeconds: 10
+        delayedStartInSeconds: 2,
+        dispatchIntervalInSeconds: 2
     )
     
     private override init(delayedStartInSeconds: Int = 0,
