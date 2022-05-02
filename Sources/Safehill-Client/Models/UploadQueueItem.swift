@@ -156,3 +156,6 @@ public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHGroupableUploadQue
         self.init(assetId: assetId, groupId: groupId)
     }
 }
+
+public class SHFailedUploadRequestQueueItem: SHUploadHistoryItem {
+}
