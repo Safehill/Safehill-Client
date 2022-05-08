@@ -197,6 +197,11 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+        // TODO: Store and retrieve users in the knowledge graph
+        completionHandler(.success([]))
+    }
+    
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         let condition = KBGenericCondition(.beginsWith, value: "low::")
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in

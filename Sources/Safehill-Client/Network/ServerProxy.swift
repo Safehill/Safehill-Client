@@ -88,6 +88,10 @@ public struct SHServerProxy {
         self.remoteServer.getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
     }
     
+    public func searchUsers(query: String, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
+        self.remoteServer.searchUsers(query: query, completionHandler: completionHandler)
+    }
+    
     /// Fetch the local user details. If fails fall back to local cache if the server is unreachable or the token is expired
     /// - Parameters:
     ///   - completionHandler: the callback method

@@ -62,6 +62,12 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getUsers(withIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
     
+    /// Get a User's public key and public signature
+    /// - Parameters:
+    ///   - query: the query string
+    ///   - completionHandler: the callback method
+    func searchUsers(query: String, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
+    
     // MARK: Assets Fetch
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())

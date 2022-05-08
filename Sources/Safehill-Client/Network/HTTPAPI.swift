@@ -127,6 +127,9 @@ struct SHServerHTTPAPI : SHServerAPI {
                 return
             }
             
+            let convertedString = String(data: data, encoding: String.Encoding.utf8)
+            log.debug("response: \(convertedString ?? "")")
+            
             do {
                 let decoded = try JSONDecoder().decode(type, from: data)
                 completionHandler(.success(decoded))
@@ -137,6 +140,28 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
             
         }.resume()
+    }
+    
+    func get<T: Decodable>(_ route: String,
+                           parameters: [String: String]?,
+                           requiresAuthentication: Bool = true,
+                           completionHandler: @escaping (Result<T, Error>) -> Void) {
+        let url = requestURL(route: route, urlParameters: parameters)
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        if requiresAuthentication {
+            guard let bearerToken = self.requestor.authToken else {
+                completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+                return
+            }
+            request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        }
+        
+        log.info("Making GET Request \(request.httpMethod!) \(request.url!)")
+        
+        SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
     func post<T: Decodable>(_ route: String,
@@ -165,7 +190,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        log.info("Making HTTP Request \(request.httpMethod!) \(request.url!)")
+        log.info("Making POST Request \(request.httpMethod!) \(request.url!)")
         log.debug("with parameters \(parameters ?? [:])")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
@@ -269,6 +294,22 @@ struct SHServerHTTPAPI : SHServerAPI {
             switch result {
             case .success(let users):
                 return completionHandler(.success(users))
+            case .failure(let error):
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+        let parameters = [
+            "query": query,
+            "page": "1",
+            "per": "5"
+        ]
+        self.get("users/search", parameters: parameters) { (result: Result<SHPaginatedUserSearchResults, Error>) in
+            switch result {
+            case .success(let searchResult):
+                return completionHandler(.success(searchResult.items))
             case .failure(let error):
                 return completionHandler(.failure(error))
             }

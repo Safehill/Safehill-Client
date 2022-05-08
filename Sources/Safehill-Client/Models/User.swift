@@ -44,8 +44,8 @@ public struct SHRemoteUser : SHServerUser, Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         identifier = try container.decode(String.self, forKey: .identifier)
-        name = try container.decode(String.self, forKey: .name)
-        email = try container.decode(String.self, forKey: .email)
+        name = try? container.decode(String.self, forKey: .name)
+        email = try? container.decode(String.self, forKey: .email)
         let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
         publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
         let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
