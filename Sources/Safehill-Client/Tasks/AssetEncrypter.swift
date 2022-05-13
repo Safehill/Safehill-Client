@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 public protocol SHAssetEncrypterDelegate {
     func didStartEncryption(itemWithLocalIdentifier: String, groupId: String)
@@ -14,6 +15,8 @@ public protocol SHAssetEncrypterDelegate {
 }
 
 open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+    
+    public let log = Logger(subsystem: "com.safehill", category: "BG-ENCRYPT")
     
     public let limit: Int?
     public let user: SHLocalUser

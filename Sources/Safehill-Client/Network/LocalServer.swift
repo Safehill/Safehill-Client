@@ -283,12 +283,22 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func getAssets(withGlobalIdentifiers assetIdentifiers: [String], quality: SHAssetQuality, completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        let prefixCondition = KBGenericCondition(.beginsWith, value: quality.rawValue + "::")
+    func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
+                   versions: [SHAssetQuality]? = nil,
+                   completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+        
+        var prefixCondition = KBGenericCondition(value: true)
+        
+        let versions = versions ?? SHAssetQuality.all
+        for quality in versions {
+            prefixCondition = prefixCondition.or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
+        }
+        
         var assetCondition = KBGenericCondition(value: true)
         for assetIdentifier in assetIdentifiers {
             assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
         }
+        
         assetStore.values(forKeysMatching: prefixCondition.and(assetCondition)) {
             (result: Swift.Result) in
             switch result {
@@ -313,60 +323,60 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func createAsset(lowResAsset: SHEncryptedAsset,
-                     hiResAsset: SHEncryptedAsset,
-                     completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
-        
-        let lowResDict: [String: Any?] = [
-            "assetIdentifier": lowResAsset.globalIdentifier,
-            "applePhotosAssetIdentifier": lowResAsset.localIdentifier,
-            "encryptedData": lowResAsset.encryptedData,
-            "encryptedSecret": lowResAsset.encryptedSecret,
-            "publicKey": lowResAsset.publicKeyData,
-            "publicSignature": lowResAsset.publicSignatureData,
-            "creationDate": lowResAsset.creationDate
-        ]
-        let hiResDict: [String: Any?] = [
-            "assetIdentifier": hiResAsset.globalIdentifier,
-            "applePhotosAssetIdentifier": hiResAsset.localIdentifier,
-            "encryptedData": hiResAsset.encryptedData,
-            "encryptedSecret": hiResAsset.encryptedSecret,
-            "publicKey": hiResAsset.publicKeyData,
-            "publicSignature": hiResAsset.publicSignatureData,
-            "creationDate": hiResAsset.creationDate
-        ]
+    func create(asset: SHEncryptedAsset,
+                completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
         
         let writeBatch = assetStore.writeBatch()
-        writeBatch.set(value: lowResDict, for: "low::" + lowResAsset.globalIdentifier)
-        writeBatch.set(value: hiResDict, for: "hi::" + hiResAsset.globalIdentifier)
-        writeBatch.set(value: true, for: ["sender",
-                                          requestor.identifier,
-                                          hiResAsset.globalIdentifier]
-                        .joined(separator: "::"))
-        writeBatch.set(value: true, for: ["receiver",
-                                          requestor.identifier,
-                                          hiResAsset.globalIdentifier]
-                        .joined(separator: "::"))
+        
+        for encryptedVersion in asset.encryptedVersions {
+            let version: [String: Any?] = [
+                "quality": encryptedVersion.quality.rawValue,
+                "assetIdentifier": asset.globalIdentifier,
+                "applePhotosAssetIdentifier": asset.localIdentifier,
+                "encryptedData": encryptedVersion.encryptedData,
+                "senderEncryptedSecret": encryptedVersion.encryptedSecret,
+                "publicKey": encryptedVersion.publicKeyData,
+                "publicSignature": encryptedVersion.publicSignatureData,
+                "creationDate": asset.creationDate
+            ]
+            
+            writeBatch.set(value: version, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
+            writeBatch.set(value: true,
+                           for: [
+                            "sender",
+                            requestor.identifier,
+                            asset.globalIdentifier
+                           ].joined(separator: "::")
+            )
+            writeBatch.set(value: encryptedVersion.encryptedSecret.base64EncodedString(),
+                           for: [
+                            "receiver",
+                            requestor.identifier,
+                            asset.globalIdentifier
+                           ].joined(separator: "::")
+            )
+        }
         
         writeBatch.write { (result: Swift.Result) in
             switch result {
             case .success():
-                let lowRes = SHServerAssetVersion(versionName: SHAssetQuality.lowResolution.rawValue,
-                                                  publicKeyData: lowResAsset.publicKeyData,
-                                                  publicSignatureData: lowResAsset.publicSignatureData,
-                                                  encryptedSecret: lowResAsset.encryptedSecret,
-                                                  presignedURL: "",
-                                                  presignedURLExpiresInMinutes: 0)
-                let hiRes = SHServerAssetVersion(versionName: SHAssetQuality.hiResolution.rawValue,
-                                                 publicKeyData: hiResAsset.publicKeyData,
-                                                 publicSignatureData: hiResAsset.publicSignatureData,
-                                                 encryptedSecret: hiResAsset.encryptedSecret,
-                                                 presignedURL: "",
-                                                 presignedURLExpiresInMinutes: 0)
-                let serverAsset = SHServerAsset(globalIdentifier: lowResAsset.globalIdentifier,
-                                                localIdentifier: lowResAsset.localIdentifier,
-                                                creationDate: lowResAsset.creationDate,
-                                                versions: [lowRes, hiRes])
+                var serverAssetVersions = [SHServerAssetVersion]()
+                for encryptedVersion in asset.encryptedVersions {
+                    serverAssetVersions.append(
+                        SHServerAssetVersion(
+                            versionName: encryptedVersion.quality.rawValue,
+                            publicKeyData: encryptedVersion.publicKeyData,
+                            publicSignatureData: encryptedVersion.publicSignatureData,
+                            encryptedSecret: encryptedVersion.encryptedSecret,
+                            presignedURL: "",
+                            presignedURLExpiresInMinutes: 0)
+                    )
+                }
+                
+                let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
+                                                localIdentifier: asset.localIdentifier,
+                                                creationDate: asset.creationDate,
+                                                versions: serverAssetVersions)
                 
                 completionHandler(.success(serverAsset))
             case .failure(let err):
@@ -376,15 +386,24 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
-                           encryptedAsset: SHEncryptedAsset,
-                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        completionHandler(.success(()))
+    func share(asset: SHShareableEncryptedAsset,
+               completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let writeBatch = assetStore.writeBatch()
+        
+        for sharedVersion in asset.sharedVersions {
+            writeBatch.set(value: sharedVersion.encryptedSecret.base64EncodedString(),
+                           for: [
+                            "receiver",
+                            sharedVersion.userPublicIdentifier,
+                            asset.globalIdentifier
+                           ].joined(separator: "::")
+            )
+        }
     }
     
-    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
-                          encryptedAsset: SHEncryptedAsset,
-                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    func upload(serverAsset: SHServerAsset,
+                asset: SHEncryptedAsset,
+                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         completionHandler(.success(()))
     }
     

@@ -41,14 +41,16 @@ public class SHEncryptionRequestQueueItem: NSObject, SHGroupableUploadQueueItem 
     
     public let asset: KBPhotoAsset
     public let groupId: String
+    public let sharedWith: [SHServerUser] // Empty if it's just a backup request, non-empty if sharing with other Safehill users
     
     public var assetId: String {
         asset.phAsset.localIdentifier
     }
     
-    public init(asset: KBPhotoAsset, groupId: String) {
+    public init(asset: KBPhotoAsset, groupId: String, sharedWith: [SHServerUser] = []) {
         self.asset = asset
         self.groupId = groupId
+        self.sharedWith = sharedWith
     }
     
     public func encode(with coder: NSCoder) {
@@ -81,15 +83,17 @@ public class SHUploadRequestQueueItem: NSObject, NSSecureCoding, SHGroupableUplo
     public let localAssetId: String
     public let globalAssetId: String
     public let groupId: String
+    public let sharedWith: [SHServerUser] // Empty if it's just a backup request
     
     public var assetId: String {
         localAssetId
     }
     
-    public init(localAssetId: String, globalAssetId: String, groupId: String) {
+    public init(localAssetId: String, globalAssetId: String, groupId: String, sharedWith: [SHServerUser] = []) {
         self.localAssetId = localAssetId
         self.globalAssetId = globalAssetId
         self.groupId = groupId
+        self.sharedWith = sharedWith
     }
     
     public func encode(with coder: NSCoder) {

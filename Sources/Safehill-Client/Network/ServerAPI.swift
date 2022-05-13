@@ -72,28 +72,35 @@ public protocol SHServerAPI {
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
     
-    func getAssets(withGlobalIdentifiers: [String], quality: SHAssetQuality, completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
+    /// Retrieve assets data and metadata
+    /// - Parameters:
+    ///   - withGlobalIdentifiers: filtering by global identifier
+    ///   - versions: filtering by version
+    ///   - completionHandler: the callback method
+    func getAssets(withGlobalIdentifiers: [String],
+                   versions: [SHAssetQuality]?,
+                   completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
     
     // MARK: Assets Write
     
     /// Create encrypted asset and versions (low res and hi res)
     /// - Parameters:
-    ///   - lowResAsset: the low resolution version of the encrypted data
-    ///   - hiResAsset: the high resolution version of the encrypted data
+    ///   - asset: the encrypted data
     ///   - completionHandler: the callback method
-    func createAsset(lowResAsset: SHEncryptedAsset,
-                     hiResAsset: SHEncryptedAsset,
-                     completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ())
+    func create(asset: SHEncryptedAsset,
+                completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ())
     
-    /// Upload encrypted low res asset version data to the CDN.
-    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
-                           encryptedAsset: SHEncryptedAsset,
-                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    /// Shares one or more assets with a set of users
+    /// - Parameters:
+    ///   - asset: the asset to share, with references to asset id, version and user id to share with
+    ///   - completionHandler: the callback method
+    func share(asset: SHShareableEncryptedAsset,
+               completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
-    /// Upload encrypted hi res asset version data to the CDN.
-    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
-                          encryptedAsset: SHEncryptedAsset,
-                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    /// Upload encrypted asset versions data to the CDN.
+    func upload(serverAsset: SHServerAsset,
+                asset: SHEncryptedAsset,
+                completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     
     /// Removes assets from the CDN

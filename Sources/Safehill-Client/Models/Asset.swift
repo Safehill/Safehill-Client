@@ -10,6 +10,10 @@ import Safehill_Crypto
 
 public enum SHAssetQuality: String {
     case lowResolution = "low", hiResolution = "hi"
+    
+    static var all: [SHAssetQuality] {
+        return [.lowResolution, .hiResolution]
+    }
 }
 
 public protocol SHAssetDescriptor {
@@ -130,73 +134,122 @@ public struct SHServerAsset : Codable {
     }
 }
 
-public protocol SHEncryptedAsset {
-    var globalIdentifier: String { get }
-    var localIdentifier: String? { get }
+public protocol SHEncryptedAssetVersion {
+    var quality: SHAssetQuality { get }
     var encryptedData: Data { get }
     var encryptedSecret: Data { get }
     var publicKeyData: Data { get }
     var publicSignatureData: Data { get }
+}
+
+public protocol SHEncryptedAsset {
+    var globalIdentifier: String { get }
+    var localIdentifier: String? { get }
     var creationDate: Date? { get }
+    var encryptedVersions: [SHEncryptedAssetVersion] { get }
+}
+
+public protocol SHShareableEncryptedAssetVersion {
+    var quality: SHAssetQuality { get }
+    var userPublicIdentifier: String { get }
+    var encryptedSecret: Data { get }
+}
+
+public protocol SHShareableEncryptedAsset {
+    var globalIdentifier: String { get }
+    var sharedVersions: [SHShareableEncryptedAssetVersion] { get }
+}
+
+public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
+    public let quality: SHAssetQuality
+    public let encryptedData: Data
+    public let encryptedSecret: Data
+    public let publicKeyData: Data
+    public let publicSignatureData: Data
+    
+    public init(quality: SHAssetQuality,
+                encryptedData: Data,
+                encryptedSecret: Data,
+                publicKeyData: Data,
+                publicSignatureData: Data) {
+        self.quality = quality
+        self.encryptedData = encryptedData
+        self.encryptedSecret = encryptedSecret
+        self.publicKeyData = publicKeyData
+        self.publicSignatureData = publicSignatureData
+    }
 }
 
 public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let globalIdentifier: String
     public let localIdentifier: String?
-    public let encryptedData: Data
-    public let encryptedSecret: Data
-    public let publicKeyData: Data
-    public let publicSignatureData: Data
     public let creationDate: Date?
+    public let encryptedVersions: [SHEncryptedAssetVersion]
     
     public init(globalIdentifier: String,
                 localIdentifier: String?,
-                encryptedData: Data,
-                encryptedSecret: Data,
-                publicKeyData: Data,
-                publicSignatureData: Data,
-                creationDate: Date?) {
+                creationDate: Date?,
+                encryptedVersions: [SHEncryptedAssetVersion]) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
-        self.encryptedData = encryptedData
-        self.encryptedSecret = encryptedSecret
-        self.publicKeyData = publicKeyData
-        self.publicSignatureData = publicSignatureData
         self.creationDate = creationDate
+        self.encryptedVersions = encryptedVersions
         
     }
     
     public static func fromDict(_ dict: [String: Any]) throws -> SHEncryptedAsset? {
-        if let assetIdentifier = dict["assetIdentifier"] as? String,
+        if let qualityS = dict["quality"] as? String,
+           let quality = SHAssetQuality(rawValue: qualityS),
+           let assetIdentifier = dict["assetIdentifier"] as? String,
            let phAssetIdentifier = dict["applePhotosAssetIdentifier"] as? String?,
            let encryptedData = dict["encryptedData"] as? Data,
-           let encryptedSecret = dict["encryptedSecret"] as? Data,
+           let encryptedSecret = dict["senderEncryptedSecret"] as? Data,
            let publicKeyData = dict["publicKey"] as? Data,
            let publicSignatureData = dict["publicSignature"] as? Data,
            let creationDate = dict["creationDate"] as? Date? {
+            let version = SHGenericEncryptedAssetVersion(
+                quality: quality,
+                encryptedData: encryptedData,
+                encryptedSecret: encryptedSecret,
+                publicKeyData: publicKeyData,
+                publicSignatureData: publicSignatureData)
             return SHGenericEncryptedAsset(globalIdentifier: assetIdentifier,
                                            localIdentifier: phAssetIdentifier,
-                                           encryptedData: encryptedData,
-                                           encryptedSecret: encryptedSecret,
-                                           publicKeyData: publicKeyData,
-                                           publicSignatureData: publicSignatureData,
-                                           creationDate: creationDate)
+                                           creationDate: creationDate,
+                                           encryptedVersions: [version])
         }
         return nil
     }
+}
+
+public struct SHGenericShareableEncryptedAssetVersion : SHShareableEncryptedAssetVersion {
+    public let quality: SHAssetQuality
+    public let userPublicIdentifier: String
+    public let encryptedSecret: Data
+}
+    
+
+public struct SHGenericShareableEncryptedAsset : SHShareableEncryptedAsset {
+    public let globalIdentifier: String
+    public let sharedVersions: [SHShareableEncryptedAssetVersion]
 
 }
 
 
 extension SHLocalUser {
-    func decrypt(_ asset: SHEncryptedAsset, receivedFrom: SHServerUser) throws -> SHDecryptedAsset {
-        let sharedSecret = SHShareablePayload(ephemeralPublicKeyData: asset.publicKeyData,
-                                              cyphertext: asset.encryptedSecret,
-                                              signature: asset.publicSignatureData)
+    func decrypt(_ asset: SHEncryptedAsset, quality: SHAssetQuality, receivedFrom: SHServerUser) throws -> SHDecryptedAsset {
+        guard let version = asset.encryptedVersions.first(where: { $0.quality == quality }) else {
+            throw SHAssetFetchError.fatalError("No such version \(quality.rawValue) for asset=\(asset.globalIdentifier)")
+        }
         
-        let decryptedData = try self.decrypted(data: asset.encryptedData,
+        let sharedSecret = SHShareablePayload(ephemeralPublicKeyData: version.publicKeyData,
+                                              cyphertext: version.encryptedSecret,
+                                              signature: version.publicSignatureData)
+        
+        let decryptedData = try self.decrypted(data: version.encryptedData,
                                                encryptedSecret: sharedSecret,
                                                receivedFrom: receivedFrom)
+        
         return SHGenericDecryptedAsset(globalIdentifier: asset.globalIdentifier,
                                        localIdentifier: asset.localIdentifier,
                                        decryptedData: decryptedData,

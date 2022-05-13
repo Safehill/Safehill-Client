@@ -6,8 +6,11 @@
 //
 
 import Foundation
+import os
 
 public protocol SHBackgroundOperationProtocol : Operation {
+    var log: Logger { get }
+    
     /// Used when the same operation is recursed on the operation queue (see OperationQueueProcessor::repeat)
     /// - Returns: a new object initialized exactly as Self was
     func clone() -> SHBackgroundOperationProtocol

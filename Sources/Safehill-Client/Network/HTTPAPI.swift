@@ -327,8 +327,13 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    /// Fetches the assets metadata from the server, then fetches their data from S3
+    /// - Parameters:
+    ///   - assetIdentifiers: the asset global identifiers
+    ///   - versions: optional version filtering. If nil, all versions are retrieved
+    ///   - completionHandler: the callback method
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
-                   quality: SHAssetQuality,
+                   versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         let parameters = [
             "globalIdentifiers": assetIdentifiers,
@@ -342,13 +347,18 @@ struct SHServerHTTPAPI : SHServerAPI {
                 
                 for asset in assets {
                     for version in asset.versions {
-                        if version.versionName != quality.rawValue {
+                        
+                        // Version filtering
+                        if let versions = versions, !versions.map({$0.rawValue}).contains(version.versionName) {
                             continue
                         }
+                        
+                        dispatch.group.enter()
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
                                 dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
+                                dispatch.group.leave()
                             case .failure(let error):
                                 dispatch.interrupt(error)
                             }
@@ -369,52 +379,96 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func createAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
-        
+    func create(asset: SHEncryptedAsset,
+                completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
         let createDict: [String: Any?] = [
-            "globalIdentifier": lowResAsset.globalIdentifier,
-            "localIdentifier": lowResAsset.localIdentifier,
-            "creationDate": lowResAsset.creationDate?.iso8601withFractionalSeconds,
-            "versions": [
+            "globalIdentifier": asset.globalIdentifier,
+            "localIdentifier": asset.localIdentifier,
+            "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
+            "versions": asset.encryptedVersions.map { encryptedVersion in
                 [
-                    "versionName": SHAssetQuality.lowResolution.rawValue,
-                    "encryptedSecret": lowResAsset.encryptedSecret.base64EncodedString(),
-                    "publicKey": lowResAsset.publicKeyData.base64EncodedString(),
-                    "publicSignature": lowResAsset.publicSignatureData.base64EncodedString(),
-                ],
-                [
-                    "versionName": SHAssetQuality.hiResolution.rawValue,
-                    "encryptedSecret": hiResAsset.encryptedSecret.base64EncodedString(),
-                    "publicKey": hiResAsset.publicKeyData.base64EncodedString(),
-                    "publicSignature": hiResAsset.publicSignatureData.base64EncodedString()
+                    "versionName": encryptedVersion.quality.rawValue,
+                    "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
+                    "publicKey": encryptedVersion.publicKeyData.base64EncodedString(),
+                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
                 ]
-            ]
+            }
         ]
         
         self.post("assets/create", parameters: createDict, completionHandler: completionHandler)
     }
     
-    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
-                           encryptedAsset: SHEncryptedAsset,
-                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.uploadAssetData(assetVersion: serverAssetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
-    }
-    
-    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
-                          encryptedAsset: SHEncryptedAsset,
-                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.uploadAssetData(assetVersion: serverAssetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
-    }
-    
-    func uploadAssetData(assetVersion: SHServerAssetVersion,
-                         encryptedAsset: SHEncryptedAsset,
-                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        guard let url = URL(string: assetVersion.presignedURL) else {
-            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid")))
-            return
+    func share(asset: SHShareableEncryptedAsset,
+               completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        
+        var versions = [[String: Any?]]()
+        for version in asset.sharedVersions {
+            versions.append([
+                "versionName": version.quality.rawValue,
+                "userEncryptedSecret": version.encryptedSecret.base64EncodedString(),
+            ])
         }
         
-        S3Proxy.save(encryptedAsset.encryptedData, usingPresignedURL: url, completionHandler: completionHandler)
+        let shareDict: [String: Any?] = [
+            "globalAssetIdentifier": asset.globalIdentifier,
+            "versionSharingDetails": versions
+        ]
+        
+        self.post("assets/share", parameters: shareDict) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func upload(serverAsset: SHServerAsset,
+                asset: SHEncryptedAsset,
+                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        
+        var results = [SHAssetQuality: Swift.Result<Void, Error>]()
+        
+        let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHUploadTimeoutInMilliseconds)
+        
+        for encryptedAssetVersion in asset.encryptedVersions {
+            dispatch.group.enter()
+            
+            let serverAssetVersion = serverAsset.versions.first { sav in
+                sav.versionName == encryptedAssetVersion.quality.rawValue
+            }
+            
+            guard let serverAssetVersion = serverAssetVersion else {
+                results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ClientError.badRequest("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)"))
+                break
+            }
+            
+            guard let url = URL(string: serverAssetVersion.presignedURL) else {
+                results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid"))
+                break
+            }
+            
+            S3Proxy.save(encryptedAssetVersion.encryptedData,
+                         usingPresignedURL: url,
+                         completionHandler: completionHandler)
+        }
+        
+        try! dispatch.notify {
+            for (version, result) in results {
+                switch result {
+                case .failure(_):
+                    log.error("Could not upload asset=\(asset.globalIdentifier) version=\(version.rawValue)")
+                    return completionHandler(result)
+                default:
+                    continue
+                }
+            }
+            completionHandler(.success(()))
+        }
+        
+        
+        
     }
 
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

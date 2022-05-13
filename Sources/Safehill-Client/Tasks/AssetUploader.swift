@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 public protocol SHAssetUploaderDelegate {
     func didStartUploading(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
@@ -14,6 +15,8 @@ public protocol SHAssetUploaderDelegate {
 }
 
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+    
+    public let log = Logger(subsystem: "com.safehill", category: "BG-UPLOAD")
     
     public let limit: Int?
     public let user: SHLocalUser

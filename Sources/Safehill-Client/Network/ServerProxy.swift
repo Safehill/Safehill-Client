@@ -190,13 +190,16 @@ public struct SHServerProxy {
         }
     }
     
-    public func getLowResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+    public func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
+                          versions: [SHAssetQuality]?,
+                          completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
             return
         }
         
-        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers, quality: .lowResolution) { localResult in
+        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers,
+                                   versions: versions) { localResult in
             let localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
@@ -208,7 +211,8 @@ public struct SHServerProxy {
                 }
             }
          
-            self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch, quality: .lowResolution) { serverResult in
+            self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch,
+                                        versions: versions) { serverResult in
                 if assetIdentifiersToFetch == assetIdentifiers {
                     completionHandler(serverResult)
                     return
@@ -223,43 +227,9 @@ public struct SHServerProxy {
         }
     }
     
-    public func getHiResAssets(withGlobalIdentifiers assetIdentifiers: [String], completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        if assetIdentifiers.count == 0 {
-            completionHandler(.success([:]))
-            return
-        }
-        
-        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers, quality: .hiResolution) { localResult in
-            let localDictionary: [String: SHEncryptedAsset] = [:]
-            var assetIdentifiersToFetch = assetIdentifiers
-            if case .success(let assetsDict) = localResult {
-                if assetsDict.keys.count == assetIdentifiers.count {
-                    completionHandler(.success(assetsDict))
-                    return
-                } else {
-                    assetIdentifiersToFetch = Array(Set(assetsDict.keys).symmetricDifference(assetIdentifiers))
-                }
-            }
-         
-            self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch, quality: .hiResolution) { serverResult in
-                if assetIdentifiersToFetch == assetIdentifiers {
-                    completionHandler(serverResult)
-                    return
-                }
-                
-                if case .success(let assetsDict) = localResult {
-                    completionHandler(.success(localDictionary.merging(assetsDict, uniquingKeysWith: { _, svr in svr })))
-                } else {
-                    completionHandler(serverResult)
-                }
-            }
-        }
-    }
-    
-    public func storeAssetLocally(lowResAsset: SHEncryptedAsset,
-                                  hiResAsset: SHEncryptedAsset,
+    public func storeAssetLocally(_ asset: SHEncryptedAsset,
                                   completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.localServer.createAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) {
+        self.localServer.create(asset: asset) {
             result in
             switch result {
             case .success(_):
@@ -270,19 +240,15 @@ public struct SHServerProxy {
         }
     }
     
-    public func createAsset(lowResAsset: SHEncryptedAsset,
-                            hiResAsset: SHEncryptedAsset,
-                            completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ()) {
-        guard lowResAsset.globalIdentifier == hiResAsset.globalIdentifier &&
-                lowResAsset.localIdentifier == hiResAsset.localIdentifier else {
-            completionHandler(.failure(SHHTTPError.ClientError.badRequest("identifiers for both low and hi resolution assets need to match")))
-            return
-        }
+    public func create(asset: SHEncryptedAsset,
+                       completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ()) {
+        log.info("Creating server asset \(asset.globalIdentifier)")
         
-        self.remoteServer.createAsset(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
+        self.remoteServer.create(asset: asset) { result in
             completionHandler(result)
+                
             if case .success(_) = result {
-                self.storeAssetLocally(lowResAsset: lowResAsset, hiResAsset: hiResAsset) { result in
+                self.storeAssetLocally(asset) { result in
                     if case .failure(let err) = result {
                         print("Asset was stored to server but not in the local cache: \(err)")
                     }
@@ -291,19 +257,14 @@ public struct SHServerProxy {
         }
     }
     
-    public func uploadLowResAsset(assetVersion: SHServerAssetVersion,
-                                  encryptedAsset: SHEncryptedAsset,
-                                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.uploadLowResAsset(serverAssetVersion: assetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
+    public func upload(serverAsset: SHServerAsset,
+                       asset: SHEncryptedAsset,
+                       completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.upload(serverAsset: serverAsset, asset: asset, completionHandler: completionHandler)
     }
     
-    public func uploadHiResAsset(assetVersion: SHServerAssetVersion,
-                                 encryptedAsset: SHEncryptedAsset,
-                                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.uploadHiResAsset(serverAssetVersion: assetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
-    }
-    
-    public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
+    public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String],
+                             completionHandler: @escaping (Result<[String], Error>) -> ()) {
         self.remoteServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
             switch result {
             case .success(_):

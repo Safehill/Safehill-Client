@@ -8,6 +8,7 @@
 import Foundation
 import Safehill_Crypto
 import KnowledgeBase
+import os
 
 public protocol SHAssetDownloaderDelegate {
     func localIdentifiersInCache() -> [String]
@@ -20,6 +21,8 @@ public protocol SHAssetDownloaderDelegate {
 
 public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
+    public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
+    
     let user: SHLocalUser
     let delegate: SHAssetDownloaderDelegate
     
@@ -28,7 +31,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         self.delegate = delegate
     }
     
-    private func decrypt(encryptedAssetsByIdentifier: [String: SHEncryptedAsset], descriptors: [SHAssetDescriptor]) -> [SHDecryptedAsset] {
+    private func decrypt(encryptedAssetsByIdentifier: [String: SHEncryptedAsset], quality: SHAssetQuality, descriptors: [SHAssetDescriptor]) -> [SHDecryptedAsset] {
         var decryptedAssets = [SHDecryptedAsset]()
         for (_, asset) in encryptedAssetsByIdentifier {
             do {
@@ -41,10 +44,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     // TODO: Get the keys for this user, either from local cache or from server
                     user = self.user
                 }
-                let decryptedAsset = try self.user.decrypt(asset, receivedFrom: user)
+                let decryptedAsset = try self.user.decrypt(asset, quality: quality, receivedFrom: user)
                 decryptedAssets.append(decryptedAsset)
             } catch {
-                print("failed to decrypt asset: \(error)")
+                log.error("failed to decrypt asset: \(error.localizedDescription)")
             }
         }
         return decryptedAssets
@@ -79,33 +82,44 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 let dispatch = KBTimedDispatch()
                 
                 dispatch.group.enter()
-                serverProxy.getLowResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) { result in
+                serverProxy.getAssets(withGlobalIdentifiers: globalIdentifiersToDownload,
+                                      versions: [.lowResolution]) { result in
+                    
                     switch result {
                     case .success(let assetsDict):
                         if assetsDict.count > 0 {
-                            let decryptedAssets = self.decrypt(encryptedAssetsByIdentifier: assetsDict, descriptors: descriptors)
+                            let decryptedAssets = self.decrypt(
+                                encryptedAssetsByIdentifier: assetsDict,
+                                quality: .lowResolution,
+                                descriptors: descriptors
+                            )
                             // Call the delegate again using low res Assets, populating the data field this time
                             self.delegate.handleLowResAssetResults(for: decryptedAssets)
                         }
                         dispatch.group.leave()
                     case .failure(let err):
-                        print("Unable to download LOW rez assets \(globalIdentifiers) from server: \(err)")
+                        print("Unable to download assets \(globalIdentifiers) version \(SHAssetQuality.lowResolution.rawValue) from server: \(err)")
                         dispatch.interrupt(err)
                     }
                 }
                 
                 dispatch.group.enter()
-                serverProxy.getHiResAssets(withGlobalIdentifiers: globalIdentifiersToDownload) { result in
+                serverProxy.getAssets(withGlobalIdentifiers: globalIdentifiersToDownload,
+                                      versions: [.hiResolution]) { result in
                     switch result {
                     case .success(let assetsDict):
                         if assetsDict.count > 0 {
-                            let decryptedAssets = self.decrypt(encryptedAssetsByIdentifier: assetsDict, descriptors: descriptors)
+                            let decryptedAssets = self.decrypt(
+                                encryptedAssetsByIdentifier: assetsDict,
+                                quality: .hiResolution,
+                                descriptors: descriptors
+                            )
                             // Call the delegate again using hi res Assets, populating the data field this time
                             self.delegate.handleHiResAssetResults(for: decryptedAssets)
                         }
                         dispatch.group.leave()
                     case .failure(let err):
-                        print("Unable to download HI rez assets \(globalIdentifiers) from server: \(err)")
+                        print("Unable to download assets \(globalIdentifiers) version \(SHAssetQuality.lowResolution.rawValue) from server: \(err)")
                         dispatch.interrupt(err)
                     }
                 }
