@@ -178,6 +178,23 @@ public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
     }
+    
+    public static func fromDict(_ dict: [String: Any]) -> SHEncryptedAssetVersion? {
+        if let qualityS = dict["quality"] as? String,
+           let quality = SHAssetQuality(rawValue: qualityS),
+           let encryptedData = dict["encryptedData"] as? Data,
+           let encryptedSecret = dict["senderEncryptedSecret"] as? Data,
+           let publicKeyData = dict["publicKey"] as? Data,
+           let publicSignatureData = dict["publicSignature"] as? Data {
+            return SHGenericEncryptedAssetVersion(
+                quality: quality,
+                encryptedData: encryptedData,
+                encryptedSecret: encryptedSecret,
+                publicKeyData: publicKeyData,
+                publicSignatureData: publicSignatureData)
+        }
+        return nil
+    }
 }
 
 public struct SHGenericEncryptedAsset : SHEncryptedAsset {
@@ -197,28 +214,49 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
         
     }
     
-    public static func fromDict(_ dict: [String: Any]) throws -> SHEncryptedAsset? {
-        if let qualityS = dict["quality"] as? String,
-           let quality = SHAssetQuality(rawValue: qualityS),
-           let assetIdentifier = dict["assetIdentifier"] as? String,
-           let phAssetIdentifier = dict["applePhotosAssetIdentifier"] as? String?,
-           let encryptedData = dict["encryptedData"] as? Data,
-           let encryptedSecret = dict["senderEncryptedSecret"] as? Data,
-           let publicKeyData = dict["publicKey"] as? Data,
-           let publicSignatureData = dict["publicSignature"] as? Data,
-           let creationDate = dict["creationDate"] as? Date? {
-            let version = SHGenericEncryptedAssetVersion(
-                quality: quality,
-                encryptedData: encryptedData,
-                encryptedSecret: encryptedSecret,
-                publicKeyData: publicKeyData,
-                publicSignatureData: publicSignatureData)
-            return SHGenericEncryptedAsset(globalIdentifier: assetIdentifier,
-                                           localIdentifier: phAssetIdentifier,
-                                           creationDate: creationDate,
-                                           encryptedVersions: [version])
+    public static func fromDicts(_ dicts: [[String: Any]]) throws -> [String: SHEncryptedAsset] {
+        var encryptedAssetById = [String: SHEncryptedAsset]()
+        
+        for dict in dicts {
+            guard let assetIdentifier = dict["assetIdentifier"] as? String else {
+                log.critical("could not deserialize local asset from dictionary=\(dict). Couldn't find assetIdentifier key")
+                throw SHAssetFetchError.unexpectedData(dict)
+            }
+            
+            guard let version = SHGenericEncryptedAssetVersion.fromDict(dict) else {
+                log.critical("could not deserialize asset version information from dictionary=\(dict)")
+                throw SHAssetFetchError.unexpectedData(dict)
+            }
+            
+            if let existing = encryptedAssetById[assetIdentifier] {
+                var versions = existing.encryptedVersions
+                versions.append(version)
+                let encryptedAsset = SHGenericEncryptedAsset(
+                    globalIdentifier: existing.globalIdentifier,
+                    localIdentifier: existing.localIdentifier,
+                    creationDate: existing.creationDate,
+                    encryptedVersions: versions
+                )
+                encryptedAssetById[assetIdentifier] = encryptedAsset
+            }
+            else if let assetIdentifier = dict["assetIdentifier"] as? String,
+                    let phAssetIdentifier = dict["applePhotosAssetIdentifier"] as? String?,
+                    let creationDate = dict["creationDate"] as? Date?
+            {
+                let encryptedAsset = SHGenericEncryptedAsset(
+                    globalIdentifier: assetIdentifier,
+                    localIdentifier: phAssetIdentifier,
+                    creationDate: creationDate,
+                    encryptedVersions: [version]
+                )
+                encryptedAssetById[assetIdentifier] = encryptedAsset
+            } else {
+                log.critical("could not deserialize asset information from dictionary=\(dict)")
+                throw SHAssetFetchError.unexpectedData(dict)
+            }
         }
-        return nil
+        
+        return encryptedAssetById
     }
 }
 

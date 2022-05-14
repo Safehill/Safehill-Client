@@ -308,15 +308,11 @@ struct LocalServer : SHServerAPI {
                     return
                 }
                 
-                var assets = [String: SHEncryptedAsset]()
-                for value in values {
-                    if let asset = try? SHGenericEncryptedAsset.fromDict(value) {
-                        assets[asset.globalIdentifier] = asset
-                    } else {
-                        print("Unexpected value \(value)")
-                    }
+                do {
+                    completionHandler(.success(try SHGenericEncryptedAsset.fromDicts(values)))
+                } catch {
+                    completionHandler(.failure(error))
                 }
-                completionHandler(.success(assets))
             case .failure(let err):
                 completionHandler(.failure(err))
             }

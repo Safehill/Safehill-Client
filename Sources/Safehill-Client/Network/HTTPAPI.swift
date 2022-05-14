@@ -81,6 +81,11 @@ struct SHServerHTTPAPI : SHServerAPI {
             let httpResponse = response as! HTTPURLResponse
             log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
             
+            if let data = data {
+                let convertedString = String(data: data, encoding: String.Encoding.utf8)
+                log.debug("response body: \(convertedString ?? "")")
+            }
+            
             switch httpResponse.statusCode {
             case 200..<300:
                 break
@@ -126,9 +131,6 @@ struct SHServerHTTPAPI : SHServerAPI {
                 completionHandler(.success(NoReply() as! T))
                 return
             }
-            
-            let convertedString = String(data: data, encoding: String.Encoding.utf8)
-            log.debug("response: \(convertedString ?? "")")
             
             do {
                 let decoded = try JSONDecoder().decode(type, from: data)
