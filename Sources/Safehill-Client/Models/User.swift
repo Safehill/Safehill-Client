@@ -10,13 +10,13 @@ import Safehill_Crypto
 
 public protocol SHServerUser : SHCryptoUser {
     var identifier: String { get }
-    var name: String? { get }
+    var name: String { get }
     var email: String? { get }
 }
 
 public struct SHRemoteUser : SHServerUser, Codable {
     public let identifier: String
-    public let name: String?
+    public let name: String
     public let email: String?
     public let publicKeyData: Data
     public let publicSignatureData: Data
@@ -31,9 +31,9 @@ public struct SHRemoteUser : SHServerUser, Codable {
     
     init(identifier: String,
          name: String,
-         email: String,
+         email: String?,
          publicKeyData: Data,
-         publicSignatureData: Data) throws {
+         publicSignatureData: Data) {
         self.identifier = identifier
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
@@ -44,7 +44,7 @@ public struct SHRemoteUser : SHServerUser, Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         identifier = try container.decode(String.self, forKey: .identifier)
-        name = try? container.decode(String.self, forKey: .name)
+        name = try container.decode(String.self, forKey: .name)
         email = try? container.decode(String.self, forKey: .email)
         let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
         publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
@@ -69,7 +69,7 @@ public struct SHLocalUser: SHServerUser {
         self.shUser.publicSignatureData
     }
         
-    public var name: String?
+    public var name: String = "" // Empty means unknown
     public var email: String?
     
     private var _ssoIdentifier: String?
@@ -118,7 +118,6 @@ public struct SHLocalUser: SHServerUser {
             try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
         }
         
-        
         // SSO identifier (if any)
         do {
             self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
@@ -143,7 +142,7 @@ public struct SHLocalUser: SHServerUser {
             self.name = user.name
             self.email = user.email
         } else {
-            self.name = nil
+            self.name = ""
             self.email = nil
         }
     }

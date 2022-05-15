@@ -180,13 +180,12 @@ struct LocalServer : SHServerAPI {
                            let email = res["email"] as? String,
                            let publicKeyData = res["publicKey"] as? Data,
                            let publicSignatureData = res["publicSignature"] as? Data {
-                            if let user = try? SHRemoteUser(identifier: identifier,
-                                                          name: name,
-                                                           email: email,
-                                                           publicKeyData: publicKeyData,
-                                                            publicSignatureData: publicSignatureData) {
-                                userList.append(user)
-                            }
+                            let user = SHRemoteUser(identifier: identifier,
+                                                    name: name,
+                                                    email: email,
+                                                    publicKeyData: publicKeyData,
+                                                    publicSignatureData: publicSignatureData)
+                            userList.append(user)
                         }
                     }
                 }
