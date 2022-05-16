@@ -381,6 +381,13 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func upload(serverAsset: SHServerAsset,
+                asset: SHEncryptedAsset,
+                completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        completionHandler(.success(()))
+    }
+    
+    
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         let writeBatch = assetStore.writeBatch()
@@ -390,16 +397,80 @@ struct LocalServer : SHServerAPI {
                            for: [
                             "receiver",
                             sharedVersion.userPublicIdentifier,
+                            sharedVersion.quality.rawValue,
                             asset.globalIdentifier
                            ].joined(separator: "::")
             )
         }
+        
+        writeBatch.write(completionHandler: completionHandler)
     }
     
-    func upload(serverAsset: SHServerAsset,
-                asset: SHEncryptedAsset,
-                completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.success(()))
+    public func getSharingInfo(forAssetIdentifier globalIdentifier: String,
+                               for users: [SHServerUser],
+                               completionHandler: @escaping (Swift.Result<SHShareableEncryptedAsset?, Error>) -> ()) {
+        var condition = KBGenericCondition(value: true)
+        for user in users {
+            let start = KBGenericCondition(.beginsWith, value: [
+                "receiver",
+                user.identifier
+            ].joined(separator: "::"))
+            let end = KBGenericCondition(.endsWith, value: globalIdentifier)
+            condition = condition.or(start.and(end))
+        }
+        
+        assetStore.dictionaryRepresentation(forKeysMatching: condition) { result in
+            switch result {
+            case .success(let keyValues):
+                var shareableVersions = [SHShareableEncryptedAssetVersion]()
+                
+                guard keyValues.count > 0 else {
+                    completionHandler(.success(nil))
+                    return
+                }
+                
+                for (k, v) in keyValues {
+                    guard let value = v as? String else {
+                        completionHandler(.failure(KBError.unexpectedData(v)))
+                        return
+                    }
+                    guard let range = k.range(of: "receiver::") else {
+                        completionHandler(.failure(KBError.unexpectedData(k)))
+                        return
+                    }
+                    
+                    let userAssetIds = ("" + k[range.upperBound...]).components(separatedBy: "::")
+                    guard userAssetIds.count == 3 else {
+                        completionHandler(.failure(KBError.unexpectedData(k)))
+                        return
+                    }
+                    
+                    let (userPublicId, qualityRaw) = (userAssetIds[0], userAssetIds[1])
+                    let versionEncryptedSecretBase64 = value
+                    
+                    guard let quality = SHAssetQuality(rawValue: qualityRaw) else {
+                        completionHandler(.failure(KBError.unexpectedData(qualityRaw)))
+                        return
+                    }
+                    guard let encryptedSecret = Data(base64Encoded: versionEncryptedSecretBase64) else {
+                        completionHandler(.failure(KBError.unexpectedData(versionEncryptedSecretBase64)))
+                        return
+                    }
+                    
+                    let shareableVersion = SHGenericShareableEncryptedAssetVersion(
+                        quality: quality,
+                        userPublicIdentifier: userPublicId,
+                        encryptedSecret: encryptedSecret
+                    )
+                    shareableVersions.append(shareableVersion)
+                }
+                
+                completionHandler(.success(SHGenericShareableEncryptedAsset(globalIdentifier: globalIdentifier,
+                                                                            sharedVersions: shareableVersions)))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
     }
     
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

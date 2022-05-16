@@ -281,4 +281,28 @@ public struct SHServerProxy {
             }
         }
     }
+    
+    public func shareAssetLocally(_ asset: SHShareableEncryptedAsset,
+                                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.localServer.share(asset: asset) {
+            result in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    public func getLocalSharingInfo(forAssetIdentifier globalIdentifier: String,
+                                    for users: [SHServerUser],
+                                    completionHandler: @escaping (Swift.Result<SHShareableEncryptedAsset?, Error>) -> ()) {
+        self.localServer.getSharingInfo(forAssetIdentifier: globalIdentifier, for: users, completionHandler: completionHandler)
+    }
+    
+    public func share(_ asset: SHShareableEncryptedAsset,
+                      completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.share(asset: asset, completionHandler: completionHandler)
+    }
 }

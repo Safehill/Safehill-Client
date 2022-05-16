@@ -8,6 +8,7 @@
 import Foundation
 import Safehill_Crypto
 
+/// Enkey stores 2 versions per asset, one low resolution for the thumbnail, one full size
 public enum SHAssetQuality: String {
     case lowResolution = "low", hiResolution = "hi"
     
@@ -16,6 +17,7 @@ public enum SHAssetQuality: String {
     }
 }
 
+/// Safehill Server descriptor: metadata associated with an asset, such as creation date, sender and list of receivers
 public protocol SHAssetDescriptor {
     var globalIdentifier: String { get }
     var localIdentifier: String? { get }
@@ -54,6 +56,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     }
 }
 
+/// The interface representing an asset after being decrypted
 public protocol SHDecryptedAsset {
     var globalIdentifier: String { get }
     var localIdentifier: String? { get }
@@ -68,11 +71,12 @@ public struct SHGenericDecryptedAsset : SHDecryptedAsset {
     public let creationDate: Date?
 }
 
+/// Safehill Server description of a version associated with an asset
 public struct SHServerAssetVersion : Codable {
     public let versionName: String
     let publicKeyData: Data
     let publicSignatureData: Data
-    let encryptedSecret: Data
+    let encryptedSecret: Data // the encrypted secret for `this` user, namely the user requesting the asset from the server
     let presignedURL: String
     let presignedURLExpiresInMinutes: Int
     
@@ -110,6 +114,7 @@ public struct SHServerAssetVersion : Codable {
     }
 }
 
+/// Safehill Server description of an asset
 public struct SHServerAsset : Codable {
     public let globalIdentifier: String
     public let localIdentifier: String?
@@ -134,6 +139,7 @@ public struct SHServerAsset : Codable {
     }
 }
 
+/// The interface representing a locally encrypted version of an asset
 public protocol SHEncryptedAssetVersion {
     var quality: SHAssetQuality { get }
     var encryptedData: Data { get }
@@ -142,6 +148,7 @@ public protocol SHEncryptedAssetVersion {
     var publicSignatureData: Data { get }
 }
 
+/// The interface representing a locally encrypted asset
 public protocol SHEncryptedAsset {
     var globalIdentifier: String { get }
     var localIdentifier: String? { get }
@@ -149,12 +156,14 @@ public protocol SHEncryptedAsset {
     var encryptedVersions: [SHEncryptedAssetVersion] { get }
 }
 
+/// The interface representing a locally encrypted asset version ready to be shared, hence holding the secret for the user it's being shared with
 public protocol SHShareableEncryptedAssetVersion {
     var quality: SHAssetQuality { get }
     var userPublicIdentifier: String { get }
     var encryptedSecret: Data { get }
 }
 
+/// The interface representing a locally encrypted asset ready to be shared
 public protocol SHShareableEncryptedAsset {
     var globalIdentifier: String { get }
     var sharedVersions: [SHShareableEncryptedAssetVersion] { get }
@@ -264,6 +273,14 @@ public struct SHGenericShareableEncryptedAssetVersion : SHShareableEncryptedAsse
     public let quality: SHAssetQuality
     public let userPublicIdentifier: String
     public let encryptedSecret: Data
+    
+    public init(quality: SHAssetQuality,
+                userPublicIdentifier: String,
+                encryptedSecret: Data) {
+        self.quality = quality
+        self.userPublicIdentifier = userPublicIdentifier
+        self.encryptedSecret = encryptedSecret
+    }
 }
     
 
@@ -271,6 +288,10 @@ public struct SHGenericShareableEncryptedAsset : SHShareableEncryptedAsset {
     public let globalIdentifier: String
     public let sharedVersions: [SHShareableEncryptedAssetVersion]
 
+    public init(globalIdentifier: String, sharedVersions: [SHShareableEncryptedAssetVersion]) {
+        self.globalIdentifier = globalIdentifier
+        self.sharedVersions = sharedVersions
+    }
 }
 
 
