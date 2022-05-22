@@ -14,6 +14,7 @@ private let LocalAssetIdKey = "localAssetId"
 private let GlobalAssetIdKey = "globalAssetId"
 private let GroupIdKey = "groupId"
 private let SharedWithKey = "sharedWith"
+private let ShouldUploadAssetKey = "shouldUploadAsset"
 private let UserNameKey = "userName"
 private let UserIdentifierKey = "userIdentifier"
 private let PublicKeyKey = "publicKey"
@@ -243,6 +244,10 @@ public class SHUploadRequestQueueItem: NSObject, NSSecureCoding, SHGroupableUplo
     }
 }
 
+public class SHEncryptionForSharingRequestQueueItem: SHEncryptionRequestQueueItem {}
+
+//public class SHShareRequestQueueItem: SHUploadRequestQueueItem {}
+
 public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHGroupableUploadQueueItem {
     
     public static var supportsSecureCoding: Bool = true
@@ -304,5 +309,6 @@ public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHGroupableUploadQue
     }
 }
 
-public class SHFailedUploadRequestQueueItem: SHUploadHistoryItem {
-}
+public class SHShareHistoryItem: SHUploadHistoryItem {}
+
+public class SHFailedUploadRequestQueueItem: SHUploadHistoryItem {}

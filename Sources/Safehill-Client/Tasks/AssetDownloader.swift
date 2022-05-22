@@ -10,15 +10,6 @@ import Safehill_Crypto
 import KnowledgeBase
 import os
 
-public protocol SHAssetDownloaderDelegate {
-    func localIdentifiersInCache() -> [String]
-    func globalIdentifiersInCache() -> [String]
-    func handleAssetDescriptorResults(for: [SHAssetDescriptor])
-    func handleLowResAssetResults(for: [SHDecryptedAsset])
-    func handleHiResAssetResults(for: [SHDecryptedAsset])
-    func completionHandler(_: Swift.Result<Void, Error>) -> Void
-}
-
 public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")

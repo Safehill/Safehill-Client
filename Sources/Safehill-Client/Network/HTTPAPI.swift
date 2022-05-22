@@ -403,11 +403,18 @@ struct SHServerHTTPAPI : SHServerAPI {
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
+        if asset.sharedVersions.count == 0 {
+            log.warning("no versions specified in sharing. Skipping")
+            completionHandler(.success(()))
+            return
+        }
+        
         var versions = [[String: Any?]]()
         for version in asset.sharedVersions {
             versions.append([
                 "versionName": version.quality.rawValue,
-                "userEncryptedSecret": version.encryptedSecret.base64EncodedString(),
+                "recipientUserIdentifier": version.userPublicIdentifier,
+                "recipientEncryptedSecret": version.encryptedSecret.base64EncodedString(),
             ])
         }
         
@@ -452,8 +459,16 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
             
             S3Proxy.save(encryptedAssetVersion.encryptedData,
-                         usingPresignedURL: url,
-                         completionHandler: completionHandler)
+                         usingPresignedURL: url) { result in
+                switch result {
+                case .success():
+                    results[encryptedAssetVersion.quality] = result
+                    dispatch.group.leave()
+                case .failure(let err):
+                    results[encryptedAssetVersion.quality] = result
+                    dispatch.interrupt(err)
+                }
+            }
         }
         
         try! dispatch.notify {
@@ -468,9 +483,6 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
             completionHandler(.success(()))
         }
-        
-        
-        
     }
 
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

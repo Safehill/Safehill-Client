@@ -228,14 +228,14 @@ struct LocalServer : SHServerAPI {
                         let keys = try assetStore.keys(matching: condition)
                         if keys.count > 0, let key = keys.first {
                             let components = key.components(separatedBy: "::")
-                            if components.count == 3 {
+                            if components.count == 4 {
                                 sharedBy = components[1]
                             } else {
-                                print("failed to retrieve sharing information for asset \(globalIdentifier)")
+                                log.error("failed to retrieve sender information for asset \(globalIdentifier)")
                                 err = KBError.fatalError("Invalid sender information for asset")
                             }
                         } else {
-                            print("failed to retrieve sender information for asset \(globalIdentifier)")
+                            log.error("failed to retrieve sender information for asset \(globalIdentifier)")
                             err = KBError.fatalError("No sender information for asset")
                         }
                     } catch {
@@ -255,7 +255,7 @@ struct LocalServer : SHServerAPI {
                         let keys = try assetStore.keys(matching: condition)
                         if keys.count > 0, let key = keys.first {
                             let components = key.components(separatedBy: "::")
-                            if components.count == 3 {
+                            if components.count == 4 {
                                 sharedWith.append(components[1])
                             } else {
                                 print("failed to retrieve sharing information for asset \(globalIdentifier)")
@@ -340,6 +340,7 @@ struct LocalServer : SHServerAPI {
                            for: [
                             "sender",
                             requestor.identifier,
+                            encryptedVersion.quality.rawValue,
                             asset.globalIdentifier
                            ].joined(separator: "::")
             )
@@ -347,6 +348,7 @@ struct LocalServer : SHServerAPI {
                            for: [
                             "receiver",
                             requestor.identifier,
+                            encryptedVersion.quality.rawValue,
                             asset.globalIdentifier
                            ].joined(separator: "::")
             )
