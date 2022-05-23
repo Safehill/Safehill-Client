@@ -32,7 +32,7 @@ public extension PHAsset {
                         SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
                     }
                 } else {
-                    completionHandler(.failure(SHAssetFetchError.unexpectedData(image)))
+                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
                 }
 #else
                 if let data = image.png {
@@ -70,7 +70,7 @@ public extension PHAsset {
                     completionHandler(.success(image))
                     return
                 }
-                completionHandler(.failure(SHAssetFetchError.unexpectedData(image)))
+                completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
             }
 //        case .video:
 //            imageManager.requestAVAsset(forVideo: self, options: nil) { asset, audioMix, info in
@@ -82,7 +82,7 @@ public extension PHAsset {
 //                }
 //            }
         default:
-            completionHandler(.failure(SHAssetFetchError.fatalError("PHAsset mediaType not supported \(self.mediaType)")))
+            completionHandler(.failure(SHBackgroundOperationError.fatalError("PHAsset mediaType not supported \(self.mediaType)")))
         }
     }
 }

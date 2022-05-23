@@ -168,7 +168,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 // TODO: Report
             }
             
-            throw SHAssetFetchError.fatalError("failed to retrieve data for item \(item.identifier)")
+            throw SHBackgroundOperationError.fatalError("failed to retrieve data for item \(item.identifier)")
         }
         
         // TODO: Update cache (in case this needs to be picked up later
@@ -185,7 +185,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 // TODO: Report
             }
             
-            throw SHAssetFetchError.fatalError("failed to retrieve data for item \(item.identifier)")
+            throw SHBackgroundOperationError.fatalError("failed to retrieve data for item \(item.identifier)")
         }
         
         let contentIdentifier = SHHash.stringDigest(for: hiResData)
@@ -210,7 +210,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 // TODO: Report
             }
             
-            throw SHAssetFetchError.fatalError("failed to encrypt data for item \(item.identifier)")
+            throw SHBackgroundOperationError.fatalError("failed to encrypt data for item \(item.identifier)")
         }
         
         return encryptedAsset

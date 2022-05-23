@@ -229,12 +229,12 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
         for dict in dicts {
             guard let assetIdentifier = dict["assetIdentifier"] as? String else {
                 log.critical("could not deserialize local asset from dictionary=\(dict). Couldn't find assetIdentifier key")
-                throw SHAssetFetchError.unexpectedData(dict)
+                throw SHBackgroundOperationError.unexpectedData(dict)
             }
             
             guard let version = SHGenericEncryptedAssetVersion.fromDict(dict) else {
                 log.critical("could not deserialize asset version information from dictionary=\(dict)")
-                throw SHAssetFetchError.unexpectedData(dict)
+                throw SHBackgroundOperationError.unexpectedData(dict)
             }
             
             if let existing = encryptedAssetById[assetIdentifier] {
@@ -261,7 +261,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 encryptedAssetById[assetIdentifier] = encryptedAsset
             } else {
                 log.critical("could not deserialize asset information from dictionary=\(dict)")
-                throw SHAssetFetchError.unexpectedData(dict)
+                throw SHBackgroundOperationError.unexpectedData(dict)
             }
         }
         
@@ -298,7 +298,7 @@ public struct SHGenericShareableEncryptedAsset : SHShareableEncryptedAsset {
 extension SHLocalUser {
     func decrypt(_ asset: SHEncryptedAsset, quality: SHAssetQuality, receivedFrom: SHServerUser) throws -> SHDecryptedAsset {
         guard let version = asset.encryptedVersions.first(where: { $0.quality == quality }) else {
-            throw SHAssetFetchError.fatalError("No such version \(quality.rawValue) for asset=\(asset.globalIdentifier)")
+            throw SHBackgroundOperationError.fatalError("No such version \(quality.rawValue) for asset=\(asset.globalIdentifier)")
         }
         
         let sharedSecret = SHShareablePayload(ephemeralPublicKeyData: version.publicKeyData,

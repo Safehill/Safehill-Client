@@ -312,3 +312,5 @@ public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHGroupableUploadQue
 public class SHShareHistoryItem: SHUploadHistoryItem {}
 
 public class SHFailedUploadRequestQueueItem: SHUploadHistoryItem {}
+
+public class SHFailedShareRequestQueueItem: SHUploadHistoryItem {}
