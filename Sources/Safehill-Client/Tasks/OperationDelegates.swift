@@ -28,8 +28,8 @@ public protocol SHAssetUploaderDelegate: SHOutboundAssetOperationDelegate {
 
 
 public protocol SHAssetSharerDelegate: SHOutboundAssetOperationDelegate {
-    func didStartSharing(itemWithLocalIdentifier: String, groupId: String, newGroupId: String)
-    func didCompleteSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didFailSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
+    func didStartSharing(itemWithLocalIdentifier: String, groupId: String, newGroupId: String, with users: [SHServerUser])
+    func didCompleteSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, with users: [SHServerUser])
+    func didFailSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, with users: [SHServerUser])
 }
 

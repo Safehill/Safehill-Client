@@ -79,7 +79,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 delegate.didFailSharing(
                     itemWithLocalIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    with: users
                 )
             }
         }
@@ -89,12 +90,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
-        sharedWith: [SHServerUser]
+        sharedWith users: [SHServerUser]
     ) throws {
         // Enquque to success history
         log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
         
-        let succesfulUploadQueueItem = SHShareHistoryItem(assetId: localIdentifier, groupId: groupId, sharedWith: sharedWith)
+        let succesfulUploadQueueItem = SHShareHistoryItem(assetId: localIdentifier, groupId: groupId, sharedWith: users)
         
         do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
         catch {
@@ -117,7 +118,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 delegate.didCompleteSharing(
                     itemWithLocalIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    with: users
                 )
             }
         }
@@ -234,7 +236,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                         delegate.didStartSharing(
                             itemWithLocalIdentifier: item.identifier,
                             groupId: shareRequest.groupId,
-                            newGroupId: shareRequest.groupId // same group id, as the asset was already uploaded
+                            newGroupId: shareRequest.groupId, // same group id, as the asset was already uploaded
+                            with: shareRequest.sharedWith
                         )
                     }
                 }
