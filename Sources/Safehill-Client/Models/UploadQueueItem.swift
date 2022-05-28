@@ -43,7 +43,7 @@ public class SHRemoteUserClass: NSObject, NSSecureCoding {
     
     public func encode(with coder: NSCoder) {
         coder.encode(self.identifier, forKey: UserIdentifierKey)
-        coder.encode(self.identifier, forKey: UserNameKey)
+        coder.encode(self.name, forKey: UserNameKey)
         coder.encode(self.publicKeyData.base64EncodedString(), forKey: PublicKeyKey)
         coder.encode(self.publicSignatureData.base64EncodedString(), forKey: PublicSignatureKey)
     }
