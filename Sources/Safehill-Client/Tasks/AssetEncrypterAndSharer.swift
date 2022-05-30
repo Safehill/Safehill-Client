@@ -61,7 +61,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         let failedShare = SHFailedShareRequestQueueItem(assetId: localIdentifier, groupId: groupId, sharedWith: users)
         
-        do { try failedShare.enqueue(in: FailedUploadQueue, with: localIdentifier) }
+        do { try failedShare.enqueue(in: FailedShareQueue, with: localIdentifier) }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
             throw error
@@ -97,7 +97,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         let succesfulUploadQueueItem = SHShareHistoryItem(assetId: localIdentifier, groupId: groupId, sharedWith: users)
         
-        do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
+        do { try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: localIdentifier) }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
             throw error
