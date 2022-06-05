@@ -7,6 +7,7 @@
 
 import Foundation
 import os
+import KnowledgeBase
 
 public protocol SHBackgroundOperationProtocol : Operation {
     var log: Logger { get }
@@ -14,6 +15,8 @@ public protocol SHBackgroundOperationProtocol : Operation {
     /// Used when the same operation is recursed on the operation queue (see OperationQueueProcessor::repeat)
     /// - Returns: a new object initialized exactly as Self was
     func clone() -> SHBackgroundOperationProtocol
+    
+    func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem
 }
 
 open class SHAbstractBackgroundOperation : Operation {
@@ -97,10 +100,6 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
         self.dispatchIntervalInSeconds = dispatchIntervalInSeconds
     }
     
-    public func add(operation: T) {
-        self.operationQueue.addOperation(operation)
-    }
-    
     public func `repeat`(_ operation: T) {
         guard self.started == false else { return }
         
@@ -121,7 +120,7 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
             let startTime = DispatchTime.now() + .seconds(seconds)
             self.timerQueue.asyncAfter(deadline: startTime) {
                 if !operation.isExecuting {
-                    self.add(operation: operation.clone() as! T)
+                    self.operationQueue.addOperation(operation.clone() as! T)
                 }
             }
         }

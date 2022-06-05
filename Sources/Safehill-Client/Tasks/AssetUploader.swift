@@ -3,7 +3,7 @@ import os
 import KnowledgeBase
 
 
-open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol, SHBackgroundUploadOperationProtocol {
+open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill.enkey", category: "BG-UPLOAD")
     
@@ -29,7 +29,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                   limitPerRun: self.limit)
     }
     
-    public func content(ofQueueItem item: KBQueueItem) throws -> SHGroupableUploadQueueItem {
+    public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)
         }
@@ -363,6 +363,6 @@ public class SHAssetsUploaderQueueProcessor : SHOperationQueueProcessor<SHUpload
     
     private override init(delayedStartInSeconds: Int = 0,
                           dispatchIntervalInSeconds: Int? = nil) {
-        super.init(dispatchIntervalInSeconds: dispatchIntervalInSeconds)
+        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

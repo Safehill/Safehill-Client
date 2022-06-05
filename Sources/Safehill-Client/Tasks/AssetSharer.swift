@@ -267,6 +267,6 @@
 //    
 //    private override init(delayedStartInSeconds: Int = 0,
 //                          dispatchIntervalInSeconds: Int? = nil) {
-//        super.init(dispatchIntervalInSeconds: dispatchIntervalInSeconds)
+//        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
 //    }
 //}

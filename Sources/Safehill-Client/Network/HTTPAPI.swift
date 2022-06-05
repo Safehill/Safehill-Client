@@ -9,6 +9,7 @@ import Foundation
 import KnowledgeBase
 
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
+public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
 
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
@@ -72,7 +73,9 @@ struct SHServerHTTPAPI : SHServerAPI {
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        let configuration = URLSessionConfiguration.default
+        configuration.waitsForConnectivity = false
+        URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
             guard error == nil else {
                 completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
                 return
@@ -81,10 +84,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             let httpResponse = response as! HTTPURLResponse
             log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
             
-            if let data = data {
-                let convertedString = String(data: data, encoding: String.Encoding.utf8)
-                log.debug("response body: \(convertedString ?? "")")
-            }
+//            if let data = data {
+//                let convertedString = String(data: data, encoding: String.Encoding.utf8)
+//                log.debug("response body: \(convertedString ?? "")")
+//            }
             
             switch httpResponse.statusCode {
             case 200..<300:
@@ -130,15 +133,20 @@ struct SHServerHTTPAPI : SHServerAPI {
             if type is NoReply.Type {
                 completionHandler(.success(NoReply() as! T))
                 return
+            } else if type is Data.Type {
+                completionHandler(.success(data as! T))
+                return
             }
             
             do {
                 let decoded = try JSONDecoder().decode(type, from: data)
                 completionHandler(.success(decoded))
+                return
             }
             catch {
                 // there's a decoding error, call completion with decoding error
                 completionHandler(.failure(error))
+                return
             }
             
         }.resume()
@@ -161,7 +169,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         }
         
-        log.info("Making GET Request \(request.httpMethod!) \(request.url!)")
+        log.info("making \(request.httpMethod!) request \(request.url!)")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
@@ -192,8 +200,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        log.info("Making POST Request \(request.httpMethod!) \(request.url!)")
-        log.debug("with parameters \(parameters ?? [:])")
+        log.info("making \(request.httpMethod!) request \(request.url!) with parameters \(parameters ?? [:])")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
@@ -248,6 +255,21 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.post("users/safe_delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                return completionHandler(.success(()))
+            case .failure(let error):
+                if case SHHTTPError.ClientError.notFound = error {
+                    // If server can't find the user, it was already deleted
+                    return completionHandler(.success(()))
+                }
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
     func deleteAccount(email: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.post("users/delete", parameters: [
             "email": email,
@@ -257,6 +279,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             case .success(_):
                 return completionHandler(.success(()))
             case .failure(let error):
+                if case SHHTTPError.ClientError.notFound = error {
+                    // If server can't find the user, it was already deleted
+                    return completionHandler(.success(()))
+                }
                 return completionHandler(.failure(error))
             }
         }
@@ -337,24 +363,21 @@ struct SHServerHTTPAPI : SHServerAPI {
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        let parameters = [
+        var parameters = [
             "globalIdentifiers": assetIdentifiers,
         ] as [String : Any]
+        if let versions = versions {
+            parameters["versionNames"] = versions.map { $0.rawValue }
+        }
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
                 var dictionary = [String: SHEncryptedAsset]()
                 
-                let dispatch = KBTimedDispatch()
+                let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHDownloadTimeoutInMilliseconds)
                 
                 for asset in assets {
                     for version in asset.versions {
-                        
-                        // Version filtering
-                        if let versions = versions, !versions.map({$0.rawValue}).contains(version.versionName) {
-                            continue
-                        }
-                        
                         dispatch.group.enter()
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
@@ -376,13 +399,18 @@ struct SHServerHTTPAPI : SHServerAPI {
                 }
                 
             case .failure(let error):
-                return completionHandler(.failure(error))
+                completionHandler(.failure(error))
             }
         }
     }
 
-    func create(asset: SHEncryptedAsset,
-                completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
+    func create(assets: [SHEncryptedAsset],
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        guard assets.count == 1, let asset = assets.first else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
+            return
+        }
+        
         let createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
@@ -397,7 +425,14 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         ]
         
-        self.post("assets/create", parameters: createDict, completionHandler: completionHandler)
+        self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let asset):
+                completionHandler(.success([asset]))
+            }
+        }
     }
     
     func share(asset: SHShareableEncryptedAsset,

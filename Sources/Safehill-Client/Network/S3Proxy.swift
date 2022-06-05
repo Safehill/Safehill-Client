@@ -26,7 +26,7 @@ struct S3Proxy {
             request.addValue(headerValue, forHTTPHeaderField: headerField)
         }
         
-        log.info("S3Proxy request \(request.httpMethod!) \(request.url!) with headers \(String(describing: request.allHTTPHeaderFields))")
+        log.info("storing asset to S3 using request \(request.httpMethod!) \(request.url!) with headers \(String(describing: request.allHTTPHeaderFields))")
         
         let bcf = ByteCountFormatter()
         bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
@@ -63,7 +63,7 @@ struct S3Proxy {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         
-        log.info("S3Proxy request \(request.httpMethod!) \(request.url!)")
+        log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName) from S3 using request \(request.httpMethod!) \(request.url!)")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: Data.self) { result in
             switch result {

@@ -13,3 +13,5 @@ public let ShareHistoryQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoA
 public let FailedUploadQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoAssetFailedUploadQueue", type: .fifo)
 
 public let FailedShareQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoAssetFailedShareQueue", type: .fifo)
+
+public let DownloadQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoAssetDownloadQueue", type: .fifo)

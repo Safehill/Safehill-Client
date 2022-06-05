@@ -37,8 +37,15 @@ public protocol SHServerAPI {
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
+    ///   - email: the user email
+    ///   - password: the password for authorization
     ///   - completionHandler: the callback method
     func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    
+    /// Delete the user making the request and all related assets, metadata and sharing information
+    /// - Parameters:
+    ///   - completionHandler: the callback method
+    func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
     /// - Parameters:
@@ -85,10 +92,10 @@ public protocol SHServerAPI {
     
     /// Create encrypted asset and versions (low res and hi res)
     /// - Parameters:
-    ///   - asset: the encrypted data
+    ///   - assets: the encrypted data for each asset
     ///   - completionHandler: the callback method
-    func create(asset: SHEncryptedAsset,
-                completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ())
+    func create(assets: [SHEncryptedAsset],
+                completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ())
     
     /// Shares one or more assets with a set of users
     /// - Parameters:

@@ -296,23 +296,27 @@ public struct SHGenericShareableEncryptedAsset : SHShareableEncryptedAsset {
 
 
 extension SHLocalUser {
-    func decrypt(_ asset: SHEncryptedAsset, quality: SHAssetQuality, receivedFrom: SHServerUser) throws -> SHDecryptedAsset {
+    func decrypt(_ asset: SHEncryptedAsset, quality: SHAssetQuality, receivedFrom user: SHServerUser) throws -> SHDecryptedAsset {
         guard let version = asset.encryptedVersions.first(where: { $0.quality == quality }) else {
             throw SHBackgroundOperationError.fatalError("No such version \(quality.rawValue) for asset=\(asset.globalIdentifier)")
         }
         
-        let sharedSecret = SHShareablePayload(ephemeralPublicKeyData: version.publicKeyData,
-                                              cyphertext: version.encryptedSecret,
-                                              signature: version.publicSignatureData)
-        
-        let decryptedData = try self.decrypted(data: version.encryptedData,
-                                               encryptedSecret: sharedSecret,
-                                               receivedFrom: receivedFrom)
-        
-        return SHGenericDecryptedAsset(globalIdentifier: asset.globalIdentifier,
-                                       localIdentifier: asset.localIdentifier,
-                                       decryptedData: decryptedData,
-                                       creationDate: asset.creationDate)
+        let sharedSecret = SHShareablePayload(
+            ephemeralPublicKeyData: version.publicKeyData,
+            cyphertext: version.encryptedSecret,
+            signature: version.publicSignatureData
+        )
+        let decryptedData = try self.decrypted(
+            data: version.encryptedData,
+            encryptedSecret: sharedSecret,
+            receivedFrom: user
+        )
+        return SHGenericDecryptedAsset(
+            globalIdentifier: asset.globalIdentifier,
+            localIdentifier: asset.localIdentifier,
+            decryptedData: decryptedData,
+            creationDate: asset.creationDate
+        )
     }
 }
 

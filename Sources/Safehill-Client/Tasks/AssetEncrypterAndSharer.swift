@@ -18,7 +18,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
     }
     
-    public override func content(ofQueueItem item: KBQueueItem) throws -> SHGroupableUploadQueueItem {
+    public override func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)
         }
@@ -326,6 +326,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     break
                 }
             }
+        } catch KBError.unexpectedData(_) {
+            log.error("error executing share task. Unexpected data in the queue, dequeueing.")
+            _ = try? ShareQueue.dequeue()
         } catch {
             log.error("error executing share task: \(error.localizedDescription)")
         }
@@ -343,6 +346,6 @@ public class SHAssetEncryptAndShareQueueProcessor : SHOperationQueueProcessor<SH
     
     private override init(delayedStartInSeconds: Int = 0,
                           dispatchIntervalInSeconds: Int? = nil) {
-        super.init(dispatchIntervalInSeconds: dispatchIntervalInSeconds)
+        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

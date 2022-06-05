@@ -4,7 +4,7 @@ import KnowledgeBase
 import Photos
 import os
 
-open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol, SHBackgroundUploadOperationProtocol {
+open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public var log: Logger {
         Logger(subsystem: "com.safehill.enkey", category: "BG-ENCRYPT")
@@ -38,7 +38,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         )
     }
     
-    public func content(ofQueueItem item: KBQueueItem) throws -> SHGroupableUploadQueueItem {
+    public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)
         }
@@ -98,6 +98,14 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         try dispatch.wait()
+        
+        #if DEBUG
+        let bcf = ByteCountFormatter()
+        bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
+        bcf.countStyle = .file
+        log.debug("lowRes bytes (\(bcf.string(fromByteCount: Int64(lowResData!.count))))")
+        log.debug("hiRes bytes (\(bcf.string(fromByteCount: Int64(hiResData!.count))))")
+        #endif
 
         return (lowResData!, hiResData!)
     }
@@ -356,7 +364,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 log.info("storing asset \(encryptedAsset.localIdentifier ?? encryptedAsset.globalIdentifier) versions in local server proxy")
                 
-                serverProxy.storeAssetLocally(encryptedAsset) { result in
+                serverProxy.storeAssetsLocally([encryptedAsset]) { result in
                     switch result {
                     case .success(_):
                         dispatch.semaphore.signal()
@@ -419,6 +427,6 @@ public class SHAssetsEncrypterQueueProcessor : SHOperationQueueProcessor<SHEncry
     
     private override init(delayedStartInSeconds: Int = 0,
                           dispatchIntervalInSeconds: Int? = nil) {
-        super.init(dispatchIntervalInSeconds: dispatchIntervalInSeconds)
+        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

@@ -7,6 +7,8 @@
 
 import Foundation
 
+public var SHServerUserInMemoryCache = [String: SHServerUser]()
+
 public struct SHServerProxy {
     
     let localServer: LocalServer
@@ -85,7 +87,35 @@ public struct SHServerProxy {
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
-        self.remoteServer.getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
+        let userIdentifiers = Set(userIdentifiers)
+        guard userIdentifiers.count > 0 else {
+            return completionHandler(.success([]))
+        }
+        
+        var response = [SHServerUser]()
+        for userIdentifier in userIdentifiers {
+            if let serverUser = SHServerUserInMemoryCache[userIdentifier] {
+                response.append(serverUser)
+            }
+        }
+        
+        let userIdentifiersToFetch = Array(userIdentifiers).subtract(response.map({$0.identifier}))
+        guard userIdentifiersToFetch.count > 0 else {
+            return completionHandler(.success(response))
+        }
+        
+        self.remoteServer.getUsers(withIdentifiers: userIdentifiersToFetch) { result in
+            switch result {
+            case .success(let serverUsers):
+                for serverUser in serverUsers {
+                    SHServerUserInMemoryCache[serverUser.identifier] = serverUser
+                }
+                response.append(contentsOf: serverUsers)
+                completionHandler(.success(response))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     public func searchUsers(query: String, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
@@ -130,6 +160,16 @@ public struct SHServerProxy {
         }
     }
     
+    public func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.deleteAccount { result in
+            if case .failure(let err) = result {
+                completionHandler(.failure(err))
+                return
+            }
+            self.localServer.deleteAccount(completionHandler: completionHandler)
+        }
+    }
+    
     public func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.remoteServer.deleteAccount(email: email, password: password) { result in
             if case .failure(let err) = result {
@@ -162,14 +202,14 @@ public struct SHServerProxy {
         
         self.remoteServer.getAssetDescriptors { serverResult in
             switch serverResult {
-            case .failure(let err):
-                switch err {
+            case .failure(let serverError):
+                switch serverError {
                 case is SHHTTPError.TransportError:
                     // Can't connect to the server, get descriptors from local cache
-                    print("Failed to get descriptors from server. Using local descriptors\n \(err)")
-                    self.getLocalAssetDescriptors(originalServerError: err, completionHandler: completionHandler)
+                    log.error("Failed to get descriptors from server. Using local descriptors. error=\(serverError.localizedDescription)")
+                    self.getLocalAssetDescriptors(originalServerError: serverError, completionHandler: completionHandler)
                 default:
-                    completionHandler(.failure(err))
+                    completionHandler(.failure(serverError))
                 }
             case .success(let descriptors):
                 serverDescriptors = descriptors
@@ -177,12 +217,23 @@ public struct SHServerProxy {
                 
                 self.getLocalAssetDescriptors { localResult in
                     if case .success(let descriptors) = localResult {
-                        guard descriptors.count == serverDescriptors.count,
-                              descriptors.map({ d in d.globalIdentifier }).elementsEqual(
-                                serverDescriptors.map { d in d.globalIdentifier }
-                              ) else {
-                                  // TODO: Remove all non-existent server descriptors from cache
-                                  return
+                        guard
+                            descriptors.count == serverDescriptors.count,
+                            descriptors.map({ d in d.globalIdentifier }).elementsEqual(serverDescriptors.map { d in d.globalIdentifier })
+                        else {
+                            ///
+                            /// Remove all non-existent server descriptors from local server
+                            ///
+                            let toRemoveLocally = descriptors.map({ d in d.globalIdentifier }).subtract(serverDescriptors.map({ d in d.globalIdentifier }))
+                            guard toRemoveLocally.count > 0 else {
+                                return
+                            }
+                            self.localServer.deleteAssets(withGlobalIdentifiers: Array(toRemoveLocally)) { result in
+                                if case .failure(let error) = result {
+                                    log.error("some assets were deleted on server but couldn't be deleted from lcoal cache. THis operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                                }
+                            }
+                            return
                         }
                     }
                 }
@@ -200,36 +251,43 @@ public struct SHServerProxy {
         
         self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers,
                                    versions: versions) { localResult in
-            let localDictionary: [String: SHEncryptedAsset] = [:]
+            var localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
-                if assetsDict.keys.count == assetIdentifiers.count {
-                    completionHandler(.success(assetsDict))
+                localDictionary = assetsDict
+                assetIdentifiersToFetch = assetIdentifiers.subtract(Array(assetsDict.keys))
+                
+                guard assetIdentifiersToFetch.count > 0 else {
+                    completionHandler(localResult)
                     return
-                } else {
-                    assetIdentifiersToFetch = Array(Set(assetsDict.keys).symmetricDifference(assetIdentifiers))
                 }
             }
-         
+            
             self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch,
                                         versions: versions) { serverResult in
-                if assetIdentifiersToFetch == assetIdentifiers {
-                    completionHandler(serverResult)
-                    return
-                }
-                
-                if case .success(let assetsDict) = localResult {
-                    completionHandler(.success(localDictionary.merging(assetsDict, uniquingKeysWith: { _, svr in svr })))
-                } else {
+                switch serverResult {
+                case .success(let assetsDict):
+                    completionHandler(.success(localDictionary.merging(assetsDict, uniquingKeysWith: { _, server in server })))
+                    
+                    ///
+                    /// Save retrieved assets to local server (cache)
+                    /// 
+                    self.storeAssetsLocally(Array(assetsDict.values)) { result in
+                        if case .failure(let err) = result {
+                            log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                        }
+                    }
+                case .failure(let error):
+                    log.error("failed to get assets with globalIdentifiers \(assetIdentifiersToFetch): \(error.localizedDescription)")
                     completionHandler(serverResult)
                 }
             }
         }
     }
     
-    public func storeAssetLocally(_ asset: SHEncryptedAsset,
-                                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.localServer.create(asset: asset) {
+    public func storeAssetsLocally(_ assets: [SHEncryptedAsset],
+                                   completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.localServer.create(assets: assets) {
             result in
             switch result {
             case .success(_):
@@ -244,15 +302,18 @@ public struct SHServerProxy {
                        completionHandler: @escaping (Swift.Result<SHServerAsset, Error>) -> ()) {
         log.info("Creating server asset \(asset.globalIdentifier)")
         
-        self.remoteServer.create(asset: asset) { result in
-            completionHandler(result)
+        self.remoteServer.create(assets: [asset]) { result in
+            switch result {
+            case .success(let assets):
+                completionHandler(.success(assets.first!))
                 
-            if case .success(_) = result {
-                self.storeAssetLocally(asset) { result in
+                self.storeAssetsLocally([asset]) { result in
                     if case .failure(let err) = result {
-                        print("Asset was stored to server but not in the local cache: \(err)")
+                        log.error("asset was created on the server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
                     }
                 }
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
         }
     }
@@ -270,7 +331,7 @@ public struct SHServerProxy {
             case .success(_):
                 self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
                     if case .failure(let err) = result {
-                        print("Asset was deleted on server but not from the local cache: \(err)")
+                        log.error("asset was deleted on server but not from the local cache: \(err.localizedDescription)")
                     }
                 }
                 completionHandler(result)

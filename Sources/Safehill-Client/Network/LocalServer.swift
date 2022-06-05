@@ -118,7 +118,15 @@ struct LocalServer : SHServerAPI {
         self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
-    func deleteAccount(email: String = "", password: String = "", completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self._deleteAccount(email: email, password: password, completionHandler: completionHandler)
+    }
+    
+    func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self._deleteAccount(completionHandler: completionHandler)
+    }
+    
+    private func _deleteAccount(email: String? = nil, password: String? = nil, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let dispatch = KBTimedDispatch()
         
         dispatch.group.enter()
@@ -318,64 +326,70 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func create(asset: SHEncryptedAsset,
-                completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
+    func create(assets: [SHEncryptedAsset],
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         
         let writeBatch = assetStore.writeBatch()
         
-        for encryptedVersion in asset.encryptedVersions {
-            let version: [String: Any?] = [
-                "quality": encryptedVersion.quality.rawValue,
-                "assetIdentifier": asset.globalIdentifier,
-                "applePhotosAssetIdentifier": asset.localIdentifier,
-                "encryptedData": encryptedVersion.encryptedData,
-                "senderEncryptedSecret": encryptedVersion.encryptedSecret,
-                "publicKey": encryptedVersion.publicKeyData,
-                "publicSignature": encryptedVersion.publicSignatureData,
-                "creationDate": asset.creationDate
-            ]
-            
-            writeBatch.set(value: version, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
-            writeBatch.set(value: true,
-                           for: [
-                            "sender",
-                            requestor.identifier,
-                            encryptedVersion.quality.rawValue,
-                            asset.globalIdentifier
-                           ].joined(separator: "::")
-            )
-            writeBatch.set(value: encryptedVersion.encryptedSecret.base64EncodedString(),
-                           for: [
-                            "receiver",
-                            requestor.identifier,
-                            encryptedVersion.quality.rawValue,
-                            asset.globalIdentifier
-                           ].joined(separator: "::")
-            )
+        for asset in assets {
+            for encryptedVersion in asset.encryptedVersions {
+                let version: [String: Any?] = [
+                    "quality": encryptedVersion.quality.rawValue,
+                    "assetIdentifier": asset.globalIdentifier,
+                    "applePhotosAssetIdentifier": asset.localIdentifier,
+                    "encryptedData": encryptedVersion.encryptedData,
+                    "senderEncryptedSecret": encryptedVersion.encryptedSecret,
+                    "publicKey": encryptedVersion.publicKeyData,
+                    "publicSignature": encryptedVersion.publicSignatureData,
+                    "creationDate": asset.creationDate
+                ]
+                
+                writeBatch.set(value: version, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
+                writeBatch.set(value: true,
+                               for: [
+                                "sender",
+                                requestor.identifier,
+                                encryptedVersion.quality.rawValue,
+                                asset.globalIdentifier
+                               ].joined(separator: "::")
+                )
+                writeBatch.set(value: encryptedVersion.encryptedSecret.base64EncodedString(),
+                               for: [
+                                "receiver",
+                                requestor.identifier,
+                                encryptedVersion.quality.rawValue,
+                                asset.globalIdentifier
+                               ].joined(separator: "::")
+                )
+            }
         }
         
         writeBatch.write { (result: Swift.Result) in
             switch result {
             case .success():
-                var serverAssetVersions = [SHServerAssetVersion]()
-                for encryptedVersion in asset.encryptedVersions {
-                    serverAssetVersions.append(
-                        SHServerAssetVersion(
-                            versionName: encryptedVersion.quality.rawValue,
-                            publicKeyData: encryptedVersion.publicKeyData,
-                            publicSignatureData: encryptedVersion.publicSignatureData,
-                            encryptedSecret: encryptedVersion.encryptedSecret,
-                            presignedURL: "",
-                            presignedURLExpiresInMinutes: 0)
-                    )
+                var serverAssets = [SHServerAsset]()
+                for asset in assets {
+                    var serverAssetVersions = [SHServerAssetVersion]()
+                    for encryptedVersion in asset.encryptedVersions {
+                        serverAssetVersions.append(
+                            SHServerAssetVersion(
+                                versionName: encryptedVersion.quality.rawValue,
+                                publicKeyData: encryptedVersion.publicKeyData,
+                                publicSignatureData: encryptedVersion.publicSignatureData,
+                                encryptedSecret: encryptedVersion.encryptedSecret,
+                                presignedURL: "",
+                                presignedURLExpiresInMinutes: 0)
+                        )
+                    }
+                    
+                    let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
+                                                    localIdentifier: asset.localIdentifier,
+                                                    creationDate: asset.creationDate,
+                                                    versions: serverAssetVersions)
+                    serverAssets.append(serverAsset)
                 }
                 
-                let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
-                                                localIdentifier: asset.localIdentifier,
-                                                creationDate: asset.creationDate,
-                                                versions: serverAssetVersions)
-                
-                completionHandler(.success(serverAsset))
+                completionHandler(.success(serverAssets))
             case .failure(let err):
                 completionHandler(.failure(err))
                 return
