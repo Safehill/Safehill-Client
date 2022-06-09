@@ -14,6 +14,11 @@ public protocol SHAssetDownloaderDelegate {
 
 public protocol SHOutboundAssetOperationDelegate {}
 
+public protocol SHAssetFetcherDelegate: SHOutboundAssetOperationDelegate {
+    func didStartFetching(itemWithLocalIdentifier: String, groupId: String)
+    func didCompleteFetching(itemWithLocalIdentifier: String, groupId: String)
+    func didFailFetching(itemWithLocalIdentifier: String, groupId: String)
+}
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
     func didStartEncryption(itemWithLocalIdentifier: String, groupId: String)
@@ -25,12 +30,12 @@ public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
 public protocol SHAssetUploaderDelegate: SHOutboundAssetOperationDelegate {
     func didStartUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
     func didCompleteUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didFailUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
+    func didFailUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, sharedWith users: [SHServerUser])
 }
 
 
 public protocol SHAssetSharerDelegate: SHOutboundAssetOperationDelegate {
-    func didStartSharing(itemWithLocalIdentifier: String, groupId: String, newGroupId: String, with users: [SHServerUser])
+    func didStartSharing(itemWithLocalIdentifier: String, groupId: String, with users: [SHServerUser])
     func didCompleteSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, with users: [SHServerUser])
     func didFailSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, with users: [SHServerUser])
 }

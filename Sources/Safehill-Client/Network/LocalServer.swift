@@ -294,14 +294,14 @@ struct LocalServer : SHServerAPI {
                    versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         
-        var prefixCondition = KBGenericCondition(value: true)
+        var prefixCondition = KBGenericCondition(value: false)
         
         let versions = versions ?? SHAssetQuality.all
         for quality in versions {
             prefixCondition = prefixCondition.or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
         }
         
-        var assetCondition = KBGenericCondition(value: true)
+        var assetCondition = KBGenericCondition(value: false)
         for assetIdentifier in assetIdentifiers {
             assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
         }

@@ -53,13 +53,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         let dispatch = KBTimedDispatch()
         var asset: SHEncryptedAsset? = nil
         
-        // Because the encrypter requested the uploader to upload this asset
-        // we can assume that the asset at this point is stored encrypted in the on-disk cache
-        // but not on the server.
-        // Calling `getAssets` will retrieve the encrypted asset from the on-disk cache.
-        
-        self.serverProxy.getAssets(withGlobalIdentifiers: [globalIdentifier],
-                                   versions: nil /* all versions */) { result in
+        self.serverProxy.getLocalAssets(withGlobalIdentifiers: [globalIdentifier],
+                                        versions: nil /* all versions */) { result in
             switch result {
             case .success(let dict):
                 guard let a = dict[globalIdentifier] else {
@@ -113,13 +108,27 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         try dispatch.wait()
     }
     
+    private func deleteAssetFromServer(globalIdentifier: String) throws {
+        log.info("deleting asset \(globalIdentifier) from server")
+        let dispatch = KBTimedDispatch()
+        
+        serverProxy.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
+            if case .failure(let err) = result {
+                self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
+            }
+            dispatch.semaphore.signal()
+        }
+        
+        try dispatch.wait()
+    }
+    
     public func markAsFailed(localIdentifier: String,
                              globalIdentifier: String,
                              groupId: String,
                              sharedWith: [SHServerUser]) throws {
         // Enquque to failed
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(assetId: localIdentifier,
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
                                                                    groupId: groupId,
                                                                    sharedWith: sharedWith)
         
@@ -148,7 +157,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 delegate.didFailUpload(
                     itemWithLocalIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    sharedWith: sharedWith
                 )
             }
         }
@@ -161,29 +171,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         sharedWith: [SHServerUser]
     ) throws {
         
-        if sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.user.identifier) {
-            log.info("enqueueing upload request in the SHARE queue for asset \(localIdentifier)")
-
-//            let uploadRequest = SHShareRequestQueueItem(
-//                localAssetId: localIdentifier,
-//                globalAssetId: globalIdentifier,
-//                groupId: groupId,
-//                sharedWith: sharedWith
-//            )
-//
-//            do { try uploadRequest.enqueue(in: ShareQueue, with: globalIdentifier) }
-//            catch {
-//                log.fault("asset \(localIdentifier) was encrypted but will never be shared because enqueueing to SHARE queue failed")
-//                throw error
-//            }
-            // TODO: Implement this so that asset fetching from local library is a new operation (move from AUC), and so that after retrieving the asset an item of type SHEncryptionForSharingRequestQueueItem can be enqueued in the ShareQueue
-            log.critical("NOT IMPLEMENTED!")
-        }
-        
         // Enquque to success history
         log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
         
-        let succesfulUploadQueueItem = SHUploadHistoryItem(assetId: localIdentifier, groupId: groupId, sharedWith: [self.user])
+        let succesfulUploadQueueItem = SHUploadHistoryItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: [self.user])
         
         do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
         catch {
@@ -198,6 +189,27 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         catch {
             log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
             throw error
+        }
+        
+        // Start the sharing part if needed
+        
+        let willShare = sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.user.identifier)
+        
+        if willShare { // Enquque to FETCH queue (fetch is needed for encrypting for sharing)
+            log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier)")
+
+            let fetchRequest = SHLocalFetchRequestQueueItem(
+                localIdentifier: localIdentifier,
+                groupId: groupId + "-share",
+                sharedWith: sharedWith,
+                shouldUpload: false
+            )
+
+            do { try fetchRequest.enqueue(in: FetchQueue, with: localIdentifier) }
+            catch {
+                log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to FETCH queue failed")
+                throw error
+            }
         }
 
 #if DEBUG
@@ -237,12 +249,20 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 }
                 log.info("uploading item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
-                guard let uploadRequest = try content(ofQueueItem: item) as? SHUploadRequestQueueItem else {
+                guard let uploadRequest = try? content(ofQueueItem: item) as? SHUploadRequestQueueItem else {
+                    log.error("unexpected data found in UPLOAD queue. Dequeueing")
+                    
+                    do { _ = try UploadQueue.dequeue() }
+                    catch {
+                        log.fault("dequeuing failed of unexpected data in UPLOAD queue. ATTENTION: this operation will be attempted again.")
+                        throw error
+                    }
+                    
                     throw KBError.unexpectedData(item.content)
                 }
                 
                 let globalIdentifier = uploadRequest.globalAssetId
-                let localIdentifier = uploadRequest.localAssetId
+                let localIdentifier = uploadRequest.assetId
                 
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
@@ -260,16 +280,30 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
                     encryptedAsset = try self.getLocalAsset(with: globalIdentifier)
                 } catch {
-                    log.error("failed to retrieve stored data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
+                    log.error("failed to retrieve stored data for item \(count), with identifier \(item.identifier): \(error.localizedDescription). Dequeueing item, as it's unlikely to succeed again.")
                     do {
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
-                        // TODO: Report
+                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                        // TODO: Handle
                     }
                     
+                    continue
+                }
+                
+                guard globalIdentifier == encryptedAsset?.globalIdentifier else {
+                    do {
+                        try self.markAsFailed(localIdentifier: localIdentifier,
+                                              globalIdentifier: globalIdentifier,
+                                              groupId: uploadRequest.groupId,
+                                              sharedWith: uploadRequest.sharedWith)
+                    } catch {
+                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                        // TODO: Handle
+                    }
                     continue
                 }
                 
@@ -285,7 +319,21 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               groupId: uploadRequest.groupId,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
-                        // TODO: Report
+                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                        // TODO: Handle
+                    }
+                    continue
+                }
+                
+                guard globalIdentifier == serverAsset?.globalIdentifier else {
+                    do {
+                        try self.markAsFailed(localIdentifier: localIdentifier,
+                                              globalIdentifier: globalIdentifier,
+                                              groupId: uploadRequest.groupId,
+                                              sharedWith: uploadRequest.sharedWith)
+                    } catch {
+                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                        // TODO: Handle
                     }
                     continue
                 }
@@ -304,20 +352,12 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               groupId: uploadRequest.groupId,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
-                        // TODO: Report
+                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                        // TODO: Handle
                     }
                     
-                    log.info("removing asset \(globalIdentifier) from server")
-                    let dispatch = KBTimedDispatch()
+                    try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
                     
-                    serverProxy.deleteAssets(withGlobalIdentifiers: [encryptedAsset!.globalIdentifier]) { [weak self] result in
-                        if case .failure(let err) = result {
-                            self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
-                        }
-                        dispatch.semaphore.signal()
-                    }
-                    
-                    try dispatch.wait()
                     continue
                 }
 
@@ -332,7 +372,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         sharedWith: uploadRequest.sharedWith
                     )
                 } catch {
-                    // TODO: report
+                    log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                    // TODO: Handle
                     continue
                 }
                 
@@ -347,7 +388,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 }
             }
         } catch {
-            log.error("error executing upload task: \(error.localizedDescription)")
+            log.error("error executing upload task: \(error.localizedDescription). ATTENTION: This operation will be attempted again")
         }
         
         state = .finished

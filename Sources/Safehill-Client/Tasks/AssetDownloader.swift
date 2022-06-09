@@ -119,7 +119,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 }
                 
                 if globalIdentifiersToDownload.count == 0 {
-//                    self.log.debug("no assets to download")
+                    self.log.debug("no assets to download")
                     completionHandler(.success(()))
                     return
                 }
@@ -153,7 +153,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 completionHandler(.success(()))
                 
             case .failure(let err):
-                print("Unable to download descriptors from server: \(err)")
+                self.log.error("Unable to download descriptors from server: \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }
@@ -173,6 +173,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 log.info("downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
                 guard let downloadRequest = try? content(ofQueueItem: item) as? SHDownloadRequestQueueItem else {
+                    log.error("unexpected data found in DOWNLOAD queue. Dequeueing")
+                    
+                    do { _ = try DownloadQueue.dequeue() }
+                    catch {
+                        log.fault("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        throw error
+                    }
+                    
                     throw KBError.unexpectedData(item.content)
                 }
                 
@@ -311,7 +319,7 @@ public class SHAssetsDownloadQueueProcessor : SHOperationQueueProcessor<SHDownlo
     
     public static var shared = SHAssetsDownloadQueueProcessor(
         delayedStartInSeconds: 4,
-        dispatchIntervalInSeconds: 3
+        dispatchIntervalInSeconds: 10
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {

@@ -241,6 +241,14 @@ public struct SHServerProxy {
         }
     }
     
+    public func getLocalAssets(withGlobalIdentifiers assetIdentifiers: [String],
+                               versions: [SHAssetQuality]?,
+                               completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers,
+                                   versions: versions,
+                                   completionHandler: completionHandler)
+    }
+    
     public func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                           versions: [SHAssetQuality]?,
                           completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
@@ -249,8 +257,8 @@ public struct SHServerProxy {
             return
         }
         
-        self.localServer.getAssets(withGlobalIdentifiers: assetIdentifiers,
-                                   versions: versions) { localResult in
+        self.getLocalAssets(withGlobalIdentifiers: assetIdentifiers,
+                            versions: versions) { localResult in
             var localDictionary: [String: SHEncryptedAsset] = [:]
             var assetIdentifiersToFetch = assetIdentifiers
             if case .success(let assetsDict) = localResult {
@@ -305,11 +313,13 @@ public struct SHServerProxy {
         self.remoteServer.create(assets: [asset]) { result in
             switch result {
             case .success(let assets):
-                completionHandler(.success(assets.first!))
-                
-                self.storeAssetsLocally([asset]) { result in
-                    if case .failure(let err) = result {
-                        log.error("asset was created on the server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                self.storeAssetsLocally([asset]) { localResult in
+                    switch localResult {
+                    case .success(_):
+                        completionHandler(.success(assets.first!))
+                    case .failure(let err):
+                        log.critical("asset was created on the server but not in the local cache. As the two servers are out of sync this can fail other operations downstream. error=\(err.localizedDescription)")
+                        completionHandler(.success(assets.first!))
                     }
                 }
             case .failure(let error):
@@ -331,7 +341,7 @@ public struct SHServerProxy {
             case .success(_):
                 self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
                     if case .failure(let err) = result {
-                        log.error("asset was deleted on server but not from the local cache: \(err.localizedDescription)")
+                        log.critical("asset was deleted on server but not from the local cache. As the two servers are out of sync this can fail other operations downstream. error=\(err.localizedDescription)")
                     }
                 }
                 completionHandler(result)

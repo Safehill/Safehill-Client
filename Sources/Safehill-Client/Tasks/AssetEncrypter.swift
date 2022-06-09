@@ -58,24 +58,26 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     }
     
     private func retrieveAssetData(for asset: KBPhotoAsset, item: KBQueueItem) throws -> (Data, Data) {
-        let dispatch = KBTimedDispatch()
         var (lowResData, hiResData): (Data?, Data?) = (nil, nil)
         
         log.info("retrieving low resolution asset \(asset.phAsset.localIdentifier)")
         
+        var error: Error? = nil
         let size = CGSize(width: kSHLowResPictureSize.width, height: kSHLowResPictureSize.height)
         
-        dispatch.group.enter()
         asset.phAsset.data(forSize: size,
                            usingImageManager: imageManager,
                            synchronousFetch: true) { result in
             switch result {
             case .success(let d):
                 lowResData = d
-                dispatch.group.leave()
-            case .failure(let error):
-                dispatch.interrupt(error)
+            case .failure(let err):
+                error = err
             }
+        }
+        
+        if let error = error {
+            throw error
         }
         
         if let cachedData = asset.cachedData {
@@ -84,20 +86,20 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         } else {
             log.info("retrieving high resolution asset \(asset.phAsset.localIdentifier)")
             
-            dispatch.group.enter()
             asset.phAsset.data(usingImageManager: imageManager,
                                synchronousFetch: true) { result in
                 switch result {
                 case .success(let d):
                     hiResData = d
-                    dispatch.group.leave()
-                case .failure(let error):
-                    dispatch.interrupt(error)
+                case .failure(let err):
+                    error = err
                 }
             }
         }
         
-        try dispatch.wait()
+        if let error = error {
+            throw error
+        }
         
         #if DEBUG
         let bcf = ByteCountFormatter()
@@ -173,7 +175,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                       groupId: request.groupId,
                                       sharedWith: request.sharedWith)
             } catch {
-                // TODO: Report
+                log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
+                // TODO: Handle
             }
             
             throw SHBackgroundOperationError.fatalError("failed to retrieve data for item \(item.identifier)")
@@ -190,7 +193,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                       groupId: request.groupId,
                                       sharedWith: request.sharedWith)
             } catch {
-                // TODO: Report
+                log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
+                // TODO: Handle
             }
             
             throw SHBackgroundOperationError.fatalError("failed to retrieve data for item \(item.identifier)")
@@ -215,7 +219,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                       groupId: request.groupId,
                                       sharedWith: request.sharedWith)
             } catch {
-                // TODO: Report
+                log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
+                // TODO: Handle
             }
             
             throw SHBackgroundOperationError.fatalError("failed to encrypt data for item \(item.identifier)")
@@ -232,7 +237,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         // Enquque to failed
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(assetId: localIdentifier, groupId: groupId, sharedWith: users)
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
         
         do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
         catch {
@@ -269,7 +274,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         globalIdentifier: String,
         groupId: String,
         sharedWith: [SHServerUser]) throws
-    {   
+    {
         let uploadRequest = SHUploadRequestQueueItem(localAssetId: localIdentifier,
                                                      globalAssetId: globalIdentifier,
                                                      groupId: groupId,
@@ -329,12 +334,12 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 log.info("encrypting and storing item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
-                guard let encryptionRequest = try content(ofQueueItem: item) as? SHEncryptionRequestQueueItem else {
+                guard let encryptionRequest = try? content(ofQueueItem: item) as? SHEncryptionRequestQueueItem else {
                     log.error("unexpected data found in ENCRYPT queue. Dequeueing")
                     
                     do { _ = try EncryptionQueue.dequeue() }
                     catch {
-                        log.fault("dequeuing failed of unexpected data. ATTENTION: this operation will be attempted again.")
+                        log.fault("dequeuing failed of unexpected data in ENCRYPT. ATTENTION: this operation will be attempted again.")
                         throw error
                     }
                     
@@ -383,7 +388,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                               groupId: encryptionRequest.groupId,
                                               sharedWith: encryptionRequest.sharedWith)
                     } catch {
-                        // TODO: Report
+                        log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
+                        // TODO: Handle
                     }
                     
                     continue
@@ -399,7 +405,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         sharedWith: encryptionRequest.sharedWith
                     )
                 } catch {
-                    // TODO: Report
+                    log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
+                    // TODO: Handle
                 }
                 
                 count += 1

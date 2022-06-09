@@ -1,5 +1,7 @@
 import KnowledgeBase
 
+public let FetchQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoAssetFetchQueue", type: .fifo)
+
 public let EncryptionQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoAssetEncryptionQueue", type: .fifo)
 
 public let UploadQueue = KBQueueStore.store(withName: "com.gf.enkey.PhotoAssetUploadQueue", type: .fifo)

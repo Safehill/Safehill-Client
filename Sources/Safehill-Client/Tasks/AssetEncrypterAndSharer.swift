@@ -59,7 +59,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         // Enquque to failed
         log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
         
-        let failedShare = SHFailedShareRequestQueueItem(assetId: localIdentifier, groupId: groupId, sharedWith: users)
+        let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
         
         do { try failedShare.enqueue(in: FailedShareQueue, with: localIdentifier) }
         catch {
@@ -95,7 +95,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         // Enquque to success history
         log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
         
-        let succesfulUploadQueueItem = SHShareHistoryItem(assetId: localIdentifier, groupId: groupId, sharedWith: users)
+        let succesfulUploadQueueItem = SHShareHistoryItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
         
         do { try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: localIdentifier) }
         catch {
@@ -218,7 +218,15 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 
                 log.info("encrypting and sharing item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
-                guard let shareRequest = try content(ofQueueItem: item) as? SHEncryptionForSharingRequestQueueItem else {
+                guard let shareRequest = try? content(ofQueueItem: item) as? SHEncryptionForSharingRequestQueueItem else {
+                    log.error("unexpected data found in SHARE queue. Dequeueing")
+                    
+                    do { _ = try ShareQueue.dequeue() }
+                    catch {
+                        log.fault("dequeuing failed of unexpected data in SHARE queue. ATTENTION: this operation will be attempted again.")
+                        throw error
+                    }
+                    
                     throw KBError.unexpectedData(item.content)
                 }
                 
@@ -236,7 +244,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                         delegate.didStartSharing(
                             itemWithLocalIdentifier: item.identifier,
                             groupId: shareRequest.groupId,
-                            newGroupId: shareRequest.groupId, // same group id, as the asset was already uploaded
                             with: shareRequest.sharedWith
                         )
                     }

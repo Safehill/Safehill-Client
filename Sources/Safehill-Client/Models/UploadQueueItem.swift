@@ -20,6 +20,7 @@ private let UserIdentifierKey = "userIdentifier"
 private let PublicKeyKey = "publicKey"
 private let PublicSignatureKey = "publicSignature"
 private let AssetDescriptorsKey = "assetDescriptors"
+private let AssetShouldUploadKey = "shouldUpload"
 
 
 /// A class (not a swift struct, such as SHRemoteUser) for SHServer objects
@@ -164,7 +165,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     }
 }
 
-public protocol SHSerializableQueueItem: NSSecureCoding {
+public protocol SHSerializableQueueItem: NSCoding {
     func enqueue(in queue: KBQueueStore, with identifier: String) throws
 }
 
@@ -188,157 +189,14 @@ public protocol SHShareableGroupableQueueItem: SHGroupableQueueItem {
     var sharedWith: [SHServerUser] { get }
 }
 
-/// On-disk representation of an upload queue item.
-/// References a group id, which is the unique identifier of the request.
-public class SHEncryptionRequestQueueItem: NSObject, NSSecureCoding, SHShareableGroupableQueueItem {
-    
-    public static var supportsSecureCoding: Bool = true
-    
-    public let asset: KBPhotoAsset
-    public let groupId: String
-    public let sharedWith: [SHServerUser] // Empty if it's just a backup request
-    
-    public var assetId: String {
-        asset.phAsset.localIdentifier
-    }
-    
-    public init(asset: KBPhotoAsset, groupId: String, sharedWith users: [SHServerUser] = []) {
-        self.asset = asset
-        self.groupId = groupId
-        self.sharedWith = users
-    }
-    
-    public func encode(with coder: NSCoder) {
-        coder.encode(self.asset, forKey: AssetKey)
-        coder.encode(self.groupId, forKey: GroupIdKey)
-        // Convert to SHRemoteUserClass
-        let remoteUsers = self.sharedWith.map {
-            SHRemoteUserClass(identifier: $0.identifier, name: $0.name, publicKeyData: $0.publicKeyData, publicSignatureData: $0.publicSignatureData)
-        }
-        coder.encode(remoteUsers, forKey: SharedWithKey)
-    }
-    
-    public required convenience init?(coder decoder: NSCoder) {
-        let asset = decoder.decodeObject(of: KBPhotoAsset.self, forKey: AssetKey)
-        let groupId = decoder.decodeObject(of: NSString.self, forKey: GroupIdKey)
-        let users = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
-        
-        guard let asset = asset as KBPhotoAsset? else {
-            log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
-            return nil
-        }
-        
-        guard let groupId = groupId as String? else {
-            log.error("unexpected value for groupId when decoding SHEncryptionRequestQueueItem object")
-            return nil
-        }
-        
-        guard let users = users as? [SHRemoteUserClass] else {
-            log.error("unexpected value for sharedWith when decoding SHEncryptionRequestQueueItem object")
-            return nil
-        }
-        // Convert to SHRemoteUser
-        let remoteUsers = users.map {
-            SHRemoteUser(identifier: $0.identifier,
-                         name: $0.name,
-                         email: nil,
-                         publicKeyData: $0.publicKeyData,
-                         publicSignatureData: $0.publicSignatureData
-            )
-        }
-        
-        self.init(asset: asset, groupId: groupId, sharedWith: remoteUsers)
-    }
-}
-
-public class SHUploadRequestQueueItem: NSObject, NSSecureCoding, SHShareableGroupableQueueItem {
-    
-    public static var supportsSecureCoding: Bool = true
-    
-    public let localAssetId: String
-    public let globalAssetId: String
-    public let groupId: String
-    public let sharedWith: [SHServerUser] // Empty if it's just a backup request
-    
-    public var assetId: String {
-        localAssetId
-    }
-    
-    public init(localAssetId: String, globalAssetId: String, groupId: String, sharedWith users: [SHServerUser] = []) {
-        self.localAssetId = localAssetId
-        self.globalAssetId = globalAssetId
-        self.groupId = groupId
-        self.sharedWith = users
-    }
-    
-    public func encode(with coder: NSCoder) {
-        coder.encode(self.localAssetId, forKey: LocalAssetIdKey)
-        coder.encode(self.globalAssetId, forKey: GlobalAssetIdKey)
-        coder.encode(self.groupId, forKey: GroupIdKey)
-        // Convert to SHRemoteUserClass
-        let remoteUsers = self.sharedWith.map {
-            SHRemoteUserClass(identifier: $0.identifier,
-                              name: $0.name,
-                              publicKeyData: $0.publicKeyData,
-                              publicSignatureData: $0.publicSignatureData
-            )
-        }
-        coder.encode(remoteUsers, forKey: SharedWithKey)
-    }
-    
-    public required convenience init?(coder decoder: NSCoder) {
-        let localAssetId = decoder.decodeObject(of: NSString.self, forKey: LocalAssetIdKey)
-        let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
-        let groupId = decoder.decodeObject(of: NSString.self, forKey: GroupIdKey)
-        let users = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
-        
-        guard let localAssetId = localAssetId as String? else {
-            log.error("unexpected value for localAssetId when decoding SHUploadRequestQueueItem object")
-            return nil
-        }
-        
-        guard let globalAssetId = globalAssetId as String? else {
-            log.error("unexpected value for globalAssetId when decoding SHUploadRequestQueueItem object")
-            return nil
-        }
-        
-        guard let groupId = groupId as String? else {
-            log.error("unexpected value for groupId when decoding SHUploadRequestQueueItem object")
-            return nil
-        }
-        
-        guard let users = users as? [SHRemoteUserClass] else {
-            log.error("unexpected value for sharedWith when decoding SHUploadRequestQueueItem object")
-            return nil
-        }
-        // Convert to SHRemoteUser
-        let remoteUsers = users.map {
-            SHRemoteUser(identifier: $0.identifier,
-                         name: $0.name,
-                         email: nil,
-                         publicKeyData: $0.publicKeyData,
-                         publicSignatureData: $0.publicSignatureData
-            )
-        }
-        
-        self.init(localAssetId: localAssetId, globalAssetId: globalAssetId, groupId: groupId, sharedWith: remoteUsers)
-    }
-}
-
-public class SHEncryptionForSharingRequestQueueItem: SHEncryptionRequestQueueItem {}
-
-//public class SHShareRequestQueueItem: SHUploadRequestQueueItem {}
-
-public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHShareableGroupableQueueItem {
-    
-    public static var supportsSecureCoding: Bool = true
+public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupableQueueItem {
     
     public let assetId: String
     public let groupId: String
     public let sharedWith: [SHServerUser] // Empty if it's just a backup request
     
-    public init(assetId: String, groupId: String, sharedWith users: [SHServerUser]) {
-        self.assetId = assetId
+    public init(localIdentifier: String, groupId: String, sharedWith users: [SHServerUser]) {
+        self.assetId = localIdentifier
         self.groupId = groupId
         self.sharedWith = users
     }
@@ -348,32 +206,28 @@ public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHShareableGroupable
         coder.encode(self.groupId, forKey: GroupIdKey)
         // Convert to SHRemoteUserClass
         let remoteUsers = self.sharedWith.map {
-            SHRemoteUserClass(identifier: $0.identifier,
-                              name: $0.name,
-                              publicKeyData: $0.publicKeyData,
-                              publicSignatureData: $0.publicSignatureData
-            )
+            SHRemoteUserClass(identifier: $0.identifier, name: $0.name, publicKeyData: $0.publicKeyData, publicSignatureData: $0.publicSignatureData)
         }
         coder.encode(remoteUsers, forKey: SharedWithKey)
     }
-
+    
     public required convenience init?(coder decoder: NSCoder) {
         let assetId = decoder.decodeObject(of: NSString.self, forKey: AssetIdKey)
         let groupId = decoder.decodeObject(of: NSString.self, forKey: GroupIdKey)
         let users = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
-
+        
         guard let assetId = assetId as String? else {
-            log.error("unexpected value for assetId when decoding SHUploadHistoryItem object")
+            log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
             return nil
         }
-
+        
         guard let groupId = groupId as String? else {
-            log.error("unexpected value for groupId when decoding SHUploadHistoryItem object")
+            log.error("unexpected value for groupId when decoding \(Self.Type.self) object")
             return nil
         }
-
+        
         guard let users = users as? [SHRemoteUserClass] else {
-            log.error("unexpected value for sharedWith when decoding SHEncryptionRequestQueueItem object")
+            log.error("unexpected value for sharedWith when decoding \(Self.Type.self) object")
             return nil
         }
         // Convert to SHRemoteUser
@@ -385,16 +239,146 @@ public class SHUploadHistoryItem: NSObject, NSSecureCoding, SHShareableGroupable
                          publicSignatureData: $0.publicSignatureData
             )
         }
-
-        self.init(assetId: assetId, groupId: groupId, sharedWith: remoteUsers)
+        
+        self.init(localIdentifier: assetId, groupId: groupId, sharedWith: remoteUsers)
     }
 }
 
-public class SHShareHistoryItem: SHUploadHistoryItem {}
+public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+    
+    public static var supportsSecureCoding: Bool = true
+    
+    public let shouldUpload: Bool
+    
+    public init(localIdentifier: String, groupId: String, sharedWith users: [SHServerUser], shouldUpload: Bool) {
+        self.shouldUpload = shouldUpload
+        super.init(localIdentifier: localIdentifier,
+                   groupId: groupId,
+                   sharedWith: users)
+    }
+    
+    public override func encode(with coder: NSCoder) {
+        super.encode(with: coder)
+        coder.encode(NSNumber(booleanLiteral: self.shouldUpload), forKey: AssetShouldUploadKey)
+    }
+    
+    public required convenience init?(coder decoder: NSCoder) {
+        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+            let shouldUpload = decoder.decodeObject(of: NSNumber.self, forKey: AssetShouldUploadKey)
+            
+            guard let shouldUpload = shouldUpload?.boolValue else {
+                log.error("unexpected value for shouldUpload when decoding SHLocalFetchRequestQueueItem object")
+                return nil
+            }
+            
+            self.init(localIdentifier: superSelf.assetId,
+                      groupId: superSelf.groupId,
+                      sharedWith: superSelf.sharedWith,
+                      shouldUpload: shouldUpload)
+            return
+        }
+       
+        return nil
+    }
+}
 
-public class SHFailedUploadRequestQueueItem: SHUploadHistoryItem {}
+/// On-disk representation of an upload queue item.
+/// References a group id, which is the unique identifier of the request.
+public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+    
+    public static var supportsSecureCoding: Bool = true
+    
+    public let asset: KBPhotoAsset
+    
+    public init(asset: KBPhotoAsset,
+                groupId: String, sharedWith users: [SHServerUser] = []) {
+        self.asset = asset
+        super.init(localIdentifier: asset.phAsset.localIdentifier,
+                   groupId: groupId,
+                   sharedWith: users)
+    }
+    
+    public override func encode(with coder: NSCoder) {
+        super.encode(with: coder)
+        coder.encode(self.asset, forKey: AssetKey)
+    }
+    
+    public required convenience init?(coder decoder: NSCoder) {
+        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+            let asset = decoder.decodeObject(of: KBPhotoAsset.self, forKey: AssetKey)
+            
+            guard let asset = asset as KBPhotoAsset? else {
+                log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
+                return nil
+            }
+            
+            self.init(asset: asset, groupId: superSelf.groupId, sharedWith: superSelf.sharedWith)
+            return
+        }
+       
+        return nil
+    }
+}
 
-public class SHFailedShareRequestQueueItem: SHUploadHistoryItem {}
+public class SHUploadRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+    
+    public static var supportsSecureCoding: Bool = true
+    
+    public let globalAssetId: String
+    
+    public init(localAssetId: String, globalAssetId: String, groupId: String, sharedWith users: [SHServerUser] = []) {
+        self.globalAssetId = globalAssetId
+        super.init(localIdentifier: localAssetId, groupId: groupId, sharedWith: users)
+    }
+    
+    public override func encode(with coder: NSCoder) {
+        super.encode(with: coder)
+        coder.encode(self.globalAssetId, forKey: GlobalAssetIdKey)
+    }
+    
+    public required convenience init?(coder decoder: NSCoder) {
+        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+            let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
+            
+            guard let globalAssetId = globalAssetId as String? else {
+                log.error("unexpected value for globalAssetId when decoding SHUploadRequestQueueItem object")
+                return nil
+            }
+            
+            self.init(
+                localAssetId: superSelf.assetId,
+                globalAssetId: globalAssetId,
+                groupId: superSelf.groupId,
+                sharedWith: superSelf.sharedWith
+            )
+            return
+        }
+        
+        return nil
+    }
+}
+
+public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+    public static var supportsSecureCoding: Bool = true
+    
+    public required convenience init?(coder decoder: NSCoder) {
+        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+            self.init(localIdentifier: superSelf.assetId,
+                      groupId: superSelf.groupId,
+                      sharedWith: superSelf.sharedWith)
+            return
+        }
+       
+        return nil
+    }
+}
+
+public typealias SHEncryptionRequestQueueItem = SHConcreteEncryptionRequestQueueItem
+public typealias SHEncryptionForSharingRequestQueueItem = SHConcreteEncryptionRequestQueueItem
+public typealias SHUploadHistoryItem = SHConcreteShareableGroupableQueueItem
+public typealias SHShareHistoryItem = SHConcreteShareableGroupableQueueItem
+public typealias SHFailedShareRequestQueueItem = SHConcreteShareableGroupableQueueItem
+public typealias SHFailedUploadRequestQueueItem = SHConcreteShareableGroupableQueueItem
 
 public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializableQueueItem {
     
