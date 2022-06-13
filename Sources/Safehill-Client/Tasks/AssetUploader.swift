@@ -58,11 +58,11 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                         versions: nil /* all versions */) { result in
             switch result {
             case .success(let dict):
-                guard let a = dict[globalIdentifier] else {
+                if let a = dict[globalIdentifier] {
+                    asset = a
+                } else {
                     error = SHBackgroundOperationError.unexpectedData(dict)
-                    return
                 }
-                asset = a
             case .failure(let err):
                 error = err
             }
@@ -200,7 +200,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     ) throws {
         
         // Enquque to success history
-        log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
+        log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
         
         let succesfulUploadQueueItem = SHUploadHistoryItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: [self.user])
         
@@ -211,7 +211,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         // Dequeque from UploadQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the UPLOAD queue")
+        log.info("dequeueing upload request for asset \(globalIdentifier) from the UPLOAD queue")
         
         do { _ = try UploadQueue.dequeue() }
         catch {
@@ -405,7 +405,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     continue
                 }
                 
-                log.info("[√] upload task completed for item \(item.identifier)")
+                log.info("[√] upload task completed for item \(count) with identifier \(item.identifier)")
                 
                 count += 1
                 

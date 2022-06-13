@@ -119,7 +119,7 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
         if self.started && operationQueue.operationCount == 0 {
             let startTime = DispatchTime.now() + .seconds(seconds)
             self.timerQueue.asyncAfter(deadline: startTime) {
-                if !operation.isExecuting {
+                if !operation.isExecuting && self.operationQueue.operationCount == 0 {
                     self.operationQueue.addOperation(operation.clone() as! T)
                 }
             }
@@ -132,7 +132,7 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
                 self.process(operation, after: 0)
             }
         } else {
-            print("No dispatchIntervalInSeconds set. Not repeating operation")
+            log.error("No dispatchIntervalInSeconds set. Not repeating operation")
         }
         
     }

@@ -61,6 +61,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     case .failure(let err):
                         error = err
                     }
+                    group.leave()
                 }
                 
                 let dispatchResult = group.wait()
@@ -222,7 +223,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                     self.delegate.handleLowResAssetResults(for: decryptedAssets)
                                 } catch {
                                     lowResError = error
-                                    return
+                                    break
                                 }
                             }
                         }
@@ -253,7 +254,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                 }
                                 catch {
                                     hiResError = error
-                                    return
+                                    break
                                 }
                             }
                         }
@@ -337,8 +338,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
 public class SHAssetsDownloadQueueProcessor : SHOperationQueueProcessor<SHDownloadOperation> {
     
     public static var shared = SHAssetsDownloadQueueProcessor(
-        delayedStartInSeconds: 4,
-        dispatchIntervalInSeconds: 10
+        delayedStartInSeconds: 6,
+        dispatchIntervalInSeconds: 12
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {
