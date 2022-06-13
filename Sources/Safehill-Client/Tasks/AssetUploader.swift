@@ -1,7 +1,7 @@
 import Foundation
 import os
 import KnowledgeBase
-
+import Async
 
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -49,77 +49,105 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     }
     
     private func getLocalAsset(with globalIdentifier: String) throws -> SHEncryptedAsset {
-        
-        let dispatch = KBTimedDispatch()
         var asset: SHEncryptedAsset? = nil
+        var error: Error? = nil
         
+        let group = AsyncGroup()
+        group.enter()
         self.serverProxy.getLocalAssets(withGlobalIdentifiers: [globalIdentifier],
                                         versions: nil /* all versions */) { result in
             switch result {
             case .success(let dict):
                 guard let a = dict[globalIdentifier] else {
-                    dispatch.interrupt(KBError.unexpectedData(dict))
+                    error = SHBackgroundOperationError.unexpectedData(dict)
                     return
                 }
                 asset = a
-                dispatch.semaphore.signal()
-            case .failure(let error):
-                dispatch.interrupt(error)
+            case .failure(let err):
+                error = err
             }
+            group.leave()
         }
         
-        try dispatch.wait()
+        let dispatchResult = group.wait()
+        
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        
+        guard error == nil else {
+            throw error!
+        }
+
         return asset!
     }
     
     private func createServerAsset(_ asset: SHEncryptedAsset) throws -> SHServerAsset {
-        let dispatch = KBTimedDispatch()
-        
         var serverAsset: SHServerAsset? = nil
+        var error: Error? = nil
         
-        serverProxy.create(asset: asset) { result in
+        let group = AsyncGroup()
+        
+        group.enter()
+        self.serverProxy.create(asset: asset) { result in
             switch result {
             case .success(let obj):
                 serverAsset = obj
-                dispatch.semaphore.signal()
-            case .failure(let error):
-                dispatch.interrupt(error)
+            case .failure(let err):
+                error = err
             }
+            group.leave()
         }
         
-        try dispatch.wait()
+        let dispatchResult = group.wait()
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        
+        guard error == nil else {
+            throw error!
+        }
+
         return serverAsset!
     }
     
     private func upload(serverAsset: SHServerAsset,
                         asset: SHEncryptedAsset) throws {
-        
-        let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHUploadTimeoutInMilliseconds)
-        
-        serverProxy.upload(serverAsset: serverAsset, asset: asset) { result in
-            switch result {
-            case .failure(let err):
-                dispatch.interrupt(err)
-            case .success():
-                dispatch.semaphore.signal()
+        var error: Error? = nil
+        let group = AsyncGroup()
+        group.enter()
+        self.serverProxy.upload(serverAsset: serverAsset, asset: asset) { result in
+            if case .failure(let err) = result {
+                error = err
             }
+            group.leave()
+        }
+        let dispatchResult = group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
+        
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
         }
         
-        try dispatch.wait()
+        if let error = error {
+            throw error
+        }
     }
     
     private func deleteAssetFromServer(globalIdentifier: String) throws {
         log.info("deleting asset \(globalIdentifier) from server")
-        let dispatch = KBTimedDispatch()
         
-        serverProxy.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
+        let group = AsyncGroup()
+        group.enter()
+        self.serverProxy.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
             if case .failure(let err) = result {
                 self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
             }
-            dispatch.semaphore.signal()
         }
+        let dispatchResult = group.wait()
         
-        try dispatch.wait()
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
+        }
     }
     
     public func markAsFailed(localIdentifier: String,
@@ -213,7 +241,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
 
 #if DEBUG
-        log.debug("items in the UPLOAD queue after dequeueing \((try? EncryptionQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
+        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
 #endif
         
         // Notify the delegates

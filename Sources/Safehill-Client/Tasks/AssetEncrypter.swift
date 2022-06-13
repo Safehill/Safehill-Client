@@ -3,6 +3,7 @@ import Safehill_Crypto
 import KnowledgeBase
 import Photos
 import os
+import Async
 
 open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -365,22 +366,21 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     continue
                 }
                 
-                let dispatch = KBTimedDispatch()
+                var error: Error? = nil
+                let group = AsyncGroup()
                 
                 log.info("storing asset \(encryptedAsset.localIdentifier ?? encryptedAsset.globalIdentifier) versions in local server proxy")
                 
+                group.enter()
                 serverProxy.storeAssetsLocally([encryptedAsset]) { result in
-                    switch result {
-                    case .success(_):
-                        dispatch.semaphore.signal()
-                    case .failure(let error):
-                        dispatch.interrupt(error)
+                    if case .failure(let err) = result {
+                        error = err
                     }
+                    group.leave()
                 }
                 
-                do {
-                    try dispatch.wait()
-                } catch {
+                let dispatchResult = group.wait()
+                guard dispatchResult != .timedOut, error == nil else {
                     log.error("failed to store data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
                     
                     do {

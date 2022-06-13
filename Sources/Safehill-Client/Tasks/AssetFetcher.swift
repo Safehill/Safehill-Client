@@ -3,6 +3,7 @@ import Safehill_Crypto
 import KnowledgeBase
 import Photos
 import os
+import Async
 
 open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -52,21 +53,22 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     private func retrieveAsset(withLocalIdentifier localIdentifier: String,
                                groupId: String,
                                sharedWith users: [SHServerUser]) throws -> KBPhotoAsset {
-        let dispatch = KBTimedDispatch()
         let photoIndexer = KBPhotosIndexer()
         var kbPhotoAsset: KBPhotoAsset? = nil
+        var error: Error? = nil
+        let group = AsyncGroup()
         
+        group.enter()
         photoIndexer.fetchCameraRollAssets(withFilters: [KBPhotosFilter.withLocalIdentifiers([localIdentifier])]) { result in
             if case .failure(let err) = result {
-                dispatch.interrupt(err)
+                error = err
+                group.leave()
                 return
             }
             
-            let options = PHImageRequestOptions()
-            options.isSynchronous = true
-            
             guard let phAsset = photoIndexer.indexedAssets.first else {
-                dispatch.interrupt(SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)"))
+                error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
+                group.leave()
                 return
             }
             
@@ -92,8 +94,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     }
                 }
                 
-                if let error = error {
-                    dispatch.interrupt(error)
+                guard error == nil else {
+                    group.leave()
                     return
                 }
             }
@@ -111,10 +113,18 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 cachedData: cachedData,
                 usingCachingImageManager: self.imageManager
             )
-            dispatch.semaphore.signal()
+            
+            group.leave()
         }
         
-        try dispatch.wait()
+        let dispatchResult = group.wait()
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
         return kbPhotoAsset!
     }
     
@@ -144,7 +154,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
 #if DEBUG
-        log.debug("items in the ENCRYPT queue after dequeueing \((try? EncryptionQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
+        log.debug("items in the FETCH queue after dequeueing \((try? FetchQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
 #endif
         
         // Notify the delegates

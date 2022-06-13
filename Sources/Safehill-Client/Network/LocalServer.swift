@@ -118,8 +118,8 @@ struct LocalServer : SHServerAPI {
         self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
-    func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self._deleteAccount(email: email, password: password, completionHandler: completionHandler)
+    func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self._deleteAccount(name: name, password: password, completionHandler: completionHandler)
     }
     
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
@@ -127,32 +127,38 @@ struct LocalServer : SHServerAPI {
     }
     
     private func _deleteAccount(email: String? = nil, password: String? = nil, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let dispatch = KBTimedDispatch()
+        var userRemovalError: Error? = nil
+        var assetsRemovalError: Error? = nil
+        let group = AsyncGroup()
         
-        dispatch.group.enter()
+        group.enter()
         userStore.removeAll { result in
             if case .failure(let err) = result {
-                dispatch.interrupt(err)
-            } else {
-                dispatch.group.leave()
+                userRemovalError = err
             }
+            group.leave()
         }
         
-        dispatch.group.enter()
+        group.enter()
         assetStore.removeAll { result in
             if case .failure(let err) = result {
-                dispatch.interrupt(err)
-            } else {
-                dispatch.group.leave()
+                assetsRemovalError = err
             }
+            group.leave()
         }
         
-        do {
-            try dispatch.wait()
-            completionHandler(.success(()))
-        } catch {
-            completionHandler(.failure(error))
+        group.wait()
+        let dispatchResult = group.wait()
+        guard dispatchResult != .timedOut else {
+            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
         }
+        guard userRemovalError == nil else {
+            return completionHandler(.failure(userRemovalError!))
+        }
+        guard assetsRemovalError == nil else {
+            return completionHandler(.failure(assetsRemovalError!))
+        }
+        completionHandler(.success(()))
     }
     
     func signInWithApple(email: String,

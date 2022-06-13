@@ -73,5 +73,6 @@ public enum SHHTTPError {
     
     public enum TransportError : Error {
         case generic(Error)
+        case timedOut
     }
 }

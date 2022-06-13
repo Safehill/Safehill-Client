@@ -9,6 +9,7 @@ import Foundation
 import Safehill_Crypto
 import KnowledgeBase
 import os
+import Async
 
 public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -43,21 +44,32 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             if descriptor.sharedByUserIdentifier == self.user.identifier {
                 user = self.user
             } else {
-                let dispatch = KBTimedDispatch()
-                SHServerProxy(user: self.user).getUsers(
+                var error: Error? = nil
+                let group = AsyncGroup()
+                
+                group.enter()
+                serverProxy.getUsers(
                     withIdentifiers: descriptor.sharedWithUserIdentifiers
                 ) { result in
                     switch result {
                     case .success(let serverUsers):
                         if let serverUser = serverUsers.first, serverUser.identifier == descriptor.sharedByUserIdentifier {
                             user = serverUser
-                            dispatch.semaphore.signal()
+                        } else {
+                            error = SHBackgroundOperationError.unexpectedData(serverUsers)
                         }
-                    case .failure(let error):
-                        dispatch.interrupt(error)
+                    case .failure(let err):
+                        error = err
                     }
                 }
-                try dispatch.wait()
+                
+                let dispatchResult = group.wait()
+                guard dispatchResult != .timedOut else {
+                    throw SHBackgroundOperationError.timedOut
+                }
+                guard error == nil else {
+                    throw error!
+                }
             }
             let decryptedAsset = try self.user.decrypt(asset, quality: quality, receivedFrom: user!)
             decryptedAssets.append(decryptedAsset)
@@ -188,9 +200,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 self.delegate.didStartDownload(of: globalIdentifiersToDownload)
                 
-                let dispatch = KBTimedDispatch()
+                var lowResError: Error? = nil, hiResError: Error? = nil
+                let group = AsyncGroup()
                 
-                dispatch.group.enter()
+                group.enter()
                 log.info("downloading assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.lowResolution.rawValue)")
                 serverProxy.getAssets(withGlobalIdentifiers: globalIdentifiersToDownload,
                                       versions: [.lowResolution]) { result in
@@ -208,19 +221,19 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                     // Call the delegate again using low res Assets, populating the data field this time
                                     self.delegate.handleLowResAssetResults(for: decryptedAssets)
                                 } catch {
-                                    dispatch.interrupt(error)
+                                    lowResError = error
                                     return
                                 }
                             }
                         }
-                        dispatch.group.leave()
+                        group.leave()
                     case .failure(let err):
                         print("Unable to download assets \(globalIdentifiersToDownload) version \(SHAssetQuality.lowResolution.rawValue) from server: \(err)")
-                        dispatch.interrupt(err)
+                        lowResError = err
                     }
                 }
                 
-                dispatch.group.enter()
+                group.enter()
                 log.info("downloading assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.hiResolution.rawValue)")
                 serverProxy.getAssets(withGlobalIdentifiers: globalIdentifiersToDownload,
                                       versions: [.hiResolution]) { result in
@@ -239,25 +252,31 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                     self.delegate.handleHiResAssetResults(for: decryptedAssets)
                                 }
                                 catch {
-                                    dispatch.interrupt(error)
+                                    hiResError = error
+                                    return
                                 }
                             }
                         }
-                        dispatch.group.leave()
+                        group.leave()
                     case .failure(let err):
                         print("Unable to download assets \(globalIdentifiersToDownload) version \(SHAssetQuality.hiResolution.rawValue) from server: \(err)")
-                        dispatch.interrupt(err)
+                        hiResError = err
                     }
                 }
                 
-                do {
-                    try dispatch.wait()
-                    completionHandler(.success(()))
-                } catch {
-                    completionHandler(.failure(error))
-                    return
+                
+                let dispatchResult = group.wait()
+                guard dispatchResult != .timedOut else {
+                    return completionHandler(.failure(SHBackgroundOperationError.timedOut))
                 }
-
+                guard lowResError == nil else {
+                    return completionHandler(.failure(lowResError!))
+                }
+                guard hiResError == nil else {
+                    return completionHandler(.failure(hiResError!))
+                }
+                completionHandler(.success(()))
+                
                 count += 1
                 
                 guard !self.isCancelled else {

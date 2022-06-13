@@ -1,6 +1,7 @@
 import Foundation
 import os
 import KnowledgeBase
+import Async
 
 
 open class SHEncryptAndShareOperation: SHEncryptionOperation {
@@ -129,8 +130,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         request: SHEncryptionForSharingRequestQueueItem,
         encryptedAsset: SHEncryptedAsset
     ) throws {
-        let dispatch = KBTimedDispatch()
-        
         log.info("storing asset \(encryptedAsset.localIdentifier ?? encryptedAsset.globalIdentifier) sharing information in local server proxy")
         
         var shareableEncryptedVersions = [SHShareableEncryptedAssetVersion]()
@@ -151,24 +150,32 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             sharedVersions: shareableEncryptedVersions
         )
         
+        var error: Error? = nil
+        let group = AsyncGroup()
+        group.enter()
         serverProxy.shareAssetLocally(shareableEncryptedAsset) { result in
-            switch result {
-            case .success():
-                dispatch.semaphore.signal()
-            case .failure(let err):
-                dispatch.interrupt(err)
+            if case .failure(let err) = result {
+                error = err
             }
+            group.leave()
         }
         
-        try dispatch.wait()
+        let dispatchResult = group.wait()
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
     }
     
     private func share(
         encryptedAsset: SHEncryptedAsset,
         via request: SHEncryptionForSharingRequestQueueItem
     ) throws {
-        let dispatch = KBTimedDispatch()
-        
+        var error: Error? = nil
+        let group = AsyncGroup()
+        group.enter()
         self.serverProxy.getLocalSharingInfo(
             forAssetIdentifier: encryptedAsset.globalIdentifier,
             for: request.sharedWith
@@ -176,23 +183,29 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             switch result {
             case .success(let shareableEncryptedAsset):
                 guard let shareableEncryptedAsset = shareableEncryptedAsset else {
-                    dispatch.interrupt(SHBackgroundOperationError.fatalError("Asset sharing information wasn't stored as expected during the encrypt step"))
+                    error = SHBackgroundOperationError.fatalError("Asset sharing information wasn't stored as expected during the encrypt step")
+                    group.leave()
                     return
                 }
                 self.serverProxy.share(shareableEncryptedAsset) { shareResult in
-                    switch shareResult {
-                    case .success():
-                        dispatch.semaphore.signal()
-                    case .failure(let err):
-                        dispatch.interrupt(err)
+                    if case .failure(let err) = shareResult {
+                        error = err
                     }
+                    group.leave()
                 }
             case .failure(let err):
-                dispatch.interrupt(err)
+                error = err
+                group.leave()
             }
         }
         
-        try dispatch.wait()
+        let dispatchResult = group.wait()
+        guard dispatchResult != .timedOut else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
     }
     
     public override func main() {

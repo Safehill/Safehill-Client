@@ -7,6 +7,7 @@
 
 import Foundation
 import KnowledgeBase
+import Async
 
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
 public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
@@ -73,6 +74,8 @@ struct SHServerHTTPAPI : SHServerAPI {
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
+        log.info("making \(request.httpMethod!) request url=\(request.url!), headers=\(request.allHTTPHeaderFields ?? [:])")
+        
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
         URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
@@ -169,8 +172,6 @@ struct SHServerHTTPAPI : SHServerAPI {
             request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         }
         
-        log.info("making \(request.httpMethod!) request \(request.url!)")
-        
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
@@ -200,7 +201,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        log.info("making \(request.httpMethod!) request \(request.url!) with parameters \(parameters ?? [:])")
+        log.info("request parameters \(parameters ?? [:])")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
@@ -373,30 +374,36 @@ struct SHServerHTTPAPI : SHServerAPI {
             switch result {
             case .success(let assets):
                 var dictionary = [String: SHEncryptedAsset]()
+                var error: Error? = nil
                 
-                let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHDownloadTimeoutInMilliseconds)
+                let group = AsyncGroup()
                 
                 for asset in assets {
                     for version in asset.versions {
-                        dispatch.group.enter()
+                        group.enter()
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
                                 dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
-                                dispatch.group.leave()
-                            case .failure(let error):
-                                dispatch.interrupt(error)
+                                group.leave()
+                            case .failure(let err):
+                                error = err
+                                break
                             }
                         }
                     }
                 }
                 
-                do {
-                    try dispatch.wait()
-                    completionHandler(.success(dictionary))
-                } catch {
-                    completionHandler(.failure(error))
+                let dispatchResult = group.wait(seconds: Double(SHDownloadTimeoutInMilliseconds / 1000))
+                
+                guard dispatchResult != .timedOut else {
+                    return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
                 }
+                
+                guard error == nil else {
+                    return completionHandler(.failure(error!))
+                }
+                completionHandler(.success(dictionary))
                 
             case .failure(let error):
                 completionHandler(.failure(error))
@@ -474,10 +481,10 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
-        let dispatch = KBTimedDispatch(timeoutInMilliseconds: SHUploadTimeoutInMilliseconds)
+        let group = AsyncGroup()
         
         for encryptedAssetVersion in asset.encryptedVersions {
-            dispatch.group.enter()
+            group.enter()
             
             let serverAssetVersion = serverAsset.versions.first { sav in
                 sav.versionName == encryptedAssetVersion.quality.rawValue
@@ -495,18 +502,14 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             S3Proxy.save(encryptedAssetVersion.encryptedData,
                          usingPresignedURL: url) { result in
-                switch result {
-                case .success():
-                    results[encryptedAssetVersion.quality] = result
-                    dispatch.group.leave()
-                case .failure(let err):
-                    results[encryptedAssetVersion.quality] = result
-                    dispatch.interrupt(err)
-                }
+                results[encryptedAssetVersion.quality] = result
+                group.leave()
             }
         }
         
-        try! dispatch.notify {
+        group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
+        
+        group.background {
             for (version, result) in results {
                 switch result {
                 case .failure(_):
