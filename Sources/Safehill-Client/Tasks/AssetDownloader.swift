@@ -40,24 +40,28 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     private func decrypt(encryptedAssets: [(SHAssetDescriptor, SHEncryptedAsset)], quality: SHAssetQuality) throws -> [SHDecryptedAsset] {
         var decryptedAssets = [SHDecryptedAsset]()
         for (descriptor, asset) in encryptedAssets {
-            var user: SHServerUser? = nil
+            var sender: SHServerUser? = nil
             if descriptor.sharedByUserIdentifier == self.user.identifier {
-                user = self.user
+                sender = self.user
             } else {
                 var error: Error? = nil
                 let group = AsyncGroup()
                 
                 group.enter()
                 serverProxy.getUsers(
-                    withIdentifiers: descriptor.sharedWithUserIdentifiers
+                    withIdentifiers: [descriptor.sharedByUserIdentifier]
                 ) { result in
                     switch result {
                     case .success(let serverUsers):
-                        if let serverUser = serverUsers.first, serverUser.identifier == descriptor.sharedByUserIdentifier {
-                            user = serverUser
-                        } else {
+                        guard serverUsers.count == 1,
+                              let serverUser = serverUsers.first,
+                                serverUser.identifier == descriptor.sharedByUserIdentifier
+                        else {
                             error = SHBackgroundOperationError.unexpectedData(serverUsers)
+                            group.leave()
+                            return
                         }
+                        sender = serverUser
                     case .failure(let err):
                         error = err
                     }
@@ -72,7 +76,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     throw error!
                 }
             }
-            let decryptedAsset = try self.user.decrypt(asset, quality: quality, receivedFrom: user!)
+            
+            let decryptedAsset = try self.user.decrypt(asset, quality: quality, receivedFrom: sender!)
             decryptedAssets.append(decryptedAsset)
         }
         return decryptedAssets
@@ -293,7 +298,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
     }
     
-    public func runOnce(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
+    private func runOnce(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
         
         ///
         /// Get all asset descriptors associated with this user from the server.
@@ -302,7 +307,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         self.downloadDescriptors() { result in
             if case .failure(let error) = result {
                 self.log.error("failed to download descriptors: \(error.localizedDescription)")
-                self.delegate.completionHandler(.failure(error))
+                completionHandler(.failure(error))
             } else {
                 ///
                 /// Get all asset descriptors associated with this user from the server.
@@ -311,9 +316,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 self.downloadAssets { result in
                     if case .failure(let error) = result {
                         self.log.error("failed to download assets: \(error.localizedDescription)")
-                        self.delegate.completionHandler(.failure(error))
+                        completionHandler(.failure(error))
                     } else {
-                        self.delegate.completionHandler(.success(()))
+                        completionHandler(.success(()))
                     }
                 }
             }
@@ -328,9 +333,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         
         state = .executing
         
-        self.runOnce(completionHandler: self.delegate.completionHandler)
-        
-        state = .finished
+        self.runOnce { result in
+            self.delegate.completionHandler(result)
+            self.state = .finished
+        }
     }
 }
 

@@ -7,6 +7,7 @@
 
 import Foundation
 import KnowledgeBase
+import Async
 
 let userStore = KBKVStore.store(withName: "com.gf.Enkey.LocalServer.users")
 let assetStore = KBKVStore.store(withName: "com.gf.Enkey.LocalServer.assets")
@@ -146,6 +147,13 @@ struct LocalServer : SHServerAPI {
             }
             group.leave()
         }
+        
+//#if DEBUG
+//        do {
+//            let keys = try assetStore.keys()
+//            log.debug("all keys AFTER REMOVAL in \(assetStore.baseURL!) = \(keys)")
+//        } catch {}
+//#endif
         
         group.wait()
         let dispatchResult = group.wait()
@@ -398,7 +406,6 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.success(serverAssets))
             case .failure(let err):
                 completionHandler(.failure(err))
-                return
             }
         }
     }
@@ -415,7 +422,12 @@ struct LocalServer : SHServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         for sharedVersion in asset.sharedVersions {
-            writeBatch.set(value: sharedVersion.encryptedSecret.base64EncodedString(),
+            let sharedVersionEncryptionDetails: [String: Any?] = [
+                "senderEncryptedSecret": sharedVersion.encryptedSecret.base64EncodedString(),
+                "ephemeralPublicKey": sharedVersion.ephemeralPublicKey.base64EncodedString(),
+                "publicSignature": sharedVersion.publicSignature.base64EncodedString()
+            ]
+            writeBatch.set(value: sharedVersionEncryptionDetails,
                            for: [
                             "receiver",
                             sharedVersion.userPublicIdentifier,
@@ -452,7 +464,7 @@ struct LocalServer : SHServerAPI {
                 }
                 
                 for (k, v) in keyValues {
-                    guard let value = v as? String else {
+                    guard let value = v as? [String: Any?] else {
                         completionHandler(.failure(KBError.unexpectedData(v)))
                         return
                     }
@@ -468,21 +480,33 @@ struct LocalServer : SHServerAPI {
                     }
                     
                     let (userPublicId, qualityRaw) = (userAssetIds[0], userAssetIds[1])
-                    let versionEncryptedSecretBase64 = value
                     
                     guard let quality = SHAssetQuality(rawValue: qualityRaw) else {
                         completionHandler(.failure(KBError.unexpectedData(qualityRaw)))
                         return
                     }
-                    guard let encryptedSecret = Data(base64Encoded: versionEncryptedSecretBase64) else {
-                        completionHandler(.failure(KBError.unexpectedData(versionEncryptedSecretBase64)))
+                    guard let versionEncryptedSecretBase64 = value["senderEncryptedSecret"] as? String,
+                          let encryptedSecret = Data(base64Encoded: versionEncryptedSecretBase64) else {
+                        completionHandler(.failure(KBError.unexpectedData(value)))
+                        return
+                    }
+                    guard let ephemeralPublicKeyBase64 = value["ephemeralPublicKey"] as? String,
+                          let ephemeralPublicKey = Data(base64Encoded: ephemeralPublicKeyBase64) else {
+                        completionHandler(.failure(KBError.unexpectedData(value)))
+                        return
+                    }
+                    guard let publicSignatureBase64 = value["publicSignature"] as? String,
+                          let publicSignature = Data(base64Encoded: publicSignatureBase64) else {
+                        completionHandler(.failure(KBError.unexpectedData(value)))
                         return
                     }
                     
                     let shareableVersion = SHGenericShareableEncryptedAssetVersion(
                         quality: quality,
                         userPublicIdentifier: userPublicId,
-                        encryptedSecret: encryptedSecret
+                        encryptedSecret: encryptedSecret,
+                        ephemeralPublicKey: ephemeralPublicKey,
+                        publicSignature: publicSignature
                     )
                     shareableVersions.append(shareableVersion)
                 }

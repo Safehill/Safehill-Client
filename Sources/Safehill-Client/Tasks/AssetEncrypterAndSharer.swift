@@ -2,6 +2,7 @@ import Foundation
 import os
 import KnowledgeBase
 import Async
+import Safehill_Crypto
 
 
 open class SHEncryptAndShareOperation: SHEncryptionOperation {
@@ -126,6 +127,65 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
+    ///
+    /// Get the private secret for the asset.
+    /// The same secret should be used when encrypting for sharing with other users.
+    /// Encrypting that secret again with the recipient's public key guarantees the privacy of that secret.
+    ///
+    /// By the time this method is called, the encrypted secret should be present in the local server (as the asset was previously encrypted on this device by the SHEncryptionOperation).
+    /// If not, the encrypted secret will be retrieved from the server.
+    ///
+    /// Note that secrets are encrypted when stored, so the secret retrieved from disk or server will be decrypted before returned.
+    ///
+    /// - Returns: the decrypted shared secret for this asset
+    /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
+    ///
+    private func retrieveEncryptionKey(
+        for asset: KBPhotoAsset,
+        item: KBQueueItem,
+        request shareRequest: SHEncryptionForSharingRequestQueueItem) throws -> Data
+    {
+        let globalIdentifier = try asset.generateGlobalIdentifier(using: imageManager)
+        
+        var decryptedSecretData: Data? = nil
+        let group = AsyncGroup()
+        group.enter()
+        self.serverProxy.getAssets(withGlobalIdentifiers: [globalIdentifier],
+                                   versions: [.lowResolution]) { result in
+            if case .success(let assetsDict) = result {
+                if assetsDict.count == 1,
+                   let asset = assetsDict.values.first,
+                   let version = asset.encryptedVersions.first {
+                    let encryptedSecret = SHShareablePayload(
+                        ephemeralPublicKeyData: version.publicKeyData,
+                        cyphertext: version.encryptedSecret,
+                        signature: version.publicSignatureData
+                    )
+                    decryptedSecretData = try? SHCypher.decrypt(
+                        encryptedSecret,
+                        using: self.user.shUser.privateKeyData,
+                        from: self.user.publicSignatureData
+                    )
+                }
+            }
+            group.leave()
+        }
+        
+        group.wait()
+        
+        guard let decryptedSecretData = decryptedSecretData else {
+            log.error("failed to get shared secret for item \(item.identifier)")
+            try self.markAsFailed(
+                localIdentifier: item.identifier,
+                groupId: shareRequest.groupId,
+                sharedWith: shareRequest.sharedWith
+            )
+            throw SHBackgroundOperationError.fatalError("failed to retrieve shared secret for asset \(globalIdentifier)")
+        }
+
+        return decryptedSecretData
+    }
+    
     private func storeSecrets(
         request: SHEncryptionForSharingRequestQueueItem,
         encryptedAsset: SHEncryptedAsset
@@ -139,7 +199,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 let shareableEncryptedVersion = SHGenericShareableEncryptedAssetVersion(
                     quality: quality,
                     userPublicIdentifier: otherUser.identifier,
-                    encryptedSecret: encryptedVersion.encryptedSecret
+                    encryptedSecret: encryptedVersion.encryptedSecret,
+                    ephemeralPublicKey: encryptedVersion.publicKeyData,
+                    publicSignature: encryptedVersion.publicSignatureData
                 )
                 shareableEncryptedVersions.append(shareableEncryptedVersion)
             }
@@ -262,12 +324,22 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     }
                 }
                 
+                guard let decryptedSecretData = try? self.retrieveEncryptionKey(
+                    for: asset,
+                    item: item,
+                    request: shareRequest
+                ) else {
+                    continue
+                }
+                
                 ///
                 /// Start encryption for the users it's shared with
                 ///
                 
                 guard let encryptedAsset = try? self.generateEncryptedAsset(
                     for: asset,
+                    usingPrivateSecret: decryptedSecretData,
+                    recipients: shareRequest.sharedWith,
                     item: item,
                     request: shareRequest
                 ) else {

@@ -4,6 +4,42 @@ import KnowledgeBase
 import Photos
 import os
 import Async
+import CryptoKit
+
+
+extension KBPhotoAsset {
+    public func getCachedData(using imageManager: PHImageManager) throws -> Data {
+        guard self.cachedData == nil else {
+            log.trace("retriving high resolution asset \(self.phAsset.localIdentifier) from cache")
+            return self.cachedData!
+        }
+        
+        log.info("retrieving high resolution asset \(self.phAsset.localIdentifier) from Photos library")
+        var error: Error? = nil
+        var hiResData: Data? = nil
+        self.phAsset.data(usingImageManager: imageManager,
+                           synchronousFetch: true) { result in
+            switch result {
+            case .success(let d):
+                hiResData = d
+            case .failure(let err):
+                error = err
+            }
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        self.cachedData = hiResData
+        return hiResData!
+    }
+    
+    
+    /// This operation is expensive if the asset is not cached. Use it carefully
+    func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
+        return SHHash.stringDigest(for: try self.getCachedData(using: imageManager))
+    }
+}
 
 open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -81,26 +117,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             throw error
         }
         
-        if let cachedData = asset.cachedData {
-            log.info("retriving high resolution asset \(asset.phAsset.localIdentifier) from cache")
-            hiResData = cachedData
-        } else {
-            log.info("retrieving high resolution asset \(asset.phAsset.localIdentifier)")
-            
-            asset.phAsset.data(usingImageManager: imageManager,
-                               synchronousFetch: true) { result in
-                switch result {
-                case .success(let d):
-                    hiResData = d
-                case .failure(let err):
-                    error = err
-                }
-            }
-        }
-        
-        if let error = error {
-            throw error
-        }
+        hiResData = try asset.getCachedData(using: imageManager)
         
         #if DEBUG
         let bcf = ByteCountFormatter()
@@ -115,52 +132,81 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     
     private func encrypt(
         asset: KBPhotoAsset,
+        usingSecret privateSecret: Data,
         lowResData: Data,
         hiResData: Data,
-        usingIdentifier contentIdentifier: String,
-        with user: SHServerUser) throws -> SHEncryptedAsset
+        forSharingWith users: [SHServerUser]) throws -> SHEncryptedAsset
     {
-        log.info("encrypting asset \(asset.phAsset.localIdentifier) versions to be shared with user \(user.identifier)")
+        let contentIdentifier = try asset.generateGlobalIdentifier(using: self.imageManager)
         
-        // encrypt this asset with a new set of ephemeral symmetric keys
-        let hiResEncryptedContent = try SHEncryptedData(clearData: hiResData)
-        let lowResEncryptedContent = try SHEncryptedData(clearData: lowResData)
+        log.info("encrypting asset \(contentIdentifier) versions to be shared with users \(users.map { $0.identifier }) using symmetric key \(privateSecret.base64EncodedString(), privacy: .private(mask: .hash))")
         
-        // encrypt the secret using this user's public key so that it can be stored securely on the server
-        let lowResEncryptedAssetSecret = try self.user.shareable(
-            data: lowResEncryptedContent.privateSecret.rawRepresentation,
-            with: user
+        // encrypt this asset with the symmetric keys generated at encryption time
+        let privateSecret = try SymmetricKey(rawRepresentation: privateSecret)
+        let hiResEncryptedContent = try SHEncryptedData(
+            privateSecret: privateSecret,
+            clearData: hiResData
         )
-        let hiResEncryptedAssetSecret = try self.user.shareable(
-            data: hiResEncryptedContent.privateSecret.rawRepresentation,
-            with: user
+        let lowResEncryptedContent = try SHEncryptedData(
+            privateSecret: privateSecret,
+            clearData: lowResData
         )
+                  
+        log.debug("lowRes-encryptedData (\(contentIdentifier)): \(lowResEncryptedContent.encryptedData.base64EncodedString())")
         
-        let lowResEncryptedVersion = SHGenericEncryptedAssetVersion(
-            quality: .lowResolution,
-            encryptedData: lowResEncryptedContent.encryptedData,
-            encryptedSecret: lowResEncryptedAssetSecret.cyphertext,
-            publicKeyData: lowResEncryptedAssetSecret.ephemeralPublicKeyData,
-            publicSignatureData: lowResEncryptedAssetSecret.signature
-        )
-        let hiResEncryptedVersion = SHGenericEncryptedAssetVersion(
-            quality: .hiResolution,
-            encryptedData: hiResEncryptedContent.encryptedData,
-            encryptedSecret: hiResEncryptedAssetSecret.cyphertext,
-            publicKeyData: hiResEncryptedAssetSecret.ephemeralPublicKeyData,
-            publicSignatureData: hiResEncryptedAssetSecret.signature
-        )
+        var versions = [SHEncryptedAssetVersion]()
+        
+        for user in users {
+            /// Encrypt the secret using the recipient's public key
+            /// so that it can be stored securely on the server
+            let encryptedAssetSecret = try self.user.shareable(
+                data: privateSecret.rawRepresentation,
+                with: user
+            )
+            
+            let lowResEncryptedVersion = SHGenericEncryptedAssetVersion(
+                quality: .lowResolution,
+                encryptedData: lowResEncryptedContent.encryptedData,
+                encryptedSecret: encryptedAssetSecret.cyphertext,
+                publicKeyData: encryptedAssetSecret.ephemeralPublicKeyData,
+                publicSignatureData: encryptedAssetSecret.signature
+            )
+            let hiResEncryptedVersion = SHGenericEncryptedAssetVersion(
+                quality: .hiResolution,
+                encryptedData: hiResEncryptedContent.encryptedData,
+                encryptedSecret: encryptedAssetSecret.cyphertext,
+                publicKeyData: encryptedAssetSecret.ephemeralPublicKeyData,
+                publicSignatureData: encryptedAssetSecret.signature
+            )
+            
+            log.debug("lowRes-encryptedSecret (\(contentIdentifier)): \(lowResEncryptedVersion.encryptedSecret.base64EncodedString())")
+            log.debug("lowRes-publicKeyData (\(contentIdentifier)): \(lowResEncryptedVersion.publicKeyData.base64EncodedString())")
+            log.debug("lowRes-publicSignatureData (\(contentIdentifier)): \(lowResEncryptedVersion.publicSignatureData.base64EncodedString())")
+            log.debug("lowRes-clearSecretData (\(contentIdentifier)): \(lowResEncryptedContent.privateSecret.rawRepresentation.base64EncodedString())")
+            
+            versions.append(lowResEncryptedVersion)
+            versions.append(hiResEncryptedVersion)
+        }
         
         return SHGenericEncryptedAsset(
             globalIdentifier: contentIdentifier,
             localIdentifier: asset.phAsset.localIdentifier,
             creationDate: asset.phAsset.creationDate,
-            encryptedVersions: [lowResEncryptedVersion, hiResEncryptedVersion]
+            encryptedVersions: versions
         )
     }
     
+    /// Encrypt the asset for the reciepients. This method is called by both the SHEncryptionOperation and the SHEncryptAndShareOperation. In the first case, the recipient will be the user (for backup), in the second it's the list of users to share the assets with
+    /// - Parameters:
+    ///   - asset: the asset to encrypt
+    ///   - recipients: the list of recipients (using their public key for encryption)
+    ///   - item: the queue item
+    ///   - request: the corresponding request
+    /// - Returns: the encrypted asset
     func generateEncryptedAsset(
         for asset: KBPhotoAsset,
+        usingPrivateSecret privateSecret: Data,
+        recipients: [SHServerUser],
         item: KBQueueItem,
         request: SHEncryptionRequestQueueItem) throws -> SHEncryptedAsset
     {
@@ -183,9 +229,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             throw SHBackgroundOperationError.fatalError("failed to retrieve data for item \(item.identifier)")
         }
         
-        // TODO: Update cache (in case this needs to be picked up later
-//                asset.cachedData = hiResData
-        
         guard let lowResData = lowResData, let hiResData = hiResData else {
             log.error("failed to retrieve data for item \(item.identifier). Dequeuing item because it's unlikely this will succeed again.")
             
@@ -201,16 +244,15 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             throw SHBackgroundOperationError.fatalError("failed to retrieve data for item \(item.identifier)")
         }
         
-        let contentIdentifier = SHHash.stringDigest(for: hiResData)
         let encryptedAsset: SHEncryptedAsset
         
         do {
             encryptedAsset = try self.encrypt(
                 asset: asset,
+                usingSecret: privateSecret,
                 lowResData: lowResData,
                 hiResData: hiResData,
-                usingIdentifier: contentIdentifier,
-                with: self.user
+                forSharingWith: recipients
             )
         } catch {
             log.error("failed to encrypt data for item \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
@@ -358,8 +400,14 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     }
                 }
                 
+                // Generate a new symmetric key, which will be used to encrypt this asset moving forward
+                // The key is only stored clear in the local database, but encrypted for each user (including self)
+                // as the encryptedSecret 
+                let privateSecret = SymmetricKey(size: .bits256)
                 guard let encryptedAsset = try? self.generateEncryptedAsset(
                     for: asset,
+                    usingPrivateSecret: privateSecret.rawRepresentation,
+                    recipients: [self.user],
                     item: item,
                     request: encryptionRequest
                 ) else {

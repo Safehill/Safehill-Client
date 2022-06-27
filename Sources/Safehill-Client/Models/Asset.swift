@@ -76,13 +76,13 @@ public struct SHServerAssetVersion : Codable {
     public let versionName: String
     let publicKeyData: Data
     let publicSignatureData: Data
-    let encryptedSecret: Data // the encrypted secret for `this` user, namely the user requesting the asset from the server
+    let encryptedSecret: Data
     let presignedURL: String
     let presignedURLExpiresInMinutes: Int
     
     enum CodingKeys: String, CodingKey {
         case versionName
-        case publicKeyData = "publicKey"
+        case publicKeyData = "ephemeralPublicKey"
         case publicSignatureData = "publicSignature"
         case encryptedSecret
         case presignedURL
@@ -161,6 +161,8 @@ public protocol SHShareableEncryptedAssetVersion {
     var quality: SHAssetQuality { get }
     var userPublicIdentifier: String { get }
     var encryptedSecret: Data { get }
+    var ephemeralPublicKey: Data { get }
+    var publicSignature: Data { get }
 }
 
 /// The interface representing a locally encrypted asset ready to be shared
@@ -220,7 +222,6 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
         self.encryptedVersions = encryptedVersions
-        
     }
     
     public static func fromDicts(_ dicts: [[String: Any]]) throws -> [String: SHEncryptedAsset] {
@@ -273,13 +274,19 @@ public struct SHGenericShareableEncryptedAssetVersion : SHShareableEncryptedAsse
     public let quality: SHAssetQuality
     public let userPublicIdentifier: String
     public let encryptedSecret: Data
+    public let ephemeralPublicKey: Data
+    public let publicSignature: Data
     
     public init(quality: SHAssetQuality,
                 userPublicIdentifier: String,
-                encryptedSecret: Data) {
+                encryptedSecret: Data,
+                ephemeralPublicKey: Data,
+                publicSignature: Data) {
         self.quality = quality
         self.userPublicIdentifier = userPublicIdentifier
         self.encryptedSecret = encryptedSecret
+        self.ephemeralPublicKey = ephemeralPublicKey
+        self.publicSignature = publicSignature
     }
 }
     

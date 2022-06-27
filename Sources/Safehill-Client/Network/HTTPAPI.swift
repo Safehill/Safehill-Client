@@ -426,7 +426,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 [
                     "versionName": encryptedVersion.quality.rawValue,
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
-                    "publicKey": encryptedVersion.publicKeyData.base64EncodedString(),
+                    "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
                     "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
                 ]
             }
@@ -457,6 +457,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                 "versionName": version.quality.rawValue,
                 "recipientUserIdentifier": version.userPublicIdentifier,
                 "recipientEncryptedSecret": version.encryptedSecret.base64EncodedString(),
+                "ephemeralPublicKey": version.ephemeralPublicKey.base64EncodedString(),
+                "publicSignature": version.publicSignature.base64EncodedString()
             ])
         }
         

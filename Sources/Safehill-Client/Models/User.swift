@@ -102,6 +102,11 @@ public struct SHLocalUser: SHServerUser {
         && lhs.publicSignatureData == rhs.publicSignatureData
     }
     
+    public init(cryptoUser: SHLocalCryptoUser) {
+        self.keychainPrefix = ""
+        self.shUser = cryptoUser
+    }
+    
     /// Initializes a SHLocalUser and the corresponding keychain element.
     /// Creates a key pair if none exists in the keychain with label `keysKeychainLabel`,
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
