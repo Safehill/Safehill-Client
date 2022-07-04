@@ -180,11 +180,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 publicSignatureData: encryptedAssetSecret.signature
             )
             
-            log.debug("lowRes-encryptedSecret (\(contentIdentifier)): \(lowResEncryptedVersion.encryptedSecret.base64EncodedString())")
-            log.debug("lowRes-publicKeyData (\(contentIdentifier)): \(lowResEncryptedVersion.publicKeyData.base64EncodedString())")
-            log.debug("lowRes-publicSignatureData (\(contentIdentifier)): \(lowResEncryptedVersion.publicSignatureData.base64EncodedString())")
-            log.debug("lowRes-clearSecretData (\(contentIdentifier)): \(lowResEncryptedContent.privateSecret.rawRepresentation.base64EncodedString())")
-            
             versions.append(lowResEncryptedVersion)
             versions.append(hiResEncryptedVersion)
         }
