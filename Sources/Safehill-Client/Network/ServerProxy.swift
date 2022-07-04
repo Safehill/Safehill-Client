@@ -19,14 +19,13 @@ public struct SHServerProxy {
         self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
     
-    public func createUser(email: String,
-                           name: String,
+    public func createUser(name: String,
                            password: String,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.createUser(email: email, name: name, password: "") { result in
+        self.localServer.createUser(name: name, password: "") { result in
             switch result {
             case .success(_):
-                self.remoteServer.createUser(email: email, name: name, password: password, completionHandler: completionHandler)
+                self.remoteServer.createUser(name: name, password: password, completionHandler: completionHandler)
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -82,8 +81,8 @@ public struct SHServerProxy {
         }
     }
     
-    public func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
-        self.remoteServer.signIn(email: email, password: password, completionHandler: completionHandler)
+    public func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+        self.remoteServer.signIn(name: name, password: password, completionHandler: completionHandler)
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
@@ -170,8 +169,8 @@ public struct SHServerProxy {
         }
     }
     
-    public func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.deleteAccount(email: email, password: password) { result in
+    public func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.deleteAccount(name: name, password: password) { result in
             if case .failure(let err) = result {
                 completionHandler(.failure(err))
                 return

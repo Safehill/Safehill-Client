@@ -11,41 +11,35 @@ import Safehill_Crypto
 public protocol SHServerUser : SHCryptoUser {
     var identifier: String { get }
     var name: String { get }
-    var email: String? { get }
 }
 
 public struct SHRemoteUser : SHServerUser, Codable {
     public let identifier: String
     public let name: String
-    public let email: String?
     public let publicKeyData: Data
     public let publicSignatureData: Data
     
     enum CodingKeys: String, CodingKey {
         case identifier
         case name
-        case email
         case publicKeyData = "publicKey"
         case publicSignatureData = "publicSignature"
     }
     
     init(identifier: String,
          name: String,
-         email: String?,
          publicKeyData: Data,
          publicSignatureData: Data) {
         self.identifier = identifier
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
         self.name = name
-        self.email = email
     }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         identifier = try container.decode(String.self, forKey: .identifier)
         name = try container.decode(String.self, forKey: .name)
-        email = try? container.decode(String.self, forKey: .email)
         let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
         publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
         let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
@@ -53,7 +47,7 @@ public struct SHRemoteUser : SHServerUser, Codable {
     }
 }
 
-/// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name, email).
+/// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name).
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHServerUser {
     public var identifier: String {
@@ -70,7 +64,6 @@ public struct SHLocalUser: SHServerUser {
     }
         
     public var name: String = "" // Empty means unknown
-    public var email: String?
     
     private var _ssoIdentifier: String?
     private var _authToken: String?
@@ -145,10 +138,8 @@ public struct SHLocalUser: SHServerUser {
     public mutating func updateUserDetails(given user: SHServerUser?) {
         if let user = user {
             self.name = user.name
-            self.email = user.email
         } else {
             self.name = ""
-            self.email = nil
         }
     }
     

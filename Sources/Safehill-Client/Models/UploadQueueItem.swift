@@ -228,7 +228,6 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
         let remoteUsers = users.map {
             SHRemoteUser(identifier: $0.identifier,
                          name: $0.name,
-                         email: nil,
                          publicKeyData: $0.publicKeyData,
                          publicSignatureData: $0.publicSignatureData
             )

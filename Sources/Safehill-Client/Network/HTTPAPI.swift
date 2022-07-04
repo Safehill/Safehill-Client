@@ -206,15 +206,13 @@ struct SHServerHTTPAPI : SHServerAPI {
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
-    func createUser(email: String,
-                    name: String,
+    func createUser(name: String,
                     password: String,
                     completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let parameters = [
             "identifier": requestor.identifier,
             "publicKey": requestor.publicKeyData.base64EncodedString(),
             "publicSignature": requestor.publicSignatureData.base64EncodedString(),
-            "email": email,
             "name": name,
             "password": password,
         ] as [String : Any]
@@ -271,9 +269,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func deleteAccount(email: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.post("users/delete", parameters: [
-            "email": email,
+            "name": name,
             "password": password
         ], requiresAuthentication: false) { (result: Result<NoReply, Error>) in
             switch result {
@@ -306,10 +304,10 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
     
-    func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
             "identifier": self.requestor.identifier,
-            "email": email,
+            "name": name,
             "password": password
         ] as [String : Any?]
         self.post("signin", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)

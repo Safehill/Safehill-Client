@@ -20,8 +20,7 @@ struct LocalServer : SHServerAPI {
         self.requestor = requestor
     }
     
-    private func createUser(email: String,
-                            name: String,
+    private func createUser(name: String,
                             password: String? = nil,
                             ssoIdentifier: String?,
                             completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
@@ -47,7 +46,6 @@ struct LocalServer : SHServerAPI {
                     "publicKey": requestor.publicKeyData,
                     "publicSignature": requestor.publicSignatureData,
                     "name": name,
-                    "email": email,
                 ] as [String : Any]
                 if let ssoIdentifier = ssoIdentifier {
                     value["ssoIdentifier"] = ssoIdentifier
@@ -115,8 +113,8 @@ struct LocalServer : SHServerAPI {
 
     }
     
-    func createUser(email: String, name: String, password: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        self.createUser(email: email, name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
+    func createUser(name: String, password: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+        self.createUser(name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
     func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
@@ -127,7 +125,7 @@ struct LocalServer : SHServerAPI {
         self._deleteAccount(completionHandler: completionHandler)
     }
     
-    private func _deleteAccount(email: String? = nil, password: String? = nil, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    private func _deleteAccount(name: String? = nil, password: String? = nil, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
         let group = AsyncGroup()
@@ -175,7 +173,7 @@ struct LocalServer : SHServerAPI {
                          identityToken: Data,
                          completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         let ssoIdentifier = identityToken.base64EncodedString()
-        self.createUser(email: email, name: name, password: "", ssoIdentifier: ssoIdentifier) { result in
+        self.createUser(name: name, password: "", ssoIdentifier: ssoIdentifier) { result in
             switch result {
             case .success(let user):
                 let authResponse = SHAuthResponse(user: user as! SHRemoteUser, bearerToken: "")
@@ -186,7 +184,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    public func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    public func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -199,12 +197,10 @@ struct LocalServer : SHServerAPI {
                     for res in resList {
                         if let identifier = res["identifier"] as? String,
                            let name = res["name"] as? String,
-                           let email = res["email"] as? String,
                            let publicKeyData = res["publicKey"] as? Data,
                            let publicSignatureData = res["publicSignature"] as? Data {
                             let user = SHRemoteUser(identifier: identifier,
                                                     name: name,
-                                                    email: email,
                                                     publicKeyData: publicKeyData,
                                                     publicSignatureData: publicSignatureData)
                             userList.append(user)

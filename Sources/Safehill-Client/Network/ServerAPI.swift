@@ -15,20 +15,18 @@ public protocol SHServerAPI {
     
     /// Creates a new user given their credentials, their public key and public signature (store in the `requestor` object)
     /// - Parameters:
-    ///   - email  the user email
     ///   - name  the user name
     ///   - password  the user password
     ///   - completionHandler: the callback method
-    func createUser(email: String,
-                    name: String,
+    func createUser(name: String,
                     password: String,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
     /// Updates an existing user details or credentials
     /// - Parameters:
-    ///   - email  the user email
-    ///   - name  the user name
-    ///   - password  the user password
+    ///   - email  the new user email
+    ///   - name  the new user name
+    ///   - password  the new user password
     ///   - completionHandler: the callback method
     func updateUser(email: String?,
                     name: String?,
@@ -37,10 +35,10 @@ public protocol SHServerAPI {
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
-    ///   - email: the user email
+    ///   - name: the user name
     ///   - password: the password for authorization
     ///   - completionHandler: the callback method
-    func deleteAccount(email: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
@@ -49,7 +47,6 @@ public protocol SHServerAPI {
     
     /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
     /// - Parameters:
-    ///   - email  the user email
     ///   - name  the user name
     ///   - authorizationCode  the data containing the auth code  to validate
     ///   - identityToken  the data containing the identity token to validate
@@ -61,7 +58,7 @@ public protocol SHServerAPI {
                          completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
+    func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
