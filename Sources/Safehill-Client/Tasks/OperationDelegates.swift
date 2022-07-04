@@ -2,13 +2,15 @@ import Foundation
 
 
 public protocol SHAssetDownloaderDelegate {
-    func didStartDownload(of items: [String])
+    func didStartDownload(of assetIdentifiers: [String])
+    func didFailDownload(of assetIdentifiers: [String], errorsByAssetIdentifier: [String: Error]?)
+    func didCompleteDownload(of assetIdentifiers: [String])
     func localIdentifiersInCache() -> [String]
     func globalIdentifiersInCache() -> [String]
     func handleAssetDescriptorResults(for: [SHAssetDescriptor])
     func handleLowResAssetResults(for: [SHDecryptedAsset])
     func handleHiResAssetResults(for: [SHDecryptedAsset])
-    func markLocalAssetsAsDownloaded(localToGlobalIdentifiers: [String: String])
+    func markLocalAssetsAsDownloaded(descriptorsByLocalIdentifier: [String: SHAssetDescriptor])
     func completionHandler(_: Swift.Result<Void, Error>) -> Void
 }
 

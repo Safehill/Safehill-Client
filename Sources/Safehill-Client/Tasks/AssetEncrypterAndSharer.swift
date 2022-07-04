@@ -209,7 +209,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         let shareableEncryptedAsset = SHGenericShareableEncryptedAsset(
             globalIdentifier: encryptedAsset.globalIdentifier,
-            sharedVersions: shareableEncryptedVersions
+            sharedVersions: shareableEncryptedVersions,
+            groupId: request.groupId
         )
         
         var error: Error? = nil

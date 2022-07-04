@@ -135,7 +135,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         usingSecret privateSecret: Data,
         lowResData: Data,
         hiResData: Data,
-        forSharingWith users: [SHServerUser]) throws -> SHEncryptedAsset
+        forSharingWith users: [SHServerUser],
+        groupId: String) throws -> SHEncryptedAsset
     {
         let contentIdentifier = try asset.generateGlobalIdentifier(using: self.imageManager)
         
@@ -192,6 +193,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             globalIdentifier: contentIdentifier,
             localIdentifier: asset.phAsset.localIdentifier,
             creationDate: asset.phAsset.creationDate,
+            groupId: groupId,
             encryptedVersions: versions
         )
     }
@@ -252,7 +254,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 usingSecret: privateSecret,
                 lowResData: lowResData,
                 hiResData: hiResData,
-                forSharingWith: recipients
+                forSharingWith: recipients,
+                groupId: request.groupId
             )
         } catch {
             log.error("failed to encrypt data for item \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
