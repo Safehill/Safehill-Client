@@ -221,19 +221,25 @@ public struct SHServerProxy {
                             descriptors.count == serverDescriptors.count,
                             descriptors.map({ d in d.globalIdentifier }).elementsEqual(serverDescriptors.map { d in d.globalIdentifier })
                         else {
-                            ///
-                            /// Remove all non-existent server descriptors from local server
-                            ///
-                            let toRemoveLocally = descriptors.map({ d in d.globalIdentifier }).subtract(serverDescriptors.map({ d in d.globalIdentifier }))
-                            guard toRemoveLocally.count > 0 else {
-                                return
-                            }
-                            self.localServer.deleteAssets(withGlobalIdentifiers: Array(toRemoveLocally)) { result in
-                                if case .failure(let error) = result {
-                                    log.error("some assets were deleted on server but couldn't be deleted from lcoal cache. THis operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
-                                }
-                            }
+                            // TODO: The following code interferes with assets being uploaded, as it removes the details for the uploads in-flight.
+                            // We store the assets and other details (like the secrets) in the SHUploadOperation to be picked up by the uploader.
+                            // However, as the SHDownloadOperation runs in parallel, it has a chance to delete these details and makes the upload fail (`serverProxy.getLocalAssets` fails to retrieve the asset).
+                            // The solution is to either store details for in-flight uploads somewhere else, or to mark them as in-flight and avoid removing them when calling deleteAssets below
                             return
+                            
+//                            ///
+//                            /// Remove all non-existent server descriptors from local server
+//                            ///
+//                            let toRemoveLocally = descriptors.map({ d in d.globalIdentifier }).subtract(serverDescriptors.map({ d in d.globalIdentifier }))
+//                            guard toRemoveLocally.count > 0 else {
+//                                return
+//                            }
+//                            self.localServer.deleteAssets(withGlobalIdentifiers: Array(toRemoveLocally)) { result in
+//                                if case .failure(let error) = result {
+//                                    log.error("some assets were deleted on server but couldn't be deleted from lcoal cache. THis operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+//                                }
+//                            }
+//                            return
                         }
                     }
                 }
@@ -275,15 +281,16 @@ public struct SHServerProxy {
                                         versions: versions) { serverResult in
                 switch serverResult {
                 case .success(let assetsDict):
-                    completionHandler(.success(localDictionary.merging(assetsDict, uniquingKeysWith: { _, server in server })))
-                    
                     ///
                     /// Save retrieved assets to local server (cache)
-                    /// 
-                    self.storeAssetsLocally(Array(assetsDict.values)) { result in
-                        if case .failure(let err) = result {
+                    ///
+                    // TODO: This methods assumes that assets were created by the local user. This is not true when assets are shared from other users
+                    // TODO: Need to pass descriptors?
+                    self.storeAssetsLocally(Array(assetsDict.values)) { localResult in
+                        if case .failure(let err) = localResult {
                             log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
                         }
+                        completionHandler(.success(localDictionary.merging(assetsDict, uniquingKeysWith: { _, server in server })))
                     }
                 case .failure(let error):
                     log.error("failed to get assets with globalIdentifiers \(assetIdentifiersToFetch): \(error.localizedDescription)")

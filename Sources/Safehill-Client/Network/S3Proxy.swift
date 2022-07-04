@@ -72,6 +72,7 @@ struct S3Proxy {
                     globalIdentifier: asset.globalIdentifier,
                     localIdentifier: asset.localIdentifier,
                     creationDate: asset.creationDate,
+                    groupId: asset.groupId,
                     encryptedVersions: [
                         SHGenericEncryptedAssetVersion(
                             quality: quality,

@@ -17,58 +17,135 @@ public enum SHAssetQuality: String {
     }
 }
 
+public protocol SHAssetGroupInfo {
+    /// The name of the asset group (optional)
+    var name: String? { get }
+    /// ISO8601 formatted datetime, representing the time the asset group was created
+    var createdAt: Date? { get }
+ }
+
+public struct SHGenericAssetGroupInfo : SHAssetGroupInfo, Codable {
+    public let name: String?
+    public let createdAt: Date?
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try? container.decode(String?.self, forKey: .name)
+        let dateString = try? container.decode(String?.self, forKey: .createdAt)
+        createdAt = dateString?.iso8601withFractionalSeconds
+    }
+    
+    init(name: String?, createdAt: Date?) {
+        self.name = name
+        self.createdAt = createdAt
+    }
+}
+
+public protocol SHDescriptorSharingInfo {
+    var sharedByUserIdentifier: String { get }
+    /// Maps user public identifiers to asset group identifiers
+    var sharedWithUserIdentifiersInGroup: [String: String] { get }
+    var groupInfoById: [String: SHAssetGroupInfo] { get }
+}
+
+public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable {
+    public let sharedByUserIdentifier: String
+    public let sharedWithUserIdentifiersInGroup: [String: String]
+    public let groupInfoById: [String: SHAssetGroupInfo]
+    
+    enum CodingKeys: String, CodingKey {
+        case sharedByUserIdentifier
+        case sharedWithUserIdentifiersInGroup
+        case groupInfoById
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sharedByUserIdentifier, forKey: .sharedByUserIdentifier)
+        try container.encode(sharedWithUserIdentifiersInGroup, forKey: .sharedWithUserIdentifiersInGroup)
+        try container.encode(groupInfoById as! [String: SHGenericAssetGroupInfo], forKey: .groupInfoById)
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sharedByUserIdentifier = try container.decode(String.self, forKey: .sharedByUserIdentifier)
+        sharedWithUserIdentifiersInGroup = try container.decode([String: String].self, forKey: .sharedWithUserIdentifiersInGroup)
+        groupInfoById = try container.decode([String: SHGenericAssetGroupInfo].self, forKey: .groupInfoById)
+    }
+    
+    public init(sharedByUserIdentifier: String,
+                sharedWithUserIdentifiersInGroup: [String: String],
+                groupInfoById: [String: SHAssetGroupInfo]) {
+        self.sharedByUserIdentifier = sharedByUserIdentifier
+        self.sharedWithUserIdentifiersInGroup = sharedWithUserIdentifiersInGroup
+        self.groupInfoById = groupInfoById
+    }
+}
+
 /// Safehill Server descriptor: metadata associated with an asset, such as creation date, sender and list of receivers
 public protocol SHAssetDescriptor {
     var globalIdentifier: String { get }
-    var localIdentifier: String? { get }
+    var localIdentifier: String? { get set }
     var creationDate: Date? { get }
-    var sharedByUserIdentifier: String { get }
-    var sharedWithUserIdentifiers: [String] { get }
+    var sharingInfo: SHDescriptorSharingInfo { get }
 }
 
 public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public let globalIdentifier: String
-    public let localIdentifier: String?
+    public var localIdentifier: String?
     public let creationDate: Date?
-    public let sharedByUserIdentifier: String
-    public let sharedWithUserIdentifiers: [String]
+    public let sharingInfo: SHDescriptorSharingInfo
+    
+    enum CodingKeys: String, CodingKey {
+        case globalIdentifier
+        case localIdentifier
+        case creationDate
+        case sharingInfo
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(globalIdentifier, forKey: .globalIdentifier)
+        try container.encode(localIdentifier, forKey: .localIdentifier)
+        try container.encode(creationDate, forKey: .creationDate)
+        try container.encode(sharingInfo as! SHGenericDescriptorSharingInfo, forKey: .sharingInfo)
+    }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
         localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
-        sharedByUserIdentifier = try container.decode(String.self, forKey: .sharedByUserIdentifier)
-        sharedWithUserIdentifiers = try container.decode([String].self, forKey: .sharedWithUserIdentifiers)
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
+        sharingInfo = try container.decode(SHGenericDescriptorSharingInfo.self, forKey: .sharingInfo)
     }
     
     public init(globalIdentifier: String,
                 localIdentifier: String?,
                 creationDate: Date?,
-                sharedByUserIdentifier: String,
-                sharedWithUserIdentifiers: [String]) {
+                sharingInfo: SHDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
-        self.sharedByUserIdentifier = sharedByUserIdentifier
-        self.sharedWithUserIdentifiers = sharedWithUserIdentifiers
+        self.sharingInfo = sharingInfo
     }
 }
 
 /// The interface representing an asset after being decrypted
 public protocol SHDecryptedAsset {
     var globalIdentifier: String { get }
-    var localIdentifier: String? { get }
+    var localIdentifier: String? { get set }
     var decryptedData: Data { get }
     var creationDate: Date? { get }
+    var groupId: String { get }
 }
 
 public struct SHGenericDecryptedAsset : SHDecryptedAsset {
     public let globalIdentifier: String
-    public let localIdentifier: String?
+    public var localIdentifier: String?
     public let decryptedData: Data
     public let creationDate: Date?
+    public let groupId: String
 }
 
 /// Safehill Server description of a version associated with an asset
@@ -99,12 +176,17 @@ public struct SHServerAssetVersion : Codable {
         publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
         let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
         publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
-        
         presignedURL = try container.decode(String.self, forKey: .presignedURL)
         presignedURLExpiresInMinutes = try container.decode(Int.self, forKey: .presignedURLExpiresInMinutes)
     }
     
-    public init(versionName: String, publicKeyData: Data, publicSignatureData: Data, encryptedSecret: Data, presignedURL: String, presignedURLExpiresInMinutes: Int) {
+    public init(versionName: String,
+                publicKeyData: Data,
+                publicSignatureData: Data,
+                encryptedSecret: Data,
+                presignedURL: String,
+                presignedURLExpiresInMinutes: Int)
+    {
         self.versionName = versionName
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
@@ -119,6 +201,7 @@ public struct SHServerAsset : Codable {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let creationDate: Date?
+    public let groupId: String
     public let versions: [SHServerAssetVersion]
     
     public init(from decoder: Decoder) throws {
@@ -128,13 +211,19 @@ public struct SHServerAsset : Codable {
         localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
+        groupId = try container.decode(String.self, forKey: .groupId)
         versions = try container.decode([SHServerAssetVersion].self, forKey: .versions)
     }
     
-    public init(globalIdentifier: String, localIdentifier: String?, creationDate: Date?, versions: [SHServerAssetVersion]) {
+    public init(globalIdentifier: String,
+                localIdentifier: String?,
+                creationDate: Date?,
+                groupId: String,
+                versions: [SHServerAssetVersion]) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
+        self.groupId = groupId
         self.versions = versions
     }
 }
@@ -154,6 +243,7 @@ public protocol SHEncryptedAsset {
     var localIdentifier: String? { get }
     var creationDate: Date? { get }
     var encryptedVersions: [SHEncryptedAssetVersion] { get }
+    var groupId: String { get }
 }
 
 /// The interface representing a locally encrypted asset version ready to be shared, hence holding the secret for the user it's being shared with
@@ -169,6 +259,7 @@ public protocol SHShareableEncryptedAssetVersion {
 public protocol SHShareableEncryptedAsset {
     var globalIdentifier: String { get }
     var sharedVersions: [SHShareableEncryptedAssetVersion] { get }
+    var groupId: String { get }
 }
 
 public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
@@ -202,7 +293,8 @@ public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
                 encryptedData: encryptedData,
                 encryptedSecret: encryptedSecret,
                 publicKeyData: publicKeyData,
-                publicSignatureData: publicSignatureData)
+                publicSignatureData: publicSignatureData
+            )
         }
         return nil
     }
@@ -212,15 +304,18 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let creationDate: Date?
+    public let groupId: String
     public let encryptedVersions: [SHEncryptedAssetVersion]
     
     public init(globalIdentifier: String,
                 localIdentifier: String?,
                 creationDate: Date?,
+                groupId: String,
                 encryptedVersions: [SHEncryptedAssetVersion]) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
+        self.groupId = groupId
         self.encryptedVersions = encryptedVersions
     }
     
@@ -245,18 +340,21 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                     globalIdentifier: existing.globalIdentifier,
                     localIdentifier: existing.localIdentifier,
                     creationDate: existing.creationDate,
+                    groupId: existing.groupId,
                     encryptedVersions: versions
                 )
                 encryptedAssetById[assetIdentifier] = encryptedAsset
             }
             else if let assetIdentifier = dict["assetIdentifier"] as? String,
                     let phAssetIdentifier = dict["applePhotosAssetIdentifier"] as? String?,
-                    let creationDate = dict["creationDate"] as? Date?
+                    let creationDate = dict["creationDate"] as? Date?,
+                    let groupId = dict["groupId"] as? String
             {
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: assetIdentifier,
                     localIdentifier: phAssetIdentifier,
                     creationDate: creationDate,
+                    groupId: groupId,
                     encryptedVersions: [version]
                 )
                 encryptedAssetById[assetIdentifier] = encryptedAsset
@@ -294,10 +392,14 @@ public struct SHGenericShareableEncryptedAssetVersion : SHShareableEncryptedAsse
 public struct SHGenericShareableEncryptedAsset : SHShareableEncryptedAsset {
     public let globalIdentifier: String
     public let sharedVersions: [SHShareableEncryptedAssetVersion]
+    public let groupId: String
 
-    public init(globalIdentifier: String, sharedVersions: [SHShareableEncryptedAssetVersion]) {
+    public init(globalIdentifier: String,
+                sharedVersions: [SHShareableEncryptedAssetVersion],
+                groupId: String) {
         self.globalIdentifier = globalIdentifier
         self.sharedVersions = sharedVersions
+        self.groupId = groupId
     }
 }
 
@@ -322,7 +424,8 @@ extension SHLocalUser {
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
             decryptedData: decryptedData,
-            creationDate: asset.creationDate
+            creationDate: asset.creationDate,
+            groupId: asset.groupId
         )
     }
 }

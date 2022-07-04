@@ -19,7 +19,7 @@ private let UserNameKey = "userName"
 private let UserIdentifierKey = "userIdentifier"
 private let PublicKeyKey = "publicKey"
 private let PublicSignatureKey = "publicSignature"
-private let AssetDescriptorsKey = "assetDescriptors"
+private let AssetDescriptorKey = "assetDescriptor"
 private let AssetShouldUploadKey = "shouldUpload"
 
 
@@ -100,58 +100,53 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let creationDate: Date?
-    public let sharedByUserIdentifier: String
-    public let sharedWithUserIdentifiers: [String]
+    public let sharingInfo: SHDescriptorSharingInfo
     
     enum CodingKeys: String, CodingKey {
         case globalIdentifier
         case localIdentifier
         case creationDate
-        case sharedByUserIdentifier
-        case sharedWithUserIdentifiers
+        case sharingInfo
     }
     
     public func encode(with coder: NSCoder) {
         coder.encode(self.globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(self.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
         coder.encode(self.creationDate, forKey: CodingKeys.creationDate.rawValue)
-        coder.encode(self.sharedByUserIdentifier, forKey: CodingKeys.sharedByUserIdentifier.rawValue)
-        coder.encode(self.sharedWithUserIdentifiers, forKey: CodingKeys.sharedWithUserIdentifiers.rawValue)
+        let encodableSharingInfo = try? JSONEncoder().encode(self.sharingInfo as! SHGenericDescriptorSharingInfo)
+        coder.encode(encodableSharingInfo, forKey: CodingKeys.sharingInfo.rawValue)
     }
     
-    public init(globalIdentifier: String, localIdentifier: String?, creationDate: Date?, sharedByUserIdentifier: String, sharedWithUserIdentifiers: [String]) {
+    public init(globalIdentifier: String,
+                localIdentifier: String?,
+                creationDate: Date?,
+                sharingInfo: SHGenericDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
-        self.sharedByUserIdentifier = sharedByUserIdentifier
-        self.sharedWithUserIdentifiers = sharedWithUserIdentifiers
+        self.sharingInfo = sharingInfo
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
         let creationDate = decoder.decodeObject(of: NSDate.self, forKey: CodingKeys.creationDate.rawValue)
-        let sharedByUserIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.sharedByUserIdentifier.rawValue)
-        let sharedWithUserIdentifiers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.sharedWithUserIdentifiers.rawValue)
+        let sharingInfoData = decoder.decodeObject(of: [NSData.self], forKey: CodingKeys.sharingInfo.rawValue) as! Data
                 
         guard let globalIdentifier = globalIdentifier as String? else {
-            log.error("unexpected value for globalIdentifier when decoding SHFGenericAssetDescriptorClass object")
+            log.error("unexpected value for globalIdentifier when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
         guard let localIdentifier = localIdentifier as String? else {
-            log.error("unexpected value for localIdentifier when decoding SHFGenericAssetDescriptorClass object")
+            log.error("unexpected value for localIdentifier when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
         guard let creationDate = creationDate as Date? else {
-            log.error("unexpected value for creationDate when decoding SHFGenericAssetDescriptorClass object")
+            log.error("unexpected value for creationDate when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
-        guard let sharedByUserIdentifier = sharedByUserIdentifier as String? else {
-            log.error("unexpected value for sharedByUserIdentifier when decoding SHFGenericAssetDescriptorClass object")
-            return nil
-        }
-        guard let sharedWithUserIdentifiers = sharedWithUserIdentifiers as? [String] else {
-            log.error("unexpected value for sharedWithUserIdentifiers when decoding SHFGenericAssetDescriptorClass object")
+        guard let sharingInfo = try? JSONDecoder().decode(SHGenericDescriptorSharingInfo.self, from: sharingInfoData) else {
+            log.error("unexpected value for sharingInfo when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
         
@@ -159,8 +154,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
             globalIdentifier: globalIdentifier,
             localIdentifier: localIdentifier,
             creationDate: creationDate,
-            sharedByUserIdentifier: sharedByUserIdentifier,
-            sharedWithUserIdentifiers: sharedWithUserIdentifiers
+            sharingInfo: sharingInfo
         )
     }
 }
@@ -380,7 +374,16 @@ public typealias SHShareHistoryItem = SHConcreteShareableGroupableQueueItem
 public typealias SHFailedShareRequestQueueItem = SHConcreteShareableGroupableQueueItem
 public typealias SHFailedUploadRequestQueueItem = SHConcreteShareableGroupableQueueItem
 
-public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializableQueueItem {
+public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializableQueueItem, SHShareableGroupableQueueItem {
+    public var assetId: String {
+        self.assetDescriptor.globalIdentifier
+    }
+    
+    public let sharedWith: [SHServerUser] = []
+    
+    public var groupId: String
+    
+    private let selfUserPublicId: String
     
     public static var supportsSecureCoding: Bool = true
     
@@ -392,20 +395,34 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
             globalIdentifier: assetDescriptor.globalIdentifier,
             localIdentifier: assetDescriptor.localIdentifier,
             creationDate: assetDescriptor.creationDate,
-            sharedByUserIdentifier: assetDescriptor.sharedByUserIdentifier,
-            sharedWithUserIdentifiers: assetDescriptor.sharedWithUserIdentifiers
+            sharingInfo: assetDescriptor.sharingInfo as! SHGenericDescriptorSharingInfo
         )
-        coder.encode(assetDescriptor, forKey: AssetDescriptorsKey)
+        coder.encode(assetDescriptor, forKey: AssetDescriptorKey)
+        coder.encode(selfUserPublicId, forKey: UserIdentifierKey)
     }
     
-    public init(assetDescriptor: SHAssetDescriptor) {
+    public init(assetDescriptor: SHAssetDescriptor, selfUserPublicId: String) {
         self.assetDescriptor = assetDescriptor
+        self.selfUserPublicId = selfUserPublicId
+        for (userId, groupId) in self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+            if userId == selfUserPublicId {
+                self.groupId = groupId
+                return
+            }
+        }
+        self.groupId = ""
     }
     
     public required convenience init?(coder decoder: NSCoder) {
-        let descriptors = decoder.decodeObject(of: SHGenericAssetDescriptorClass.self, forKey: AssetDescriptorsKey)
-        guard let descriptor = descriptors else {
+        let descriptor = decoder.decodeObject(of: SHGenericAssetDescriptorClass.self, forKey: AssetDescriptorKey)
+        let selfUserPublicId = decoder.decodeObject(of: NSString.self, forKey: UserIdentifierKey)
+        
+        guard let descriptor = descriptor else {
             log.error("unexpected value for assetDescriptor when decoding SHDownloadRequestQueueItem object")
+            return nil
+        }
+        guard let selfUserPublicId = selfUserPublicId as? String else {
+            log.error("unexpected value for selfUserPublicId when decoding SHDownloadRequestQueueItem object")
             return nil
         }
         
@@ -414,10 +431,9 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
             globalIdentifier: descriptor.globalIdentifier,
             localIdentifier: descriptor.localIdentifier,
             creationDate: descriptor.creationDate,
-            sharedByUserIdentifier: descriptor.sharedByUserIdentifier,
-            sharedWithUserIdentifiers: descriptor.sharedWithUserIdentifiers
+            sharingInfo: descriptor.sharingInfo
         )
         
-        self.init(assetDescriptor: assetDescriptor)
+        self.init(assetDescriptor: assetDescriptor, selfUserPublicId: selfUserPublicId)
     }
 }

@@ -224,6 +224,8 @@ struct LocalServer : SHServerAPI {
     }
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        /// No need to pull all versions when constructing descriptor, pulling "low" version only.
+        /// This assumes that sharing information and other metadata are common across all versions (low and hi)
         let condition = KBGenericCondition(.beginsWith, value: "low::")
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
@@ -270,30 +272,54 @@ struct LocalServer : SHServerAPI {
                         return
                     }
                     
-                    var sharedWith = [String]()
+                    var groupInfoById = [String: SHAssetGroupInfo]()
+                    var sharedWithUsersInGroup = [String: String]()
                     
                     do {
-                        let condition = KBGenericCondition(.beginsWith, value: "receiver::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
-                        let keys = try assetStore.keys(matching: condition)
-                        if keys.count > 0, let key = keys.first {
-                            let components = key.components(separatedBy: "::")
-                            if components.count == 4 {
-                                sharedWith.append(components[1])
-                            } else {
-                                print("failed to retrieve sharing information for asset \(globalIdentifier)")
+                        let condition = KBGenericCondition(
+                            .beginsWith, value: "receiver::"
+                        ).and(KBGenericCondition(
+                            .endsWith, value: globalIdentifier)
+                        ).and(KBGenericCondition(
+                            .contains, value: "::low::")
+                        )
+
+                        let keysAndValues = try assetStore.dictionaryRepresentation(forKeysMatching: condition)
+                        if keysAndValues.count > 0 {
+                            for (key, value) in keysAndValues {
+                                guard let value = value as? [String: String] else {
+                                    print("failed to retrieve sharing information for asset \(globalIdentifier). Type is not a dictionary")
+                                    continue
+                                }
+                                let components = key.components(separatedBy: "::")
+                                if components.count == 4, let groupId = value["groupId"] {
+                                    sharedWithUsersInGroup[components[1]] = groupId
+                                } else {
+                                    print("failed to retrieve sharing information for asset \(globalIdentifier). Invalid formal")
+                                }
+                                
+                                if let groupId = value["groupId"], let groupCreationDate = value["groupCreationDate"] {
+                                    groupInfoById[groupId] = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate.iso8601withFractionalSeconds)
+                                }
                             }
                         } else {
-                            print("failed to retrieve sharing information for asset \(globalIdentifier)")
+                            print("failed to retrieve sharing information for asset \(globalIdentifier). No data")
                         }
                     } catch {
                         print("failed to retrieve sharing information for asset \(globalIdentifier): \(error)")
                     }
                     
-                    let descriptor = SHGenericAssetDescriptor(globalIdentifier: globalIdentifier,
-                                                              localIdentifier: phAssetIdentifier,
-                                                              creationDate: creationDate,
-                                                              sharedByUserIdentifier: sharedBy,
-                                                              sharedWithUserIdentifiers: sharedWith)
+                    let sharingInfo = SHGenericDescriptorSharingInfo(
+                        sharedByUserIdentifier: sharedBy,
+                        sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
+                        groupInfoById: groupInfoById
+                    )
+                    let descriptor = SHGenericAssetDescriptor(
+                        globalIdentifier: globalIdentifier,
+                        localIdentifier: phAssetIdentifier,
+                        creationDate: creationDate,
+                        sharingInfo: sharingInfo
+                    )
                     descriptors.append(descriptor)
                 }
                 completionHandler(.success(descriptors))
@@ -353,6 +379,8 @@ struct LocalServer : SHServerAPI {
                     "applePhotosAssetIdentifier": asset.localIdentifier,
                     "encryptedData": encryptedVersion.encryptedData,
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret,
+                    "groupId": asset.groupId,
+                    "groupCreationDate": Date().iso8601withFractionalSeconds, // TODO: Should this be the creation value we get from the server?
                     "publicKey": encryptedVersion.publicKeyData,
                     "publicSignature": encryptedVersion.publicSignatureData,
                     "creationDate": asset.creationDate
@@ -367,7 +395,14 @@ struct LocalServer : SHServerAPI {
                                 asset.globalIdentifier
                                ].joined(separator: "::")
                 )
-                writeBatch.set(value: encryptedVersion.encryptedSecret.base64EncodedString(),
+                let sharedVersionDetails: [String: String] = [
+                    "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
+                    "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
+                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
+                    "groupId": asset.groupId,
+                    "groupCreationDate": Date().iso8601withFractionalSeconds
+                ]
+                writeBatch.set(value: sharedVersionDetails,
                                for: [
                                 "receiver",
                                 requestor.identifier,
@@ -392,13 +427,15 @@ struct LocalServer : SHServerAPI {
                                 publicSignatureData: encryptedVersion.publicSignatureData,
                                 encryptedSecret: encryptedVersion.encryptedSecret,
                                 presignedURL: "",
-                                presignedURLExpiresInMinutes: 0)
+                                presignedURLExpiresInMinutes: 0
+                            )
                         )
                     }
                     
                     let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
                                                     localIdentifier: asset.localIdentifier,
                                                     creationDate: asset.creationDate,
+                                                    groupId: asset.groupId,
                                                     versions: serverAssetVersions)
                     serverAssets.append(serverAsset)
                 }
@@ -422,12 +459,14 @@ struct LocalServer : SHServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         for sharedVersion in asset.sharedVersions {
-            let sharedVersionEncryptionDetails: [String: Any?] = [
+            let sharedVersionDetails: [String: String] = [
                 "senderEncryptedSecret": sharedVersion.encryptedSecret.base64EncodedString(),
                 "ephemeralPublicKey": sharedVersion.ephemeralPublicKey.base64EncodedString(),
-                "publicSignature": sharedVersion.publicSignature.base64EncodedString()
+                "publicSignature": sharedVersion.publicSignature.base64EncodedString(),
+                "groupId": asset.groupId,
+                "groupCreationDate": Date().iso8601withFractionalSeconds
             ]
-            writeBatch.set(value: sharedVersionEncryptionDetails,
+            writeBatch.set(value: sharedVersionDetails,
                            for: [
                             "receiver",
                             sharedVersion.userPublicIdentifier,
@@ -462,6 +501,8 @@ struct LocalServer : SHServerAPI {
                     completionHandler(.success(nil))
                     return
                 }
+                
+                var groupId: String? = nil
                 
                 for (k, v) in keyValues {
                     guard let value = v as? [String: Any?] else {
@@ -500,6 +541,13 @@ struct LocalServer : SHServerAPI {
                         completionHandler(.failure(KBError.unexpectedData(value)))
                         return
                     }
+                    guard let gid = value["groupId"] as? String else {
+                        completionHandler(.failure(KBError.unexpectedData(value)))
+                        return
+                    }
+                    /// Although groupId is stored as a property of version, it is safe to coalesce,
+                    /// as all versions should have the same groupId
+                    groupId = gid
                     
                     let shareableVersion = SHGenericShareableEncryptedAssetVersion(
                         quality: quality,
@@ -511,8 +559,16 @@ struct LocalServer : SHServerAPI {
                     shareableVersions.append(shareableVersion)
                 }
                 
-                completionHandler(.success(SHGenericShareableEncryptedAsset(globalIdentifier: globalIdentifier,
-                                                                            sharedVersions: shareableVersions)))
+                guard let groupId = groupId else {
+                    completionHandler(.failure(KBError.unexpectedData(groupId)))
+                    return
+                }
+                
+                completionHandler(.success(SHGenericShareableEncryptedAsset(
+                    globalIdentifier: globalIdentifier,
+                    sharedVersions: shareableVersions,
+                    groupId: groupId
+                )))
             case .failure(let err):
                 completionHandler(.failure(err))
             }

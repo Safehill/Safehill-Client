@@ -374,21 +374,22 @@ struct SHServerHTTPAPI : SHServerAPI {
             switch result {
             case .success(let assets):
                 var dictionary = [String: SHEncryptedAsset]()
-                var error: Error? = nil
+                var errors = [String: Error]()
                 
                 let group = AsyncGroup()
                 
                 for asset in assets {
                     for version in asset.versions {
                         group.enter()
+                        log.info("uploading asset \(asset.globalIdentifier) version \(version.versionName)")
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
                                 dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
                                 group.leave()
                             case .failure(let err):
-                                error = err
-                                break
+                                errors[asset.globalIdentifier + "::" + version.versionName] = err
+                                group.leave()
                             }
                         }
                     }
@@ -400,8 +401,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                     return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
                 }
                 
-                guard error == nil else {
-                    return completionHandler(.failure(error!))
+                guard errors.count == 0 else {
+                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error uploading to S3 asset with identifiers \(errors.keys)")))
                 }
                 completionHandler(.success(dictionary))
                 
@@ -422,12 +423,13 @@ struct SHServerHTTPAPI : SHServerAPI {
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
             "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
+            "groupId": asset.groupId,
             "versions": asset.encryptedVersions.map { encryptedVersion in
                 [
                     "versionName": encryptedVersion.quality.rawValue,
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
                     "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
-                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
+                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
                 ]
             }
         ]
@@ -464,7 +466,8 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         let shareDict: [String: Any?] = [
             "globalAssetIdentifier": asset.globalIdentifier,
-            "versionSharingDetails": versions
+            "versionSharingDetails": versions,
+            "grouId": asset.groupId
         ]
         
         self.post("assets/share", parameters: shareDict) { (result: Result<NoReply, Error>) in
