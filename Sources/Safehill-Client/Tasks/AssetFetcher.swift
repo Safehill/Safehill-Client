@@ -131,12 +131,16 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     public func markAsFailed(
         localIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser]) throws
     {
         // Enquque to failed
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
+                                                                   groupId: groupId,
+                                                                   eventOriginator: eventOriginator,
+                                                                   sharedWith: users)
         
         do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
         catch {
@@ -171,13 +175,17 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     public func markAsSuccessful(
         kbPhotoAsset: KBPhotoAsset,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser],
         shouldUpload: Bool) throws
     {
         let localIdentifier = kbPhotoAsset.phAsset.localIdentifier
         
         if shouldUpload {
-            let encryptionRequest = SHEncryptionRequestQueueItem(asset: kbPhotoAsset, groupId: groupId, sharedWith: users)
+            let encryptionRequest = SHEncryptionRequestQueueItem(asset: kbPhotoAsset,
+                                                                 groupId: groupId,
+                                                                 eventOriginator: eventOriginator,
+                                                                 sharedWith: users)
             log.info("enqueueing encryption request in the ENCRYPTING queue for asset \(localIdentifier)")
             
             do { try encryptionRequest.enqueue(in: EncryptionQueue, with: localIdentifier) }
@@ -186,7 +194,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 throw error
             }
         } else {
-            let encryptionForSharingRequest = SHEncryptionForSharingRequestQueueItem(asset: kbPhotoAsset, groupId: groupId, sharedWith: users)
+            let encryptionForSharingRequest = SHEncryptionForSharingRequestQueueItem(asset: kbPhotoAsset,
+                                                                                     groupId: groupId,
+                                                                                     eventOriginator: eventOriginator,
+                                                                                     sharedWith: users)
             log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier)")
             
             do { try encryptionForSharingRequest.enqueue(in: ShareQueue, with: localIdentifier) }
@@ -273,6 +284,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         try self.markAsFailed(
                             localIdentifier: fetchRequest.assetId,
                             groupId: fetchRequest.groupId,
+                            eventOriginator: fetchRequest.eventOriginator,
                             sharedWith: fetchRequest.sharedWith
                         )
                     } catch {
@@ -289,6 +301,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     try self.markAsSuccessful(
                         kbPhotoAsset: kbPhotoAsset,
                         groupId: fetchRequest.groupId,
+                        eventOriginator: fetchRequest.eventOriginator,
                         sharedWith: fetchRequest.sharedWith,
                         shouldUpload: fetchRequest.shouldUpload
                     )

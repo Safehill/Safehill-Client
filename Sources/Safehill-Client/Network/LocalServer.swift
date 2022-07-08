@@ -364,6 +364,12 @@ struct LocalServer : SHServerAPI {
     
     func create(assets: [SHEncryptedAsset],
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        self.create(assets: assets, senderUserIdentifier: requestor.identifier, completionHandler: completionHandler)
+    }
+    
+    func create(assets: [SHEncryptedAsset],
+                senderUserIdentifier: String,
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         
         let writeBatch = assetStore.writeBatch()
         
@@ -386,7 +392,7 @@ struct LocalServer : SHServerAPI {
                 writeBatch.set(value: true,
                                for: [
                                 "sender",
-                                requestor.identifier,
+                                senderUserIdentifier,
                                 encryptedVersion.quality.rawValue,
                                 asset.globalIdentifier
                                ].joined(separator: "::")

@@ -217,6 +217,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             do {
                 try self.markAsFailed(localIdentifier: item.identifier,
                                       groupId: request.groupId,
+                                      eventOriginator: request.eventOriginator,
                                       sharedWith: request.sharedWith)
             } catch {
                 log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
@@ -232,6 +233,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             do {
                 try self.markAsFailed(localIdentifier: item.identifier,
                                       groupId: request.groupId,
+                                      eventOriginator: request.eventOriginator,
                                       sharedWith: request.sharedWith)
             } catch {
                 log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
@@ -258,6 +260,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             do {
                 try self.markAsFailed(localIdentifier: item.identifier,
                                       groupId: request.groupId,
+                                      eventOriginator: request.eventOriginator,
                                       sharedWith: request.sharedWith)
             } catch {
                 log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
@@ -273,12 +276,16 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     public func markAsFailed(
         localIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser]) throws
     {
         // Enquque to failed
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
+                                                                   groupId: groupId,
+                                                                   eventOriginator: eventOriginator,
+                                                                   sharedWith: users)
         
         do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
         catch {
@@ -314,11 +321,13 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith: [SHServerUser]) throws
     {
         let uploadRequest = SHUploadRequestQueueItem(localAssetId: localIdentifier,
                                                      globalAssetId: globalIdentifier,
                                                      groupId: groupId,
+                                                     eventOriginator: eventOriginator,
                                                      sharedWith: sharedWith)
         log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier)")
         
@@ -418,7 +427,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 log.info("storing asset \(encryptedAsset.localIdentifier ?? encryptedAsset.globalIdentifier) versions in local server proxy")
                 
                 group.enter()
-                serverProxy.storeAssetsLocally([encryptedAsset]) { result in
+                serverProxy.storeAssetsLocally([encryptedAsset],
+                                               senderUserIdentifier: self.user.identifier) { result in
                     if case .failure(let err) = result {
                         error = err
                     }
@@ -432,6 +442,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     do {
                         try self.markAsFailed(localIdentifier: item.identifier,
                                               groupId: encryptionRequest.groupId,
+                                              eventOriginator: encryptionRequest.eventOriginator,
                                               sharedWith: encryptionRequest.sharedWith)
                     } catch {
                         log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
@@ -448,6 +459,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         localIdentifier: item.identifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: encryptionRequest.groupId,
+                        eventOriginator: encryptionRequest.eventOriginator,
                         sharedWith: encryptionRequest.sharedWith
                     )
                 } catch {

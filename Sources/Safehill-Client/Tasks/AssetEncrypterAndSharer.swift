@@ -42,12 +42,14 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func markAsFailed(
         localIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser]) throws
     {
         try self.markAsFailed(
             localIdentifier: localIdentifier,
             globalIdentifier: "",
             groupId: groupId,
+            eventOriginator: eventOriginator,
             sharedWith: users
         )
     }
@@ -56,12 +58,16 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser]) throws
     {
         // Enquque to failed
         log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
         
-        let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
+        let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier,
+                                                        groupId: groupId,
+                                                        eventOriginator: eventOriginator,
+                                                        sharedWith: users)
         
         do { try failedShare.enqueue(in: FailedShareQueue, with: localIdentifier) }
         catch {
@@ -92,12 +98,16 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser]
     ) throws {
         // Enquque to success history
         log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
         
-        let succesfulUploadQueueItem = SHShareHistoryItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: users)
+        let succesfulUploadQueueItem = SHShareHistoryItem(localIdentifier: localIdentifier,
+                                                          groupId: groupId,
+                                                          eventOriginator: eventOriginator,
+                                                          sharedWith: users)
         
         do { try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: localIdentifier) }
         catch {
@@ -150,8 +160,11 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         var decryptedSecretData: Data? = nil
         let group = AsyncGroup()
         group.enter()
-        self.serverProxy.getAssets(withGlobalIdentifiers: [globalIdentifier],
-                                   versions: [.lowResolution]) { result in
+        self.serverProxy.getAssets(
+            withGlobalIdentifiers: [globalIdentifier],
+            versions: [.lowResolution],
+            saveLocallyAsOwnedByUserIdentifier: self.user.identifier
+        ) { result in
             if case .success(let assetsDict) = result {
                 if assetsDict.count == 1,
                    let asset = assetsDict.values.first,
@@ -178,6 +191,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             try self.markAsFailed(
                 localIdentifier: item.identifier,
                 groupId: shareRequest.groupId,
+                eventOriginator: shareRequest.eventOriginator,
                 sharedWith: shareRequest.sharedWith
             )
             throw SHBackgroundOperationError.fatalError("failed to retrieve shared secret for asset \(globalIdentifier)")
@@ -359,6 +373,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     try self.markAsFailed(
                         localIdentifier: item.identifier,
                         groupId: shareRequest.groupId,
+                        eventOriginator: shareRequest.eventOriginator,
                         sharedWith: shareRequest.sharedWith
                     )
                     
@@ -380,6 +395,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                         localIdentifier: item.identifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: shareRequest.groupId,
+                        eventOriginator: shareRequest.eventOriginator,
                         sharedWith: shareRequest.sharedWith
                     )
                     
@@ -392,6 +408,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                         localIdentifier: item.identifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: shareRequest.groupId,
+                        eventOriginator: shareRequest.eventOriginator,
                         sharedWith: shareRequest.sharedWith
                     )
                     
@@ -408,6 +425,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     localIdentifier: item.identifier,
                     globalIdentifier: encryptedAsset.globalIdentifier,
                     groupId: shareRequest.groupId,
+                    eventOriginator: shareRequest.eventOriginator,
                     sharedWith: shareRequest.sharedWith
                 )
                 

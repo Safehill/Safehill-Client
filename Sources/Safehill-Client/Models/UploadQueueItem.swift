@@ -13,6 +13,7 @@ private let AssetIdKey = "assetId"
 private let LocalAssetIdKey = "localAssetId"
 private let GlobalAssetIdKey = "globalAssetId"
 private let GroupIdKey = "groupId"
+private let EventOriginatorKey = "eventOriginator"
 private let SharedWithKey = "sharedWith"
 private let ShouldUploadAssetKey = "shouldUploadAsset"
 private let UserNameKey = "userName"
@@ -180,6 +181,7 @@ public protocol SHGroupableQueueItem: SHSerializableQueueItem {
 
 public protocol SHShareableGroupableQueueItem: SHGroupableQueueItem {
     var assetId: String { get }
+    var eventOriginator: SHServerUser { get }
     var sharedWith: [SHServerUser] { get }
 }
 
@@ -187,11 +189,16 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
     
     public let assetId: String
     public let groupId: String
+    public let eventOriginator: SHServerUser
     public let sharedWith: [SHServerUser] // Empty if it's just a backup request
     
-    public init(localIdentifier: String, groupId: String, sharedWith users: [SHServerUser]) {
+    public init(localIdentifier: String,
+                groupId: String,
+                eventOriginator: SHServerUser,
+                sharedWith users: [SHServerUser]) {
         self.assetId = localIdentifier
         self.groupId = groupId
+        self.eventOriginator = eventOriginator
         self.sharedWith = users
     }
     
@@ -199,16 +206,22 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
         coder.encode(self.assetId, forKey: AssetIdKey)
         coder.encode(self.groupId, forKey: GroupIdKey)
         // Convert to SHRemoteUserClass
-        let remoteUsers = self.sharedWith.map {
+        let remoteSender = SHRemoteUserClass(identifier: self.eventOriginator.identifier,
+                                             name: self.eventOriginator.name,
+                                             publicKeyData: self.eventOriginator.publicKeyData,
+                                             publicSignatureData: self.eventOriginator.publicSignatureData)
+        coder.encode(remoteSender, forKey: EventOriginatorKey)
+        let remoteReceivers = self.sharedWith.map {
             SHRemoteUserClass(identifier: $0.identifier, name: $0.name, publicKeyData: $0.publicKeyData, publicSignatureData: $0.publicSignatureData)
         }
-        coder.encode(remoteUsers, forKey: SharedWithKey)
+        coder.encode(remoteReceivers, forKey: SharedWithKey)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         let assetId = decoder.decodeObject(of: NSString.self, forKey: AssetIdKey)
         let groupId = decoder.decodeObject(of: NSString.self, forKey: GroupIdKey)
-        let users = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
+        let sender = decoder.decodeObject(of: SHRemoteUserClass.self, forKey: EventOriginatorKey)
+        let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
         
         guard let assetId = assetId as String? else {
             log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
@@ -220,12 +233,21 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             return nil
         }
         
-        guard let users = users as? [SHRemoteUserClass] else {
+        guard let sender = sender else {
+            log.error("unexpected value for eventOriginator when decoding \(Self.Type.self) object")
+            return nil
+        }
+        
+        guard let receivers = receivers as? [SHRemoteUserClass] else {
             log.error("unexpected value for sharedWith when decoding \(Self.Type.self) object")
             return nil
         }
         // Convert to SHRemoteUser
-        let remoteUsers = users.map {
+        let remoteSender = SHRemoteUser(identifier: sender.identifier,
+                                        name: sender.name,
+                                        publicKeyData: sender.publicKeyData,
+                                        publicSignatureData: sender.publicSignatureData)
+        let remoteReceivers = receivers.map {
             SHRemoteUser(identifier: $0.identifier,
                          name: $0.name,
                          publicKeyData: $0.publicKeyData,
@@ -233,7 +255,10 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             )
         }
         
-        self.init(localIdentifier: assetId, groupId: groupId, sharedWith: remoteUsers)
+        self.init(localIdentifier: assetId,
+                  groupId: groupId,
+                  eventOriginator: remoteSender,
+                  sharedWith: remoteReceivers)
     }
 }
 
@@ -243,10 +268,15 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     
     public let shouldUpload: Bool
     
-    public init(localIdentifier: String, groupId: String, sharedWith users: [SHServerUser], shouldUpload: Bool) {
+    public init(localIdentifier: String,
+                groupId: String,
+                eventOriginator: SHServerUser,
+                sharedWith users: [SHServerUser],
+                shouldUpload: Bool) {
         self.shouldUpload = shouldUpload
         super.init(localIdentifier: localIdentifier,
                    groupId: groupId,
+                   eventOriginator: eventOriginator,
                    sharedWith: users)
     }
     
@@ -266,6 +296,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
             
             self.init(localIdentifier: superSelf.assetId,
                       groupId: superSelf.groupId,
+                      eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
                       shouldUpload: shouldUpload)
             return
@@ -284,10 +315,13 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     public let asset: KBPhotoAsset
     
     public init(asset: KBPhotoAsset,
-                groupId: String, sharedWith users: [SHServerUser] = []) {
+                groupId: String,
+                eventOriginator: SHServerUser,
+                sharedWith users: [SHServerUser] = []) {
         self.asset = asset
         super.init(localIdentifier: asset.phAsset.localIdentifier,
                    groupId: groupId,
+                   eventOriginator: eventOriginator,
                    sharedWith: users)
     }
     
@@ -305,7 +339,10 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
                 return nil
             }
             
-            self.init(asset: asset, groupId: superSelf.groupId, sharedWith: superSelf.sharedWith)
+            self.init(asset: asset,
+                      groupId: superSelf.groupId,
+                      eventOriginator: superSelf.eventOriginator,
+                      sharedWith: superSelf.sharedWith)
             return
         }
        
@@ -319,9 +356,16 @@ public class SHUploadRequestQueueItem: SHAbstractShareableGroupableQueueItem, NS
     
     public let globalAssetId: String
     
-    public init(localAssetId: String, globalAssetId: String, groupId: String, sharedWith users: [SHServerUser] = []) {
+    public init(localAssetId: String,
+                globalAssetId: String,
+                groupId: String,
+                eventOriginator: SHServerUser,
+                sharedWith users: [SHServerUser] = []) {
         self.globalAssetId = globalAssetId
-        super.init(localIdentifier: localAssetId, groupId: groupId, sharedWith: users)
+        super.init(localIdentifier: localAssetId,
+                   groupId: groupId,
+                   eventOriginator: eventOriginator,
+                   sharedWith: users)
     }
     
     public override func encode(with coder: NSCoder) {
@@ -342,6 +386,7 @@ public class SHUploadRequestQueueItem: SHAbstractShareableGroupableQueueItem, NS
                 localAssetId: superSelf.assetId,
                 globalAssetId: globalAssetId,
                 groupId: superSelf.groupId,
+                eventOriginator: superSelf.eventOriginator,
                 sharedWith: superSelf.sharedWith
             )
             return
@@ -358,6 +403,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             self.init(localIdentifier: superSelf.assetId,
                       groupId: superSelf.groupId,
+                      eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith)
             return
         }
@@ -373,16 +419,30 @@ public typealias SHShareHistoryItem = SHConcreteShareableGroupableQueueItem
 public typealias SHFailedShareRequestQueueItem = SHConcreteShareableGroupableQueueItem
 public typealias SHFailedUploadRequestQueueItem = SHConcreteShareableGroupableQueueItem
 
+
+/// A placeholder for a SHServerUser when only its identifier is available
+public struct SHRemotePhantomUser : SHServerUser {
+    public let identifier: String
+    public let name: String = ""
+    public let publicKeyData: Data = "".data(using: .utf8)!
+    public let publicSignatureData: Data = "".data(using: .utf8)!
+    
+    public init(identifier: String) {
+        self.identifier = identifier
+    }
+}
+
 public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializableQueueItem, SHShareableGroupableQueueItem {
     public var assetId: String {
         self.assetDescriptor.globalIdentifier
     }
     
+    public let eventOriginator: SHServerUser
     public let sharedWith: [SHServerUser] = []
     
     public var groupId: String
     
-    private let selfUserPublicId: String
+    private let receiverUserIdentifier: String
     
     public static var supportsSecureCoding: Bool = true
     
@@ -397,14 +457,20 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
             sharingInfo: assetDescriptor.sharingInfo as! SHGenericDescriptorSharingInfo
         )
         coder.encode(assetDescriptor, forKey: AssetDescriptorKey)
-        coder.encode(selfUserPublicId, forKey: UserIdentifierKey)
+        coder.encode(receiverUserIdentifier, forKey: UserIdentifierKey)
     }
     
-    public init(assetDescriptor: SHAssetDescriptor, selfUserPublicId: String) {
+    public init(assetDescriptor: SHAssetDescriptor,
+                receiverUserIdentifier: String) {
         self.assetDescriptor = assetDescriptor
-        self.selfUserPublicId = selfUserPublicId
+        self.eventOriginator = SHRemotePhantomUser(identifier: assetDescriptor.sharingInfo.sharedByUserIdentifier)
+        self.receiverUserIdentifier = receiverUserIdentifier
+        
+        /// Sharing information link sharing information such as the user id the asset is shared with to group identifiers
+        /// (aka the logical grouping of assets that was shared).
+        /// The code belows retrieves the group identifier specific to the local user
         for (userId, groupId) in self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-            if userId == selfUserPublicId {
+            if userId == receiverUserIdentifier {
                 self.groupId = groupId
                 return
             }
@@ -414,14 +480,14 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
     
     public required convenience init?(coder decoder: NSCoder) {
         let descriptor = decoder.decodeObject(of: SHGenericAssetDescriptorClass.self, forKey: AssetDescriptorKey)
-        let selfUserPublicId = decoder.decodeObject(of: NSString.self, forKey: UserIdentifierKey)
+        let receiverUserIdentifier = decoder.decodeObject(of: NSString.self, forKey: UserIdentifierKey)
         
         guard let descriptor = descriptor else {
             log.error("unexpected value for assetDescriptor when decoding SHDownloadRequestQueueItem object")
             return nil
         }
-        guard let selfUserPublicId = selfUserPublicId as? String else {
-            log.error("unexpected value for selfUserPublicId when decoding SHDownloadRequestQueueItem object")
+        guard let receiverUserIdentifier = receiverUserIdentifier as? String else {
+            log.error("unexpected value for receiverUserIdentifier when decoding SHDownloadRequestQueueItem object")
             return nil
         }
         
@@ -433,6 +499,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
             sharingInfo: descriptor.sharingInfo
         )
         
-        self.init(assetDescriptor: assetDescriptor, selfUserPublicId: selfUserPublicId)
+        self.init(assetDescriptor: assetDescriptor,
+                  receiverUserIdentifier: receiverUserIdentifier)
     }
 }

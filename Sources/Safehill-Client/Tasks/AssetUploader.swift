@@ -153,11 +153,13 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     public func markAsFailed(localIdentifier: String,
                              globalIdentifier: String,
                              groupId: String,
+                             eventOriginator: SHServerUser,
                              sharedWith: [SHServerUser]) throws {
         // Enquque to failed
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
                                                                    groupId: groupId,
+                                                                   eventOriginator: eventOriginator,
                                                                    sharedWith: sharedWith)
         
         do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
@@ -196,13 +198,17 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
+        eventOriginator: SHServerUser,
         sharedWith: [SHServerUser]
     ) throws {
         
         // Enquque to success history
         log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
         
-        let succesfulUploadQueueItem = SHUploadHistoryItem(localIdentifier: localIdentifier, groupId: groupId, sharedWith: [self.user])
+        let succesfulUploadQueueItem = SHUploadHistoryItem(localIdentifier: localIdentifier,
+                                                           groupId: groupId,
+                                                           eventOriginator: eventOriginator,
+                                                           sharedWith: [self.user])
         
         do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
         catch {
@@ -229,6 +235,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
                 groupId: groupId + "-share",
+                eventOriginator: eventOriginator,
                 sharedWith: sharedWith,
                 shouldUpload: false
             )
@@ -313,6 +320,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
+                                              eventOriginator: uploadRequest.eventOriginator,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
@@ -327,6 +335,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
+                                              eventOriginator: uploadRequest.eventOriginator,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
@@ -345,6 +354,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
+                                              eventOriginator: uploadRequest.eventOriginator,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
@@ -358,6 +368,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
+                                              eventOriginator: uploadRequest.eventOriginator,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
@@ -378,6 +389,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
+                                              eventOriginator: uploadRequest.eventOriginator,
                                               sharedWith: uploadRequest.sharedWith)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
@@ -397,6 +409,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         localIdentifier: localIdentifier,
                         globalIdentifier: globalIdentifier,
                         groupId: uploadRequest.groupId,
+                        eventOriginator: uploadRequest.eventOriginator,
                         sharedWith: uploadRequest.sharedWith
                     )
                 } catch {

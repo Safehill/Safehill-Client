@@ -20,8 +20,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     let delegate: SHAssetDownloaderDelegate
     
     public init(user: SHLocalUser,
-                limitPerRun limit: Int? = nil,
-                delegate: SHAssetDownloaderDelegate) {
+                delegate: SHAssetDownloaderDelegate,
+                limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
         self.delegate = delegate
@@ -33,8 +33,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHDownloadOperation(user: self.user,
-                            limitPerRun: self.limit,
-                            delegate: self.delegate)
+                            delegate: self.delegate,
+                            limitPerRun: self.limit)
     }
     
     private func decrypt(encryptedAssets: [(SHAssetDescriptor, SHEncryptedAsset)], quality: SHAssetQuality) throws -> [SHDecryptedAsset] {
@@ -102,7 +102,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         return downloadRequest
     }
     
-    private func downloadDescriptors(completionHandler: @escaping (Swift.Result<Bool, Error>) -> Void) {
+    private func downloadDescriptors(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
         /// Fetching assets from the ServerProxy is a 2-step process
         /// 1. Get the descriptors (no data) to determine which assets to pull. This calls the delegate with Assets with empty `encryptedData` (resulting in `downloadInProgress` to be `true`
         /// 2. Get the assets data for the assets not already downloaded (based on the descriptors), and call the delegate with Assets with the low-rez `encryptedData` (resulting in `downloadInProgress` to be `false`)
@@ -138,7 +138,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 if globalIdentifiersToDownload.count == 0 {
                     self.log.debug("no assets to download")
-                    completionHandler(.success(false))
+                    completionHandler(.success(()))
                     return
                 }
                 
@@ -153,7 +153,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 // Create items in the DownloadQueue, one per descriptor
                 for newDescriptor in newDescriptors {
-                    let queueItem = SHDownloadRequestQueueItem(assetDescriptor: newDescriptor, selfUserPublicId: self.user.identifier)
+                    let queueItem = SHDownloadRequestQueueItem(
+                        assetDescriptor: newDescriptor,
+                        receiverUserIdentifier: self.user.identifier
+                    )
                     let queueItemIdentifier = newDescriptor.globalIdentifier
                     if let existingItemIdentifiers = try? DownloadQueue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
                        existingItemIdentifiers.isEmpty {
@@ -168,7 +171,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         self.log.info("Not enqueuing item \(queueItemIdentifier) in the DOWNLOAD queue as a request with the same identifier hasn't been fulfilled yet")
                     }
                 }
-                completionHandler(.success(true))
+                completionHandler(.success(()))
                 
             case .failure(let err):
                 self.log.error("Unable to download descriptors from server: \(err.localizedDescription)")
@@ -211,8 +214,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 group.enter()
                 log.info("downloading assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.lowResolution.rawValue)")
-                serverProxy.getAssets(withGlobalIdentifiers: globalIdentifiersToDownload,
-                                      versions: [.lowResolution]) { result in
+                serverProxy.getAssets(
+                    withGlobalIdentifiers: globalIdentifiersToDownload,
+                    versions: [.lowResolution],
+                    saveLocallyAsOwnedByUserIdentifier: downloadRequest.assetDescriptor.sharingInfo.sharedByUserIdentifier
+                )
+                { result in
                     switch result {
                     case .success(let assetsDict):
                         if assetsDict.count > 0 {
@@ -243,8 +250,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 group.enter()
                 log.info("downloading assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.hiResolution.rawValue)")
-                serverProxy.getAssets(withGlobalIdentifiers: globalIdentifiersToDownload,
-                                      versions: [.hiResolution]) { result in
+                serverProxy.getAssets(
+                    withGlobalIdentifiers: globalIdentifiersToDownload,
+                    versions: [.hiResolution],
+                    saveLocallyAsOwnedByUserIdentifier: downloadRequest.assetDescriptor.sharingInfo.sharedByUserIdentifier
+                )
+                { result in
                     switch result {
                     case .success(let assetsDict):
                         if assetsDict.count > 0 {
@@ -319,12 +330,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             case .failure(let error):
                 self.log.error("failed to download descriptors: \(error.localizedDescription)")
                 completionHandler(.failure(error))
-            case .success(let shouldDownload):
-                if shouldDownload == false {
-                    completionHandler(.success(()))
-                    return
-                }
-                
+            case .success():                
                 ///
                 /// Get all asset descriptors associated with this user from the server.
                 /// Descriptors serve as a manifest to determine what to download

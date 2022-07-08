@@ -465,7 +465,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         let shareDict: [String: Any?] = [
             "globalAssetIdentifier": asset.globalIdentifier,
             "versionSharingDetails": versions,
-            "grouId": asset.groupId
+            "groupId": asset.groupId
         ]
         
         self.post("assets/share", parameters: shareDict) { (result: Result<NoReply, Error>) in

@@ -254,8 +254,16 @@ public struct SHServerProxy {
                                    completionHandler: completionHandler)
     }
     
+    /// Retrieves assets versions with given identifiers.
+    /// Tries to fetch from local server first, then remote server if some are not present. For those, it updates the local server (cache)
+    /// - Parameters:
+    ///   - assetIdentifiers: the global asset identifiers to retrieve
+    ///   - versions: filter asset version (retrieve just the low res asset or the hi res asset, for instance)
+    ///   - saveLocallyAsOwnedByUserIdentifier: when saving assets in the local server mark this asset as shared by this user public identifier
+    ///   - completionHandler: the callback
     public func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                           versions: [SHAssetQuality]?,
+                          saveLocallyAsOwnedByUserIdentifier: String,
                           completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
@@ -283,9 +291,9 @@ public struct SHServerProxy {
                     ///
                     /// Save retrieved assets to local server (cache)
                     ///
-                    // TODO: This methods assumes that assets were created by the local user. This is not true when assets are shared from other users
-                    // TODO: Need to pass descriptors?
-                    self.storeAssetsLocally(Array(assetsDict.values)) { localResult in
+                    self.storeAssetsLocally(Array(assetsDict.values),
+                                            senderUserIdentifier: saveLocallyAsOwnedByUserIdentifier)
+                    { localResult in
                         if case .failure(let err) = localResult {
                             log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
                         }
@@ -300,8 +308,9 @@ public struct SHServerProxy {
     }
     
     public func storeAssetsLocally(_ assets: [SHEncryptedAsset],
+                                   senderUserIdentifier: String,
                                    completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.localServer.create(assets: assets) {
+        self.localServer.create(assets: assets, senderUserIdentifier: senderUserIdentifier) {
             result in
             switch result {
             case .success(_):
@@ -319,7 +328,9 @@ public struct SHServerProxy {
         self.remoteServer.create(assets: [asset]) { result in
             switch result {
             case .success(let assets):
-                self.storeAssetsLocally([asset]) { localResult in
+                self.storeAssetsLocally([asset],
+                                        senderUserIdentifier: self.localServer.requestor.identifier)
+                { localResult in
                     switch localResult {
                     case .success(_):
                         completionHandler(.success(assets.first!))
