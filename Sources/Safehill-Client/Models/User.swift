@@ -200,10 +200,41 @@ public struct SHLocalUser: SHServerUser {
             }
         }
     }
+}
+
+extension SHLocalUser: Codable {
     
-    public func shareablePrivateKeys() throws -> Data {
+    enum CodingKeys: String, CodingKey {
+        case shUser
+        case name
+        case keychainPrefix
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.name = try container.decode(String.self, forKey: .name)
+        self.shUser = try container.decode(SHLocalCryptoUser.self, forKey: .shUser)
+        self.keychainPrefix = try container.decode(String.self, forKey: .keychainPrefix)
+        
+        try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
+        self._ssoIdentifier = nil
+        
+        try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+        // TODO: Do not swallow this exception
+        self._authToken = nil
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.shUser, forKey: .shUser)
+        try container.encode(self.name, forKey: .name)
+        try container.encode(self.keychainPrefix, forKey: .keychainPrefix)
+    }
+    
+    public func shareableLocalUser() throws -> Data {
         let encoder = JSONEncoder()
-        return try encoder.encode(self.shUser)
+        return try encoder.encode(self)
     }
 }
 
