@@ -118,14 +118,10 @@ struct LocalServer : SHServerAPI {
     }
     
     func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self._deleteAccount(name: name, password: password, completionHandler: completionHandler)
+        self.deleteAccount(completionHandler: completionHandler)
     }
     
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self._deleteAccount(completionHandler: completionHandler)
-    }
-    
-    private func _deleteAccount(name: String? = nil, password: String? = nil, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
         let group = AsyncGroup()
@@ -145,13 +141,6 @@ struct LocalServer : SHServerAPI {
             }
             group.leave()
         }
-        
-//#if DEBUG
-//        do {
-//            let keys = try assetStore.keys()
-//            log.debug("all keys AFTER REMOVAL in \(assetStore.baseURL!) = \(keys)")
-//        } catch {}
-//#endif
         
         group.wait()
         let dispatchResult = group.wait()
