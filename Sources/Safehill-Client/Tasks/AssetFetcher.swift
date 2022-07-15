@@ -8,7 +8,7 @@ import Async
 open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public var log: Logger {
-        Logger(subsystem: "com.safehill.enkey", category: "BG-FETCH")
+        Logger(subsystem: "com.gf.safehill", category: "BG-FETCH")
     }
     
     public let limit: Int?

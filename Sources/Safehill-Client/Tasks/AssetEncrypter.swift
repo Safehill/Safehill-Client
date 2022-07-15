@@ -44,7 +44,7 @@ extension KBPhotoAsset {
 open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public var log: Logger {
-        Logger(subsystem: "com.safehill.enkey", category: "BG-ENCRYPT")
+        Logger(subsystem: "com.gf.safehill", category: "BG-ENCRYPT")
     }
     
     public let limit: Int?

@@ -11,7 +11,12 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         let first = ["Alice", "Bob", "Cindy"]
         let second = ["Bob", "Mary"]
         
-        XCTAssert(first.subtract(second).elementsEqual(["Alice", "Cindy"]))
+        let subtract = first.subtract(second)
+        XCTAssert(subtract.count == 2)
+        XCTAssert(subtract.contains("Alice"))
+        XCTAssert(subtract.contains("Cindy"))
+        XCTAssert(!subtract.contains("Bob"))
+        XCTAssert(!subtract.contains("Mary"))
     }
     
 }
@@ -45,6 +50,7 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
             globalIdentifier: "Logo-globalId",
             localIdentifier: "Logo-localId",
             creationDate: Date(),
+            groupId: "group",
             encryptedVersions: [encryptedVersion]
         )
         
@@ -178,18 +184,16 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
     }
     
     override func setUpWithError() throws {
-        try self.destroyUser()
-        
         // Create sender on the server
         var error: Error? = nil
         let group = AsyncGroup()
         
         group.enter()
-        serverProxy.createUser(name: self.username, password: self.password) {
+        serverProxy.createUser(name: self.username) {
             createResult in
             switch createResult {
             case .success(_):
-                self.serverProxy.signIn(name: self.username, password: self.password) {
+                self.serverProxy.signIn(name: self.username) {
                     signInResult in
                     switch signInResult {
                     case .success(let authResponse):
@@ -225,7 +229,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         let group = AsyncGroup()
         
         group.enter()
-        serverProxy.deleteAccount(name: self.username, password: self.password) { result in
+        serverProxy.deleteAccount() { result in
             if case .failure(let err) = result {
                 error = err
             }
@@ -274,8 +278,11 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         
         // Receiver downloads
         group.enter()
-        serverProxy.getAssets(withGlobalIdentifiers: [encryptedAsset.globalIdentifier], versions: [.lowResolution]) {
-            result in
+        serverProxy.getAssets(
+            withGlobalIdentifiers: [encryptedAsset.globalIdentifier],
+            versions: [.lowResolution],
+            saveLocallyAsOwnedByUserIdentifier: user.identifier)
+        { result in
             switch result {
             case .success(let assetsDict):
                 XCTAssert(assetsDict.count == 1)
@@ -335,6 +342,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             globalIdentifier: "globalId",
             localIdentifier: "localId",
             creationDate: Date(),
+            groupId: "group",
             encryptedVersions: [encryptedVersion]
         )
     }
@@ -355,7 +363,8 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             globalIdentifier: encryptedAsset.globalIdentifier,
             localIdentifier: encryptedAsset.localIdentifier,
             decryptedData: decryptedData,
-            creationDate: encryptedAsset.creationDate
+            creationDate: encryptedAsset.creationDate,
+            groupId: "group"
         )
     }
 }

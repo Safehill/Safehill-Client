@@ -1,16 +1,9 @@
-//
-//  LocalServer.swift
-//  Safehill-Client
-//
-//  Created by Gennaro Frazzingaro on 9/9/21.
-//
-
 import Foundation
 import KnowledgeBase
 import Async
 
-let userStore = KBKVStore.store(withName: "com.gf.Enkey.LocalServer.users")
-let assetStore = KBKVStore.store(withName: "com.gf.Enkey.LocalServer.assets")
+let userStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.users")
+let assetStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.assets")
 
 struct LocalServer : SHServerAPI {
     
@@ -21,7 +14,6 @@ struct LocalServer : SHServerAPI {
     }
     
     private func createUser(name: String,
-                            password: String? = nil,
                             ssoIdentifier: String?,
                             completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let key = requestor.identifier
@@ -67,9 +59,8 @@ struct LocalServer : SHServerAPI {
     
     func updateUser(email: String?,
                     name: String?,
-                    password: String?,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil || password != nil else {
+        guard email != nil || name != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
@@ -113,8 +104,8 @@ struct LocalServer : SHServerAPI {
 
     }
     
-    func createUser(name: String, password: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        self.createUser(name: name, password: password, ssoIdentifier: nil, completionHandler: completionHandler)
+    func createUser(name: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+        self.createUser(name: name, ssoIdentifier: nil, completionHandler: completionHandler)
     }
     
     func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
@@ -162,7 +153,7 @@ struct LocalServer : SHServerAPI {
                          identityToken: Data,
                          completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         let ssoIdentifier = identityToken.base64EncodedString()
-        self.createUser(name: name, password: "", ssoIdentifier: ssoIdentifier) { result in
+        self.createUser(name: name, ssoIdentifier: ssoIdentifier) { result in
             switch result {
             case .success(let user):
                 let authResponse = SHAuthResponse(user: user as! SHRemoteUser, bearerToken: "")
@@ -173,7 +164,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    public func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    public func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     

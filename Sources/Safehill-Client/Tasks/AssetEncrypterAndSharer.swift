@@ -8,7 +8,7 @@ import Safehill_Crypto
 open class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     public override var log: Logger {
-        Logger(subsystem: "com.safehill.enkey", category: "BG-SHARE")
+        Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
     }
     
     public override func clone() -> SHBackgroundOperationProtocol {

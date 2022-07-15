@@ -1,10 +1,3 @@
-//
-//  UploadQueueItem.swift
-//  Enkey
-//
-//  Created by Gennaro on 23/02/22.
-//
-
 import Foundation
 import KnowledgeBase
 

@@ -8,6 +8,8 @@
 import Foundation
 import KnowledgeBase
 import Async
+import Safehill_Crypto
+import CryptoKit
 
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
 public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
@@ -161,7 +163,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                            completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route, urlParameters: parameters)
         
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 5)
         request.httpMethod = "GET"
         
         if requiresAuthentication {
@@ -181,7 +183,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                             completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route)
         
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 5)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -207,14 +209,12 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func createUser(name: String,
-                    password: String,
                     completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let parameters = [
             "identifier": requestor.identifier,
             "publicKey": requestor.publicKeyData.base64EncodedString(),
             "publicSignature": requestor.publicSignatureData.base64EncodedString(),
-            "name": name,
-            "password": password,
+            "name": name
         ] as [String : Any]
         self.post("users/create", parameters: parameters, requiresAuthentication: false) { (result: Result<SHRemoteUser, Error>) in
             switch result {
@@ -228,9 +228,8 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func updateUser(email: String?,
                     name: String?,
-                    password: String?,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil || password != nil else {
+        guard email != nil || name != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
@@ -240,9 +239,6 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         if let name = name {
             parameters["name"] = name
-        }
-        if let password = password {
-            parameters["password"] = password
         }
         self.post("users/update", parameters: parameters, requiresAuthentication: false) { (result: Result<SHRemoteUser, Error>) in
             switch result {
@@ -304,13 +300,55 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
     
-    func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(name: String, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
-            "identifier": self.requestor.identifier,
-            "name": name,
-            "password": password
-        ] as [String : Any?]
-        self.post("signin", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+            "identifier": self.requestor.identifier
+        ]
+        self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
+            (result: Result<SHAuthChallenge, Error>) in
+            switch result {
+            case .success(let authChallenge):
+                
+                // Initialize the server's SHRemoteCryptoUser
+                // This will fail if the server sends invalid key/signature values
+                // Since this is not supposed to happen unless the server is corrupted
+                // don't retry
+                guard let serverCrypto = try? SHRemoteCryptoUser(publicKeyData: Data(base64Encoded: authChallenge.publicKey)!,
+                                                                publicSignatureData: Data(base64Encoded: authChallenge.publicSignature)!)
+                else {
+                    return completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("publicKey=\(authChallenge.publicKey) publicSignature=\(authChallenge.publicSignature)")))
+                }
+                
+                let encryptedChallenge = SHShareablePayload(
+                    ephemeralPublicKeyData: Data(base64Encoded: authChallenge.ephemeralPublicKey)!,
+                    cyphertext: Data(base64Encoded: authChallenge.challenge)!,
+                    signature: Data(base64Encoded: authChallenge.ephemeralPublicSignature)!
+                )
+                
+                do {
+                    let decryptedChallenge = try SHCypher.decrypt(
+                        encryptedChallenge,
+                        using: self.requestor.shUser.privateKeyData,
+                        from: serverCrypto.publicSignatureData
+                    )
+                    let signatureForData = try self.requestor.shUser.signature(for: decryptedChallenge)
+                    let digest512 = Data(SHA512.hash(data: decryptedChallenge))
+                    let signatureForDigest = try self.requestor.shUser.signature(for: digest512)
+                    let parameters = [
+                        "userIdentifier": self.requestor.identifier,
+                        "signedChallenge": signatureForData.rawRepresentation.base64EncodedString(),
+                        "digest": digest512.base64EncodedString(),
+                        "signedDigest": signatureForDigest.rawRepresentation.base64EncodedString()
+                    ]
+                    self.post("signin/challenge/verify", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+                }
+                catch {
+                    completionHandler(.failure(error))
+                }
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
     }
 
     func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
