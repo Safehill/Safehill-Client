@@ -1,10 +1,3 @@
-//
-//  ServerProxy.swift
-//  Enkey
-//
-//  Created by Gennaro Frazzingaro on 9/5/21.
-//
-
 import Foundation
 
 public var SHServerUserInMemoryCache = [String: SHServerUser]()
@@ -20,12 +13,11 @@ public struct SHServerProxy {
     }
     
     public func createUser(name: String,
-                           password: String,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.createUser(name: name, password: "") { result in
+        self.localServer.createUser(name: name) { result in
             switch result {
             case .success(_):
-                self.remoteServer.createUser(name: name, password: password, completionHandler: completionHandler)
+                self.remoteServer.createUser(name: name, completionHandler: completionHandler)
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -36,10 +28,10 @@ public struct SHServerProxy {
                            name: String? = nil,
                            password: String? = nil,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.updateUser(email: email, name: name, password: "") { result in
+        self.localServer.updateUser(email: email, name: name) { result in
             switch result {
             case .success(_):
-                self.remoteServer.updateUser(email: email, name: name, password: password, completionHandler: completionHandler)
+                self.remoteServer.updateUser(email: email, name: name, completionHandler: completionHandler)
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -81,8 +73,8 @@ public struct SHServerProxy {
         }
     }
     
-    public func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
-        self.remoteServer.signIn(name: name, password: password, completionHandler: completionHandler)
+    public func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+        self.remoteServer.signIn(name: name, completionHandler: completionHandler)
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
@@ -135,7 +127,7 @@ public struct SHServerProxy {
                     // Can't connect to the server, get details from local cache
                     print("Failed to get user details from server. Using local cache\n \(err)")
                     self.fetchLocalUserAccount(originalServerError: err,
-                                              completionHandler: completionHandler)
+                                               completionHandler: completionHandler)
                 default:
                     completionHandler(.failure(err))
                 }

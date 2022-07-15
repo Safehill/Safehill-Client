@@ -16,10 +16,8 @@ public protocol SHServerAPI {
     /// Creates a new user given their credentials, their public key and public signature (store in the `requestor` object)
     /// - Parameters:
     ///   - name  the user name
-    ///   - password  the user password
     ///   - completionHandler: the callback method
     func createUser(name: String,
-                    password: String,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
     /// Updates an existing user details or credentials
@@ -30,7 +28,6 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func updateUser(email: String?,
                     name: String?,
-                    password: String?,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information
@@ -58,7 +55,7 @@ public protocol SHServerAPI {
                          completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
+    func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:

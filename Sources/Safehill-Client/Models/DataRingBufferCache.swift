@@ -4,7 +4,7 @@ public final class SHDataRingBufferCache {
     private var cache = [String: Data]()
     private var keys: [String?]
     fileprivate var index = 0
-    let readWriteQueue = DispatchQueue(label: "com.gf.enkey.DataRingBufferCache", attributes: .concurrent)
+    let readWriteQueue = DispatchQueue(label: "com.gf.safehill.DataRingBufferCache", attributes: .concurrent)
       
     init(count: Int) {
         keys = [String?](repeating: nil, count: count)

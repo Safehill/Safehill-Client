@@ -5,7 +5,7 @@ import Async
 
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
-    public let log = Logger(subsystem: "com.safehill.enkey", category: "BG-UPLOAD")
+    public let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
     
     public let limit: Int?
     public let user: SHLocalUser

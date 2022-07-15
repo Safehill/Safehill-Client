@@ -8,7 +8,7 @@
 import Foundation
 import Safehill_Crypto
 
-/// Enkey stores 2 versions per asset, one low resolution for the thumbnail, one full size
+/// Safehill clients store 2 versions per asset, one low resolution for the thumbnail, one full size
 public enum SHAssetQuality: String {
     case lowResolution = "low", hiResolution = "hi"
     
