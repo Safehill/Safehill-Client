@@ -7,8 +7,10 @@
 
 import Foundation
 import KnowledgeBase
+import Async
 
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
+public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
 
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
@@ -72,7 +74,11 @@ struct SHServerHTTPAPI : SHServerAPI {
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        log.info("making \(request.httpMethod!) request url=\(request.url!), headers=\(request.allHTTPHeaderFields ?? [:])")
+        
+        let configuration = URLSessionConfiguration.default
+        configuration.waitsForConnectivity = false
+        URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
             guard error == nil else {
                 completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
                 return
@@ -80,6 +86,11 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             let httpResponse = response as! HTTPURLResponse
             log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+            
+//            if let data = data {
+//                let convertedString = String(data: data, encoding: String.Encoding.utf8)
+//                log.debug("response body: \(convertedString ?? "")")
+//            }
             
             switch httpResponse.statusCode {
             case 200..<300:
@@ -125,18 +136,20 @@ struct SHServerHTTPAPI : SHServerAPI {
             if type is NoReply.Type {
                 completionHandler(.success(NoReply() as! T))
                 return
+            } else if type is Data.Type {
+                completionHandler(.success(data as! T))
+                return
             }
-            
-            let convertedString = String(data: data, encoding: String.Encoding.utf8)
-            log.debug("response: \(convertedString ?? "")")
             
             do {
                 let decoded = try JSONDecoder().decode(type, from: data)
                 completionHandler(.success(decoded))
+                return
             }
             catch {
                 // there's a decoding error, call completion with decoding error
                 completionHandler(.failure(error))
+                return
             }
             
         }.resume()
@@ -158,8 +171,6 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
             request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         }
-        
-        log.info("Making GET Request \(request.httpMethod!) \(request.url!)")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
@@ -190,21 +201,18 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        log.info("Making POST Request \(request.httpMethod!) \(request.url!)")
-        log.debug("with parameters \(parameters ?? [:])")
+        log.info("request parameters \(parameters ?? [:])")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
-    func createUser(email: String,
-                    name: String,
+    func createUser(name: String,
                     password: String,
                     completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let parameters = [
             "identifier": requestor.identifier,
             "publicKey": requestor.publicKeyData.base64EncodedString(),
             "publicSignature": requestor.publicSignatureData.base64EncodedString(),
-            "email": email,
             "name": name,
             "password": password,
         ] as [String : Any]
@@ -246,15 +254,34 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func deleteAccount(email: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.post("users/safe_delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                return completionHandler(.success(()))
+            case .failure(let error):
+                if case SHHTTPError.ClientError.notFound = error {
+                    // If server can't find the user, it was already deleted
+                    return completionHandler(.success(()))
+                }
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.post("users/delete", parameters: [
-            "email": email,
+            "name": name,
             "password": password
         ], requiresAuthentication: false) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 return completionHandler(.success(()))
             case .failure(let error):
+                if case SHHTTPError.ClientError.notFound = error {
+                    // If server can't find the user, it was already deleted
+                    return completionHandler(.success(()))
+                }
                 return completionHandler(.failure(error))
             }
         }
@@ -277,10 +304,10 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
     }
     
-    func signIn(email: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(name: String?, password: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
             "identifier": self.requestor.identifier,
-            "email": email,
+            "name": name,
             "password": password
         ] as [String : Any?]
         self.post("signin", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
@@ -327,94 +354,176 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    /// Fetches the assets metadata from the server, then fetches their data from S3
+    /// - Parameters:
+    ///   - assetIdentifiers: the asset global identifiers
+    ///   - versions: optional version filtering. If nil, all versions are retrieved
+    ///   - completionHandler: the callback method
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
-                   quality: SHAssetQuality,
+                   versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        let parameters = [
+        var parameters = [
             "globalIdentifiers": assetIdentifiers,
         ] as [String : Any]
+        if let versions = versions {
+            parameters["versionNames"] = versions.map { $0.rawValue }
+        }
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
                 var dictionary = [String: SHEncryptedAsset]()
+                var errors = [String: Error]()
                 
-                let dispatch = KBTimedDispatch()
+                let group = AsyncGroup()
                 
                 for asset in assets {
                     for version in asset.versions {
-                        if version.versionName != quality.rawValue {
-                            continue
-                        }
+                        group.enter()
+                        log.info("uploading asset \(asset.globalIdentifier) version \(version.versionName)")
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
                                 dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
-                            case .failure(let error):
-                                dispatch.interrupt(error)
+                                group.leave()
+                            case .failure(let err):
+                                errors[asset.globalIdentifier + "::" + version.versionName] = err
+                                group.leave()
                             }
                         }
                     }
                 }
                 
-                do {
-                    try dispatch.wait()
-                    completionHandler(.success(dictionary))
-                } catch {
-                    completionHandler(.failure(error))
+                let dispatchResult = group.wait(seconds: Double(SHDownloadTimeoutInMilliseconds / 1000))
+                
+                guard dispatchResult != .timedOut else {
+                    return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
                 }
                 
+                guard errors.count == 0 else {
+                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error uploading to S3 asset with identifiers \(errors.keys)")))
+                }
+                completionHandler(.success(dictionary))
+                
             case .failure(let error):
-                return completionHandler(.failure(error))
+                completionHandler(.failure(error))
             }
         }
     }
 
-    func createAsset(lowResAsset: SHEncryptedAsset, hiResAsset: SHEncryptedAsset, completionHandler: @escaping (Result<SHServerAsset, Error>) -> ()) {
-        
-        let createDict: [String: Any?] = [
-            "globalIdentifier": lowResAsset.globalIdentifier,
-            "localIdentifier": lowResAsset.localIdentifier,
-            "creationDate": lowResAsset.creationDate?.iso8601withFractionalSeconds,
-            "versions": [
-                [
-                    "versionName": SHAssetQuality.lowResolution.rawValue,
-                    "encryptedSecret": lowResAsset.encryptedSecret.base64EncodedString(),
-                    "publicKey": lowResAsset.publicKeyData.base64EncodedString(),
-                    "publicSignature": lowResAsset.publicSignatureData.base64EncodedString(),
-                ],
-                [
-                    "versionName": SHAssetQuality.hiResolution.rawValue,
-                    "encryptedSecret": hiResAsset.encryptedSecret.base64EncodedString(),
-                    "publicKey": hiResAsset.publicKeyData.base64EncodedString(),
-                    "publicSignature": hiResAsset.publicSignatureData.base64EncodedString()
-                ]
-            ]
-        ]
-        
-        self.post("assets/create", parameters: createDict, completionHandler: completionHandler)
-    }
-    
-    func uploadLowResAsset(serverAssetVersion: SHServerAssetVersion,
-                           encryptedAsset: SHEncryptedAsset,
-                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.uploadAssetData(assetVersion: serverAssetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
-    }
-    
-    func uploadHiResAsset(serverAssetVersion: SHServerAssetVersion,
-                          encryptedAsset: SHEncryptedAsset,
-                          completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.uploadAssetData(assetVersion: serverAssetVersion, encryptedAsset: encryptedAsset, completionHandler: completionHandler)
-    }
-    
-    func uploadAssetData(assetVersion: SHServerAssetVersion,
-                         encryptedAsset: SHEncryptedAsset,
-                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        guard let url = URL(string: assetVersion.presignedURL) else {
-            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid")))
+    func create(assets: [SHEncryptedAsset],
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        guard assets.count == 1, let asset = assets.first else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
             return
         }
         
-        S3Proxy.save(encryptedAsset.encryptedData, usingPresignedURL: url, completionHandler: completionHandler)
+        let createDict: [String: Any?] = [
+            "globalIdentifier": asset.globalIdentifier,
+            "localIdentifier": asset.localIdentifier,
+            "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
+            "groupId": asset.groupId,
+            "versions": asset.encryptedVersions.map { encryptedVersion in
+                [
+                    "versionName": encryptedVersion.quality.rawValue,
+                    "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
+                    "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
+                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
+                ]
+            }
+        ]
+        
+        self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let asset):
+                completionHandler(.success([asset]))
+            }
+        }
+    }
+    
+    func share(asset: SHShareableEncryptedAsset,
+               completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        
+        if asset.sharedVersions.count == 0 {
+            log.warning("no versions specified in sharing. Skipping")
+            completionHandler(.success(()))
+            return
+        }
+        
+        var versions = [[String: Any?]]()
+        for version in asset.sharedVersions {
+            versions.append([
+                "versionName": version.quality.rawValue,
+                "recipientUserIdentifier": version.userPublicIdentifier,
+                "recipientEncryptedSecret": version.encryptedSecret.base64EncodedString(),
+                "ephemeralPublicKey": version.ephemeralPublicKey.base64EncodedString(),
+                "publicSignature": version.publicSignature.base64EncodedString()
+            ])
+        }
+        
+        let shareDict: [String: Any?] = [
+            "globalAssetIdentifier": asset.globalIdentifier,
+            "versionSharingDetails": versions,
+            "groupId": asset.groupId
+        ]
+        
+        self.post("assets/share", parameters: shareDict) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func upload(serverAsset: SHServerAsset,
+                asset: SHEncryptedAsset,
+                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        
+        var results = [SHAssetQuality: Swift.Result<Void, Error>]()
+        
+        let group = AsyncGroup()
+        
+        for encryptedAssetVersion in asset.encryptedVersions {
+            group.enter()
+            
+            let serverAssetVersion = serverAsset.versions.first { sav in
+                sav.versionName == encryptedAssetVersion.quality.rawValue
+            }
+            
+            guard let serverAssetVersion = serverAssetVersion else {
+                results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ClientError.badRequest("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)"))
+                break
+            }
+            
+            guard let url = URL(string: serverAssetVersion.presignedURL) else {
+                results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid"))
+                break
+            }
+            
+            S3Proxy.save(encryptedAssetVersion.encryptedData,
+                         usingPresignedURL: url) { result in
+                results[encryptedAssetVersion.quality] = result
+                group.leave()
+            }
+        }
+        
+        group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
+        
+        group.background {
+            for (version, result) in results {
+                switch result {
+                case .failure(_):
+                    log.error("Could not upload asset=\(asset.globalIdentifier) version=\(version.rawValue)")
+                    return completionHandler(result)
+                default:
+                    continue
+                }
+            }
+            completionHandler(.success(()))
+        }
     }
 
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {

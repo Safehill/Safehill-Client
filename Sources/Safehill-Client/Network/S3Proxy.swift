@@ -26,7 +26,7 @@ struct S3Proxy {
             request.addValue(headerValue, forHTTPHeaderField: headerField)
         }
         
-        log.info("S3Proxy request \(request.httpMethod!) \(request.url!) with headers \(String(describing: request.allHTTPHeaderFields))")
+        log.info("storing asset to S3 using request \(request.httpMethod!) \(request.url!) with headers \(String(describing: request.allHTTPHeaderFields))")
         
         let bcf = ByteCountFormatter()
         bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
@@ -38,10 +38,10 @@ struct S3Proxy {
                                     decodingResponseAs: NoReply.self) { result in
             switch result {
             case .success(_):
-                log.info("successfully uploaded to S3")
+                log.info("successfully uploaded to \(presignedURL)")
                 completionHandler(.success(()))
             case .failure(let err):
-                log.error("error uploading to S3: \(err.localizedDescription)")
+                log.error("error uploading to \(presignedURL): \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }
@@ -50,6 +50,11 @@ struct S3Proxy {
     static func retrieve(_ asset: SHServerAsset,
                          _ version: SHServerAssetVersion,
                          completionHandler: @escaping (Result<SHEncryptedAsset, Error>) -> ()) {
+        guard let quality = SHAssetQuality(rawValue: version.versionName) else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("invalid versionName=\(version.versionName)")))
+            return
+        }
+        
         guard let url = URL(string: version.presignedURL) else {
             completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid")))
             return
@@ -58,18 +63,26 @@ struct S3Proxy {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         
-        log.info("S3Proxy request \(request.httpMethod!) \(request.url!)")
+        log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName) from S3 using request \(request.httpMethod!) \(request.url!)")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: Data.self) { result in
             switch result {
             case .success(let data):
-                let encryptedAsset = SHGenericEncryptedAsset(globalIdentifier: asset.globalIdentifier,
-                                                             localIdentifier: asset.localIdentifier,
-                                                             encryptedData: data,
-                                                             encryptedSecret: version.encryptedSecret,
-                                                             publicKeyData: version.publicKeyData,
-                                                             publicSignatureData: version.publicSignatureData,
-                                                             creationDate: asset.creationDate)
+                let encryptedAsset = SHGenericEncryptedAsset(
+                    globalIdentifier: asset.globalIdentifier,
+                    localIdentifier: asset.localIdentifier,
+                    creationDate: asset.creationDate,
+                    groupId: asset.groupId,
+                    encryptedVersions: [
+                        SHGenericEncryptedAssetVersion(
+                            quality: quality,
+                            encryptedData: data,
+                            encryptedSecret: version.encryptedSecret,
+                            publicKeyData: version.publicKeyData,
+                            publicSignatureData: version.publicSignatureData
+                        )
+                    ]
+                )
                 completionHandler(.success(encryptedAsset))
             case .failure(let error):
                 completionHandler(.failure(error))

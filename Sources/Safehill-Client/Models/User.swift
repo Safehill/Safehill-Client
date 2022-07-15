@@ -10,42 +10,36 @@ import Safehill_Crypto
 
 public protocol SHServerUser : SHCryptoUser {
     var identifier: String { get }
-    var name: String? { get }
-    var email: String? { get }
+    var name: String { get }
 }
 
 public struct SHRemoteUser : SHServerUser, Codable {
     public let identifier: String
-    public let name: String?
-    public let email: String?
+    public let name: String
     public let publicKeyData: Data
     public let publicSignatureData: Data
     
     enum CodingKeys: String, CodingKey {
         case identifier
         case name
-        case email
         case publicKeyData = "publicKey"
         case publicSignatureData = "publicSignature"
     }
     
     init(identifier: String,
          name: String,
-         email: String,
          publicKeyData: Data,
-         publicSignatureData: Data) throws {
+         publicSignatureData: Data) {
         self.identifier = identifier
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
         self.name = name
-        self.email = email
     }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         identifier = try container.decode(String.self, forKey: .identifier)
-        name = try? container.decode(String.self, forKey: .name)
-        email = try? container.decode(String.self, forKey: .email)
+        name = try container.decode(String.self, forKey: .name)
         let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
         publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
         let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
@@ -53,7 +47,7 @@ public struct SHRemoteUser : SHServerUser, Codable {
     }
 }
 
-/// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name, email).
+/// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name).
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHServerUser {
     public var identifier: String {
@@ -69,8 +63,7 @@ public struct SHLocalUser: SHServerUser {
         self.shUser.publicSignatureData
     }
         
-    public var name: String?
-    public var email: String?
+    public var name: String = "" // Empty means unknown
     
     private var _ssoIdentifier: String?
     private var _authToken: String?
@@ -102,6 +95,11 @@ public struct SHLocalUser: SHServerUser {
         && lhs.publicSignatureData == rhs.publicSignatureData
     }
     
+    public init(cryptoUser: SHLocalCryptoUser) {
+        self.keychainPrefix = ""
+        self.shUser = cryptoUser
+    }
+    
     /// Initializes a SHLocalUser and the corresponding keychain element.
     /// Creates a key pair if none exists in the keychain with label `keysKeychainLabel`,
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
@@ -117,7 +115,6 @@ public struct SHLocalUser: SHServerUser {
             self.shUser = SHLocalCryptoUser()
             try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
         }
-        
         
         // SSO identifier (if any)
         do {
@@ -141,10 +138,8 @@ public struct SHLocalUser: SHServerUser {
     public mutating func updateUserDetails(given user: SHServerUser?) {
         if let user = user {
             self.name = user.name
-            self.email = user.email
         } else {
-            self.name = nil
-            self.email = nil
+            self.name = ""
         }
     }
     
@@ -205,10 +200,41 @@ public struct SHLocalUser: SHServerUser {
             }
         }
     }
+}
+
+extension SHLocalUser: Codable {
     
-    public func shareablePrivateKeys() throws -> Data {
+    enum CodingKeys: String, CodingKey {
+        case shUser
+        case name
+        case keychainPrefix
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.name = try container.decode(String.self, forKey: .name)
+        self.shUser = try container.decode(SHLocalCryptoUser.self, forKey: .shUser)
+        self.keychainPrefix = try container.decode(String.self, forKey: .keychainPrefix)
+        
+        try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
+        self._ssoIdentifier = nil
+        
+        try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+        // TODO: Do not swallow this exception
+        self._authToken = nil
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.shUser, forKey: .shUser)
+        try container.encode(self.name, forKey: .name)
+        try container.encode(self.keychainPrefix, forKey: .keychainPrefix)
+    }
+    
+    public func shareableLocalUser() throws -> Data {
         let encoder = JSONEncoder()
-        return try encoder.encode(self.shUser)
+        return try encoder.encode(self)
     }
 }
 

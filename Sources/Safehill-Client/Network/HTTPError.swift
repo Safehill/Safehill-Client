@@ -35,7 +35,7 @@ public enum SHHTTPError {
             case .badRequest(let message):
                 return message
             case .unauthorized:
-                return "Invalid credentials"
+                return "401 Unauthorized"
             default:
                 return "Error \(self.toCode())"
             }
@@ -73,5 +73,6 @@ public enum SHHTTPError {
     
     public enum TransportError : Error {
         case generic(Error)
+        case timedOut
     }
 }
