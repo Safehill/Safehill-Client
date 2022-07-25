@@ -28,7 +28,7 @@ open class SHAbstractBackgroundOperation : Operation {
         fileprivate var keyPath: String { return "is" + self.rawValue }
     }
     
-    private let stateQueue = DispatchQueue(label: "com.sh.BackgroundOperation.stateQueue",
+    private let stateQueue = DispatchQueue(label: "com.gf.safehill.BackgroundOperation.stateQueue",
                                            qos: .background,
                                            attributes: .concurrent)
     private var _state: State = .ready

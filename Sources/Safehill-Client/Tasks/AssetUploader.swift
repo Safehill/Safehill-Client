@@ -3,6 +3,8 @@ import os
 import KnowledgeBase
 import Async
 
+public let ShareAndUploadGroupIdSuffix = "-share"
+
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
@@ -234,7 +236,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
 
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
-                groupId: groupId + "-share",
+                groupId: groupId + ShareAndUploadGroupIdSuffix,
                 eventOriginator: eventOriginator,
                 sharedWith: sharedWith,
                 shouldUpload: false

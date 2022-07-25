@@ -172,7 +172,6 @@ public struct SHServerProxy {
     }
     
     public func deleteLocalAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        // No need to check email and password for local accounts
         self.localServer.deleteAccount(completionHandler: completionHandler)
     }
     

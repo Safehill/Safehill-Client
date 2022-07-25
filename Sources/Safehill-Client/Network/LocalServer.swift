@@ -133,7 +133,6 @@ struct LocalServer : SHServerAPI {
             group.leave()
         }
         
-        group.wait()
         let dispatchResult = group.wait()
         guard dispatchResult != .timedOut else {
             return completionHandler(.failure(SHHTTPError.TransportError.timedOut))

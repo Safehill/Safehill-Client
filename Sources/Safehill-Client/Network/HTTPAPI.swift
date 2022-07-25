@@ -76,7 +76,11 @@ struct SHServerHTTPAPI : SHServerAPI {
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
-        log.info("making \(request.httpMethod!) request url=\(request.url!), headers=\(request.allHTTPHeaderFields ?? [:])")
+        log.trace("""
+"\(request.httpMethod!) \(request.url!),
+headers=\(request.allHTTPHeaderFields ?? [:]),
+body=\(request.httpBody != nil ? String(data: request.httpBody!, encoding: .utf8) ?? "some" : "nil")
+""")
         
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
@@ -87,12 +91,13 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
             
             let httpResponse = response as! HTTPURLResponse
-            log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
-            
-//            if let data = data {
-//                let convertedString = String(data: data, encoding: String.Encoding.utf8)
-//                log.debug("response body: \(convertedString ?? "")")
-//            }
+            if httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
+                log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+                if let data = data {
+                    let convertedString = String(data: data, encoding: String.Encoding.utf8)
+                    log.debug("response body: \(convertedString ?? "")")
+                }
+            }
             
             switch httpResponse.statusCode {
             case 200..<300:
@@ -203,8 +208,6 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        log.info("request parameters \(parameters ?? [:])")
-        
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
@@ -302,6 +305,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func signIn(name: String, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
+            "name": name,
             "identifier": self.requestor.identifier
         ]
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
@@ -516,6 +520,27 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
+                        assetGlobalIdentifier globalId: String,
+                        retryCount: Int = 1,
+                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.post("asset/\(globalId)/version/\(assetVersion.quality.rawValue)/uploaded", parameters: nil)
+        { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                guard retryCount <= 3 else {
+                    return completionHandler(.failure(err))
+                }
+                self.markAsUploaded(assetVersion,
+                                    assetGlobalIdentifier: globalId,
+                                    retryCount: retryCount + 1,
+                                    completionHandler: completionHandler)
+            }
+        }
+    }
+    
     func upload(serverAsset: SHServerAsset,
                 asset: SHEncryptedAsset,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
@@ -544,7 +569,21 @@ struct SHServerHTTPAPI : SHServerAPI {
             S3Proxy.save(encryptedAssetVersion.encryptedData,
                          usingPresignedURL: url) { result in
                 results[encryptedAssetVersion.quality] = result
-                group.leave()
+                
+                if case .success(_) = result {
+                    self.markAsUploaded(encryptedAssetVersion,
+                                        assetGlobalIdentifier: asset.globalIdentifier) { _ in
+                        group.leave()
+                        //
+                        // TODO: Shall the client try to upload again instead of leaving things out of sync?
+                        // Consider updating the server on the upload in the next iteration of the AssetDownloader:
+                        // - get the descriptors
+                        // - if upload state is `.partial`, and locally it's in the upload history, mark as uploaded then
+                        //
+                    }
+                } else {
+                    group.leave()
+                }
             }
         }
         
