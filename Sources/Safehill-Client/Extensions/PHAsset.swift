@@ -48,7 +48,6 @@ public extension PHAsset {
                 completionHandler(.failure(error))
             }
         }
-        
     }
     
     func image(forSize size: CGSize? = nil,

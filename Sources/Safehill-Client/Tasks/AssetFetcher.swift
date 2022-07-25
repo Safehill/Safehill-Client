@@ -81,8 +81,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             if let d = SHLocalPHAssetHighQualityDataCache.data(forAssetId: phAsset.localIdentifier) {
                 cachedData = d
             } else {
-                var error: Error? = nil
                 phAsset.data(
+                    forSize: kSHHiResPictureSize,
                     usingImageManager: self.imageManager,
                     synchronousFetch: true
                 ) { result in
@@ -93,7 +93,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         error = err
                     }
                 }
-                
                 guard error == nil else {
                     group.leave()
                     return
@@ -144,14 +143,14 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         
         do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
         catch {
+            /// Be forgiving for failed Fetch operations
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
-            throw error
         }
         
         // Dequeue from encryption queue
         log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
         
-        do { _ = try EncryptionQueue.dequeue() }
+        do { _ = try FetchQueue.dequeue() }
         catch {
             log.error("asset \(localIdentifier) failed to encrypt but dequeuing from ENCRYPT queue failed, so this operation will be attempted again.")
             throw error

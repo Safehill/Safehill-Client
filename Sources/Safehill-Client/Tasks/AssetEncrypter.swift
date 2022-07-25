@@ -17,8 +17,9 @@ extension KBPhotoAsset {
         log.info("retrieving high resolution asset \(self.phAsset.localIdentifier) from Photos library")
         var error: Error? = nil
         var hiResData: Data? = nil
-        self.phAsset.data(usingImageManager: imageManager,
-                           synchronousFetch: true) { result in
+        self.phAsset.data(forSize: kSHHiResPictureSize,
+                          usingImageManager: imageManager,
+                          synchronousFetch: true) { result in
             switch result {
             case .success(let d):
                 hiResData = d
@@ -100,9 +101,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         log.info("retrieving low resolution asset \(asset.phAsset.localIdentifier)")
         
         var error: Error? = nil
-        let size = CGSize(width: kSHLowResPictureSize.width, height: kSHLowResPictureSize.height)
         
-        asset.phAsset.data(forSize: size,
+        asset.phAsset.data(forSize: kSHLowResPictureSize,
                            usingImageManager: imageManager,
                            synchronousFetch: true) { result in
             switch result {
