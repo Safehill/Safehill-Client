@@ -524,7 +524,7 @@ body=\(request.httpBody != nil ? String(data: request.httpBody!, encoding: .utf8
                         assetGlobalIdentifier globalId: String,
                         retryCount: Int = 1,
                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.post("asset/\(globalId)/version/\(assetVersion.quality.rawValue)/uploaded", parameters: nil)
+        self.post("assets/\(globalId)/versions/\(assetVersion.quality.rawValue)/uploaded", parameters: nil)
         { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
