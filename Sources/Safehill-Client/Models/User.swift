@@ -186,6 +186,7 @@ public struct SHLocalUser: SHServerUser {
     }
     
     public mutating func regenerateKeys() throws {
+        self.deauthenticate()
         self.shUser = SHLocalCryptoUser()
         do {
             try self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
