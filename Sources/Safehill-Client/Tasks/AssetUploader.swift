@@ -3,8 +3,6 @@ import os
 import KnowledgeBase
 import Async
 
-public let ShareAndUploadGroupIdSuffix = "-share"
-
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
@@ -144,6 +142,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             if case .failure(let err) = result {
                 self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
             }
+            group.leave()
         }
         let dispatchResult = group.wait()
         
