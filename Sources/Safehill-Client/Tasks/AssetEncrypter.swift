@@ -152,8 +152,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             privateSecret: privateSecret,
             clearData: lowResData
         )
-                  
-        log.debug("lowRes-encryptedData (\(contentIdentifier)): \(lowResEncryptedContent.encryptedData.base64EncodedString())")
         
         var versions = [SHEncryptedAssetVersion]()
         
@@ -348,6 +346,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         
 #if DEBUG
         log.debug("items in the ENCRYPT queue after dequeueing \((try? EncryptionQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
+        log.debug("items in the UPLOAD queue after enqueueing \((try? UploadQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
 #endif
         
         // Notify the delegates
@@ -471,7 +470,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 guard !self.isCancelled else {
                     log.info("encrypt task cancelled. Finishing")
-                    state = .finished
                     break
                 }
             }

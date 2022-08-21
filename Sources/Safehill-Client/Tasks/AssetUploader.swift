@@ -425,7 +425,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 
                 guard !self.isCancelled else {
                     log.info("upload task cancelled. Finishing")
-                    state = .finished
                     break
                 }
             }
@@ -446,6 +445,7 @@ public class SHAssetsUploaderQueueProcessor : SHOperationQueueProcessor<SHUpload
     
     private override init(delayedStartInSeconds: Int = 0,
                           dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
+        super.init(delayedStartInSeconds: delayedStartInSeconds,
+                   dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

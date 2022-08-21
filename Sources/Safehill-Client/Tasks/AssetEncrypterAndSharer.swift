@@ -433,7 +433,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 
                 guard !self.isCancelled else {
                     log.info("share task cancelled. Finishing")
-                    state = .finished
                     break
                 }
             }

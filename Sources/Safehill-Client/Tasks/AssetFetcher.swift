@@ -313,7 +313,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 guard !self.isCancelled else {
                     log.info("fetch task cancelled. Finishing")
-                    state = .finished
                     break
                 }
             }
