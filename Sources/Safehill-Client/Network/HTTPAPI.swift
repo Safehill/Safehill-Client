@@ -521,8 +521,17 @@ body=\(request.httpBody != nil ? String(data: request.httpBody!, encoding: .utf8
     }
     
     func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
+                        assetGlobalIdentifier globalAssetId: String,
+                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.markAsUploaded(assetVersion,
+                            assetGlobalIdentifier: globalAssetId,
+                            retryCount: 1,
+                            completionHandler: completionHandler)
+    }
+    
+    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
                         assetGlobalIdentifier globalId: String,
-                        retryCount: Int = 1,
+                        retryCount: Int,
                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.post("assets/\(globalId)/versions/\(assetVersion.quality.rawValue)/uploaded", parameters: nil)
         { (result: Result<NoReply, Error>) in

@@ -103,6 +103,10 @@ public protocol SHServerAPI {
                 asset: SHEncryptedAsset,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
+    /// Mark encrypted asset versions data as uploaded to the CDN.
+    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
+                        assetGlobalIdentifier globalId: String,
+                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Removes assets from the CDN
     /// - Parameters:
