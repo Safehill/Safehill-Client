@@ -399,7 +399,8 @@ struct LocalServer : SHServerAPI {
                     "groupCreationDate": Date().iso8601withFractionalSeconds, // TODO: Should this be the creation value we get from the server?
                     "publicKey": encryptedVersion.publicKeyData,
                     "publicSignature": encryptedVersion.publicSignatureData,
-                    "creationDate": asset.creationDate
+                    "creationDate": asset.creationDate,
+                    "uploadState": SHAssetDescriptorUploadState.notStarted.rawValue
                 ]
                 
                 writeBatch.set(value: version, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
