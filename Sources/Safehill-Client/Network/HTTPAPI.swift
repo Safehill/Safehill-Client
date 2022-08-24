@@ -202,7 +202,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                            completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route, urlParameters: parameters)
         
-        var request = URLRequest(url: url, timeoutInterval: 5)
+        var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "GET"
         
         if requiresAuthentication {
@@ -222,7 +222,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                             completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route)
         
-        var request = URLRequest(url: url, timeoutInterval: 5)
+        var request = URLRequest(url: url, timeoutInterval: 90)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
