@@ -28,7 +28,7 @@ open class SHAbstractBackgroundOperation : Operation {
         fileprivate var keyPath: String { return "is" + self.rawValue }
     }
     
-    private let stateQueue = DispatchQueue(label: "com.sh.BackgroundOperation.stateQueue",
+    private let stateQueue = DispatchQueue(label: "com.gf.safehill.BackgroundOperation.stateQueue",
                                            qos: .background,
                                            attributes: .concurrent)
     private var _state: State = .ready
@@ -82,9 +82,12 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
     
     private var started = false
     private let stateQueue = DispatchQueue(label: "com.sh.AssetsUploadQueueProcessor.stateQueue",
-                                           qos: .background)
+                                           qos: .background,
+                                           attributes: .concurrent)
     private let timerQueue = DispatchQueue(label: "com.sh.AssetsUploadQueueProcessor.timerQueue",
-                                           qos: .background)
+                                           qos: .background,
+                                           attributes: .concurrent)
+    private var timer: Timer? = nil
     
     let operationQueue = OperationQueue()
     
@@ -105,44 +108,56 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
         
         self.stateQueue.sync {
             self.started = true
-            
-            // If there is no operation in the queue, continously add an upload operation.
-            // That operation will pick up any item in the queue, if any exists.
-            // If the queue is empty, then the upload operation will finish immediately
-            self.timerQueue.async { [self] in
-                self.process(operation, after: delayedStartInSeconds)
-            }
+        }
+        self.timerQueue.sync { [weak self] in
+            self?.process(operation, after: self!.delayedStartInSeconds)
         }
     }
     
     private func process(_ operation: T, after seconds: Int) {
-        if self.started && operationQueue.operationCount == 0 {
-            let startTime = DispatchTime.now() + .seconds(seconds)
-            self.timerQueue.asyncAfter(deadline: startTime) {
-                if !operation.isExecuting && self.operationQueue.operationCount == 0 {
-                    self.operationQueue.addOperation(operation.clone() as! T)
-                }
+        
+        guard self.started else { return }
+        
+        // As long as there is no operation in the queue that is running, add an operation by cloning the last one run.
+        // That operation will pick up any item in the queue, if any exists.
+        // If the queue is empty, then the upload operation will finish immediately
+        
+        if operationQueue.operationCount == 0 {
+            self.timerQueue.sync {
+                self.timer = Timer.scheduledTimer(withTimeInterval: Double(seconds), repeats: false, block: { [weak self] _ in
+                    if !operation.isExecuting,
+                       let sself = self,
+                       sself.started,
+                       sself.operationQueue.operationCount == 0
+                    {
+                        sself.operationQueue.addOperation(operation.clone() as! T)
+                    }
+                })
             }
         }
         
+        // If a repeat interval is set, recursively call this method to continuously add the operation to the queue
+        
         if let dispatchIntervalInSeconds = self.dispatchIntervalInSeconds {
-            let dispatchInterval = max(dispatchIntervalInSeconds, seconds)
-            let checkAgainTime = DispatchTime.now() + .seconds(dispatchInterval)
-            self.timerQueue.asyncAfter(deadline: checkAgainTime) {
-                self.process(operation, after: 0)
+            self.timerQueue.sync {
+                let dispatchInterval = max(dispatchIntervalInSeconds, seconds)
+                self.timer = Timer.scheduledTimer(withTimeInterval: Double(dispatchInterval), repeats: false, block: { [weak self] _ in
+                    self?.process(operation, after: 0)
+                })
             }
         } else {
-            log.error("No dispatchIntervalInSeconds set. Not repeating operation")
+            log.info("No dispatchIntervalInSeconds set. The operation will not repeat")
         }
         
     }
     
     public func stopRepeat() {
-        guard self.started == true else { return }
-        
         self.stateQueue.sync {
             self.started = false
             self.operationQueue.cancelAllOperations()
+        }
+        self.timerQueue.sync {
+            self.timer?.invalidate()
         }
     }
 }

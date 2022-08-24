@@ -142,6 +142,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             if case .failure(let err) = result {
                 self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
             }
+            group.leave()
         }
         let dispatchResult = group.wait()
         
@@ -234,7 +235,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
 
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
-                groupId: groupId + "-share",
+                groupId: groupId,
                 eventOriginator: eventOriginator,
                 sharedWith: sharedWith,
                 shouldUpload: false
@@ -424,7 +425,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 
                 guard !self.isCancelled else {
                     log.info("upload task cancelled. Finishing")
-                    state = .finished
                     break
                 }
             }
@@ -445,6 +445,7 @@ public class SHAssetsUploaderQueueProcessor : SHOperationQueueProcessor<SHUpload
     
     private override init(delayedStartInSeconds: Int = 0,
                           dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
+        super.init(delayedStartInSeconds: delayedStartInSeconds,
+                   dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

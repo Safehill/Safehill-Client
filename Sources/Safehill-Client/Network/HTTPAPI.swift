@@ -11,6 +11,23 @@ import Async
 import Safehill_Crypto
 import CryptoKit
 
+public class SHNetwork {
+    public static let shared = SHNetwork()
+    
+    private var _bytesPerSecond: Double = 0.0
+    
+    public var speedInBytesPerSecond: Double {
+        self._bytesPerSecond
+    }
+    
+    internal func setSpeed(bytesPerSecond: Double) {
+        /// Optimistic approximation of actual network speed calculated on small payloads
+        /// On relatively fast connections, the speed calculated on a small payload is far lower
+        /// than the peak speed uploading a large file once the connection has been established
+        self._bytesPerSecond = bytesPerSecond * 15
+    }
+}
+
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
 public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
 
@@ -51,12 +68,15 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
         var components = URLComponents()
+#if DEBUG
         components.scheme = "http"
         components.host = "localhost"
         components.port = 8080
-//        components.scheme = "https"
-//        components.host = "safehill.herokuapp.com"
-//        components.port = 443
+#else
+        components.scheme = "https"
+        components.host = "safehill.herokuapp.com"
+        components.port = 443
+#endif
         components.path = "/\(route)"
         var queryItems = [URLQueryItem]()
         
@@ -76,23 +96,42 @@ struct SHServerHTTPAPI : SHServerAPI {
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
-        log.info("making \(request.httpMethod!) request url=\(request.url!), headers=\(request.allHTTPHeaderFields ?? [:])")
+//        log.trace("""
+//"\(request.httpMethod!) \(request.url!),
+//headers=\(request.allHTTPHeaderFields ?? [:]),
+//body=\(request.httpBody != nil ? String(data: request.httpBody!, encoding: .utf8) ?? "some" : "nil")
+//""")
+        
+        let startTime = CFAbsoluteTimeGetCurrent()
+        var stopTime = startTime
+        var bytesReceived = 0
         
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
         URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
+            
             guard error == nil else {
                 completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
                 return
             }
             
-            let httpResponse = response as! HTTPURLResponse
-            log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+            bytesReceived = data?.count ?? 0
+            if bytesReceived > 0 {
+                stopTime = CFAbsoluteTimeGetCurrent()
+                let elapsed = stopTime - startTime
+                if elapsed > 0 {
+                    SHNetwork.shared.setSpeed(bytesPerSecond: Double(bytesReceived) / elapsed)
+                }
+            }
             
-//            if let data = data {
-//                let convertedString = String(data: data, encoding: String.Encoding.utf8)
-//                log.debug("response body: \(convertedString ?? "")")
-//            }
+            let httpResponse = response as! HTTPURLResponse
+            if httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
+                log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+                if let data = data {
+                    let convertedString = String(data: data, encoding: String.Encoding.utf8)
+                    log.debug("response body: \(convertedString ?? "")")
+                }
+            }
             
             switch httpResponse.statusCode {
             case 200..<300:
@@ -163,7 +202,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                            completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route, urlParameters: parameters)
         
-        var request = URLRequest(url: url, timeoutInterval: 5)
+        var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "GET"
         
         if requiresAuthentication {
@@ -183,7 +222,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                             completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route)
         
-        var request = URLRequest(url: url, timeoutInterval: 5)
+        var request = URLRequest(url: url, timeoutInterval: 90)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
@@ -202,8 +241,6 @@ struct SHServerHTTPAPI : SHServerAPI {
                 return completionHandler(.failure(error))
             }
         }
-        
-        log.info("request parameters \(parameters ?? [:])")
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
@@ -302,6 +339,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func signIn(name: String, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
+            "name": name,
             "identifier": self.requestor.identifier
         ]
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
@@ -516,10 +554,41 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
+                        assetGlobalIdentifier globalAssetId: String,
+                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.markAsUploaded(assetVersion,
+                            assetGlobalIdentifier: globalAssetId,
+                            retryCount: 1,
+                            completionHandler: completionHandler)
+    }
+    
+    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
+                        assetGlobalIdentifier globalId: String,
+                        retryCount: Int,
+                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.post("assets/\(globalId)/versions/\(assetVersion.quality.rawValue)/uploaded", parameters: nil)
+        { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                guard retryCount <= 3 else {
+                    return completionHandler(.failure(err))
+                }
+                self.markAsUploaded(assetVersion,
+                                    assetGlobalIdentifier: globalId,
+                                    retryCount: retryCount + 1,
+                                    completionHandler: completionHandler)
+            }
+        }
+    }
+    
     func upload(serverAsset: SHServerAsset,
                 asset: SHEncryptedAsset,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        
+        let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)",
+                                       qos: .background)
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
         let group = AsyncGroup()
@@ -543,14 +612,30 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             S3Proxy.save(encryptedAssetVersion.encryptedData,
                          usingPresignedURL: url) { result in
-                results[encryptedAssetVersion.quality] = result
-                group.leave()
+                writeQueue.sync {
+                    results[encryptedAssetVersion.quality] = result
+                }
+                
+                if case .success(_) = result {
+                    self.markAsUploaded(encryptedAssetVersion,
+                                        assetGlobalIdentifier: asset.globalIdentifier) { _ in
+                        group.leave()
+                        //
+                        // TODO: Shall the client try to upload again instead of leaving things out of sync?
+                        // Consider updating the server on the upload in the next iteration of the AssetDownloader:
+                        // - get the descriptors
+                        // - if upload state is `.partial`, and locally it's in the upload history, mark as uploaded then
+                        //
+                    }
+                } else {
+                    group.leave()
+                }
             }
         }
         
         group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
         
-        group.background {
+        writeQueue.sync {
             for (version, result) in results {
                 switch result {
                 case .failure(_):

@@ -118,6 +118,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 let existingLocalIdentifiers = self.delegate.localIdentifiersInCache()
                 
                 var globalIdentifiersToDownload = [String]()
+                var globalIdentifiersNotReadyForDownload = [String]()
                 var descriptorsByLocalIdentifier = [String: SHAssetDescriptor]()
                 for descriptor in descriptors {
                     guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
@@ -128,7 +129,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                        existingLocalIdentifiers.contains(localIdentifier) {
                         descriptorsByLocalIdentifier[localIdentifier] = descriptor
                     } else {
-                        globalIdentifiersToDownload.append(descriptor.globalIdentifier)
+                        if descriptor.uploadState == .completed {
+                            globalIdentifiersToDownload.append(descriptor.globalIdentifier)
+                        } else {
+                            globalIdentifiersNotReadyForDownload.append(descriptor.globalIdentifier)
+                        }
                     }
                 }
                 
@@ -137,22 +142,27 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 }
                 
                 if globalIdentifiersToDownload.count == 0 {
-                    self.log.debug("no assets to download")
                     completionHandler(.success(()))
                     return
                 }
                 
                 self.log.info("found \(descriptors.count) assets on the server. Need to download \(globalIdentifiersToDownload.count)")
                 
-                let newDescriptors = descriptors.filter {
+                let descriptorsForAssetsToDownload = descriptors.filter {
                     globalIdentifiersToDownload.contains($0.globalIdentifier)
                 }
+                let descriptorsForAssetsNotToDownload = descriptors.filter {
+                    globalIdentifiersNotReadyForDownload.contains($0.globalIdentifier)
+                }
                 
-                // Call the delegate using Assets with empty data, created based on their descriptor
-                self.delegate.handleAssetDescriptorResults(for: newDescriptors)
+                // Call the delegate for assets that will be downloaded using Assets with empty data, created based on their descriptor
+                self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsToDownload)
+
+                // Call the delegate for assets that won't be downloaded (as they are still being uploaded on the other side)
+                self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsNotToDownload)
                 
                 // Create items in the DownloadQueue, one per descriptor
-                for newDescriptor in newDescriptors {
+                for newDescriptor in descriptorsForAssetsToDownload {
                     let queueItem = SHDownloadRequestQueueItem(
                         assetDescriptor: newDescriptor,
                         receiverUserIdentifier: self.user.identifier

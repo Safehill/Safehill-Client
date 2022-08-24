@@ -17,8 +17,9 @@ extension KBPhotoAsset {
         log.info("retrieving high resolution asset \(self.phAsset.localIdentifier) from Photos library")
         var error: Error? = nil
         var hiResData: Data? = nil
-        self.phAsset.data(usingImageManager: imageManager,
-                           synchronousFetch: true) { result in
+        self.phAsset.data(forSize: kSHHiResPictureSize,
+                          usingImageManager: imageManager,
+                          synchronousFetch: true) { result in
             switch result {
             case .success(let d):
                 hiResData = d
@@ -100,9 +101,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         log.info("retrieving low resolution asset \(asset.phAsset.localIdentifier)")
         
         var error: Error? = nil
-        let size = CGSize(width: kSHLowResPictureSize.width, height: kSHLowResPictureSize.height)
         
-        asset.phAsset.data(forSize: size,
+        asset.phAsset.data(forSize: kSHLowResPictureSize,
                            usingImageManager: imageManager,
                            synchronousFetch: true) { result in
             switch result {
@@ -152,8 +152,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             privateSecret: privateSecret,
             clearData: lowResData
         )
-                  
-        log.debug("lowRes-encryptedData (\(contentIdentifier)): \(lowResEncryptedContent.encryptedData.base64EncodedString())")
         
         var versions = [SHEncryptedAssetVersion]()
         
@@ -348,6 +346,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         
 #if DEBUG
         log.debug("items in the ENCRYPT queue after dequeueing \((try? EncryptionQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
+        log.debug("items in the UPLOAD queue after enqueueing \((try? UploadQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
 #endif
         
         // Notify the delegates
@@ -471,7 +470,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 guard !self.isCancelled else {
                     log.info("encrypt task cancelled. Finishing")
-                    state = .finished
                     break
                 }
             }

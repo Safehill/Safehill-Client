@@ -133,7 +133,6 @@ struct LocalServer : SHServerAPI {
             group.leave()
         }
         
-        group.wait()
         let dispatchResult = group.wait()
         guard dispatchResult != .timedOut else {
             return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
@@ -202,21 +201,43 @@ struct LocalServer : SHServerAPI {
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         /// No need to pull all versions when constructing descriptor, pulling "low" version only.
         /// This assumes that sharing information and other metadata are common across all versions (low and hi)
-        let condition = KBGenericCondition(.beginsWith, value: "low::")
+        let condition = KBGenericCondition(.beginsWith, value: "low::").or(KBGenericCondition(.beginsWith, value: "hi::"))
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
+                var versionUploadState = [SHAssetQuality: SHAssetDescriptorUploadState]()
                 var descriptors = [SHGenericAssetDescriptor]()
                 for (k, v) in keyValues {
                     let globalIdentifier: String
-                    if let range = k.range(of: "low::") {
-                        globalIdentifier = "" + k[range.upperBound...]
-                    } else {
-                        break
-                    }
+                    
                     guard let value = v as? [String: Any],
                           let phAssetIdentifier = value["applePhotosAssetIdentifier"] as? String?,
                           let creationDate = value["creationDate"] as? Date? else {
+                        break
+                    }
+                    
+                    if let range = k.range(of: "low::") {
+                        globalIdentifier = "" + k[range.upperBound...]
+                        
+                        if let uploadStateStr = value["uploadState"] as? String,
+                           let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
+                            versionUploadState[.lowResolution] = uploadState
+                        } else {
+                            versionUploadState[.hiResolution] = .notStarted
+                        }
+                        
+                    } else if let _ = k.range(of: "hi::") {
+                        if let uploadStateStr = value["uploadState"] as? String,
+                           let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
+                            versionUploadState[.hiResolution] = uploadState
+                        } else {
+                            versionUploadState[.hiResolution] = .notStarted
+                        }
+                        
+                        break
+                        // Terminate here, as from this point there's no version-specific information
+                        // All the asset descriptor details will be pulled from the "low::" version
+                    } else {
                         break
                     }
                     
@@ -290,10 +311,23 @@ struct LocalServer : SHServerAPI {
                         sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
                         groupInfoById: groupInfoById
                     )
+                    
+                    let combinedUploadState = versionUploadState.reduce(SHAssetDescriptorUploadState.notStarted, {
+                        (partialResult: SHAssetDescriptorUploadState, item) in
+                        let (_, value) = item
+                        if partialResult == .completed {
+                            if value == .completed { return .completed }
+                            else { return .partial }
+                        } else {
+                            return value
+                        }
+                    })
+                    
                     let descriptor = SHGenericAssetDescriptor(
                         globalIdentifier: globalIdentifier,
                         localIdentifier: phAssetIdentifier,
                         creationDate: creationDate,
+                        uploadState: combinedUploadState,
                         sharingInfo: sharingInfo
                     )
                     descriptors.append(descriptor)
@@ -365,7 +399,8 @@ struct LocalServer : SHServerAPI {
                     "groupCreationDate": Date().iso8601withFractionalSeconds, // TODO: Should this be the creation value we get from the server?
                     "publicKey": encryptedVersion.publicKeyData,
                     "publicSignature": encryptedVersion.publicSignatureData,
-                    "creationDate": asset.creationDate
+                    "creationDate": asset.creationDate,
+                    "uploadState": SHAssetDescriptorUploadState.notStarted.rawValue
                 ]
                 
                 writeBatch.set(value: version, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
@@ -433,6 +468,32 @@ struct LocalServer : SHServerAPI {
                 asset: SHEncryptedAsset,
                 completionHandler: @escaping (Result<Void, Error>) -> ()) {
         completionHandler(.success(()))
+    }
+    
+    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
+                        assetGlobalIdentifier globalAssetId: String,
+                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let condition = KBGenericCondition(.beginsWith, value: "\(assetVersion.quality.rawValue)::\(globalAssetId)")
+        assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
+            switch result {
+            case .success(let keyValues):
+                for (k, v) in keyValues {
+                    guard var value = v as? [String: Any],
+                          let _ = value["uploadState"] as? String?
+                    else {
+                        completionHandler(.failure(KBError.unexpectedData(v)))
+                        return
+                    }
+                    
+                    value["uploadState"] = SHAssetDescriptorUploadState.completed.rawValue
+                    let writeBatch = assetStore.writeBatch()
+                    writeBatch.set(value: value, for: k)
+                    writeBatch.write(completionHandler: completionHandler)
+                }
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
     }
     
     

@@ -94,12 +94,14 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let creationDate: Date?
+    public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
     
     enum CodingKeys: String, CodingKey {
         case globalIdentifier
         case localIdentifier
         case creationDate
+        case uploadState
         case sharingInfo
     }
     
@@ -107,6 +109,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
         coder.encode(self.globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(self.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
         coder.encode(self.creationDate, forKey: CodingKeys.creationDate.rawValue)
+        coder.encode(self.uploadState.rawValue, forKey: CodingKeys.uploadState.rawValue)
         let encodableSharingInfo = try? JSONEncoder().encode(self.sharingInfo as! SHGenericDescriptorSharingInfo)
         coder.encode(encodableSharingInfo, forKey: CodingKeys.sharingInfo.rawValue)
     }
@@ -114,10 +117,12 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public init(globalIdentifier: String,
                 localIdentifier: String?,
                 creationDate: Date?,
+                uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHGenericDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
+        self.uploadState = uploadState
         self.sharingInfo = sharingInfo
     }
     
@@ -125,6 +130,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
         let creationDate = decoder.decodeObject(of: NSDate.self, forKey: CodingKeys.creationDate.rawValue)
+        let uploadStateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.uploadState.rawValue)
         let sharingInfoData = decoder.decodeObject(of: [NSData.self], forKey: CodingKeys.sharingInfo.rawValue) as! Data
                 
         guard let globalIdentifier = globalIdentifier as String? else {
@@ -139,6 +145,12 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
             log.error("unexpected value for creationDate when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
+        guard let uploadStateStr = uploadStateStr as String?,
+              let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr)
+        else {
+            log.error("unexpected value for uploadState when decoding SHGenericAssetDescriptorClass object")
+            return nil
+        }
         guard let sharingInfo = try? JSONDecoder().decode(SHGenericDescriptorSharingInfo.self, from: sharingInfoData) else {
             log.error("unexpected value for sharingInfo when decoding SHGenericAssetDescriptorClass object")
             return nil
@@ -148,6 +160,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
             globalIdentifier: globalIdentifier,
             localIdentifier: localIdentifier,
             creationDate: creationDate,
+            uploadState: uploadState,
             sharingInfo: sharingInfo
         )
     }
@@ -447,6 +460,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
             globalIdentifier: assetDescriptor.globalIdentifier,
             localIdentifier: assetDescriptor.localIdentifier,
             creationDate: assetDescriptor.creationDate,
+            uploadState: assetDescriptor.uploadState,
             sharingInfo: assetDescriptor.sharingInfo as! SHGenericDescriptorSharingInfo
         )
         coder.encode(assetDescriptor, forKey: AssetDescriptorKey)
@@ -489,6 +503,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
             globalIdentifier: descriptor.globalIdentifier,
             localIdentifier: descriptor.localIdentifier,
             creationDate: descriptor.creationDate,
+            uploadState: descriptor.uploadState,
             sharingInfo: descriptor.sharingInfo
         )
         
