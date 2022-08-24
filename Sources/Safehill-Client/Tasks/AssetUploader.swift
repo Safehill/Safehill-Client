@@ -235,7 +235,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
 
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
-                groupId: groupId + ShareAndUploadGroupIdSuffix,
+                groupId: groupId,
                 eventOriginator: eventOriginator,
                 sharedWith: sharedWith,
                 shouldUpload: false
