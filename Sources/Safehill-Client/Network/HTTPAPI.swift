@@ -11,6 +11,23 @@ import Async
 import Safehill_Crypto
 import CryptoKit
 
+public class SHNetwork {
+    public static let shared = SHNetwork()
+    
+    private var _bytesPerSecond: Double = 0.0
+    
+    public var speedInBytesPerSecond: Double {
+        self._bytesPerSecond
+    }
+    
+    internal func setSpeed(bytesPerSecond: Double) {
+        /// Optimistic approximation of actual network speed calculated on small payloads
+        /// On relatively fast connections, the speed calculated on a small payload is far lower
+        /// than the peak speed uploading a large file once the connection has been established
+        self._bytesPerSecond = bytesPerSecond * 15
+    }
+}
+
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
 public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
 
@@ -51,12 +68,15 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
         var components = URLComponents()
+#if DEBUG
         components.scheme = "http"
         components.host = "localhost"
         components.port = 8080
-//        components.scheme = "https"
-//        components.host = "safehill.herokuapp.com"
-//        components.port = 443
+#else
+        components.scheme = "https"
+        components.host = "safehill.herokuapp.com"
+        components.port = 443
+#endif
         components.path = "/\(route)"
         var queryItems = [URLQueryItem]()
         
@@ -76,18 +96,32 @@ struct SHServerHTTPAPI : SHServerAPI {
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
-        log.trace("""
-"\(request.httpMethod!) \(request.url!),
-headers=\(request.allHTTPHeaderFields ?? [:]),
-body=\(request.httpBody != nil ? String(data: request.httpBody!, encoding: .utf8) ?? "some" : "nil")
-""")
+//        log.trace("""
+//"\(request.httpMethod!) \(request.url!),
+//headers=\(request.allHTTPHeaderFields ?? [:]),
+//body=\(request.httpBody != nil ? String(data: request.httpBody!, encoding: .utf8) ?? "some" : "nil")
+//""")
+        
+        let startTime = CFAbsoluteTimeGetCurrent()
+        var stopTime = startTime
+        var bytesReceived = 0
         
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
         URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
+            
             guard error == nil else {
                 completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
                 return
+            }
+            
+            bytesReceived = data?.count ?? 0
+            if bytesReceived > 0 {
+                stopTime = CFAbsoluteTimeGetCurrent()
+                let elapsed = stopTime - startTime
+                if elapsed > 0 {
+                    SHNetwork.shared.setSpeed(bytesPerSecond: Double(bytesReceived) / elapsed)
+                }
             }
             
             let httpResponse = response as! HTTPURLResponse
