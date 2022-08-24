@@ -587,7 +587,8 @@ struct SHServerHTTPAPI : SHServerAPI {
     func upload(serverAsset: SHServerAsset,
                 asset: SHEncryptedAsset,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        
+        let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)",
+                                       qos: .background)
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
         let group = AsyncGroup()
@@ -611,7 +612,9 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             S3Proxy.save(encryptedAssetVersion.encryptedData,
                          usingPresignedURL: url) { result in
-                results[encryptedAssetVersion.quality] = result
+                writeQueue.sync {
+                    results[encryptedAssetVersion.quality] = result
+                }
                 
                 if case .success(_) = result {
                     self.markAsUploaded(encryptedAssetVersion,
@@ -632,7 +635,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
         
-        group.background {
+        writeQueue.sync {
             for (version, result) in results {
                 switch result {
                 case .failure(_):
