@@ -28,7 +28,7 @@ public extension PHAsset {
 #if os(iOS)
                 if let data = image.pngData() {
                     completionHandler(.success(data))
-                    if shouldCache && size == nil {
+                    if shouldCache {
                         SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
                     }
                 } else {

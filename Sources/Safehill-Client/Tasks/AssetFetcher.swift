@@ -78,25 +78,21 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             /// as cachedData on the KBPhotoAsset will be set here
             ///
             var cachedData: Data? = nil
-            if let d = SHLocalPHAssetHighQualityDataCache.data(forAssetId: phAsset.localIdentifier) {
-                cachedData = d
-            } else {
-                phAsset.data(
-                    forSize: kSHHiResPictureSize,
-                    usingImageManager: self.imageManager,
-                    synchronousFetch: true
-                ) { result in
-                    switch result {
-                    case .success(let d):
-                        cachedData = d
-                    case .failure(let err):
-                        error = err
-                    }
+            phAsset.data(
+                forSize: kSHHiResPictureSize,
+                usingImageManager: self.imageManager,
+                synchronousFetch: true
+            ) { result in
+                switch result {
+                case .success(let d):
+                    cachedData = d
+                case .failure(let err):
+                    error = err
                 }
-                guard error == nil else {
-                    group.leave()
-                    return
-                }
+            }
+            guard error == nil else {
+                group.leave()
+                return
             }
             
             self.log.info("caching hi res data in a KBPhotoAsset for later consumption")

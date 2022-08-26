@@ -38,7 +38,9 @@ extension KBPhotoAsset {
     
     /// This operation is expensive if the asset is not cached. Use it carefully
     func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
-        return SHHash.stringDigest(for: try self.getCachedData(using: imageManager))
+        let data = try self.getCachedData(using: imageManager)
+        let hash = SHHash.stringDigest(for: data)
+        return hash
     }
 }
 
@@ -88,7 +90,9 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             unarchiver = NSKeyedUnarchiver(forReadingWith: data)
         }
         
-        guard let encryptionRequest = unarchiver.decodeObject(of: SHEncryptionRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey) else {
+        guard let encryptionRequest = unarchiver.decodeObject(of: SHEncryptionRequestQueueItem.self,
+                                                              forKey: NSKeyedArchiveRootObjectKey)
+        else {
             throw KBError.unexpectedData(item)
         }
         
