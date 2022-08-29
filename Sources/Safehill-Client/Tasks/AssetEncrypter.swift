@@ -8,7 +8,7 @@ import CryptoKit
 
 
 extension KBPhotoAsset {
-    public func getCachedData(using imageManager: PHImageManager) throws -> Data {
+    public func getCachedData(using imageManager: PHImageManager, forSize size: CGSize?) throws -> Data {
         guard self.cachedData == nil else {
             log.trace("retriving high resolution asset \(self.phAsset.localIdentifier) from cache")
             return self.cachedData!
@@ -17,7 +17,7 @@ extension KBPhotoAsset {
         log.info("retrieving high resolution asset \(self.phAsset.localIdentifier) from Photos library")
         var error: Error? = nil
         var hiResData: Data? = nil
-        self.phAsset.data(forSize: kSHHiResPictureSize,
+        self.phAsset.data(forSize: size,
                           usingImageManager: imageManager,
                           synchronousFetch: true) { result in
             switch result {
@@ -38,7 +38,7 @@ extension KBPhotoAsset {
     
     /// This operation is expensive if the asset is not cached. Use it carefully
     func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
-        let data = try self.getCachedData(using: imageManager)
+        let data = try self.getCachedData(using: imageManager, forSize: kSHFullResPictureSize)
         let hash = SHHash.stringDigest(for: data)
         return hash
     }
@@ -121,7 +121,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             throw error
         }
         
-        hiResData = try asset.getCachedData(using: imageManager)
+        hiResData = try asset.getCachedData(using: imageManager, forSize: kSHHiResPictureSize)
         
         #if DEBUG
         let bcf = ByteCountFormatter()
