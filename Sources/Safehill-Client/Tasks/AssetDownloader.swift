@@ -196,7 +196,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             
             while let item = try DownloadQueue.peek() {
                 if let limit = limit {
-                    guard count < limit else {
+                    guard count <= limit else {
                         break
                     }
                 }

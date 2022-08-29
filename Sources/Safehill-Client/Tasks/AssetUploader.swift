@@ -279,7 +279,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             
             while let item = try UploadQueue.peek() {
                 if let limit = limit {
-                    guard count < limit else {
+                    guard count <= limit else {
                         break
                     }
                 }

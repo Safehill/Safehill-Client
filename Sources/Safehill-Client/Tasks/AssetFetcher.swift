@@ -241,7 +241,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             
             while let item = try FetchQueue.peek() {
                 if let limit = limit {
-                    guard count < limit else {
+                    guard count <= limit else {
                         break
                     }
                 }
