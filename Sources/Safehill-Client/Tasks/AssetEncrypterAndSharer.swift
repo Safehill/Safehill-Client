@@ -54,6 +54,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
     }
     
+    internal static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
+        return assetId + "+" + SHHash.stringDigest(for: (groupId + users.map({ $0.identifier }).joined(separator: "+")).data(using: .utf8)!)
+    }
+    
     public func markAsFailed(
         localIdentifier: String,
         globalIdentifier: String,
@@ -68,8 +72,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                                                         groupId: groupId,
                                                         eventOriginator: eventOriginator,
                                                         sharedWith: users)
-        
-        do { try failedShare.enqueue(in: FailedShareQueue, with: localIdentifier) }
+        let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+        do {
+            try failedShare.enqueue(in: FailedShareQueue, with: key)
+        }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
             throw error
@@ -109,7 +115,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                                                           eventOriginator: eventOriginator,
                                                           sharedWith: users)
         
-        do { try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: localIdentifier) }
+        let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+        do {
+            try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: key)
+        }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
             throw error
@@ -189,7 +198,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         guard let decryptedSecretData = decryptedSecretData else {
             log.error("failed to get shared secret for item \(item.identifier)")
             try self.markAsFailed(
-                localIdentifier: item.identifier,
+                localIdentifier: asset.phAsset.localIdentifier,
                 groupId: shareRequest.groupId,
                 eventOriginator: shareRequest.eventOriginator,
                 sharedWith: shareRequest.sharedWith
@@ -332,7 +341,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
                         delegate.didStartSharing(
-                            itemWithLocalIdentifier: item.identifier,
+                            itemWithLocalIdentifier: asset.phAsset.localIdentifier,
                             groupId: shareRequest.groupId,
                             with: shareRequest.sharedWith
                         )
@@ -371,7 +380,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     log.error("failed to locally share encrypted item \(count) with users \(shareRequest.sharedWith.map { $0.identifier }): \(error.localizedDescription)")
                     
                     try self.markAsFailed(
-                        localIdentifier: item.identifier,
+                        localIdentifier: asset.phAsset.localIdentifier,
                         groupId: shareRequest.groupId,
                         eventOriginator: shareRequest.eventOriginator,
                         sharedWith: shareRequest.sharedWith
@@ -392,7 +401,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier }): \(errorMsg)")
                     
                     try self.markAsFailed(
-                        localIdentifier: item.identifier,
+                        localIdentifier: asset.phAsset.localIdentifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: shareRequest.groupId,
                         eventOriginator: shareRequest.eventOriginator,
@@ -405,7 +414,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier }): \(error.localizedDescription)")
                     
                     try self.markAsFailed(
-                        localIdentifier: item.identifier,
+                        localIdentifier: asset.phAsset.localIdentifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: shareRequest.groupId,
                         eventOriginator: shareRequest.eventOriginator,
@@ -422,7 +431,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 log.info("[√] share task completed for item \(item.identifier)")
                 
                 try self.markAsSuccessful(
-                    localIdentifier: item.identifier,
+                    localIdentifier: asset.phAsset.localIdentifier,
                     globalIdentifier: encryptedAsset.globalIdentifier,
                     groupId: shareRequest.groupId,
                     eventOriginator: shareRequest.eventOriginator,

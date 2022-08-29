@@ -195,7 +195,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                                                                      sharedWith: users)
             log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier)")
             
-            do { try encryptionForSharingRequest.enqueue(in: ShareQueue, with: localIdentifier) }
+            let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            do {
+                try encryptionForSharingRequest.enqueue(in: ShareQueue, with: key)
+            }
             catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be shared because enqueueing to SHARE queue failed")
                 throw error
@@ -263,7 +266,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetFetcherDelegate {
                         delegate.didStartFetching(
-                            itemWithLocalIdentifier: item.identifier,
+                            itemWithLocalIdentifier: fetchRequest.assetId,
                             groupId: fetchRequest.groupId
                         )
                     }

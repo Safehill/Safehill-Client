@@ -404,7 +404,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
                         delegate.didStartEncryption(
-                            itemWithLocalIdentifier: item.identifier,
+                            itemWithLocalIdentifier: asset.phAsset.localIdentifier,
                             groupId: encryptionRequest.groupId
                         )
                     }
@@ -443,7 +443,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     log.error("failed to store data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
                     
                     do {
-                        try self.markAsFailed(localIdentifier: item.identifier,
+                        try self.markAsFailed(localIdentifier: asset.phAsset.localIdentifier,
                                               groupId: encryptionRequest.groupId,
                                               eventOriginator: encryptionRequest.eventOriginator,
                                               sharedWith: encryptionRequest.sharedWith)
@@ -459,7 +459,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 do {
                     try self.markAsSuccessful(
-                        localIdentifier: item.identifier,
+                        localIdentifier: asset.phAsset.localIdentifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: encryptionRequest.groupId,
                         eventOriginator: encryptionRequest.eventOriginator,
