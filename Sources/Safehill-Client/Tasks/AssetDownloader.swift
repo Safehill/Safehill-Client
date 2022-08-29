@@ -376,7 +376,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
 public class SHAssetsDownloadQueueProcessor : SHOperationQueueProcessor<SHDownloadOperation> {
     
     public static var shared = SHAssetsDownloadQueueProcessor(
-        delayedStartInSeconds: 2,
+        delayedStartInSeconds: 1,
         dispatchIntervalInSeconds: 3
     )
     private override init(delayedStartInSeconds: Int,

@@ -450,8 +450,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
 public class SHAssetEncryptAndShareQueueProcessor : SHOperationQueueProcessor<SHEncryptAndShareOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetEncryptAndShareQueueProcessor(
-        delayedStartInSeconds: 2,
-        dispatchIntervalInSeconds: 2
+        delayedStartInSeconds: 5,
+        dispatchIntervalInSeconds: 3
     )
     
     private override init(delayedStartInSeconds: Int = 0,

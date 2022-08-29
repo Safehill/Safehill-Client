@@ -439,8 +439,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
 public class SHAssetsUploaderQueueProcessor : SHOperationQueueProcessor<SHUploadOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsUploaderQueueProcessor(
-        delayedStartInSeconds: 2,
-        dispatchIntervalInSeconds: 2
+        delayedStartInSeconds: 4,
+        dispatchIntervalInSeconds: 3
     )
     
     private override init(delayedStartInSeconds: Int = 0,

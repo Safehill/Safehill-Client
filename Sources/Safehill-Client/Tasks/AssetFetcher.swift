@@ -324,7 +324,7 @@ public class SHAssetsFetcherQueueProcessor : SHOperationQueueProcessor<SHLocalFe
     /// Singleton (with private initializer)
     public static var shared = SHAssetsFetcherQueueProcessor(
         delayedStartInSeconds: 2,
-        dispatchIntervalInSeconds: 2
+        dispatchIntervalInSeconds: 3
     )
     
     private override init(delayedStartInSeconds: Int = 0,
