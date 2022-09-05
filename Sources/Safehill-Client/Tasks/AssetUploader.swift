@@ -170,7 +170,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         // Dequeque from UploadQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the UPLOAD queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
         
         do { _ = try UploadQueue.dequeue() }
         catch {
@@ -218,7 +218,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         // Dequeque from UploadQueue
-        log.info("dequeueing upload request for asset \(globalIdentifier) from the UPLOAD queue")
+        log.info("dequeueing request for asset \(globalIdentifier) from the UPLOAD queue")
         
         do { _ = try UploadQueue.dequeue() }
         catch {
@@ -316,7 +316,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
                     encryptedAsset = try self.getLocalAsset(with: globalIdentifier)
                 } catch {
-                    log.error("failed to retrieve stored data for item \(count), with identifier \(item.identifier): \(error.localizedDescription). Dequeueing item, as it's unlikely to succeed again.")
+                    log.error("failed to retrieve stored data for item \(count), with identifier \(localIdentifier): \(error.localizedDescription). Dequeueing item, as it's unlikely to succeed again.")
                     do {
                         try self.markAsFailed(localIdentifier: localIdentifier,
                                               globalIdentifier: globalIdentifier,
@@ -344,6 +344,19 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     }
                     continue
                 }
+                
+#if DEBUG
+                guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 20 != 0 else {
+                    log.debug("simulating CREATE ASSET failure")
+                    try self.markAsFailed(localIdentifier: localIdentifier,
+                                          globalIdentifier: globalIdentifier,
+                                          groupId: uploadRequest.groupId,
+                                          eventOriginator: uploadRequest.eventOriginator,
+                                          sharedWith: uploadRequest.sharedWith)
+                    
+                    continue
+                }
+#endif
                 
                 var serverAsset: SHServerAsset? = nil
                 do {
@@ -377,6 +390,21 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     }
                     continue
                 }
+                
+#if DEBUG
+                guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 5 != 0 else {
+                    log.debug("simulating UPLOAD TO CDN failure")
+                    try self.markAsFailed(localIdentifier: localIdentifier,
+                                          globalIdentifier: globalIdentifier,
+                                          groupId: uploadRequest.groupId,
+                                          eventOriginator: uploadRequest.eventOriginator,
+                                          sharedWith: uploadRequest.sharedWith)
+                    
+                    try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
+                    
+                    continue
+                }
+#endif
                 
                 do {
                     log.info("uploading asset to the CDN: \(String(describing: serverAsset?.globalIdentifier))")

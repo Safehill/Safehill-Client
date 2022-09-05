@@ -144,7 +144,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         // Dequeue from encryption queue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
         do { _ = try FetchQueue.dequeue() }
         catch {
@@ -206,7 +206,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         // Dequeue from FetchQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the FETCH queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
         
         do { _ = try FetchQueue.dequeue() }
         catch {
@@ -290,7 +290,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         // TODO: Handle
                     }
                     
-                    return
+                    continue
                 }
                 
                 log.info("[√] fetch task completed for item \(item.identifier)")

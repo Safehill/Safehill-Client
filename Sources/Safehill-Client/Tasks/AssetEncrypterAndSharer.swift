@@ -55,7 +55,15 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     }
     
     internal static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
-        return assetId + "+" + SHHash.stringDigest(for: (groupId + users.map({ $0.identifier }).joined(separator: "+")).data(using: .utf8)!)
+        return (
+            assetId + "+" +
+            groupId + "+" +
+            SHHash.stringDigest(for: users
+                .map({ $0.identifier })
+                .sorted()
+                .joined(separator: "+").data(using: .utf8)!
+            )
+        )
     }
     
     public func markAsFailed(
@@ -125,7 +133,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         // Dequeque from ShareQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the SHARE queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
         
         do { _ = try ShareQueue.dequeue() }
         catch {
@@ -172,7 +180,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         self.serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
             versions: [.lowResolution],
-            saveLocallyAsOwnedByUserIdentifier: self.user.identifier
+            saveLocallyWithSenderIdentifier: self.user.identifier
         ) { result in
             if case .success(let assetsDict) = result {
                 if assetsDict.count == 1,
@@ -394,6 +402,21 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 ///
                 /// Share using Safehill Server API
                 ///
+                
+#if DEBUG
+                guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 20 != 0 else {
+                    log.debug("simulating SHARE failure")
+                    try self.markAsFailed(
+                        localIdentifier: asset.phAsset.localIdentifier,
+                        globalIdentifier: encryptedAsset.globalIdentifier,
+                        groupId: shareRequest.groupId,
+                        eventOriginator: shareRequest.eventOriginator,
+                        sharedWith: shareRequest.sharedWith
+                    )
+                    
+                    continue
+                }
+#endif
                 
                 do {
                     try self.share(encryptedAsset: encryptedAsset, via: shareRequest)

@@ -296,7 +296,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         // Dequeue from encryption queue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
         do { _ = try EncryptionQueue.dequeue() }
         catch {
@@ -333,14 +333,14 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                                      sharedWith: sharedWith)
         log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier)")
         
-        do { try uploadRequest.enqueue(in: UploadQueue, with: globalIdentifier) }
+        do { try uploadRequest.enqueue(in: UploadQueue, with: localIdentifier) }
         catch {
             log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
         }
         
         // Dequeue from EncryptionQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
         do { _ = try EncryptionQueue.dequeue() }
         catch {

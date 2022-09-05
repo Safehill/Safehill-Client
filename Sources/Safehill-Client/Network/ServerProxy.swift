@@ -250,11 +250,11 @@ public struct SHServerProxy {
     /// - Parameters:
     ///   - assetIdentifiers: the global asset identifiers to retrieve
     ///   - versions: filter asset version (retrieve just the low res asset or the hi res asset, for instance)
-    ///   - saveLocallyAsOwnedByUserIdentifier: when saving assets in the local server mark this asset as shared by this user public identifier
+    ///   - saveLocallyWithSenderIdentifier: when saving assets in the local server mark this asset as shared by this user public identifier
     ///   - completionHandler: the callback
     public func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                           versions: [SHAssetQuality]?,
-                          saveLocallyAsOwnedByUserIdentifier: String,
+                          saveLocallyWithSenderIdentifier senderUserIdentifier: String,
                           completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
@@ -283,7 +283,7 @@ public struct SHServerProxy {
                     /// Save retrieved assets to local server (cache)
                     ///
                     self.storeAssetsLocally(Array(assetsDict.values),
-                                            senderUserIdentifier: saveLocallyAsOwnedByUserIdentifier)
+                                            senderUserIdentifier: senderUserIdentifier)
                     { localResult in
                         if case .failure(let err) = localResult {
                             log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
