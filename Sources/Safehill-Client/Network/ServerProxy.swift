@@ -1,7 +1,5 @@
 import Foundation
 
-public var SHServerUserInMemoryCache = [String: SHServerUser]()
-
 public struct SHServerProxy {
     
     let localServer: LocalServer
@@ -77,34 +75,32 @@ public struct SHServerProxy {
         self.remoteServer.signIn(name: name, completionHandler: completionHandler)
     }
     
-    public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
-        let userIdentifiers = Set(userIdentifiers)
-        guard userIdentifiers.count > 0 else {
+    public func getUsers(withIdentifiers userIdentifiersToFetch: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
+        guard userIdentifiersToFetch.count > 0 else {
             return completionHandler(.success([]))
         }
         
         var response = [SHServerUser]()
-        for userIdentifier in userIdentifiers {
-            if let serverUser = SHServerUserInMemoryCache[userIdentifier] {
-                response.append(serverUser)
-            }
-        }
-        
-        let userIdentifiersToFetch = Array(userIdentifiers).subtract(response.map({$0.identifier}))
-        guard userIdentifiersToFetch.count > 0 else {
-            return completionHandler(.success(response))
-        }
         
         self.remoteServer.getUsers(withIdentifiers: userIdentifiersToFetch) { result in
             switch result {
             case .success(let serverUsers):
-                for serverUser in serverUsers {
-                    SHServerUserInMemoryCache[serverUser.identifier] = serverUser
-                }
                 response.append(contentsOf: serverUsers)
                 completionHandler(.success(response))
             case .failure(let error):
-                completionHandler(.failure(error))
+                // If can't get from the server try to get them from the local cache
+                self.localServer.getUsers(withIdentifiers: userIdentifiersToFetch) { localResult in
+                    switch localResult {
+                    case .success(let serverUsers):
+                        if serverUsers.count == userIdentifiersToFetch.count {
+                            completionHandler(localResult)
+                        } else {
+                            completionHandler(.failure(error))
+                        }
+                    case .failure(_):
+                        completionHandler(.failure(error))
+                    }
+                }
             }
         }
     }
@@ -250,11 +246,11 @@ public struct SHServerProxy {
     /// - Parameters:
     ///   - assetIdentifiers: the global asset identifiers to retrieve
     ///   - versions: filter asset version (retrieve just the low res asset or the hi res asset, for instance)
-    ///   - saveLocallyAsOwnedByUserIdentifier: when saving assets in the local server mark this asset as shared by this user public identifier
+    ///   - saveLocallyWithSenderIdentifier: when saving assets in the local server mark this asset as shared by this user public identifier
     ///   - completionHandler: the callback
     public func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                           versions: [SHAssetQuality]?,
-                          saveLocallyAsOwnedByUserIdentifier: String,
+                          saveLocallyWithSenderIdentifier senderUserIdentifier: String,
                           completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
@@ -283,7 +279,7 @@ public struct SHServerProxy {
                     /// Save retrieved assets to local server (cache)
                     ///
                     self.storeAssetsLocally(Array(assetsDict.values),
-                                            senderUserIdentifier: saveLocallyAsOwnedByUserIdentifier)
+                                            senderUserIdentifier: senderUserIdentifier)
                     { localResult in
                         if case .failure(let err) = localResult {
                             log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")

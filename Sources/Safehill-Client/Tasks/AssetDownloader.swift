@@ -196,7 +196,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             
             while let item = try DownloadQueue.peek() {
                 if let limit = limit {
-                    guard count < limit else {
+                    guard count <= limit else {
                         break
                     }
                 }
@@ -227,7 +227,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 serverProxy.getAssets(
                     withGlobalIdentifiers: globalIdentifiersToDownload,
                     versions: [.lowResolution],
-                    saveLocallyAsOwnedByUserIdentifier: downloadRequest.assetDescriptor.sharingInfo.sharedByUserIdentifier
+                    saveLocallyWithSenderIdentifier: downloadRequest.assetDescriptor.sharingInfo.sharedByUserIdentifier
                 )
                 { result in
                     switch result {
@@ -263,7 +263,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 serverProxy.getAssets(
                     withGlobalIdentifiers: globalIdentifiersToDownload,
                     versions: [.hiResolution],
-                    saveLocallyAsOwnedByUserIdentifier: downloadRequest.assetDescriptor.sharingInfo.sharedByUserIdentifier
+                    saveLocallyWithSenderIdentifier: downloadRequest.assetDescriptor.sharingInfo.sharedByUserIdentifier
                 )
                 { result in
                     switch result {
@@ -376,8 +376,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
 public class SHAssetsDownloadQueueProcessor : SHOperationQueueProcessor<SHDownloadOperation> {
     
     public static var shared = SHAssetsDownloadQueueProcessor(
-        delayedStartInSeconds: 2,
-        dispatchIntervalInSeconds: 3
+        delayedStartInSeconds: 1,
+        dispatchIntervalInSeconds: 5
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {

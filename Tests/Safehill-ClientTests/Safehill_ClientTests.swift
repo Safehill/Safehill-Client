@@ -281,7 +281,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         serverProxy.getAssets(
             withGlobalIdentifiers: [encryptedAsset.globalIdentifier],
             versions: [.lowResolution],
-            saveLocallyAsOwnedByUserIdentifier: user.identifier)
+            saveLocallyWithSenderIdentifier: user.identifier)
         { result in
             switch result {
             case .success(let assetsDict):

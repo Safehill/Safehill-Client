@@ -78,25 +78,21 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             /// as cachedData on the KBPhotoAsset will be set here
             ///
             var cachedData: Data? = nil
-            if let d = SHLocalPHAssetHighQualityDataCache.data(forAssetId: phAsset.localIdentifier) {
-                cachedData = d
-            } else {
-                phAsset.data(
-                    forSize: kSHHiResPictureSize,
-                    usingImageManager: self.imageManager,
-                    synchronousFetch: true
-                ) { result in
-                    switch result {
-                    case .success(let d):
-                        cachedData = d
-                    case .failure(let err):
-                        error = err
-                    }
+            phAsset.data(
+                forSize: kSHHiResPictureSize,
+                usingImageManager: self.imageManager,
+                synchronousFetch: true
+            ) { result in
+                switch result {
+                case .success(let d):
+                    cachedData = d
+                case .failure(let err):
+                    error = err
                 }
-                guard error == nil else {
-                    group.leave()
-                    return
-                }
+            }
+            guard error == nil else {
+                group.leave()
+                return
             }
             
             self.log.info("caching hi res data in a KBPhotoAsset for later consumption")
@@ -148,7 +144,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         // Dequeue from encryption queue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
         do { _ = try FetchQueue.dequeue() }
         catch {
@@ -199,7 +195,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                                                                      sharedWith: users)
             log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier)")
             
-            do { try encryptionForSharingRequest.enqueue(in: ShareQueue, with: localIdentifier) }
+            let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            do {
+                try encryptionForSharingRequest.enqueue(in: ShareQueue, with: key)
+            }
             catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be shared because enqueueing to SHARE queue failed")
                 throw error
@@ -207,7 +206,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         // Dequeue from FetchQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the FETCH queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
         
         do { _ = try FetchQueue.dequeue() }
         catch {
@@ -245,7 +244,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             
             while let item = try FetchQueue.peek() {
                 if let limit = limit {
-                    guard count < limit else {
+                    guard count <= limit else {
                         break
                     }
                 }
@@ -267,7 +266,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetFetcherDelegate {
                         delegate.didStartFetching(
-                            itemWithLocalIdentifier: item.identifier,
+                            itemWithLocalIdentifier: fetchRequest.assetId,
                             groupId: fetchRequest.groupId
                         )
                     }
@@ -291,7 +290,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         // TODO: Handle
                     }
                     
-                    return
+                    continue
                 }
                 
                 log.info("[√] fetch task completed for item \(item.identifier)")
@@ -328,7 +327,7 @@ public class SHAssetsFetcherQueueProcessor : SHOperationQueueProcessor<SHLocalFe
     /// Singleton (with private initializer)
     public static var shared = SHAssetsFetcherQueueProcessor(
         delayedStartInSeconds: 2,
-        dispatchIntervalInSeconds: 2
+        dispatchIntervalInSeconds: 3
     )
     
     private override init(delayedStartInSeconds: Int = 0,

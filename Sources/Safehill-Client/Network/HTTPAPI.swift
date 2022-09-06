@@ -24,7 +24,7 @@ public class SHNetwork {
         /// Optimistic approximation of actual network speed calculated on small payloads
         /// On relatively fast connections, the speed calculated on a small payload is far lower
         /// than the peak speed uploading a large file once the connection has been established
-        self._bytesPerSecond = bytesPerSecond * 15
+        self._bytesPerSecond = bytesPerSecond * 12
     }
 }
 
@@ -70,7 +70,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         var components = URLComponents()
 #if DEBUG
         components.scheme = "http"
-        components.host = "localhost"
+        components.host = "127.0.0.1"
         components.port = 8080
 #else
         components.scheme = "https"

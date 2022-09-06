@@ -8,7 +8,7 @@ import CryptoKit
 
 
 extension KBPhotoAsset {
-    public func getCachedData(using imageManager: PHImageManager) throws -> Data {
+    public func getCachedData(using imageManager: PHImageManager, forSize size: CGSize?) throws -> Data {
         guard self.cachedData == nil else {
             log.trace("retriving high resolution asset \(self.phAsset.localIdentifier) from cache")
             return self.cachedData!
@@ -17,7 +17,7 @@ extension KBPhotoAsset {
         log.info("retrieving high resolution asset \(self.phAsset.localIdentifier) from Photos library")
         var error: Error? = nil
         var hiResData: Data? = nil
-        self.phAsset.data(forSize: kSHHiResPictureSize,
+        self.phAsset.data(forSize: size,
                           usingImageManager: imageManager,
                           synchronousFetch: true) { result in
             switch result {
@@ -38,7 +38,9 @@ extension KBPhotoAsset {
     
     /// This operation is expensive if the asset is not cached. Use it carefully
     func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
-        return SHHash.stringDigest(for: try self.getCachedData(using: imageManager))
+        let data = try self.getCachedData(using: imageManager, forSize: kSHFullResPictureSize)
+        let hash = SHHash.stringDigest(for: data)
+        return hash
     }
 }
 
@@ -88,7 +90,9 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             unarchiver = NSKeyedUnarchiver(forReadingWith: data)
         }
         
-        guard let encryptionRequest = unarchiver.decodeObject(of: SHEncryptionRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey) else {
+        guard let encryptionRequest = unarchiver.decodeObject(of: SHEncryptionRequestQueueItem.self,
+                                                              forKey: NSKeyedArchiveRootObjectKey)
+        else {
             throw KBError.unexpectedData(item)
         }
         
@@ -117,7 +121,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             throw error
         }
         
-        hiResData = try asset.getCachedData(using: imageManager)
+        hiResData = try asset.getCachedData(using: imageManager, forSize: kSHHiResPictureSize)
         
         #if DEBUG
         let bcf = ByteCountFormatter()
@@ -292,7 +296,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
         // Dequeue from encryption queue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
         do { _ = try EncryptionQueue.dequeue() }
         catch {
@@ -329,14 +333,14 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                                      sharedWith: sharedWith)
         log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier)")
         
-        do { try uploadRequest.enqueue(in: UploadQueue, with: globalIdentifier) }
+        do { try uploadRequest.enqueue(in: UploadQueue, with: localIdentifier) }
         catch {
             log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
         }
         
         // Dequeue from EncryptionQueue
-        log.info("dequeueing upload request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
         do { _ = try EncryptionQueue.dequeue() }
         catch {
@@ -376,7 +380,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             
             while let item = try EncryptionQueue.peek() {
                 if let limit = limit {
-                    guard count < limit else {
+                    guard count <= limit else {
                         break
                     }
                 }
@@ -400,7 +404,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
                         delegate.didStartEncryption(
-                            itemWithLocalIdentifier: item.identifier,
+                            itemWithLocalIdentifier: asset.phAsset.localIdentifier,
                             groupId: encryptionRequest.groupId
                         )
                     }
@@ -439,7 +443,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     log.error("failed to store data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
                     
                     do {
-                        try self.markAsFailed(localIdentifier: item.identifier,
+                        try self.markAsFailed(localIdentifier: asset.phAsset.localIdentifier,
                                               groupId: encryptionRequest.groupId,
                                               eventOriginator: encryptionRequest.eventOriginator,
                                               sharedWith: encryptionRequest.sharedWith)
@@ -455,7 +459,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 do {
                     try self.markAsSuccessful(
-                        localIdentifier: item.identifier,
+                        localIdentifier: asset.phAsset.localIdentifier,
                         globalIdentifier: encryptedAsset.globalIdentifier,
                         groupId: encryptionRequest.groupId,
                         eventOriginator: encryptionRequest.eventOriginator,
@@ -484,8 +488,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
 public class SHAssetsEncrypterQueueProcessor : SHOperationQueueProcessor<SHEncryptionOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsEncrypterQueueProcessor(
-        delayedStartInSeconds: 2,
-        dispatchIntervalInSeconds: 2
+        delayedStartInSeconds: 3,
+        dispatchIntervalInSeconds: 3
     )
     
     private override init(delayedStartInSeconds: Int = 0,
