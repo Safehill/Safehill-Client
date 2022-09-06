@@ -17,3 +17,14 @@ public let FailedUploadQueue = KBQueueStore.store(withName: "com.gf.safehill.Pho
 public let FailedShareQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetFailedShareQueue", type: .fifo)
 
 public let DownloadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetDownloadQueue", type: .fifo)
+
+
+// Asset <=> User knowledge graph
+
+public let KnowledgeGraph = KBKnowledgeStore.store(withName: "com.gf.safehill.KnowledgeGraph")
+
+public enum KGPredicates: String {
+    case shares = "shares"
+    case knows = "knows"
+    case sharedWith = "sharedWith"
+}
