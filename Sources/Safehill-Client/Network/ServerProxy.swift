@@ -1,7 +1,5 @@
 import Foundation
 
-public var SHServerUserInMemoryCache = [String: SHServerUser]()
-
 public struct SHServerProxy {
     
     let localServer: LocalServer
@@ -77,34 +75,32 @@ public struct SHServerProxy {
         self.remoteServer.signIn(name: name, completionHandler: completionHandler)
     }
     
-    public func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
-        let userIdentifiers = Set(userIdentifiers)
-        guard userIdentifiers.count > 0 else {
+    public func getUsers(withIdentifiers userIdentifiersToFetch: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
+        guard userIdentifiersToFetch.count > 0 else {
             return completionHandler(.success([]))
         }
         
         var response = [SHServerUser]()
-        for userIdentifier in userIdentifiers {
-            if let serverUser = SHServerUserInMemoryCache[userIdentifier] {
-                response.append(serverUser)
-            }
-        }
-        
-        let userIdentifiersToFetch = Array(userIdentifiers).subtract(response.map({$0.identifier}))
-        guard userIdentifiersToFetch.count > 0 else {
-            return completionHandler(.success(response))
-        }
         
         self.remoteServer.getUsers(withIdentifiers: userIdentifiersToFetch) { result in
             switch result {
             case .success(let serverUsers):
-                for serverUser in serverUsers {
-                    SHServerUserInMemoryCache[serverUser.identifier] = serverUser
-                }
                 response.append(contentsOf: serverUsers)
                 completionHandler(.success(response))
             case .failure(let error):
-                completionHandler(.failure(error))
+                // If can't get from the server try to get them from the local cache
+                self.localServer.getUsers(withIdentifiers: userIdentifiersToFetch) { localResult in
+                    switch localResult {
+                    case .success(let serverUsers):
+                        if serverUsers.count == userIdentifiersToFetch.count {
+                            completionHandler(localResult)
+                        } else {
+                            completionHandler(.failure(error))
+                        }
+                    case .failure(_):
+                        completionHandler(.failure(error))
+                    }
+                }
             }
         }
     }
