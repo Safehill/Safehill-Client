@@ -120,8 +120,6 @@ public struct SHLocalUser: SHServerUser {
         do {
             self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
         } catch {
-            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
-            // TODO: Do not swallow this exception
             self._ssoIdentifier = nil
         }
         
@@ -129,8 +127,6 @@ public struct SHLocalUser: SHServerUser {
         do {
             self._authToken = try SHKeychain.retrieveValue(from: authTokenKeychainLabel)
         } catch {
-            try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
-            // TODO: Do not swallow this exception
             self._authToken = nil
         }
     }
