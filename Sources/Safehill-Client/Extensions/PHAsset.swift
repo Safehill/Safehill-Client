@@ -53,10 +53,15 @@ public extension PHAsset {
     func image(forSize size: CGSize? = nil,
                usingImageManager imageManager: PHImageManager,
                synchronousFetch: Bool,
+               // TODO: Implement iCloud progress handler when downloading the image
+               progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
                completionHandler: @escaping (Swift.Result<UIImage, Error>) -> ()) {
         
         let options = PHImageRequestOptions()
         options.isSynchronous = synchronousFetch
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .opportunistic
+        options.progressHandler = progressHandler
 
         let targetSize = CGSize(width: min(size?.width ?? CGFloat(self.pixelWidth), CGFloat(self.pixelWidth)),
                                 height: min(size?.width ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight)))
