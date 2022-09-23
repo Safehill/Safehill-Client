@@ -73,9 +73,10 @@ public struct SHLocalUser: SHServerUser {
     
     private let keychainPrefix: String
     
-    private static func keysKeychainLabel(withPrefix prefix: String) -> String {
+    public static func keysKeychainLabel(withPrefix prefix: String) -> String {
         "\(prefix).keys"
     }
+    
     public var keysKeychainLabel: String {
         SHLocalUser.keysKeychainLabel(withPrefix: keychainPrefix)
     }
