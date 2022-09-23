@@ -649,5 +649,4 @@ struct LocalServer : SHServerAPI {
             }
         }
     }
-    
 }

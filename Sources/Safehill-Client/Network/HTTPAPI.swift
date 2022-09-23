@@ -66,16 +66,27 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.requestor = requestor
     }
     
-    func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
+    var productionURLComponents: URLComponents {
         var components = URLComponents()
-#if DEBUG
-        components.scheme = "http"
-        components.host = "127.0.0.1"
-        components.port = 8080
-#else
         components.scheme = "https"
         components.host = "safehill.herokuapp.com"
         components.port = 443
+        return components
+    }
+    
+    var localURLComponents: URLComponents {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = 8080
+        return components
+    }
+    
+    func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
+#if targetEnvironment(simulator)
+        var components = localURLComponents
+#else
+        var components = productionURLComponents
 #endif
         components.path = "/\(route)"
         var queryItems = [URLQueryItem]()
@@ -147,6 +158,11 @@ struct SHServerHTTPAPI : SHServerAPI {
                 return
             case 409:
                 completionHandler(.failure(SHHTTPError.ClientError.conflict))
+                return
+            case 501:
+                completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            case 503:
+                completionHandler(.failure(SHHTTPError.ServerError.badGateway))
                 return
             case 400..<500:
                 var message = "Bad or malformed request"
@@ -664,4 +680,23 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
+    
+    func validateTransaction(
+        originalTransactionId: String,
+        receipt: String,
+        completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
+    ) {
+        let parameters = [
+            "originalTransactionId": originalTransactionId,
+            "receipt": receipt
+        ] as [String : Any]
+        self.post("purchases/apple/subscriptions", parameters: parameters) { (result: Result<SHReceiptValidationResponse, Error>) in
+            switch result {
+            case .success(let response):
+                completionHandler(.success(response))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 }

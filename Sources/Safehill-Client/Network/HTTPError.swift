@@ -11,6 +11,7 @@ public enum SHHTTPError {
     public enum ClientError : Error, LocalizedError {
         case badRequest(String)
         case unauthorized
+        case paymentRequired
         case notFound
         case methodNotAllowed
         case conflict
@@ -19,6 +20,8 @@ public enum SHHTTPError {
             switch self {
             case .unauthorized:
                 return 401
+            case .paymentRequired:
+                return 402
             case .notFound:
                 return 404
             case .methodNotAllowed:
@@ -36,6 +39,8 @@ public enum SHHTTPError {
                 return message
             case .unauthorized:
                 return "401 Unauthorized"
+            case .paymentRequired:
+                return "402 PaymentRequired"
             default:
                 return "Error \(self.toCode())"
             }
@@ -47,11 +52,14 @@ public enum SHHTTPError {
         case notImplemented
         case noData
         case unexpectedResponse(String)
+        case badGateway
         
         public func toCode() -> Int {
             switch self {
             case .notImplemented:
                 return 501
+            case .badGateway:
+                return 503
             default:
                 return 500
             }
@@ -61,6 +69,8 @@ public enum SHHTTPError {
             switch self {
             case .generic(let message):
                 return message
+            case .badGateway:
+                return "The route doesn't exist on the server (yet)"
             case .unexpectedResponse(let message):
                 return "Unexpected response from server: \(message)"
             case .noData:

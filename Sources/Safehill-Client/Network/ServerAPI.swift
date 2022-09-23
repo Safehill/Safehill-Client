@@ -113,4 +113,15 @@ public protocol SHServerAPI {
     ///   - withGlobalIdentifiers: the global identifier
     ///   - completionHandler: the callback method. Returns the list of global identifiers removed
     func deleteAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ())
+    
+    /// Validates an AppStore transaction (with receipt)
+    /// - Parameters:
+    ///   - originalTransactionId: the unique identifier for the transaction
+    ///   - receipt: the base64 encoded receipt for the purchases made by this app
+    ///   - completionHandler: the callback method. Returns a `SHReceiptValidationResponse` object
+    func validateTransaction(
+        originalTransactionId: String,
+        receipt: String,
+        completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
+    )
 }
