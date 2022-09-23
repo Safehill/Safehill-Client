@@ -425,16 +425,7 @@ extension SHServerProxy {
                 
                 completionHandler(.success(localResponse))
             case .failure(let serverErr):
-                // This condition is to handle servers where the subscription feature was not implemented yet.
-                // It can be removed soon.
-                // For some reason the server responds randomly when either a 404 or a 503.
-                if let err = serverErr as? SHHTTPError.ServerError, case SHHTTPError.ServerError.badGateway = err {
-                    completionHandler(localResult)
-                } else if let err = serverErr as? SHHTTPError.ClientError, case SHHTTPError.ClientError.notFound = err {
-                    completionHandler(localResult)
-                } else {
-                    completionHandler(.failure(serverErr))
-                }
+                completionHandler(.failure(serverErr))
             }
         }
     }

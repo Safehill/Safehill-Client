@@ -690,7 +690,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "originalTransactionId": originalTransactionId,
             "receipt": receipt
         ] as [String : Any]
-        self.post("purchases/apple/subscriptions", parameters: parameters) { (result: Result<SHReceiptValidationResponse, Error>) in
+        self.post("purchases/apple/subscription", parameters: parameters) { (result: Result<SHReceiptValidationResponse, Error>) in
             switch result {
             case .success(let response):
                 completionHandler(.success(response))
