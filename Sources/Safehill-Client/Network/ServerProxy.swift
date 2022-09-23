@@ -1,4 +1,5 @@
 import Foundation
+import Async
 
 public struct SHServerProxy {
     
@@ -379,5 +380,62 @@ public struct SHServerProxy {
     public func share(_ asset: SHShareableEncryptedAsset,
                       completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
+    }
+}
+
+extension SHServerProxy {
+    public func validateTransaction(originalTransactionId: String,
+                                    receipt: String,
+                                    completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()) {
+        let group = AsyncGroup()
+        var localResult: Result<SHReceiptValidationResponse, Error>? = nil
+        var serverResult: Result<SHReceiptValidationResponse, Error>? = nil
+        
+        group.enter()
+        self.localServer.validateTransaction(originalTransactionId: originalTransactionId,
+                                             receipt: receipt) { result in
+            localResult = result
+            group.leave()
+        }
+        
+        group.enter()
+        self.remoteServer.validateTransaction(originalTransactionId: originalTransactionId,
+                                              receipt: receipt) { result in
+            serverResult = result
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait()
+        guard dispatchResult != .timedOut else {
+            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+        }
+        
+        guard let localResult = localResult, let serverResult = serverResult else {
+            return completionHandler(.failure(SHHTTPError.ServerError.noData))
+        }
+        
+        switch localResult {
+        case .failure(let localErr):
+            completionHandler(.failure(localErr))
+        case .success(let localResponse):
+            switch serverResult {
+            case .success(let serverRespose):
+                // TODO: After Safehill server notifications are implemented make sure values from server and local invocation of StoreKit API agree
+                // Currently we only validate the receipt with the StoreKit server API, and on Safehill Server that this receipt has been granted to the user
+                
+                completionHandler(.success(localResponse))
+            case .failure(let serverErr):
+                // This condition is to handle servers where the subscription feature was not implemented yet.
+                // It can be removed soon.
+                // For some reason the server responds randomly when either a 404 or a 503.
+                if let err = serverErr as? SHHTTPError.ServerError, case SHHTTPError.ServerError.badGateway = err {
+                    completionHandler(localResult)
+                } else if let err = serverErr as? SHHTTPError.ClientError, case SHHTTPError.ClientError.notFound = err {
+                    completionHandler(localResult)
+                } else {
+                    completionHandler(.failure(serverErr))
+                }
+            }
+        }
     }
 }
