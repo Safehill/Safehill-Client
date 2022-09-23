@@ -113,7 +113,7 @@ public struct SHLocalUser: SHServerUser {
             self.shUser = shUser
         } else {
             self.shUser = SHLocalCryptoUser()
-            try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
+            try? self.saveKeysToKeychain(withLabel: keysKeychainLabel)
         }
         
         // SSO identifier (if any)
@@ -129,6 +129,10 @@ public struct SHLocalUser: SHServerUser {
         } catch {
             self._authToken = nil
         }
+    }
+    
+    public mutating func saveKeysToKeychain(withLabel label: String, force: Bool = false) throws {
+        try self.shUser.saveKeysToKeychain(withLabel: label, force: force)
     }
     
     public mutating func updateUserDetails(given user: SHServerUser?) {
@@ -184,18 +188,7 @@ public struct SHLocalUser: SHServerUser {
     public mutating func regenerateKeys() throws {
         self.deauthenticate()
         self.shUser = SHLocalCryptoUser()
-        do {
-            try self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
-        } catch SHKeychain.Error.unexpectedStatus(let status) {
-            if status == -25299 {
-                // keychain item exists
-                try self.shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
-                try self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
-            } else {
-                print("error saving to the keychain. status=\(status)")
-                throw SHKeychain.Error.unexpectedStatus(status)
-            }
-        }
+        try self.saveKeysToKeychain(withLabel: keysKeychainLabel, force: true)
     }
 }
 
@@ -214,11 +207,7 @@ extension SHLocalUser: Codable {
         self.shUser = try container.decode(SHLocalCryptoUser.self, forKey: .shUser)
         self.keychainPrefix = try container.decode(String.self, forKey: .keychainPrefix)
         
-        try? self.shUser.saveKeysToKeychain(withLabel: keysKeychainLabel)
         self._ssoIdentifier = nil
-        
-        try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
-        // TODO: Do not swallow this exception
         self._authToken = nil
     }
     
