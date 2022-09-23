@@ -14,6 +14,7 @@ public extension PHAsset {
     func data(forSize size: CGSize? = nil,
               usingImageManager imageManager: PHImageManager,
               synchronousFetch: Bool,
+              deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
               shouldCache: Bool = false,
               completionHandler: @escaping (Swift.Result<Data, Error>) -> ()) {
         if let data = SHLocalPHAssetHighQualityDataCache.data(forAssetId: self.localIdentifier) {
@@ -21,7 +22,7 @@ public extension PHAsset {
             return
         }
         
-        self.image(forSize: size, usingImageManager: imageManager, synchronousFetch: synchronousFetch) {
+        self.image(forSize: size, usingImageManager: imageManager, synchronousFetch: synchronousFetch, deliveryMode: deliveryMode) {
             result in
             switch result {
             case .success(let image):
@@ -53,6 +54,7 @@ public extension PHAsset {
     func image(forSize size: CGSize? = nil,
                usingImageManager imageManager: PHImageManager,
                synchronousFetch: Bool,
+               deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
                // TODO: Implement iCloud progress handler when downloading the image
                progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
                completionHandler: @escaping (Swift.Result<UIImage, Error>) -> ()) {
@@ -60,7 +62,7 @@ public extension PHAsset {
         let options = PHImageRequestOptions()
         options.isSynchronous = synchronousFetch
         options.isNetworkAccessAllowed = true
-        options.deliveryMode = .opportunistic
+        options.deliveryMode = deliveryMode
         options.progressHandler = progressHandler
 
         let targetSize = CGSize(width: min(size?.width ?? CGFloat(self.pixelWidth), CGFloat(self.pixelWidth)),
