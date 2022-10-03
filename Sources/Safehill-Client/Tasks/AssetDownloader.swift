@@ -301,9 +301,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     return completionHandler(.failure(SHBackgroundOperationError.timedOut))
                 }
                 guard lowResErrorsByAssetId.count + hiResErrorsByAssetId.count == 0 else {
-                    self.delegate.didFailDownload(of: Array(lowResErrorsByAssetId.keys), errorsByAssetIdentifier: lowResErrorsByAssetId)
-                    self.delegate.didFailDownload(of: Array(hiResErrorsByAssetId.keys), errorsByAssetIdentifier: hiResErrorsByAssetId)
-                    return completionHandler(.failure(lowResErrorsByAssetId.values.first!))
+                    if lowResErrorsByAssetId.count > 0 {
+                        self.delegate.didFailDownload(of: Array(lowResErrorsByAssetId.keys), errorsByAssetIdentifier: lowResErrorsByAssetId)
+                    }
+                    if hiResErrorsByAssetId.count > 0 {
+                        self.delegate.didFailDownload(of: Array(hiResErrorsByAssetId.keys), errorsByAssetIdentifier: hiResErrorsByAssetId)
+                    }
+                    return completionHandler(.failure(lowResErrorsByAssetId.values.first ?? hiResErrorsByAssetId.values.first ?? SHBackgroundOperationError.unexpectedData(nil)))
                 }
                 
                 self.delegate.didCompleteDownload(of: globalIdentifiersToDownload)

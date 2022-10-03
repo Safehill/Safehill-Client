@@ -471,7 +471,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 for asset in assets {
                     for version in asset.versions {
                         group.enter()
-                        log.info("uploading asset \(asset.globalIdentifier) version \(version.versionName)")
+                        log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
