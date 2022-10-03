@@ -161,7 +161,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             if let delegate = delegate as? SHAssetFetcherDelegate {
                 delegate.didFailFetching(
                     itemWithLocalIdentifier: localIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    sharedWith: users
                 )
             }
         }
@@ -223,7 +224,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             if let delegate = delegate as? SHAssetFetcherDelegate {
                 delegate.didCompleteFetching(
                     itemWithLocalIdentifier: localIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    sharedWith: users
                 )
             }
         }
@@ -267,7 +269,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     if let delegate = delegate as? SHAssetFetcherDelegate {
                         delegate.didStartFetching(
                             itemWithLocalIdentifier: fetchRequest.assetId,
-                            groupId: fetchRequest.groupId
+                            groupId: fetchRequest.groupId,
+                            sharedWith: fetchRequest.sharedWith
                         )
                     }
                 }

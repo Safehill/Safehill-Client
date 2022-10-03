@@ -17,9 +17,9 @@ public protocol SHAssetDownloaderDelegate {
 public protocol SHOutboundAssetOperationDelegate {}
 
 public protocol SHAssetFetcherDelegate: SHOutboundAssetOperationDelegate {
-    func didStartFetching(itemWithLocalIdentifier: String, groupId: String)
-    func didCompleteFetching(itemWithLocalIdentifier: String, groupId: String)
-    func didFailFetching(itemWithLocalIdentifier: String, groupId: String)
+    func didStartFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didCompleteFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didFailFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
 }
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
