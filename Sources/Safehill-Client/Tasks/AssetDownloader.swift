@@ -151,15 +151,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 let descriptorsForAssetsToDownload = descriptors.filter {
                     globalIdentifiersToDownload.contains($0.globalIdentifier)
                 }
-                let descriptorsForAssetsNotToDownload = descriptors.filter {
-                    globalIdentifiersNotReadyForDownload.contains($0.globalIdentifier)
-                }
+                
+                let start = CFAbsoluteTimeGetCurrent()
                 
                 // Call the delegate for assets that will be downloaded using Assets with empty data, created based on their descriptor
                 self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsToDownload)
 
-                // Call the delegate for assets that won't be downloaded (as they are still being uploaded on the other side)
-                self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsNotToDownload)
+                // DO NOT call the delegate for assets that won't be downloaded (as they are still being uploaded on the other side)
                 
                 // Create items in the DownloadQueue, one per descriptor
                 for newDescriptor in descriptorsForAssetsToDownload {
@@ -183,6 +181,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 }
                 completionHandler(.success(()))
                 
+                let end = CFAbsoluteTimeGetCurrent()
+                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
+                
             case .failure(let err):
                 self.log.error("Unable to download descriptors from server: \(err.localizedDescription)")
                 completionHandler(.failure(err))
@@ -200,6 +201,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                         break
                     }
                 }
+                
+                let start = CFAbsoluteTimeGetCurrent()
                 
                 log.info("downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
@@ -222,8 +225,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 var lowResErrorsByAssetId = [String: Error](), hiResErrorsByAssetId = [String: Error]()
                 let group = AsyncGroup()
                 
+                let startLowRes = CFAbsoluteTimeGetCurrent()
+                var endLowRes: CFAbsoluteTime? = nil
+                
                 group.enter()
-                log.info("downloading assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.lowResolution.rawValue)")
+                log.info("downloading low res assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.lowResolution.rawValue)")
                 serverProxy.getAssets(
                     withGlobalIdentifiers: globalIdentifiersToDownload,
                     versions: [.lowResolution],
@@ -249,17 +255,21 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                 }
                             }
                         }
-                        group.leave()
                     case .failure(let err):
                         print("Unable to download assets \(globalIdentifiersToDownload) version \(SHAssetQuality.lowResolution.rawValue) from server: \(err)")
                         for assetId in globalIdentifiersToDownload {
                             lowResErrorsByAssetId[assetId] = err
                         }
                     }
+                    group.leave()
+                    endLowRes = CFAbsoluteTimeGetCurrent()
                 }
                 
+                let startHiRes = CFAbsoluteTimeGetCurrent()
+                var endHiRes: CFAbsoluteTime? = nil
+                
                 group.enter()
-                log.info("downloading assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.hiResolution.rawValue)")
+                log.info("downloading hi res assets with identifiers \(globalIdentifiersToDownload) version \(SHAssetQuality.hiResolution.rawValue)")
                 serverProxy.getAssets(
                     withGlobalIdentifiers: globalIdentifiersToDownload,
                     versions: [.hiResolution],
@@ -286,13 +296,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                                 }
                             }
                         }
-                        group.leave()
                     case .failure(let err):
                         print("Unable to download assets \(globalIdentifiersToDownload) version \(SHAssetQuality.hiResolution.rawValue) from server: \(err)")
                         for assetId in globalIdentifiersToDownload {
                             hiResErrorsByAssetId[assetId] = err
                         }
                     }
+                    group.leave()
+                    endHiRes = CFAbsoluteTimeGetCurrent()
                 }
                 
                 let dispatchResult = group.wait()
@@ -311,6 +322,15 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 }
                 
                 self.delegate.didCompleteDownload(of: globalIdentifiersToDownload)
+                
+                let end = CFAbsoluteTimeGetCurrent()
+                log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to download asset in total")
+                if let endLowRes = endLowRes {
+                    log.debug("[PERF] \(CFAbsoluteTime(endLowRes - startLowRes)) for the low res")
+                }
+                if let endHiRes = endHiRes {
+                    log.debug("[PERF] \(CFAbsoluteTime(endHiRes - startHiRes)) for the hi res")
+                }
                 
                 do { _ = try DownloadQueue.dequeue() }
                 catch {
@@ -381,7 +401,7 @@ public class SHAssetsDownloadQueueProcessor : SHOperationQueueProcessor<SHDownlo
     
     public static var shared = SHAssetsDownloadQueueProcessor(
         delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 5
+        dispatchIntervalInSeconds: 15
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {
