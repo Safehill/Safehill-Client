@@ -4,7 +4,7 @@ import os
 internal let log = Logger(subsystem: "com.gf.safehill", category: "SafehillClient")
 
 public let kSHLowResPictureSize = CGSize(width: 480.0, height: 480.0)
-public let kSHHiResPictureSize = CGSize(width: 1920.0, height: 1920.0)
+public let kSHHiResPictureSize = CGSize(width: 2400.0, height: 2400.0)
 public let kSHFullResPictureSize: CGSize? = nil
 
 
