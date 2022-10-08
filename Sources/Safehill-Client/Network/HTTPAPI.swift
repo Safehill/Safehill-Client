@@ -21,10 +21,11 @@ public class SHNetwork {
     }
     
     internal func setSpeed(bytesPerSecond: Double) {
+        /// HEURISTICS on network speed
         /// Optimistic approximation of actual network speed calculated on small payloads
         /// On relatively fast connections, the speed calculated on a small payload is far lower
         /// than the peak speed uploading a large file once the connection has been established
-        self._bytesPerSecond = bytesPerSecond * 12
+        self._bytesPerSecond = bytesPerSecond * 17
     }
 }
 
