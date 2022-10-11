@@ -11,6 +11,7 @@ public protocol SHAssetDownloaderDelegate {
     func handleLowResAssetResults(for: [SHDecryptedAsset])
     func handleHiResAssetResults(for: [SHDecryptedAsset])
     func markLocalAssetsAsDownloaded(descriptorsByLocalIdentifier: [String: SHAssetDescriptor])
+    func noLocalAssetsInTheCloud() -> Void
     func completionHandler(_: Swift.Result<Void, Error>) -> Void
 }
 

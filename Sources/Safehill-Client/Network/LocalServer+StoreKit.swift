@@ -31,8 +31,24 @@ public enum SHStoreKitHandlerError: Error, LocalizedError {
     }
 }
 
-public let SHIAPProductIds = Set(["safehill.subscription.basic", "safehill.subscription.premium", "safehill.subscription.professional"])
+public enum SHIAPProduct {
+    case free, monthlyBasic, monthlyPremium, monthlyPro
+}
+
+public let SHIAPProductIds = [
+    "safehill.subscription.basic": SHIAPProduct.monthlyBasic,
+    "safehill.subscription.premium": SHIAPProduct.monthlyPremium,
+    "safehill.subscription.professional": SHIAPProduct.monthlyPro
+]
 public let SHIAPSharedSecret = "92267f6120324e16b1cf9b52c5ea26e7"
+
+public let SHIAPProductLimits = [
+    SHIAPProduct.free: 10,
+    SHIAPProduct.monthlyBasic: 1000,
+    SHIAPProduct.monthlyPremium: 25000,
+    SHIAPProduct.monthlyPro: 1000000
+]
+
 
 // MARK: - IAP API DTOs
 

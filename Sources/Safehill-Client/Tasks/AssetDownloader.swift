@@ -121,14 +121,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 var globalIdentifiersNotReadyForDownload = [String]()
                 var descriptorsByLocalIdentifier = [String: SHAssetDescriptor]()
                 for descriptor in descriptors {
-                    guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
-                        continue
-                    }
-                    
                     if let localIdentifier = descriptor.localIdentifier,
                        existingLocalIdentifiers.contains(localIdentifier) {
                         descriptorsByLocalIdentifier[localIdentifier] = descriptor
                     } else {
+                        guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
+                            continue
+                        }
+                        
                         if descriptor.uploadState == .completed {
                             globalIdentifiersToDownload.append(descriptor.globalIdentifier)
                         } else {
@@ -139,6 +139,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 
                 if descriptorsByLocalIdentifier.count > 0 {
                     self.delegate.markLocalAssetsAsDownloaded(descriptorsByLocalIdentifier: descriptorsByLocalIdentifier)
+                } else {
+                    self.delegate.noLocalAssetsInTheCloud()
                 }
                 
                 if globalIdentifiersToDownload.count == 0 {
