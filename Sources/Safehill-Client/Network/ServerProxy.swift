@@ -386,6 +386,7 @@ public struct SHServerProxy {
 extension SHServerProxy {
     public func validateTransaction(originalTransactionId: String,
                                     receipt: String,
+                                    productId: String,
                                     completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()) {
         let group = AsyncGroup()
         var localResult: Result<SHReceiptValidationResponse, Error>? = nil
@@ -393,14 +394,16 @@ extension SHServerProxy {
         
         group.enter()
         self.localServer.validateTransaction(originalTransactionId: originalTransactionId,
-                                             receipt: receipt) { result in
+                                             receipt: receipt,
+                                             productId: productId) { result in
             localResult = result
             group.leave()
         }
         
         group.enter()
         self.remoteServer.validateTransaction(originalTransactionId: originalTransactionId,
-                                              receipt: receipt) { result in
+                                              receipt: receipt,
+                                              productId: productId) { result in
             serverResult = result
             group.leave()
         }

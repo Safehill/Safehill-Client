@@ -118,10 +118,12 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - originalTransactionId: the unique identifier for the transaction
     ///   - receipt: the base64 encoded receipt for the purchases made by this app
+    ///   - productId: the identifier of the current subscription known by the client
     ///   - completionHandler: the callback method. Returns a `SHReceiptValidationResponse` object
     func validateTransaction(
         originalTransactionId: String,
         receipt: String,
+        productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     )
 }

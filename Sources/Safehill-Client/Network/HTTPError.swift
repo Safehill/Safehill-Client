@@ -39,6 +39,8 @@ public enum SHHTTPError {
                 return message
             case .unauthorized:
                 return "401 Unauthorized"
+            case .conflict:
+                return "409 Conflict"
             case .paymentRequired:
                 return "402 PaymentRequired"
             default:

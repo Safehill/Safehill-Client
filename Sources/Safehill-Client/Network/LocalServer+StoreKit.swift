@@ -200,6 +200,7 @@ extension LocalServer {
     func validateTransaction(
         originalTransactionId: String,
         receipt: String,
+        productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     ) {
         self.validate(receipt: receipt, against: SHIAPVerifyReceiptURLProd) { result in

@@ -151,6 +151,9 @@ struct SHServerHTTPAPI : SHServerAPI {
             case 401:
                 completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
                 return
+            case 402:
+                completionHandler(.failure(SHHTTPError.ClientError.paymentRequired))
+                return
             case 404:
                 completionHandler(.failure(SHHTTPError.ClientError.notFound))
                 return
@@ -685,11 +688,13 @@ struct SHServerHTTPAPI : SHServerAPI {
     func validateTransaction(
         originalTransactionId: String,
         receipt: String,
+        productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     ) {
         let parameters = [
             "originalTransactionId": originalTransactionId,
-            "receipt": receipt
+            "receipt": receipt,
+            "productId": productId
         ] as [String : Any]
         self.post("purchases/apple/subscription", parameters: parameters) { (result: Result<SHReceiptValidationResponse, Error>) in
             switch result {
