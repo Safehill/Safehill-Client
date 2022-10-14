@@ -33,7 +33,11 @@ public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
 public protocol SHAssetUploaderDelegate: SHOutboundAssetOperationDelegate {
     func didStartUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
     func didCompleteUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didFailUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, sharedWith users: [SHServerUser])
+    func didFailUpload(itemWithLocalIdentifier: String,
+                       globalIdentifier: String,
+                       groupId: String,
+                       sharedWith users: [SHServerUser],
+                       error: Error)
 }
 
 

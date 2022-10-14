@@ -155,7 +155,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                              globalIdentifier: String,
                              groupId: String,
                              eventOriginator: SHServerUser,
-                             sharedWith: [SHServerUser]) throws {
+                             sharedWith: [SHServerUser],
+                             error: Error) throws {
         // Enquque to failed
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
@@ -189,7 +190,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     itemWithLocalIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
                     groupId: groupId,
-                    sharedWith: sharedWith
+                    sharedWith: sharedWith,
+                    error: error
                 )
             }
         }
@@ -322,7 +324,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
                                               eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith)
+                                              sharedWith: uploadRequest.sharedWith,
+                                              error: error)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                         // TODO: Handle
@@ -337,7 +340,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
                                               eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith)
+                                              sharedWith: uploadRequest.sharedWith,
+                                              error: SHBackgroundOperationError.globalIdentifierDisagreement)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                         // TODO: Handle
@@ -352,7 +356,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                           globalIdentifier: globalIdentifier,
                                           groupId: uploadRequest.groupId,
                                           eventOriginator: uploadRequest.eventOriginator,
-                                          sharedWith: uploadRequest.sharedWith)
+                                          sharedWith: uploadRequest.sharedWith,
+                                          error: SHBackgroundOperationError.fatalError("simulated error"))
                     
                     continue
                 }
@@ -369,7 +374,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
                                               eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith)
+                                              sharedWith: uploadRequest.sharedWith,
+                                              error: error)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                         // TODO: Handle
@@ -383,7 +389,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
                                               eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith)
+                                              sharedWith: uploadRequest.sharedWith,
+                                              error: SHBackgroundOperationError.globalIdentifierDisagreement)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                         // TODO: Handle
@@ -398,7 +405,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                           globalIdentifier: globalIdentifier,
                                           groupId: uploadRequest.groupId,
                                           eventOriginator: uploadRequest.eventOriginator,
-                                          sharedWith: uploadRequest.sharedWith)
+                                          sharedWith: uploadRequest.sharedWith,
+                                          error: SHBackgroundOperationError.fatalError("simlated error"))
                     
                     try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
                     
@@ -419,7 +427,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                                               globalIdentifier: globalIdentifier,
                                               groupId: uploadRequest.groupId,
                                               eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith)
+                                              sharedWith: uploadRequest.sharedWith,
+                                              error: error)
                     } catch {
                         log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                         // TODO: Handle
