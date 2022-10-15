@@ -1,9 +1,34 @@
 import Photos
+import Safehill_Crypto
 #if os(iOS)
 import UIKit
 #endif
 
 public extension PHAsset {
+    
+    func globalIdentifier(using imageManager: PHImageManager? = nil) throws -> String{
+        var error: Error? = nil
+        var data: Data? = nil
+        self.data(forSize: CGSize(width: 320.0, height: 320.0),
+                  usingImageManager: imageManager ?? PHImageManager(),
+                  synchronousFetch: true) { result in
+            switch result {
+            case .success(let d):
+                data = d
+            case .failure(let err):
+                error = err
+            }
+        }
+        guard error == nil else {
+            throw error!
+        }
+        guard let data = data else {
+            throw SHBackgroundOperationError.unexpectedData(nil)
+        }
+        let hash = SHHash.stringDigest(for: data)
+        return hash
+    }
+    
     /// Get the asset data from a lazy-loaded PHAsset object
     /// - Parameters:
     ///   - asset: the PHAsset object
