@@ -1,9 +1,3 @@
-//
-//  AssetDownloader.swift
-//  Safehill-Client
-//
-//  Created by Gennaro Frazzingaro on 9/12/21.
-//
 
 import Foundation
 import Safehill_Crypto

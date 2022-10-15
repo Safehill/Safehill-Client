@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Gennaro on 04/12/21.
-//
-
 import Foundation
 
 public enum SHHTTPError {

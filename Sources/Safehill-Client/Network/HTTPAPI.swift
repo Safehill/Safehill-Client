@@ -1,10 +1,3 @@
-//
-//  HTTPAPI.swift
-//  
-//
-//  Created by Gennaro on 06/11/21.
-//
-
 import Foundation
 import KnowledgeBase
 import Async

@@ -1,10 +1,3 @@
-//
-//  PaginatedSearchResult.swift
-//  
-//
-//  Created by Gennaro on 06/05/22.
-//
-
 import Foundation
 
 public struct SHPageMetadata : Decodable {
