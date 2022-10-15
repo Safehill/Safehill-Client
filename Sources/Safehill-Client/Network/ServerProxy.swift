@@ -276,6 +276,12 @@ public struct SHServerProxy {
                                         versions: versions) { serverResult in
                 switch serverResult {
                 case .success(let assetsDict):
+                    guard assetsDict.count > 0 else {
+                        log.error("No assets with globalIdentifiers \(assetIdentifiersToFetch)")
+                        completionHandler(.success(localDictionary))
+                        return
+                    }
+                    
                     ///
                     /// Save retrieved assets to local server (cache)
                     ///
