@@ -38,9 +38,7 @@ extension KBPhotoAsset {
     
     /// This operation is expensive if the asset is not cached. Use it carefully
     func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
-        let data = try self.getCachedData(using: imageManager, forSize: kSHFullResPictureSize)
-        let hash = SHHash.stringDigest(for: data)
-        return hash
+        return try self.phAsset.globalIdentifier(using: imageManager)
     }
 }
 

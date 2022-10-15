@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Gennaro on 04/12/21.
-//
-
 import Foundation
 
 public enum SHHTTPError {
@@ -39,6 +32,8 @@ public enum SHHTTPError {
                 return message
             case .unauthorized:
                 return "401 Unauthorized"
+            case .conflict:
+                return "409 Conflict"
             case .paymentRequired:
                 return "402 PaymentRequired"
             default:

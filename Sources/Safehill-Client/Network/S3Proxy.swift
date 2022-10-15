@@ -1,10 +1,3 @@
-//
-//  S3Proxy.swift
-//  
-//
-//  Created by Gennaro on 21/12/21.
-//
-
 import Foundation
 
 public enum S3HTTPMethod: String {

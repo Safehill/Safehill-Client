@@ -31,8 +31,24 @@ public enum SHStoreKitHandlerError: Error, LocalizedError {
     }
 }
 
-public let SHIAPProductIds = Set(["safehill.subscription.basic", "safehill.subscription.premium", "safehill.subscription.professional"])
+public enum SHIAPProduct {
+    case free, monthlyBasic, monthlyPremium, monthlyPro
+}
+
+public let SHIAPProductIds = [
+    "safehill.subscription.basic": SHIAPProduct.monthlyBasic,
+    "safehill.subscription.premium": SHIAPProduct.monthlyPremium,
+    "safehill.subscription.professional": SHIAPProduct.monthlyPro
+]
 public let SHIAPSharedSecret = "92267f6120324e16b1cf9b52c5ea26e7"
+
+public let SHIAPProductLimits = [
+    SHIAPProduct.free: 10,
+    SHIAPProduct.monthlyBasic: 1000,
+    SHIAPProduct.monthlyPremium: 25000,
+    SHIAPProduct.monthlyPro: 1000000
+]
+
 
 // MARK: - IAP API DTOs
 
@@ -71,8 +87,24 @@ struct ValidateReceiptResponse: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         status = try container.decode(Int.self, forKey: .status)
         environment = try? container.decode(String.self, forKey: .environment)
-        latestReceiptInfo = (try? container.decode([LatestReceiptInfo].self, forKey: .latestReceiptInfo)) ?? []
-        pendingRenewalInfo = (try? container.decode([PendingRenewalInfo].self, forKey: .pendingRenewalInfo)) ?? []
+        guard status != 21007 else {
+            latestReceiptInfo = []
+            pendingRenewalInfo = []
+            return
+        }
+        do {
+            latestReceiptInfo = try container.decode([LatestReceiptInfo].self, forKey: .latestReceiptInfo)
+        } catch {
+            log.error("unable to parse latestReceiptInfo: \(error)")
+            latestReceiptInfo = []
+        }
+        do {
+            pendingRenewalInfo = try container.decode([PendingRenewalInfo].self, forKey: .pendingRenewalInfo)
+        } catch {
+            log.error("unable to parse pendingRenewalInfo: \(error)")
+            pendingRenewalInfo = []
+        }
+        print(pendingRenewalInfo)
     }
 }
 
@@ -169,8 +201,12 @@ struct PendingRenewalInfo: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         autoRenewProductId = try container.decode(String.self, forKey: .autoRenewProductId)
         originalTransactionId = try container.decode(String.self, forKey: .originalTransactionId)
-        autoRenewStatus = Int(try container.decode(String.self, forKey: .autoRenewStatus)) ?? 0
-        isInBillingRetryPeriod = Bool(try container.decode(String.self, forKey: .isInBillingRetryPeriod)) ?? false
+        autoRenewStatus = Int(try container.decode(String.self, forKey: .autoRenewStatus)) ?? 1
+        do {
+            isInBillingRetryPeriod = Bool(try container.decode(String.self, forKey: .isInBillingRetryPeriod)) ?? false
+        } catch {
+            isInBillingRetryPeriod = false
+        }
     }
 }
 
@@ -184,6 +220,7 @@ extension LocalServer {
     func validateTransaction(
         originalTransactionId: String,
         receipt: String,
+        productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     ) {
         self.validate(receipt: receipt, against: SHIAPVerifyReceiptURLProd) { result in

@@ -54,7 +54,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
     }
     
-    internal static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
+    public static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
         return (
             assetId + "+" +
             groupId + "+" +

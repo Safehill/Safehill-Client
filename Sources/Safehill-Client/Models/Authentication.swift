@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Gennaro on 02/12/21.
-//
-
 import Foundation
 
 public typealias BearerToken = String

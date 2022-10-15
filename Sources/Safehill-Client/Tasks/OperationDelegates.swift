@@ -11,15 +11,16 @@ public protocol SHAssetDownloaderDelegate {
     func handleLowResAssetResults(for: [SHDecryptedAsset])
     func handleHiResAssetResults(for: [SHDecryptedAsset])
     func markLocalAssetsAsDownloaded(descriptorsByLocalIdentifier: [String: SHAssetDescriptor])
+    func noLocalAssetsInTheCloud() -> Void
     func completionHandler(_: Swift.Result<Void, Error>) -> Void
 }
 
 public protocol SHOutboundAssetOperationDelegate {}
 
 public protocol SHAssetFetcherDelegate: SHOutboundAssetOperationDelegate {
-    func didStartFetching(itemWithLocalIdentifier: String, groupId: String)
-    func didCompleteFetching(itemWithLocalIdentifier: String, groupId: String)
-    func didFailFetching(itemWithLocalIdentifier: String, groupId: String)
+    func didStartFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didCompleteFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didFailFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
 }
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
@@ -32,7 +33,11 @@ public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
 public protocol SHAssetUploaderDelegate: SHOutboundAssetOperationDelegate {
     func didStartUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
     func didCompleteUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didFailUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, sharedWith users: [SHServerUser])
+    func didFailUpload(itemWithLocalIdentifier: String,
+                       globalIdentifier: String,
+                       groupId: String,
+                       sharedWith users: [SHServerUser],
+                       error: Error)
 }
 
 

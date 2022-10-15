@@ -1,10 +1,3 @@
-//
-//  User.swift
-//  
-//
-//  Created by Gennaro Frazzingaro on 9/22/21.
-//
-
 import Foundation
 import Safehill_Crypto
 

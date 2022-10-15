@@ -1,10 +1,3 @@
-//
-//  HTTPAPI.swift
-//  
-//
-//  Created by Gennaro on 06/11/21.
-//
-
 import Foundation
 import KnowledgeBase
 import Async
@@ -21,10 +14,11 @@ public class SHNetwork {
     }
     
     internal func setSpeed(bytesPerSecond: Double) {
+        /// HEURISTICS on network speed
         /// Optimistic approximation of actual network speed calculated on small payloads
         /// On relatively fast connections, the speed calculated on a small payload is far lower
         /// than the peak speed uploading a large file once the connection has been established
-        self._bytesPerSecond = bytesPerSecond * 12
+        self._bytesPerSecond = bytesPerSecond * 17
     }
 }
 
@@ -149,6 +143,9 @@ struct SHServerHTTPAPI : SHServerAPI {
                 break
             case 401:
                 completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+                return
+            case 402:
+                completionHandler(.failure(SHHTTPError.ClientError.paymentRequired))
                 return
             case 404:
                 completionHandler(.failure(SHHTTPError.ClientError.notFound))
@@ -471,7 +468,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 for asset in assets {
                     for version in asset.versions {
                         group.enter()
-                        log.info("uploading asset \(asset.globalIdentifier) version \(version.versionName)")
+                        log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
@@ -684,11 +681,13 @@ struct SHServerHTTPAPI : SHServerAPI {
     func validateTransaction(
         originalTransactionId: String,
         receipt: String,
+        productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     ) {
         let parameters = [
             "originalTransactionId": originalTransactionId,
-            "receipt": receipt
+            "receipt": receipt,
+            "productId": productId
         ] as [String : Any]
         self.post("purchases/apple/subscription", parameters: parameters) { (result: Result<SHReceiptValidationResponse, Error>) in
             switch result {

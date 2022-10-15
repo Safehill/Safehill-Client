@@ -276,6 +276,12 @@ public struct SHServerProxy {
                                         versions: versions) { serverResult in
                 switch serverResult {
                 case .success(let assetsDict):
+                    guard assetsDict.count > 0 else {
+                        log.error("No assets with globalIdentifiers \(assetIdentifiersToFetch)")
+                        completionHandler(.success(localDictionary))
+                        return
+                    }
+                    
                     ///
                     /// Save retrieved assets to local server (cache)
                     ///
@@ -386,6 +392,7 @@ public struct SHServerProxy {
 extension SHServerProxy {
     public func validateTransaction(originalTransactionId: String,
                                     receipt: String,
+                                    productId: String,
                                     completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()) {
         let group = AsyncGroup()
         var localResult: Result<SHReceiptValidationResponse, Error>? = nil
@@ -393,14 +400,16 @@ extension SHServerProxy {
         
         group.enter()
         self.localServer.validateTransaction(originalTransactionId: originalTransactionId,
-                                             receipt: receipt) { result in
+                                             receipt: receipt,
+                                             productId: productId) { result in
             localResult = result
             group.leave()
         }
         
         group.enter()
         self.remoteServer.validateTransaction(originalTransactionId: originalTransactionId,
-                                              receipt: receipt) { result in
+                                              receipt: receipt,
+                                              productId: productId) { result in
             serverResult = result
             group.leave()
         }
