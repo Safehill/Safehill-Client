@@ -16,4 +16,5 @@ public enum SHBackgroundOperationError : Error {
     case unexpectedData(Any?)
     case fatalError(String)
     case timedOut
+    case globalIdentifierDisagreement
 }

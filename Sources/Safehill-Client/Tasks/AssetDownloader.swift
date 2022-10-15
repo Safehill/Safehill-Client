@@ -403,7 +403,7 @@ public class SHAssetsDownloadQueueProcessor : SHOperationQueueProcessor<SHDownlo
     
     public static var shared = SHAssetsDownloadQueueProcessor(
         delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 2
+        dispatchIntervalInSeconds: 8
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {
