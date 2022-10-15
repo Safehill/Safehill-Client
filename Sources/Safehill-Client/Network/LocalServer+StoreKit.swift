@@ -87,8 +87,24 @@ struct ValidateReceiptResponse: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         status = try container.decode(Int.self, forKey: .status)
         environment = try? container.decode(String.self, forKey: .environment)
-        latestReceiptInfo = (try? container.decode([LatestReceiptInfo].self, forKey: .latestReceiptInfo)) ?? []
-        pendingRenewalInfo = (try? container.decode([PendingRenewalInfo].self, forKey: .pendingRenewalInfo)) ?? []
+        guard status != 21007 else {
+            latestReceiptInfo = []
+            pendingRenewalInfo = []
+            return
+        }
+        do {
+            latestReceiptInfo = try container.decode([LatestReceiptInfo].self, forKey: .latestReceiptInfo)
+        } catch {
+            log.error("unable to parse latestReceiptInfo: \(error)")
+            latestReceiptInfo = []
+        }
+        do {
+            pendingRenewalInfo = try container.decode([PendingRenewalInfo].self, forKey: .pendingRenewalInfo)
+        } catch {
+            log.error("unable to parse pendingRenewalInfo: \(error)")
+            pendingRenewalInfo = []
+        }
+        print(pendingRenewalInfo)
     }
 }
 
@@ -185,8 +201,12 @@ struct PendingRenewalInfo: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         autoRenewProductId = try container.decode(String.self, forKey: .autoRenewProductId)
         originalTransactionId = try container.decode(String.self, forKey: .originalTransactionId)
-        autoRenewStatus = Int(try container.decode(String.self, forKey: .autoRenewStatus)) ?? 0
-        isInBillingRetryPeriod = Bool(try container.decode(String.self, forKey: .isInBillingRetryPeriod)) ?? false
+        autoRenewStatus = Int(try container.decode(String.self, forKey: .autoRenewStatus)) ?? 1
+        do {
+            isInBillingRetryPeriod = Bool(try container.decode(String.self, forKey: .isInBillingRetryPeriod)) ?? false
+        } catch {
+            isInBillingRetryPeriod = false
+        }
     }
 }
 
