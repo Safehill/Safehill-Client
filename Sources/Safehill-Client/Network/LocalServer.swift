@@ -1,6 +1,8 @@
 import Foundation
 import KnowledgeBase
 
+public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
+
 let userStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.users")
 let assetStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.assets")
 

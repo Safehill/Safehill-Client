@@ -111,7 +111,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+        let dispatchResult = group.wait(timeout: .now() + .seconds(30))
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }

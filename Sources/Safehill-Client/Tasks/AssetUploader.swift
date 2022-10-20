@@ -68,7 +68,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
         
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut

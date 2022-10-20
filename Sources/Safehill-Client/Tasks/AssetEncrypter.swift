@@ -435,7 +435,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     group.leave()
                 }
                 
-                let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
                 guard dispatchResult == .success, error == nil else {
                     log.error("failed to store data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
                     
