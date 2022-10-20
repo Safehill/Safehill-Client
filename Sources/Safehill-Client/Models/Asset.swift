@@ -148,7 +148,6 @@ public protocol SHDecryptedAsset {
     var localIdentifier: String? { get set }
     var decryptedData: Data { get }
     var creationDate: Date? { get }
-    var groupId: String { get }
 }
 
 public struct SHGenericDecryptedAsset : SHDecryptedAsset {
@@ -156,7 +155,6 @@ public struct SHGenericDecryptedAsset : SHDecryptedAsset {
     public var localIdentifier: String?
     public let decryptedData: Data
     public let creationDate: Date?
-    public let groupId: String
 }
 
 /// Safehill Server description of a version associated with an asset
@@ -270,7 +268,7 @@ public protocol SHShareableEncryptedAssetVersion {
 public protocol SHShareableEncryptedAsset {
     var globalIdentifier: String { get }
     var sharedVersions: [SHShareableEncryptedAssetVersion] { get }
-    var groupId: String { get }
+    var groupId: String { get }
 }
 
 public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
@@ -435,8 +433,7 @@ extension SHLocalUser {
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
             decryptedData: decryptedData,
-            creationDate: asset.creationDate,
-            groupId: asset.groupId
+            creationDate: asset.creationDate
         )
     }
 }

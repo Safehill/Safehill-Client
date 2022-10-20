@@ -395,8 +395,6 @@ struct LocalServer : SHServerAPI {
                     "applePhotosAssetIdentifier": asset.localIdentifier,
                     "encryptedData": encryptedVersion.encryptedData,
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret,
-                    "groupId": asset.groupId,
-                    "groupCreationDate": Date().iso8601withFractionalSeconds, // TODO: Should this be the creation value we get from the server?
                     "publicKey": encryptedVersion.publicKeyData,
                     "publicSignature": encryptedVersion.publicSignatureData,
                     "creationDate": asset.creationDate,
