@@ -1,7 +1,6 @@
 import Foundation
 import os
 import KnowledgeBase
-import Async
 
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -52,7 +51,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         var asset: SHEncryptedAsset? = nil
         var error: Error? = nil
         
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         group.enter()
         self.serverProxy.getLocalAssets(withGlobalIdentifiers: [globalIdentifier],
                                         versions: nil /* all versions */) { result in
@@ -69,9 +68,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        let dispatchResult = group.wait()
+        let dispatchResult = group.wait(timeout: .now() + .seconds(15))
         
-        guard dispatchResult != .timedOut else {
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         
@@ -86,7 +85,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         var serverAsset: SHServerAsset? = nil
         var error: Error? = nil
         
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         self.serverProxy.create(asset: asset) { result in
@@ -99,8 +98,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         
@@ -114,7 +113,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     private func upload(serverAsset: SHServerAsset,
                         asset: SHEncryptedAsset) throws {
         var error: Error? = nil
-        let group = AsyncGroup()
+        
+        let group = DispatchGroup()
         group.enter()
         self.serverProxy.upload(serverAsset: serverAsset, asset: asset) { result in
             if case .failure(let err) = result {
@@ -122,9 +122,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             }
             group.leave()
         }
-        let dispatchResult = group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
         
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHUploadTimeoutInMilliseconds))
+        
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         
@@ -136,7 +137,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     private func deleteAssetFromServer(globalIdentifier: String) throws {
         log.info("deleting asset \(globalIdentifier) from server")
         
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         group.enter()
         self.serverProxy.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
             if case .failure(let err) = result {
@@ -144,9 +145,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             }
             group.leave()
         }
-        let dispatchResult = group.wait()
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
         
-        guard dispatchResult != .timedOut else {
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
     }

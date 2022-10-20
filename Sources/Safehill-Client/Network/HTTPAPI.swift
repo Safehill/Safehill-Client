@@ -1,6 +1,5 @@
 import Foundation
 import KnowledgeBase
-import Async
 import Safehill_Crypto
 import CryptoKit
 
@@ -22,6 +21,7 @@ public class SHNetwork {
     }
 }
 
+public let SHDefaultNetworkTimeoutInMilliseconds = 30000 // 30 seconds
 public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
 public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
 
@@ -463,7 +463,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 var dictionary = [String: SHEncryptedAsset]()
                 var errors = [String: Error]()
                 
-                let group = AsyncGroup()
+                let group = DispatchGroup()
                 
                 for asset in assets {
                     for version in asset.versions {
@@ -482,9 +482,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                     }
                 }
                 
-                let dispatchResult = group.wait(seconds: Double(SHDownloadTimeoutInMilliseconds / 1000))
-                
-                guard dispatchResult != .timedOut else {
+                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds * asset.versions.count))
+                guard dispatchResult == .success else {
                     return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
                 }
                 
@@ -604,7 +603,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                                        qos: .background)
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         for encryptedAssetVersion in asset.encryptedVersions {
             group.enter()
@@ -646,7 +645,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        group.wait(seconds: Double(SHUploadTimeoutInMilliseconds/1000))
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHUploadTimeoutInMilliseconds * asset.encryptedVersions.count))
+        guard dispatchResult == .success else {
+            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+        }
         
         writeQueue.sync {
             for (version, result) in results {

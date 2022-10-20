@@ -3,7 +3,6 @@ import Safehill_Crypto
 import KnowledgeBase
 import Photos
 import os
-import Async
 import CryptoKit
 
 
@@ -423,7 +422,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                 }
                 
                 var error: Error? = nil
-                let group = AsyncGroup()
+                let group = DispatchGroup()
                 
                 log.info("storing asset \(encryptedAsset.localIdentifier ?? encryptedAsset.globalIdentifier) versions in local server proxy")
                 
@@ -436,8 +435,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
                     group.leave()
                 }
                 
-                let dispatchResult = group.wait()
-                guard dispatchResult != .timedOut, error == nil else {
+                let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+                guard dispatchResult == .success, error == nil else {
                     log.error("failed to store data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
                     
                     do {

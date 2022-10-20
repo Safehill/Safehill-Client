@@ -1,5 +1,4 @@
 import Foundation
-import Async
 
 public struct SHServerProxy {
     
@@ -394,7 +393,7 @@ extension SHServerProxy {
                                     receipt: String,
                                     productId: String,
                                     completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()) {
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         var localResult: Result<SHReceiptValidationResponse, Error>? = nil
         var serverResult: Result<SHReceiptValidationResponse, Error>? = nil
         
@@ -414,8 +413,8 @@ extension SHServerProxy {
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .seconds(SHDefaultNetworkTimeoutInMilliseconds * 2))
+        guard dispatchResult == .success else {
             return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
         }
         

@@ -17,8 +17,7 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         .package(name: "Safehill-Crypto", path: "../Safehill-Crypto"),
-        .package(name: "KnowledgeBase", path: "../KnowledgeBase/KnowledgeBase"),
-        .package(url: "https://github.com/duemunk/Async", from: "2.1.0"),
+        .package(name: "KnowledgeBase", path: "../KnowledgeBase/KnowledgeBase")
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -27,8 +26,7 @@ let package = Package(
             name: "Safehill-Client",
             dependencies: [
                 "Safehill-Crypto",
-                "KnowledgeBase",
-                "Async",
+                "KnowledgeBase"
             ]
         ),
         .testTarget(

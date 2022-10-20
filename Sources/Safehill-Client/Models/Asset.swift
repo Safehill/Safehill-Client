@@ -268,7 +268,7 @@ public protocol SHShareableEncryptedAssetVersion {
 public protocol SHShareableEncryptedAsset {
     var globalIdentifier: String { get }
     var sharedVersions: [SHShareableEncryptedAssetVersion] { get }
-    var groupId: String { get }
+    var groupId: String { get }
 }
 
 public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {

@@ -1,6 +1,5 @@
 import Foundation
 import KnowledgeBase
-import Async
 
 let userStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.users")
 let assetStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.assets")
@@ -115,7 +114,7 @@ struct LocalServer : SHServerAPI {
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         userStore.removeAll { result in
@@ -133,8 +132,8 @@ struct LocalServer : SHServerAPI {
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds * 2))
+        guard dispatchResult == .success else {
             return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
         }
         guard userRemovalError == nil else {

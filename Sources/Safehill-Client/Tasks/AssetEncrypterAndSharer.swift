@@ -1,7 +1,6 @@
 import Foundation
 import os
 import KnowledgeBase
-import Async
 import Safehill_Crypto
 
 
@@ -175,7 +174,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         let globalIdentifier = try asset.generateGlobalIdentifier(using: imageManager)
         
         var decryptedSecretData: Data? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         group.enter()
         self.serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
@@ -201,7 +200,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             group.leave()
         }
         
-        group.wait()
+        let dispatchResult = group.wait(timeout: .now() + .seconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHHTTPError.TransportError.timedOut
+        }
         
         guard let decryptedSecretData = decryptedSecretData else {
             log.error("failed to get shared secret for item \(item.identifier)")
@@ -245,7 +247,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
         
         var error: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         group.enter()
         serverProxy.shareAssetLocally(shareableEncryptedAsset) { result in
             if case .failure(let err) = result {
@@ -254,8 +256,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         guard error == nil else {
@@ -268,7 +270,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         via request: SHEncryptionForSharingRequestQueueItem
     ) throws {
         var error: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         group.enter()
         self.serverProxy.getLocalSharingInfo(
             forAssetIdentifier: encryptedAsset.globalIdentifier,
@@ -293,8 +295,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         guard error == nil else {

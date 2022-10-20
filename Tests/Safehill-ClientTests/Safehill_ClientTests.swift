@@ -2,7 +2,6 @@ import XCTest
 @testable import Safehill_Client
 @testable import Safehill_Crypto
 import CryptoKit
-import Async
 
 final class Safehill_ClientBaseUnitTests: XCTestCase {
     
@@ -186,7 +185,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
     override func setUpWithError() throws {
         // Create sender on the server
         var error: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         serverProxy.createUser(name: self.username) {
@@ -213,7 +212,8 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
                 group.leave()
             }
         }
-        group.wait()
+        
+        let _ = group.wait(timeout: .distantFuture)
         guard error == nil else {
             XCTFail(error!.localizedDescription)
             return
@@ -226,7 +226,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
     
     private func destroyUser() throws {
         var error: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         serverProxy.deleteAccount() { result in
@@ -235,7 +235,8 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             }
             group.leave()
         }
-        group.wait()
+        
+        let _ = group.wait(timeout: .distantFuture)
         guard error == nil else {
             XCTFail(error!.localizedDescription)
             return
@@ -248,7 +249,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         let sender = user.shUser
         let receiver = SHLocalCryptoUser()
         
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         var error: Error? = nil
         
         // Sender encrypts
@@ -270,7 +271,8 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
                 group.leave()
             }
         }
-        group.wait()
+        
+        let _ = group.wait(timeout: .distantFuture)
         guard error == nil else {
             XCTFail(error!.localizedDescription)
             return
@@ -298,7 +300,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             group.leave()
         }
         
-        group.wait()
+        let _ = group.wait(timeout: .distantFuture)
         guard error == nil else {
             XCTFail(error!.localizedDescription)
             return
@@ -363,8 +365,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             globalIdentifier: encryptedAsset.globalIdentifier,
             localIdentifier: encryptedAsset.localIdentifier,
             decryptedData: decryptedData,
-            creationDate: encryptedAsset.creationDate,
-            groupId: "group"
+            creationDate: encryptedAsset.creationDate
         )
     }
 }

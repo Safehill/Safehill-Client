@@ -3,7 +3,6 @@ import Safehill_Crypto
 import KnowledgeBase
 import Photos
 import os
-import Async
 
 open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
@@ -56,7 +55,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         let photoIndexer = KBPhotosIndexer()
         var kbPhotoAsset: KBPhotoAsset? = nil
         var error: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         photoIndexer.fetchCameraRollAssets(withFilters: [KBPhotosFilter.withLocalIdentifiers([localIdentifier])]) { result in
@@ -112,8 +111,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .seconds(15))
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         guard error == nil else {
