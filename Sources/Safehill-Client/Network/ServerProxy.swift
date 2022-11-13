@@ -486,6 +486,10 @@ public struct SHServerProxy {
         }
     }
     
+    public func deleteAllLocalAssets(completionHandler: @escaping (Swift.Result<[String], Error>) -> ()) {
+        self.localServer.deleteAllAssets(completionHandler: completionHandler)
+    }
+    
     public func shareAssetLocally(_ asset: SHShareableEncryptedAsset,
                                   completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.localServer.share(asset: asset) {

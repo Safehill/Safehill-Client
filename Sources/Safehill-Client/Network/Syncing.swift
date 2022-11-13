@@ -99,10 +99,8 @@ extension SHServerProxy {
                 if diff.stateDifferentOnServer.count > 0 {
                     // TODO: Do we need to mark things as failed/pending depending on state?
                 }
-                break
             case .failure(let err):
                 log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
-                break
             }
         }
     }

@@ -41,7 +41,7 @@ public final class SHDataRingBufferCache {
 /// Custom management of PHAsset high quality assets (5 max in memory)
 /// Low quality asset cache is managed by PHCachingImageManager
 ///
-public var SHLocalPHAssetHighQualityDataCache = SHDataRingBufferCache(count: 10)
+public var SHLocalPHAssetHighQualityDataCache = SHDataRingBufferCache(count: 5)
 ///
 /// Custom management of SHDecryptedAsset high quality assets (10 max in memory)
 /// Low quality asset cache are in the inMemoryCache

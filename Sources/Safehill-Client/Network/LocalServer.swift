@@ -134,6 +134,10 @@ struct LocalServer : SHServerAPI {
         self.deleteAccount(completionHandler: completionHandler)
     }
     
+    func deleteAllAssets(completionHandler: @escaping (Swift.Result<[String], Error>) -> ()) {
+        assetStore.removeAll(completionHandler: completionHandler)
+    }
+    
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
@@ -148,7 +152,7 @@ struct LocalServer : SHServerAPI {
         }
         
         group.enter()
-        assetStore.removeAll { result in
+        self.deleteAllAssets { result in
             if case .failure(let err) = result {
                 assetsRemovalError = err
             }
