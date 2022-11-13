@@ -2,17 +2,17 @@ import Foundation
 import os
 import KnowledgeBase
 
-open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
     public let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
     
-    public let limit: Int?
+    public let limit: Int
     public let user: SHLocalUser
     public var delegates: [SHOutboundAssetOperationDelegate]
     
     public init(user: SHLocalUser,
                 delegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil) {
+                limitPerRun limit: Int) {
         self.user = user
         self.limit = limit
         self.delegates = delegates
@@ -24,13 +24,13 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHUploadOperation(user: self.user,
-                                  delegates: self.delegates,
-                                  limitPerRun: self.limit)
+                          delegates: self.delegates,
+                          limitPerRun: self.limit)
     }
     
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
-            throw KBError.unexpectedData(item.content)
+            throw SHBackgroundOperationError.unexpectedData(item.content)
         }
         
         let unarchiver: NSKeyedUnarchiver
@@ -41,20 +41,20 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         guard let uploadRequest = unarchiver.decodeObject(of: SHUploadRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey) else {
-            throw KBError.unexpectedData(item)
+            throw SHBackgroundOperationError.unexpectedData(data)
         }
         
         return uploadRequest
     }
     
-    private func getLocalAsset(with globalIdentifier: String) throws -> SHEncryptedAsset {
-        var asset: SHEncryptedAsset? = nil
+    private func getLocalAsset(with globalIdentifier: String) throws -> any SHEncryptedAsset {
+        var asset: (any SHEncryptedAsset)? = nil
         var error: Error? = nil
         
         let group = DispatchGroup()
         group.enter()
         self.serverProxy.getLocalAssets(withGlobalIdentifiers: [globalIdentifier],
-                                        versions: nil /* all versions */) { result in
+                                        versions: SHAssetQuality.all) { result in
             switch result {
             case .success(let dict):
                 if let a = dict[globalIdentifier] {
@@ -81,17 +81,21 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         return asset!
     }
     
-    private func createServerAsset(_ asset: SHEncryptedAsset) throws -> SHServerAsset {
+    private func createRemoteAsset(_ asset: any SHEncryptedAsset, groupId: String) throws -> SHServerAsset {
         var serverAsset: SHServerAsset? = nil
         var error: Error? = nil
         
         let group = DispatchGroup()
         
         group.enter()
-        self.serverProxy.create(asset: asset) { result in
+        self.serverProxy.createRemoteAssets([asset], groupId: groupId) { result in
             switch result {
-            case .success(let obj):
-                serverAsset = obj
+            case .success(let serverAssets):
+                if serverAssets.count == 1 {
+                    serverAsset = serverAssets.first!
+                } else {
+                    error = SHBackgroundOperationError.unexpectedData(serverAssets)
+                }
             case .failure(let err):
                 error = err
             }
@@ -111,7 +115,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     }
     
     private func upload(serverAsset: SHServerAsset,
-                        asset: SHEncryptedAsset) throws {
+                        asset: any SHEncryptedAsset) throws {
         var error: Error? = nil
         
         let group = DispatchGroup()
@@ -134,17 +138,37 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
+    private func markLocalAssetAsFailed(globalIdentifier: String) throws {
+        let group = DispatchGroup()
+        for quality in SHAssetQuality.all {
+            group.enter()
+            self.serverProxy.localServer.markAsset(with: globalIdentifier, quality: quality, as: .failed) { result in
+                if case .failure(let err) = result {
+                    self.log.info("failed to mark local asset \(globalIdentifier) as failed: \(err.localizedDescription)")
+                }
+                group.leave()
+            }
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+    }
+    
     private func deleteAssetFromServer(globalIdentifier: String) throws {
         log.info("deleting asset \(globalIdentifier) from server")
         
         let group = DispatchGroup()
         group.enter()
-        self.serverProxy.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
+        self.serverProxy.remoteServer.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
             if case .failure(let err) = result {
                 self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
             }
             group.leave()
         }
+        
         let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
         
         guard dispatchResult == .success else {
@@ -152,37 +176,45 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
-    public func markAsFailed(localIdentifier: String,
+    public func markAsFailed(item: KBQueueItem,
+                             localIdentifier: String,
                              globalIdentifier: String,
                              groupId: String,
                              eventOriginator: SHServerUser,
                              sharedWith: [SHServerUser],
                              error: Error) throws {
-        // Enquque to failed
-        log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
-                                                                   groupId: groupId,
-                                                                   eventOriginator: eventOriginator,
-                                                                   sharedWith: sharedWith)
-        
-        do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
-        catch {
-            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
-            throw error
-        }
-        
-        // Dequeque from UploadQueue
+        ///
+        /// Dequeque from UploadQueue
+        ///
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
         
-        do { _ = try UploadQueue.dequeue() }
+        do { _ = try UploadQueue.dequeue(item: item) }
         catch {
             log.error("asset \(localIdentifier) failed to upload but dequeuing from UPLOAD queue failed, so this operation will be attempted again.")
             throw error
         }
         
 #if DEBUG
-        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
+        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekNext(100))?.count ?? 0)")
 #endif
+        
+        ///
+        /// Enquque to FailedUpload queue
+        ///
+        log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
+                                                                   groupId: groupId,
+                                                                   eventOriginator: eventOriginator,
+                                                                   sharedWith: sharedWith)
+        
+        do {
+            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier)
+            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier)
+        }
+        catch {
+            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
+            throw error
+        }
         
         // Notify the delegates
         for delegate in delegates {
@@ -199,14 +231,29 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     }
     
     public func markAsSuccessful(
+        item: KBQueueItem,
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
         eventOriginator: SHServerUser,
         sharedWith: [SHServerUser]
     ) throws {
+        ///
+        /// Dequeue from Upload queue
+        ///
+        log.info("dequeueing item \(item.identifier) from the UPLOAD queue")
         
-        // Enquque to success history
+        do { _ = try UploadQueue.dequeue(item: item) }
+        catch {
+            log.warning("item \(item.identifier) was completed but dequeuing from UPLOAD queue failed. This task will be attempted again")
+        }
+#if DEBUG
+        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekNext(100))?.count ?? 0)")
+#endif
+        
+        ///
+        /// Enquque to success history
+        ///
         log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
         
         let succesfulUploadQueueItem = SHUploadHistoryItem(localIdentifier: localIdentifier,
@@ -220,20 +267,15 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             throw error
         }
         
-        // Dequeque from UploadQueue
-        log.info("dequeueing request for asset \(globalIdentifier) from the UPLOAD queue")
-        
-        do { _ = try UploadQueue.dequeue() }
-        catch {
-            log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
-            throw error
-        }
-        
-        // Start the sharing part if needed
-        
+        ///
+        /// Start the sharing part if needed
+        ///
         let willShare = sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.user.identifier)
         
-        if willShare { // Enquque to FETCH queue (fetch is needed for encrypting for sharing)
+        if willShare {
+            ///
+            /// Enquque to FETCH queue (fetch is needed for encrypting for sharing)
+            ///
             log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier)")
 
             let fetchRequest = SHLocalFetchRequestQueueItem(
@@ -250,12 +292,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 throw error
             }
         }
-
-#if DEBUG
-        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
-#endif
         
-        // Notify the delegates
+        ///
+        /// Notify the delegates
+        ///
         for delegate in delegates {
             if let delegate = delegate as? SHAssetUploaderDelegate {
                 delegate.didCompleteUpload(
@@ -267,6 +307,127 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
+    private func process(_ item: KBQueueItem) throws {
+        
+        let uploadRequest: SHUploadRequestQueueItem
+        
+        do {
+            let content = try content(ofQueueItem: item)
+            guard let content = content as? SHUploadRequestQueueItem else {
+                log.error("unexpected data found in UPLOAD queue. Dequeueing")
+                // Delegates can't be called as item content can't be read and it will be silently removed from the queue
+                throw SHBackgroundOperationError.unexpectedData(item.content)
+            }
+            uploadRequest = content
+        } catch {
+            do { _ = try UploadQueue.dequeue(item: item) }
+            catch {
+                log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
+            }
+            throw error
+        }
+        
+        let globalIdentifier = uploadRequest.globalAssetId
+        let localIdentifier = uploadRequest.assetId
+        
+        do {
+            for delegate in delegates {
+                if let delegate = delegate as? SHAssetUploaderDelegate {
+                    delegate.didStartUpload(
+                        itemWithLocalIdentifier: localIdentifier,
+                        globalIdentifier: globalIdentifier,
+                        groupId: uploadRequest.groupId
+                    )
+                }
+            }
+            
+            log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
+            let encryptedAsset: any SHEncryptedAsset
+            do {
+                encryptedAsset = try self.getLocalAsset(with: globalIdentifier)
+            } catch {
+                log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
+                throw SHBackgroundOperationError.fatalError("failed to retrieved encrypted asset from local server")
+            }
+            
+            guard globalIdentifier == encryptedAsset.globalIdentifier else {
+                throw SHBackgroundOperationError.globalIdentifierDisagreement
+            }
+            
+#if DEBUG
+            guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 20 != 0 else {
+                log.debug("simulating CREATE ASSET failure")
+                throw SHBackgroundOperationError.fatalError("failed to create server asset")
+            }
+#endif
+            
+            log.info("requesting to create asset on the server: \(String(describing: encryptedAsset.globalIdentifier))")
+            let serverAsset: SHServerAsset
+            do {
+                serverAsset = try self.createRemoteAsset(encryptedAsset, groupId: uploadRequest.groupId)
+            } catch {
+                log.error("failed to create server asset for item with localIdentifier \(localIdentifier). Dequeueing item, as it's unlikely to succeed again. error=\(error.localizedDescription)")
+                throw SHBackgroundOperationError.fatalError("failed to create server asset")
+            }
+            
+            guard globalIdentifier == serverAsset.globalIdentifier else {
+                throw SHBackgroundOperationError.globalIdentifierDisagreement
+            }
+            
+#if DEBUG
+            guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 5 != 0 else {
+                log.debug("simulating UPLOAD TO CDN failure")
+                try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
+                throw SHBackgroundOperationError.fatalError("upload to CDN failed")
+            }
+#endif
+            
+            log.info("uploading asset to the CDN: \(String(describing: serverAsset.globalIdentifier))")
+            do {
+                try self.upload(serverAsset: serverAsset, asset: encryptedAsset)
+            } catch {
+                log.error("failed to upload data for item with localIdentifier \(localIdentifier). error=\(error.localizedDescription)")
+                
+                try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
+                throw SHBackgroundOperationError.fatalError("upload to CDN failed")
+            }
+            
+        } catch {
+            do {
+                try self.markAsFailed(item: item,
+                                      localIdentifier: localIdentifier,
+                                      globalIdentifier: globalIdentifier,
+                                      groupId: uploadRequest.groupId,
+                                      eventOriginator: uploadRequest.eventOriginator,
+                                      sharedWith: uploadRequest.sharedWith,
+                                      error: error)
+            } catch {
+                log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                // TODO: Handle
+            }
+            
+            throw error
+        }
+
+        ///
+        /// Upload is completed.
+        /// Create an item in the history queue for this upload, and remove the one in the upload queue
+        ///
+        do {
+            try self.markAsSuccessful(
+                item: item,
+                localIdentifier: localIdentifier,
+                globalIdentifier: globalIdentifier,
+                groupId: uploadRequest.groupId,
+                eventOriginator: uploadRequest.eventOriginator,
+                sharedWith: uploadRequest.sharedWith
+            )
+        } catch {
+            log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+            // TODO: Handle
+        }
+    }
+    
     public override func main() {
         guard !self.isCancelled else {
             state = .finished
@@ -275,210 +436,56 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         state = .executing
         
+        let items: [KBQueueItem]
+        
         do {
-            // Retrieve assets in the queue
-            
-            var count = 1
-            
-            while let item = try UploadQueue.peek() {
-                if let limit = limit {
-                    guard count <= limit else {
-                        break
-                    }
-                }
-                log.info("uploading item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
-                
-                guard let uploadRequest = try? content(ofQueueItem: item) as? SHUploadRequestQueueItem else {
-                    log.error("unexpected data found in UPLOAD queue. Dequeueing")
-                    
-                    do { _ = try UploadQueue.dequeue() }
-                    catch {
-                        log.fault("dequeuing failed of unexpected data in UPLOAD queue. ATTENTION: this operation will be attempted again.")
-                        throw error
-                    }
-                    
-                    throw KBError.unexpectedData(item.content)
-                }
-                
-                let globalIdentifier = uploadRequest.globalAssetId
-                let localIdentifier = uploadRequest.assetId
-                
-                for delegate in delegates {
-                    if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didStartUpload(
-                            itemWithLocalIdentifier: localIdentifier,
-                            globalIdentifier: globalIdentifier,
-                            groupId: uploadRequest.groupId
-                        )
-                    }
-                }
-                
-                var encryptedAsset: SHEncryptedAsset? = nil
-                
-                do {
-                    log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
-                    encryptedAsset = try self.getLocalAsset(with: globalIdentifier)
-                } catch {
-                    log.error("failed to retrieve stored data for item \(count), with identifier \(localIdentifier): \(error.localizedDescription). Dequeueing item, as it's unlikely to succeed again.")
-                    do {
-                        try self.markAsFailed(localIdentifier: localIdentifier,
-                                              globalIdentifier: globalIdentifier,
-                                              groupId: uploadRequest.groupId,
-                                              eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith,
-                                              error: error)
-                    } catch {
-                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
-                        // TODO: Handle
-                    }
-                    
-                    continue
-                }
-                
-                guard globalIdentifier == encryptedAsset?.globalIdentifier else {
-                    do {
-                        try self.markAsFailed(localIdentifier: localIdentifier,
-                                              globalIdentifier: globalIdentifier,
-                                              groupId: uploadRequest.groupId,
-                                              eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith,
-                                              error: SHBackgroundOperationError.globalIdentifierDisagreement)
-                    } catch {
-                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
-                        // TODO: Handle
-                    }
-                    continue
-                }
-                
-#if DEBUG
-                guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 20 != 0 else {
-                    log.debug("simulating CREATE ASSET failure")
-                    try self.markAsFailed(localIdentifier: localIdentifier,
-                                          globalIdentifier: globalIdentifier,
-                                          groupId: uploadRequest.groupId,
-                                          eventOriginator: uploadRequest.eventOriginator,
-                                          sharedWith: uploadRequest.sharedWith,
-                                          error: SHBackgroundOperationError.fatalError("simulated error"))
-                    
-                    continue
-                }
-#endif
-                
-                var serverAsset: SHServerAsset? = nil
-                do {
-                    log.info("requesting to create asset on the server: \(String(describing: encryptedAsset?.globalIdentifier))")
-                    serverAsset = try self.createServerAsset(encryptedAsset!)
-                } catch {
-                    log.error("failed to create server asset for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again. error=\(error.localizedDescription)")
-                    do {
-                        try self.markAsFailed(localIdentifier: localIdentifier,
-                                              globalIdentifier: globalIdentifier,
-                                              groupId: uploadRequest.groupId,
-                                              eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith,
-                                              error: error)
-                    } catch {
-                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
-                        // TODO: Handle
-                    }
-                    continue
-                }
-                
-                guard globalIdentifier == serverAsset?.globalIdentifier else {
-                    do {
-                        try self.markAsFailed(localIdentifier: localIdentifier,
-                                              globalIdentifier: globalIdentifier,
-                                              groupId: uploadRequest.groupId,
-                                              eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith,
-                                              error: SHBackgroundOperationError.globalIdentifierDisagreement)
-                    } catch {
-                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
-                        // TODO: Handle
-                    }
-                    continue
-                }
-                
-#if DEBUG
-                guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 5 != 0 else {
-                    log.debug("simulating UPLOAD TO CDN failure")
-                    try self.markAsFailed(localIdentifier: localIdentifier,
-                                          globalIdentifier: globalIdentifier,
-                                          groupId: uploadRequest.groupId,
-                                          eventOriginator: uploadRequest.eventOriginator,
-                                          sharedWith: uploadRequest.sharedWith,
-                                          error: SHBackgroundOperationError.fatalError("simlated error"))
-                    
-                    try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
-                    
-                    continue
-                }
-#endif
-                
-                do {
-                    log.info("uploading asset to the CDN: \(String(describing: serverAsset?.globalIdentifier))")
-                    try self.upload(serverAsset: serverAsset!,
-                                    asset: encryptedAsset!)
-                }
-                catch {
-                    log.error("failed to upload data for item \(count), with identifier \(item.identifier). error=\(error.localizedDescription)")
-                    
-                    do {
-                        try self.markAsFailed(localIdentifier: localIdentifier,
-                                              globalIdentifier: globalIdentifier,
-                                              groupId: uploadRequest.groupId,
-                                              eventOriginator: uploadRequest.eventOriginator,
-                                              sharedWith: uploadRequest.sharedWith,
-                                              error: error)
-                    } catch {
-                        log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
-                        // TODO: Handle
-                    }
-                    
-                    try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
-                    
-                    continue
-                }
-
-                //
-                // Upload is completed so we can create an item in the history queue for this upload
-                //
-                do {
-                    try self.markAsSuccessful(
-                        localIdentifier: localIdentifier,
-                        globalIdentifier: globalIdentifier,
-                        groupId: uploadRequest.groupId,
-                        eventOriginator: uploadRequest.eventOriginator,
-                        sharedWith: uploadRequest.sharedWith
-                    )
-                } catch {
-                    log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-                    // TODO: Handle
-                    continue
-                }
-                
-                log.info("[√] upload task completed for item \(count) with identifier \(item.identifier)")
-                
-                count += 1
-                
-                guard !self.isCancelled else {
-                    log.info("upload task cancelled. Finishing")
-                    break
-                }
-            }
+            items = try UploadQueue.peekNext(self.limit)
         } catch {
-            log.error("error executing upload task: \(error.localizedDescription). ATTENTION: This operation will be attempted again")
+            log.error("failed to fetch items from the UPLOAD queue")
+            state = .finished
+            return
+        }
+        
+        for item in items {
+            guard ItemIdentifiersInProcessByState[.uploading]?.contains(item.identifier) == false else {
+                continue
+            }
+            
+            log.info("uploading item \(item.identifier) created at \(item.createdAt)")
+            
+            ItemIdentifiersInProcessByState[.uploading]?.insert(item.identifier)
+            
+            DispatchQueue.global(qos: .background).async { [self] in
+                guard !isCancelled else {
+                    log.info("upload task cancelled. Finishing")
+                    ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+                    return
+                }
+                do {
+                    try self.process(item)
+                    log.info("[√] upload task completed for item \(item.identifier)")
+                } catch {
+                    log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
+                }
+                
+                ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+            }
+            
+            guard !isCancelled else {
+                log.info("upload task cancelled. Finishing")
+                break
+            }
         }
         
         state = .finished
     }
 }
 
-public class SHAssetsUploaderQueueProcessor : SHOperationQueueProcessor<SHUploadOperation> {
+public class SHAssetsUploaderQueueProcessor : SHBackgroundOperationProcessor<SHUploadOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsUploaderQueueProcessor(
         delayedStartInSeconds: 4,
-        dispatchIntervalInSeconds: 3
+        dispatchIntervalInSeconds: 2
     )
     
     private override init(delayedStartInSeconds: Int = 0,

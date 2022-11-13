@@ -49,11 +49,10 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
             globalIdentifier: "Logo-globalId",
             localIdentifier: "Logo-localId",
             creationDate: Date(),
-            groupId: "group",
-            encryptedVersions: [encryptedVersion]
+            encryptedVersions: [.lowResolution: encryptedVersion]
         )
         
-        let version = encryptedAsset.encryptedVersions.first!
+        let version = encryptedAsset.encryptedVersions[.lowResolution]!
         let sharedSecret = SHShareablePayload(
             ephemeralPublicKeyData: version.publicKeyData,
             cyphertext: version.encryptedSecret,
@@ -243,7 +242,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         }
     }
     
-    func testUploadAndDownload() throws {
+    func _testUploadAndDownload() throws {
         let plainText = "example data"
         let data = plainText.data(using: .utf8)!
         let sender = user.shUser
@@ -257,9 +256,14 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         
         // Sender uploads
         group.enter()
-        serverProxy.create(asset: encryptedAsset) { result in
+        serverProxy.createRemoteAssets([encryptedAsset], groupId: "groupId") { result in
             switch result {
-            case .success(let serverAsset):
+            case .success(let serverAssets):
+                guard let serverAsset = serverAssets.first else {
+                    error = SHBackgroundOperationError.fatalError("No asset created")
+                    group.leave()
+                    return
+                }
                 self.serverProxy.upload(serverAsset: serverAsset, asset: encryptedAsset) { result in
                     if case .failure(let err) = result {
                         error = err
@@ -290,10 +294,10 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
                 XCTAssert(assetsDict.count == 1)
                 XCTAssert(assetsDict.keys.first == encryptedAsset.globalIdentifier)
                 XCTAssert(assetsDict.values.first?.globalIdentifier == encryptedAsset.globalIdentifier)
-                XCTAssert(assetsDict.values.first?.encryptedVersions.first?.encryptedData == encryptedAsset.encryptedVersions.first!.encryptedData)
-                XCTAssert(assetsDict.values.first?.encryptedVersions.first?.encryptedSecret == encryptedAsset.encryptedVersions.first!.encryptedSecret)
-                XCTAssert(assetsDict.values.first?.encryptedVersions.first?.publicKeyData == encryptedAsset.encryptedVersions.first!.publicKeyData)
-                XCTAssert(assetsDict.values.first?.encryptedVersions.first?.publicSignatureData == encryptedAsset.encryptedVersions.first!.publicSignatureData)
+                XCTAssert(assetsDict.values.first?.encryptedVersions[.lowResolution]!.encryptedData == encryptedAsset.encryptedVersions[.lowResolution]!.encryptedData)
+                XCTAssert(assetsDict.values.first?.encryptedVersions[.lowResolution]!.encryptedSecret == encryptedAsset.encryptedVersions[.lowResolution]!.encryptedSecret)
+                XCTAssert(assetsDict.values.first?.encryptedVersions[.lowResolution]!.publicKeyData == encryptedAsset.encryptedVersions[.lowResolution]!.publicKeyData)
+                XCTAssert(assetsDict.values.first?.encryptedVersions[.lowResolution]!.publicSignatureData == encryptedAsset.encryptedVersions[.lowResolution]!.publicSignatureData)
             case .failure(let err):
                 error = err
             }
@@ -308,14 +312,14 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         
         // Receiver decrypts
         let decryptedAsset = try decrypt(encryptedAsset, receiver: receiver, sender: sender)
-        let decryptedData = decryptedAsset.decryptedData
+        let decryptedData = decryptedAsset.decryptedVersions[.lowResolution]!
         XCTAssertEqual(decryptedAsset.localIdentifier, decryptedAsset.localIdentifier)
         XCTAssertEqual(decryptedAsset.globalIdentifier, decryptedAsset.globalIdentifier)
         XCTAssertEqual(decryptedAsset.creationDate, decryptedAsset.creationDate)
         XCTAssertEqual(plainText, String(data: decryptedData, encoding: .utf8))
     }
 
-    func encrypt(_ data: Data, from sender: SHLocalCryptoUser, to receiver: SHCryptoUser) throws -> SHEncryptedAsset {
+    func encrypt(_ data: Data, from sender: SHLocalCryptoUser, to receiver: SHCryptoUser) throws -> any SHEncryptedAsset {
         let privateSecret = SymmetricKey(size: .bits256)
         let samePrivateSecret = try SymmetricKey(rawRepresentation: privateSecret.rawRepresentation)
 
@@ -344,13 +348,12 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             globalIdentifier: "globalId",
             localIdentifier: "localId",
             creationDate: Date(),
-            groupId: "group",
-            encryptedVersions: [encryptedVersion]
+            encryptedVersions: [.lowResolution: encryptedVersion]
         )
     }
     
-    func decrypt(_ encryptedAsset: SHEncryptedAsset, receiver: SHLocalCryptoUser, sender: SHCryptoUser) throws -> SHDecryptedAsset {
-        let version = encryptedAsset.encryptedVersions.first!
+    func decrypt(_ encryptedAsset: any SHEncryptedAsset, receiver: SHLocalCryptoUser, sender: SHCryptoUser) throws -> any SHDecryptedAsset {
+        let version = encryptedAsset.encryptedVersions[.lowResolution]!
         let sharedSecret = SHShareablePayload(
             ephemeralPublicKeyData: version.publicKeyData,
             cyphertext: version.encryptedSecret,
@@ -364,7 +367,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         return SHGenericDecryptedAsset(
             globalIdentifier: encryptedAsset.globalIdentifier,
             localIdentifier: encryptedAsset.localIdentifier,
-            decryptedData: decryptedData,
+            decryptedVersions: [.lowResolution: decryptedData],
             creationDate: encryptedAsset.creationDate
         )
     }

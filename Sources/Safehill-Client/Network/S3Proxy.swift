@@ -42,7 +42,7 @@ struct S3Proxy {
     
     static func retrieve(_ asset: SHServerAsset,
                          _ version: SHServerAssetVersion,
-                         completionHandler: @escaping (Result<SHEncryptedAsset, Error>) -> ()) {
+                         completionHandler: @escaping (Result<any SHEncryptedAsset, Error>) -> ()) {
         guard let quality = SHAssetQuality(rawValue: version.versionName) else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("invalid versionName=\(version.versionName)")))
             return
@@ -61,20 +61,20 @@ struct S3Proxy {
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: Data.self) { result in
             switch result {
             case .success(let data):
+                let versionsDict = [
+                    quality: SHGenericEncryptedAssetVersion(
+                        quality: quality,
+                        encryptedData: data,
+                        encryptedSecret: version.encryptedSecret,
+                        publicKeyData: version.publicKeyData,
+                        publicSignatureData: version.publicSignatureData
+                    )
+                ]
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: asset.globalIdentifier,
                     localIdentifier: asset.localIdentifier,
                     creationDate: asset.creationDate,
-                    groupId: asset.groupId,
-                    encryptedVersions: [
-                        SHGenericEncryptedAssetVersion(
-                            quality: quality,
-                            encryptedData: data,
-                            encryptedSecret: version.encryptedSecret,
-                            publicKeyData: version.publicKeyData,
-                            publicSignatureData: version.publicSignatureData
-                        )
-                    ]
+                    encryptedVersions: versionsDict
                 )
                 completionHandler(.success(encryptedAsset))
             case .failure(let error):

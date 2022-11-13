@@ -452,7 +452,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
     
     public static var supportsSecureCoding: Bool = true
     
-    public let assetDescriptor: SHAssetDescriptor
+    public let assetDescriptor: any SHAssetDescriptor
     
     public func encode(with coder: NSCoder) {
         // Convert to SHGenericAssetDescriptorClass
@@ -467,7 +467,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         coder.encode(receiverUserIdentifier, forKey: UserIdentifierKey)
     }
     
-    public init(assetDescriptor: SHAssetDescriptor,
+    public init(assetDescriptor: any SHAssetDescriptor,
                 receiverUserIdentifier: String) {
         self.assetDescriptor = assetDescriptor
         self.eventOriginator = SHRemotePhantomUser(identifier: assetDescriptor.sharingInfo.sharedByUserIdentifier)

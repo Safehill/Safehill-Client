@@ -43,7 +43,7 @@ public let SHIAPProductIds = [
 public let SHIAPSharedSecret = "92267f6120324e16b1cf9b52c5ea26e7"
 
 public let SHIAPProductLimits = [
-    SHIAPProduct.free: 10,
+    SHIAPProduct.free: 50,
     SHIAPProduct.monthlyBasic: 1000,
     SHIAPProduct.monthlyPremium: 25000,
     SHIAPProduct.monthlyPro: 1000000

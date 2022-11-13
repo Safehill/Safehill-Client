@@ -8,7 +8,9 @@ public protocol SHBackgroundOperationProtocol : Operation {
     /// Used when the same operation is recursed on the operation queue (see OperationQueueProcessor::repeat)
     /// - Returns: a new object initialized exactly as Self was
     func clone() -> SHBackgroundOperationProtocol
-    
+}
+
+public protocol SHBackgroundQueueProcessorOperationProtocol : SHBackgroundOperationProtocol {
     func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem
 }
 
@@ -68,7 +70,7 @@ open class SHAbstractBackgroundOperation : Operation {
 }
 
 
-open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
+open class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     
     private let dispatchIntervalInSeconds: Int?
     private let delayedStartInSeconds: Int
@@ -108,6 +110,7 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
     }
     
     private func process(_ operation: T, after seconds: Int) {
+        Dispatch.dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
         guard self.started else { return }
         
@@ -117,15 +120,20 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
         
         if operationQueue.operationCount == 0 {
             self.timerQueue.sync {
-                self.timer = Timer.scheduledTimer(withTimeInterval: Double(seconds), repeats: false, block: { [weak self] _ in
-                    if !operation.isExecuting,
-                       let sself = self,
-                       sself.started,
-                       sself.operationQueue.operationCount == 0
-                    {
-                        sself.operationQueue.addOperation(operation.clone() as! T)
-                    }
-                })
+                DispatchQueue.main.sync {
+                    // timers need to be scheduled on the main queue
+                    self.timer = Timer.scheduledTimer(withTimeInterval: Double(seconds), repeats: false, block: { [weak self] _ in
+                        self?.timerQueue.async {
+                            if !operation.isExecuting,
+                               let sself = self,
+                               sself.started,
+                               sself.operationQueue.operationCount == 0
+                            {
+                                sself.operationQueue.addOperation(operation.clone() as! T)
+                            }
+                        }
+                    })
+                }
             }
         }
         
@@ -134,9 +142,14 @@ open class SHOperationQueueProcessor<T: SHBackgroundOperationProtocol> {
         if let dispatchIntervalInSeconds = self.dispatchIntervalInSeconds {
             self.timerQueue.sync {
                 let dispatchInterval = max(dispatchIntervalInSeconds, seconds)
-                self.timer = Timer.scheduledTimer(withTimeInterval: Double(dispatchInterval), repeats: false, block: { [weak self] _ in
-                    self?.process(operation, after: 0)
-                })
+                
+                DispatchQueue.main.sync {
+                    self.timer = Timer.scheduledTimer(withTimeInterval: Double(dispatchInterval), repeats: false, block: { [weak self] _ in
+                        self?.timerQueue.async {
+                            self?.process(operation, after: 0)
+                        }
+                    })
+                }
             }
         } else {
             log.info("No dispatchIntervalInSeconds set. The operation will not repeat")

@@ -1,5 +1,9 @@
 import KnowledgeBase
 
+///
+/// All queues for background operation
+///
+
 public let FetchQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetFetchQueue", type: .fifo)
 
 public let EncryptionQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetEncryptionQueue", type: .fifo)
@@ -18,8 +22,20 @@ public let FailedShareQueue = KBQueueStore.store(withName: "com.gf.safehill.Phot
 
 public let DownloadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetDownloadQueue", type: .fifo)
 
+///
+/// Queue item reservations
+///
+enum ProcessingState { case fetching, encrypting, uploading, sharing }
+var ItemIdentifiersInProcessByState: [ProcessingState: Set<String>] = [
+    .fetching: Set<String>(),
+    .encrypting: Set<String>(),
+    .uploading: Set<String>(),
+    .sharing: Set<String>(),
+]
 
-// Asset <=> User knowledge graph
+///
+/// Asset <=> User knowledge graph
+///
 
 public let KnowledgeGraph = KBKnowledgeStore.store(withName: "com.gf.safehill.KnowledgeGraph")
 

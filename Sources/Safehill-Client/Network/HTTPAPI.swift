@@ -22,8 +22,8 @@ public class SHNetwork {
 }
 
 public let SHDefaultNetworkTimeoutInMilliseconds = 30000 // 30 seconds
-public let SHUploadTimeoutInMilliseconds = 900000 // 15 minutes
-public let SHDownloadTimeoutInMilliseconds = 900000 // 15 minutes
+public let SHUploadTimeoutInMilliseconds = 300000 // 5 minutes
+public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
 
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
@@ -116,7 +116,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
             
             guard error == nil else {
-                completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
+                if let err = error as? URLError {
+                    // Not connected to the internet, handle it differently
+                    completionHandler(.failure(err))
+                } else {
+                    completionHandler(.failure(SHHTTPError.TransportError.generic(error!)))
+                }
                 return
             }
             
@@ -460,7 +465,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
-                var dictionary = [String: SHEncryptedAsset]()
+                var dictionary = [String: any SHEncryptedAsset]()
                 var errors = [String: Error]()
                 
                 let group = DispatchGroup()
@@ -473,22 +478,22 @@ struct SHServerHTTPAPI : SHServerAPI {
                             switch result {
                             case .success(let encryptedAsset):
                                 dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
-                                group.leave()
                             case .failure(let err):
                                 errors[asset.globalIdentifier + "::" + version.versionName] = err
-                                group.leave()
                             }
+                            group.leave()
                         }
                     }
                 }
                 
-                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds * asset.versions.count))
+                let allAssetsVersionsCount = assets.reduce(0, { partialResult, asset in partialResult + asset.versions.count })
+                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds * allAssetsVersionsCount))
                 guard dispatchResult == .success else {
                     return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
                 }
                 
                 guard errors.count == 0 else {
-                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error uploading to S3 asset with identifiers \(errors.keys)")))
+                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errors.keys)")))
                 }
                 completionHandler(.success(dictionary))
                 
@@ -498,7 +503,8 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func create(assets: [SHEncryptedAsset],
+    func create(assets: [any SHEncryptedAsset],
+                groupId: String,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.count == 1, let asset = assets.first else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
@@ -509,8 +515,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
             "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
-            "groupId": asset.groupId,
-            "versions": asset.encryptedVersions.map { encryptedVersion in
+            "groupId": groupId,
+            "versions": asset.encryptedVersions.values.map { encryptedVersion in
                 [
                     "versionName": encryptedVersion.quality.rawValue,
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
@@ -566,20 +572,26 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
-                        assetGlobalIdentifier globalAssetId: String,
-                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.markAsUploaded(assetVersion,
-                            assetGlobalIdentifier: globalAssetId,
+    func markAsset(with assetGlobalIdentifier: String,
+                   quality: SHAssetQuality,
+                   as: SHAssetDescriptorUploadState,
+                   completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard `as` == .completed else {
+            completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            return
+        }
+        
+        self.markAsUploaded(assetGlobalIdentifier,
+                            quality: quality,
                             retryCount: 1,
                             completionHandler: completionHandler)
     }
     
-    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
-                        assetGlobalIdentifier globalId: String,
+    func markAsUploaded(_ assetGlobalIdentifier: String,
+                        quality: SHAssetQuality,
                         retryCount: Int,
                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.post("assets/\(globalId)/versions/\(assetVersion.quality.rawValue)/uploaded", parameters: nil)
+        self.post("assets/\(assetGlobalIdentifier)/versions/\(quality.rawValue)/uploaded", parameters: nil)
         { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
@@ -588,8 +600,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                 guard retryCount <= 3 else {
                     return completionHandler(.failure(err))
                 }
-                self.markAsUploaded(assetVersion,
-                                    assetGlobalIdentifier: globalId,
+                self.markAsUploaded(assetGlobalIdentifier,
+                                    quality: quality,
                                     retryCount: retryCount + 1,
                                     completionHandler: completionHandler)
             }
@@ -597,7 +609,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func upload(serverAsset: SHServerAsset,
-                asset: SHEncryptedAsset,
+                asset: any SHEncryptedAsset,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)",
                                        qos: .background)
@@ -605,7 +617,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         let group = DispatchGroup()
         
-        for encryptedAssetVersion in asset.encryptedVersions {
+        for encryptedAssetVersion in asset.encryptedVersions.values {
             group.enter()
             
             let serverAssetVersion = serverAsset.versions.first { sav in
@@ -629,15 +641,10 @@ struct SHServerHTTPAPI : SHServerAPI {
                 }
                 
                 if case .success(_) = result {
-                    self.markAsUploaded(encryptedAssetVersion,
-                                        assetGlobalIdentifier: asset.globalIdentifier) { _ in
+                    self.markAsset(with: asset.globalIdentifier,
+                                   quality: encryptedAssetVersion.quality,
+                                   as: .completed) { _ in
                         group.leave()
-                        //
-                        // TODO: Shall the client try to upload again instead of leaving things out of sync?
-                        // Consider updating the server on the upload in the next iteration of the AssetDownloader:
-                        // - get the descriptors
-                        // - if upload state is `.partial`, and locally it's in the upload history, mark as uploaded then
-                        //
                     }
                 } else {
                     group.leave()

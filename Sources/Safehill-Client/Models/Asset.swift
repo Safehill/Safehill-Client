@@ -76,12 +76,41 @@ public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable 
 }
 
 public enum SHAssetDescriptorUploadState: String {
-    case notStarted = "not_started", partial = "partial", completed = "completed"
+    case notStarted = "not_started", partial = "partial", completed = "completed", failed = "failed"
 }
 
-/// Safehill Server descriptor: metadata associated with an asset, such as creation date, sender and list of receivers
-public protocol SHAssetDescriptor {
+
+public protocol SHRemoteAssetIdentifiable: Hashable {
     var globalIdentifier: String { get }
+    var localIdentifier: String? { get }
+}
+
+public extension SHRemoteAssetIdentifiable {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.localIdentifier == rhs.localIdentifier
+        && lhs.globalIdentifier == rhs.globalIdentifier
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(localIdentifier)
+        hasher.combine(globalIdentifier)
+    }
+}
+
+public struct SHRemoteAssetIdentifier: SHRemoteAssetIdentifiable {
+    public let globalIdentifier: String
+    public let localIdentifier: String?
+ 
+    public init(globalIdentifier: String, localIdentifier: String?) {
+        self.globalIdentifier = globalIdentifier
+        self.localIdentifier = localIdentifier
+    }
+}
+
+///
+/// Safehill Server descriptor: metadata associated with an asset, such as creation date, sender and list of receivers
+///
+public protocol SHAssetDescriptor: SHRemoteAssetIdentifiable {
     var localIdentifier: String? { get set }
     var creationDate: Date? { get }
     var uploadState: SHAssetDescriptorUploadState { get }
@@ -89,7 +118,6 @@ public protocol SHAssetDescriptor {
 }
 
 public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
-    
     public let globalIdentifier: String
     public var localIdentifier: String?
     public let creationDate: Date?
@@ -143,17 +171,16 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
 }
 
 /// The interface representing an asset after being decrypted
-public protocol SHDecryptedAsset {
-    var globalIdentifier: String { get }
+public protocol SHDecryptedAsset: SHRemoteAssetIdentifiable {
     var localIdentifier: String? { get set }
-    var decryptedData: Data { get }
+    var decryptedVersions: [SHAssetQuality: Data] { get set }
     var creationDate: Date? { get }
 }
 
 public struct SHGenericDecryptedAsset : SHDecryptedAsset {
     public let globalIdentifier: String
     public var localIdentifier: String?
-    public let decryptedData: Data
+    public var decryptedVersions: [SHAssetQuality: Data]
     public let creationDate: Date?
 }
 
@@ -247,12 +274,9 @@ public protocol SHEncryptedAssetVersion {
 }
 
 /// The interface representing a locally encrypted asset
-public protocol SHEncryptedAsset {
-    var globalIdentifier: String { get }
-    var localIdentifier: String? { get }
+public protocol SHEncryptedAsset: SHRemoteAssetIdentifiable {
     var creationDate: Date? { get }
-    var encryptedVersions: [SHEncryptedAssetVersion] { get }
-    var groupId: String { get }
+    var encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion] { get }
 }
 
 /// The interface representing a locally encrypted asset version ready to be shared, hence holding the secret for the user it's being shared with
@@ -290,10 +314,10 @@ public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
         self.publicSignatureData = publicSignatureData
     }
     
-    public static func fromDict(_ dict: [String: Any]) -> SHEncryptedAssetVersion? {
-        if let qualityS = dict["quality"] as? String,
+    public static func fromDict(_ dict: [String: Any], data: Data?) -> SHEncryptedAssetVersion? {
+        if let encryptedData = data,
+           let qualityS = dict["quality"] as? String,
            let quality = SHAssetQuality(rawValue: qualityS),
-           let encryptedData = dict["encryptedData"] as? Data,
            let encryptedSecret = dict["senderEncryptedSecret"] as? Data,
            let publicKeyData = dict["publicKey"] as? Data,
            let publicSignatureData = dict["publicSignature"] as? Data {
@@ -313,58 +337,77 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let globalIdentifier: String
     public let localIdentifier: String?
     public let creationDate: Date?
-    public let groupId: String
-    public let encryptedVersions: [SHEncryptedAssetVersion]
+    public let encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion]
     
     public init(globalIdentifier: String,
                 localIdentifier: String?,
                 creationDate: Date?,
-                groupId: String,
-                encryptedVersions: [SHEncryptedAssetVersion]) {
+                encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion]) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
         self.creationDate = creationDate
-        self.groupId = groupId
         self.encryptedVersions = encryptedVersions
     }
     
-    public static func fromDicts(_ dicts: [[String: Any]]) throws -> [String: SHEncryptedAsset] {
-        var encryptedAssetById = [String: SHEncryptedAsset]()
+    public static func fromDicts(_ dicts: [[String: Any]]) throws -> [String: any SHEncryptedAsset] {
+        var encryptedAssetById = [String: any SHEncryptedAsset]()
+        
+        let assetDataByGlobalIdentifier: [String: Data] = dicts.reduce([:]) { partialResult, nextValue in
+            var result = partialResult
+            if let identifier = nextValue["assetIdentifier"] as? String,
+               let data = nextValue["encryptedData"] as? Data {
+                result[identifier] = data
+            }
+            return result
+        }
         
         for dict in dicts {
+            guard dict.keys.count > 2 else {
+                ///
+                /// Snoog 1.1.3 and earlier store the data along with the metadata.
+                /// More precisely, the value under key '<quality>::<assetIdentifier>' stores both the `encryptedData` and metadata associated with it.
+                /// Since Snoog 1.1.4, data metadata are stored under two different keys:
+                /// 1. '<quality>::<assetIdentifier>' for the metadata
+                /// 2. 'data::<quality>::<assetIdentifier>' for the data
+                ///
+                /// The `dicts` param will then have either `N * quality` values (for 1.1.3), or `N * quality * 2` values (for 1.1.4 and later)
+                /// `assetDataByGlobalIdentifier` is created to retrieve the data from the values regardless of the underlying schema.
+                /// However, because both data and metadata values are present in `dicts`, we can skip elements of `dicts` that refer to the data,
+                /// as they were already retreived in the `assetDataByGlobalIdentifier` by the logic above.
+                ///
+                continue
+            }
+            
             guard let assetIdentifier = dict["assetIdentifier"] as? String else {
                 log.critical("could not deserialize local asset from dictionary=\(dict). Couldn't find assetIdentifier key")
                 throw SHBackgroundOperationError.unexpectedData(dict)
             }
             
-            guard let version = SHGenericEncryptedAssetVersion.fromDict(dict) else {
+            guard let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: assetDataByGlobalIdentifier[assetIdentifier]) else {
                 log.critical("could not deserialize asset version information from dictionary=\(dict)")
                 throw SHBackgroundOperationError.unexpectedData(dict)
             }
             
             if let existing = encryptedAssetById[assetIdentifier] {
                 var versions = existing.encryptedVersions
-                versions.append(version)
+                versions[version.quality] = version
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: existing.globalIdentifier,
                     localIdentifier: existing.localIdentifier,
                     creationDate: existing.creationDate,
-                    groupId: existing.groupId,
                     encryptedVersions: versions
                 )
                 encryptedAssetById[assetIdentifier] = encryptedAsset
             }
             else if let assetIdentifier = dict["assetIdentifier"] as? String,
                     let phAssetIdentifier = dict["applePhotosAssetIdentifier"] as? String?,
-                    let creationDate = dict["creationDate"] as? Date?,
-                    let groupId = dict["groupId"] as? String
+                    let creationDate = dict["creationDate"] as? Date?
             {
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: assetIdentifier,
                     localIdentifier: phAssetIdentifier,
                     creationDate: creationDate,
-                    groupId: groupId,
-                    encryptedVersions: [version]
+                    encryptedVersions: [version.quality: version]
                 )
                 encryptedAssetById[assetIdentifier] = encryptedAsset
             } else {
@@ -414,8 +457,8 @@ public struct SHGenericShareableEncryptedAsset : SHShareableEncryptedAsset {
 
 
 extension SHLocalUser {
-    func decrypt(_ asset: SHEncryptedAsset, quality: SHAssetQuality, receivedFrom user: SHServerUser) throws -> SHDecryptedAsset {
-        guard let version = asset.encryptedVersions.first(where: { $0.quality == quality }) else {
+    func decrypt(_ asset: any SHEncryptedAsset, quality: SHAssetQuality, receivedFrom user: SHServerUser) throws -> any SHDecryptedAsset {
+        guard let version = asset.encryptedVersions[quality] else {
             throw SHBackgroundOperationError.fatalError("No such version \(quality.rawValue) for asset=\(asset.globalIdentifier)")
         }
         
@@ -432,7 +475,7 @@ extension SHLocalUser {
         return SHGenericDecryptedAsset(
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
-            decryptedData: decryptedData,
+            decryptedVersions: [quality: decryptedData],
             creationDate: asset.creationDate
         )
     }

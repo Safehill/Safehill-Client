@@ -1,18 +1,25 @@
 import Foundation
 
-public protocol SHAssetDownloaderDelegate {
+public protocol SHAssetDescriptorsChangeDelegate {
+    func assetWasRemoved(globalIdentifier: String)
+}
+
+/// Inbound operation delegate.
+public protocol SHInboundAssetOperationDelegate {}
+
+public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func localIdentifiersInCache() -> [String]
     func globalIdentifiersInCache() -> [String]
     
     /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)
     /// - Parameter for: the descriptors
-    func handleAssetDescriptorResults(for: [SHAssetDescriptor], users: [SHServerUser])
+    func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser])
     /// Notifies there are no assets to download at this time
     func noAssetsToDownload() -> Void
     
     /// Notifies about a local asset being backed up on the cloud
     /// - Parameter descriptorsByLocalIdentifier: the list of local asset identifier to server asset descriptor
-    func markLocalAssetsAsDownloaded(descriptorsByLocalIdentifier: [String: SHAssetDescriptor])
+    func markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: [String: any SHAssetDescriptor])
     
     /// The download of a set of assets started
     /// - Parameter downloadRequest: the request
@@ -28,13 +35,15 @@ public protocol SHAssetDownloaderDelegate {
     func unrecoverableDownloadFailure(for assetIdentifier: String, groupId: String)
     /// The low res was downloaded successfullly for some assets
     /// - Parameter _: the decrypted low res asset
-    /// - Parameter groupId: the group id of the request it belongs to
-    func handleLowResAsset(_: SHDecryptedAsset, groupId: String)
+    func handleLowResAsset(_: any SHDecryptedAsset)
     /// The hi res was downloaded successfullly for some assets
-    /// - Parameter for:
+    /// - Parameters:
     /// - Parameter _: the decrypted hi res asset
+    func handleHiResAsset(_: any SHDecryptedAsset)
+    /// The download for this asset completed
+    /// - Parameter assetIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
-    func handleHiResAsset(_: SHDecryptedAsset, groupId: String)
+    func completed(_ assetIdentifier: String, groupId: String)
     
     /// One cycle of downloads has finished
     /// - Parameter _:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched

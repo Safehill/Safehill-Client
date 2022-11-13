@@ -39,6 +39,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     }
     
     public override func markAsFailed(
+        item: KBQueueItem,
         localIdentifier: String,
         groupId: String,
         eventOriginator: SHServerUser,
@@ -108,6 +109,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     }
     
     public override func markAsSuccessful(
+        item: KBQueueItem,
         localIdentifier: String,
         globalIdentifier: String,
         groupId: String,
@@ -158,10 +160,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     /// The same secret should be used when encrypting for sharing with other users.
     /// Encrypting that secret again with the recipient's public key guarantees the privacy of that secret.
     ///
-    /// By the time this method is called, the encrypted secret should be present in the local server (as the asset was previously encrypted on this device by the SHEncryptionOperation).
-    /// If not, the encrypted secret will be retrieved from the server.
+    /// By the time this method is called, the encrypted secret should be present in the local server,
+    /// as the asset was previously encrypted on this device by the SHEncryptionOperation.
     ///
-    /// Note that secrets are encrypted when stored, so the secret retrieved from disk or server will be decrypted before returned.
+    /// Note that secrets are encrypted at rest, wheres the in-memory data is its decrypted (clear) version.
     ///
     /// - Returns: the decrypted shared secret for this asset
     /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
@@ -171,20 +173,20 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         item: KBQueueItem,
         request shareRequest: SHEncryptionForSharingRequestQueueItem) throws -> Data
     {
+        let quality = SHAssetQuality.lowResolution
         let globalIdentifier = try asset.generateGlobalIdentifier(using: imageManager)
         
         var decryptedSecretData: Data? = nil
         let group = DispatchGroup()
         group.enter()
-        self.serverProxy.getAssets(
+        self.serverProxy.getLocalAssets(
             withGlobalIdentifiers: [globalIdentifier],
-            versions: [.lowResolution],
-            saveLocallyWithSenderIdentifier: self.user.identifier
+            versions: [quality]
         ) { result in
             if case .success(let assetsDict) = result {
                 if assetsDict.count == 1,
                    let asset = assetsDict.values.first,
-                   let version = asset.encryptedVersions.first {
+                   let version = asset.encryptedVersions[quality] {
                     let encryptedSecret = SHShareablePayload(
                         ephemeralPublicKeyData: version.publicKeyData,
                         cyphertext: version.encryptedSecret,
@@ -206,13 +208,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         guard let decryptedSecretData = decryptedSecretData else {
-            log.error("failed to get shared secret for item \(item.identifier)")
-            try self.markAsFailed(
-                localIdentifier: asset.phAsset.localIdentifier,
-                groupId: shareRequest.groupId,
-                eventOriginator: shareRequest.eventOriginator,
-                sharedWith: shareRequest.sharedWith
-            )
+            log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
             throw SHBackgroundOperationError.fatalError("failed to retrieve shared secret for asset \(globalIdentifier)")
         }
 
@@ -221,14 +217,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     private func storeSecrets(
         request: SHEncryptionForSharingRequestQueueItem,
-        encryptedAsset: SHEncryptedAsset
+        encryptedAsset: any SHEncryptedAsset
     ) throws {
-        log.info("storing asset \(encryptedAsset.localIdentifier ?? encryptedAsset.globalIdentifier) sharing information in local server proxy")
-        
         var shareableEncryptedVersions = [SHShareableEncryptedAssetVersion]()
         for otherUser in request.sharedWith {
-            for quality in [SHAssetQuality.lowResolution, SHAssetQuality.hiResolution] {
-                let encryptedVersion = encryptedAsset.encryptedVersions.first(where: { $0.quality == quality })!
+            for quality in SHAssetQuality.all {
+                let encryptedVersion = encryptedAsset.encryptedVersions[quality]!
                 let shareableEncryptedVersion = SHGenericShareableEncryptedAssetVersion(
                     quality: quality,
                     userPublicIdentifier: otherUser.identifier,
@@ -266,7 +260,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     }
     
     private func share(
-        encryptedAsset: SHEncryptedAsset,
+        encryptedAsset: any SHEncryptedAsset,
         via request: SHEncryptionForSharingRequestQueueItem
     ) throws {
         var error: Error? = nil
@@ -304,6 +298,128 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
+    private func process(_ item: KBQueueItem) throws {
+        let shareRequest: SHEncryptionForSharingRequestQueueItem
+        
+        do {
+            let content = try content(ofQueueItem: item)
+            guard let content = content as? SHEncryptionForSharingRequestQueueItem else {
+                ///
+                /// Delegates can't be called as item content can't be read and it will be silently removed from the queue
+                ///
+                log.error("unexpected data found in SHARE queue. Dequeueing")
+                throw SHBackgroundOperationError.unexpectedData(item.content)
+            }
+            shareRequest = content
+        } catch {
+            do { _ = try ShareQueue.dequeue(item: item) }
+            catch {
+                log.fault("dequeuing failed of unexpected data in SHARE queue. ATTENTION: this operation will be attempted again.")
+            }
+
+            throw SHBackgroundOperationError.unexpectedData(item.content)
+        }
+        
+        let asset = shareRequest.asset
+        let encryptedAsset: any SHEncryptedAsset
+
+        do {
+            guard shareRequest.sharedWith.count > 0 else {
+                log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
+                throw SHBackgroundOperationError.fatalError("sharingWith emtpy. No sharing info")
+            }
+
+            log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
+
+            for delegate in delegates {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didStartSharing(
+                        itemWithLocalIdentifier: asset.phAsset.localIdentifier,
+                        groupId: shareRequest.groupId,
+                        with: shareRequest.sharedWith
+                    )
+                }
+            }
+            
+            let decryptedSecretData: Data = try self.retrieveEncryptionKey(
+                for: asset,
+                item: item,
+                request: shareRequest
+            )
+            
+            ///
+            /// Encrypt asset for the users it's being shared with
+            ///
+            encryptedAsset = try self.generateEncryptedAsset(
+                for: asset,
+                usingPrivateSecret: decryptedSecretData,
+                recipients: shareRequest.sharedWith,
+                request: shareRequest
+            )
+            
+            ///
+            /// Store sharing information in the local server proxy
+            ///
+            do {
+                log.info("storing encryption secrets for asset \(encryptedAsset.globalIdentifier) for OTHER users in local server proxy")
+
+                try self.storeSecrets(request: shareRequest, encryptedAsset: encryptedAsset)
+                
+                log.info("successfully stored asset \(encryptedAsset.globalIdentifier) sharing information in local server proxy")
+            } catch {
+                log.error("failed to locally share encrypted item \(item.identifier) with users \(shareRequest.sharedWith.map { $0.identifier }): \(error.localizedDescription)")
+                throw SHBackgroundOperationError.fatalError("failed to store secrets")
+            }
+            
+            ///
+            /// Share using Safehill Server API
+            ///
+#if DEBUG
+            guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 20 != 0 else {
+                log.debug("simulating SHARE failure")
+                throw SHBackgroundOperationError.fatalError("share failed")
+            }
+#endif
+            
+            do {
+                try self.share(encryptedAsset: encryptedAsset, via: shareRequest)
+            } catch {
+                log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier })")
+                throw SHBackgroundOperationError.fatalError("share failed")
+            }
+
+        } catch {
+            do {
+                try self.markAsFailed(
+                    item: item,
+                    localIdentifier: asset.phAsset.localIdentifier,
+                    groupId: shareRequest.groupId,
+                    eventOriginator: shareRequest.eventOriginator,
+                    sharedWith: shareRequest.sharedWith
+                )
+            } catch {
+                log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
+                // TODO: Handle
+            }
+            
+            throw error
+        }
+
+        ///
+        /// Finish
+        ///
+        log.info("[√] share task completed for item \(item.identifier)")
+
+        try self.markAsSuccessful(
+            item: item,
+            localIdentifier: asset.phAsset.localIdentifier,
+            globalIdentifier: encryptedAsset.globalIdentifier,
+            groupId: shareRequest.groupId,
+            eventOriginator: shareRequest.eventOriginator,
+            sharedWith: shareRequest.sharedWith
+        )
+    }
+    
     public override func main() {
         guard !self.isCancelled else {
             state = .finished
@@ -312,180 +428,56 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         state = .executing
         
+        let items: [KBQueueItem]
+        
         do {
-            ///
-            /// Retrieve assets in the queue
-            ///
-            var count = 1
-            
-            while let item = try ShareQueue.peek() {
-                if let limit = limit {
-                    guard count <= limit else {
-                        break
-                    }
-                }
-                
-                log.info("encrypting and sharing item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
-                
-                guard let shareRequest = try? content(ofQueueItem: item) as? SHEncryptionForSharingRequestQueueItem else {
-                    log.error("unexpected data found in SHARE queue. Dequeueing")
-                    
-                    do { _ = try ShareQueue.dequeue() }
-                    catch {
-                        log.fault("dequeuing failed of unexpected data in SHARE queue. ATTENTION: this operation will be attempted again.")
-                        throw error
-                    }
-                    
-                    throw KBError.unexpectedData(item.content)
-                }
-                
-                guard shareRequest.sharedWith.count > 0 else {
-                    log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
-                    throw KBError.unexpectedData(item.content)
-                }
-                
-                log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
-                
-                let asset = shareRequest.asset
-                
-                for delegate in delegates {
-                    if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(
-                            itemWithLocalIdentifier: asset.phAsset.localIdentifier,
-                            groupId: shareRequest.groupId,
-                            with: shareRequest.sharedWith
-                        )
-                    }
-                }
-                
-                guard let decryptedSecretData = try? self.retrieveEncryptionKey(
-                    for: asset,
-                    item: item,
-                    request: shareRequest
-                ) else {
-                    continue
-                }
-                
-                ///
-                /// Start encryption for the users it's shared with
-                ///
-                
-                guard let encryptedAsset = try? self.generateEncryptedAsset(
-                    for: asset,
-                    usingPrivateSecret: decryptedSecretData,
-                    recipients: shareRequest.sharedWith,
-                    item: item,
-                    request: shareRequest
-                ) else {
-                    continue
-                }
-                
-                ///
-                /// Store sharing information in the local server proxy
-                ///
-                
-                do {
-                    try self.storeSecrets(request: shareRequest, encryptedAsset: encryptedAsset)
-                } catch {
-                    log.error("failed to locally share encrypted item \(count) with users \(shareRequest.sharedWith.map { $0.identifier }): \(error.localizedDescription)")
-                    
-                    try self.markAsFailed(
-                        localIdentifier: asset.phAsset.localIdentifier,
-                        groupId: shareRequest.groupId,
-                        eventOriginator: shareRequest.eventOriginator,
-                        sharedWith: shareRequest.sharedWith
-                    )
-                    
-                    continue
-                }
-                
-                log.info("successfully stored asset \(encryptedAsset.globalIdentifier) sharing information in local server proxy")
-                
-                ///
-                /// Share using Safehill Server API
-                ///
-                
-#if DEBUG
-                guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 20 != 0 else {
-                    log.debug("simulating SHARE failure")
-                    try self.markAsFailed(
-                        localIdentifier: asset.phAsset.localIdentifier,
-                        globalIdentifier: encryptedAsset.globalIdentifier,
-                        groupId: shareRequest.groupId,
-                        eventOriginator: shareRequest.eventOriginator,
-                        sharedWith: shareRequest.sharedWith
-                    )
-                    
-                    continue
-                }
-#endif
-                
-                do {
-                    try self.share(encryptedAsset: encryptedAsset, via: shareRequest)
-                } catch SHBackgroundOperationError.fatalError(let errorMsg) {
-                    log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier }): \(errorMsg)")
-                    
-                    try self.markAsFailed(
-                        localIdentifier: asset.phAsset.localIdentifier,
-                        globalIdentifier: encryptedAsset.globalIdentifier,
-                        groupId: shareRequest.groupId,
-                        eventOriginator: shareRequest.eventOriginator,
-                        sharedWith: shareRequest.sharedWith
-                    )
-                    
-                    continue
-                    
-                } catch {
-                    log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier }): \(error.localizedDescription)")
-                    
-                    try self.markAsFailed(
-                        localIdentifier: asset.phAsset.localIdentifier,
-                        globalIdentifier: encryptedAsset.globalIdentifier,
-                        groupId: shareRequest.groupId,
-                        eventOriginator: shareRequest.eventOriginator,
-                        sharedWith: shareRequest.sharedWith
-                    )
-                    
-                    continue
-                }
-                
-                ///
-                /// Finish
-                ///
-                
-                log.info("[√] share task completed for item \(item.identifier)")
-                
-                try self.markAsSuccessful(
-                    localIdentifier: asset.phAsset.localIdentifier,
-                    globalIdentifier: encryptedAsset.globalIdentifier,
-                    groupId: shareRequest.groupId,
-                    eventOriginator: shareRequest.eventOriginator,
-                    sharedWith: shareRequest.sharedWith
-                )
-                
-                count += 1
-                
-                guard !self.isCancelled else {
-                    log.info("share task cancelled. Finishing")
-                    break
-                }
-            }
-        } catch KBError.unexpectedData(_) {
-            log.error("error executing share task. Unexpected data in the queue, dequeueing.")
-            _ = try? ShareQueue.dequeue()
+            items = try ShareQueue.peekNext(self.limit)
         } catch {
-            log.error("error executing share task: \(error.localizedDescription)")
+            log.error("failed to fetch items from the ENCRYPT queue")
+            state = .finished
+            return
+        }
+        
+        for item in items {
+            guard ItemIdentifiersInProcessByState[.sharing]?.contains(item.identifier) == false else {
+                continue
+            }
+            
+            log.info("sharing item \(item.identifier) created at \(item.createdAt)")
+            
+            ItemIdentifiersInProcessByState[.sharing]?.insert(item.identifier)
+            
+            DispatchQueue.global(qos: .background).async { [self] in
+                guard !isCancelled else {
+                    log.info("share task cancelled. Finishing")
+                    ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+                    return
+                }
+                do {
+                    try self.process(item)
+                    log.info("[√] share task completed for item \(item.identifier)")
+                } catch {
+                    log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
+                }
+                
+                ItemIdentifiersInProcessByState[.sharing]?.remove(item.identifier)
+            }
+            
+            guard !self.isCancelled else {
+                log.info("share task cancelled. Finishing")
+                break
+            }
         }
         
         state = .finished
     }
 }
 
-public class SHAssetEncryptAndShareQueueProcessor : SHOperationQueueProcessor<SHEncryptAndShareOperation> {
+public class SHAssetEncryptAndShareQueueProcessor : SHBackgroundOperationProcessor<SHEncryptAndShareOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetEncryptAndShareQueueProcessor(
         delayedStartInSeconds: 5,
-        dispatchIntervalInSeconds: 3
+        dispatchIntervalInSeconds: 2
     )
     
     private override init(delayedStartInSeconds: Int = 0,
