@@ -471,18 +471,18 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         for item in items {
-            guard ItemIdentifiersInProcessByState[.encrypting]?.contains(item.identifier) == false else {
+            guard processingState(for: item.identifier) != .encrypting else {
                 continue
             }
             
             log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
             
-            ItemIdentifiersInProcessByState[.encrypting]?.insert(item.identifier)
+            setProcessingState(.encrypting, for: item.identifier)
             
             DispatchQueue.global(qos: .background).async { [self] in
                 guard !isCancelled else {
                     log.info("encryption task cancelled. Finishing")
-                    ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+                    setProcessingState(nil, for: item.identifier)
                     return
                 }
                 do {
@@ -492,7 +492,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
                 }
                 
-                ItemIdentifiersInProcessByState[.encrypting]?.remove(item.identifier)
+                setProcessingState(nil, for: item.identifier)
             }
                 
             guard !self.isCancelled else {

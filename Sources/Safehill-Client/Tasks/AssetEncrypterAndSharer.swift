@@ -439,18 +439,18 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         for item in items {
-            guard ItemIdentifiersInProcessByState[.sharing]?.contains(item.identifier) == false else {
+            guard processingState(for: item.identifier) != .sharing else {
                 continue
             }
             
             log.info("sharing item \(item.identifier) created at \(item.createdAt)")
             
-            ItemIdentifiersInProcessByState[.sharing]?.insert(item.identifier)
+            setProcessingState(.sharing, for: item.identifier)
             
             DispatchQueue.global(qos: .background).async { [self] in
                 guard !isCancelled else {
                     log.info("share task cancelled. Finishing")
-                    ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+                    setProcessingState(nil, for: item.identifier)
                     return
                 }
                 do {
@@ -460,7 +460,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
                 }
                 
-                ItemIdentifiersInProcessByState[.sharing]?.remove(item.identifier)
+                setProcessingState(nil, for: item.identifier)
             }
             
             guard !self.isCancelled else {

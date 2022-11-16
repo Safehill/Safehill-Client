@@ -325,17 +325,17 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         for item in items {
-            guard ItemIdentifiersInProcessByState[.fetching]?.contains(item.identifier) == false else {
+            guard processingState(for: item.identifier) != .fetching else {
                 continue
             }
             
             log.info("fetching item \(item.identifier) created at \(item.createdAt)")
-            ItemIdentifiersInProcessByState[.fetching]?.insert(item.identifier)
+            setProcessingState(.fetching, for: item.identifier)
             
             DispatchQueue.global(qos: .background).async { [self] in
                 guard !isCancelled else {
                     log.info("fetch task cancelled. Finishing")
-                    ItemIdentifiersInProcessByState[.fetching]?.remove(item.identifier)
+                    setProcessingState(nil, for: item.identifier)
                     return
                 }
                 do {
@@ -345,7 +345,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
                 }
                 
-                ItemIdentifiersInProcessByState[.fetching]?.remove(item.identifier)
+                setProcessingState(nil, for: item.identifier)
             }
                 
             guard !self.isCancelled else {

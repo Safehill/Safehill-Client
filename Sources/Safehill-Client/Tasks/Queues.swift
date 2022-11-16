@@ -1,3 +1,4 @@
+import Foundation
 import KnowledgeBase
 
 ///
@@ -26,12 +27,43 @@ public let DownloadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAs
 /// Queue item reservations
 ///
 enum ProcessingState { case fetching, encrypting, uploading, sharing }
-var ItemIdentifiersInProcessByState: [ProcessingState: Set<String>] = [
+
+private let ProcessingStateUpdateQueue = DispatchQueue(label: "com.gf.safehill.ProcessingStateUpdateQueue", attributes: .concurrent)
+
+private var ItemIdentifiersInProcessByState: [ProcessingState: Set<String>] = [
     .fetching: Set<String>(),
     .encrypting: Set<String>(),
     .uploading: Set<String>(),
     .sharing: Set<String>(),
 ]
+
+func processingState(for assetIdentifier: String) -> ProcessingState? {
+    var state: ProcessingState? = nil
+    ProcessingStateUpdateQueue.sync(flags: .barrier) {
+        for everyState in ItemIdentifiersInProcessByState.keys {
+            if ItemIdentifiersInProcessByState[everyState]!.contains(assetIdentifier) {
+                state = everyState
+                break
+            }
+        }
+    }
+    return state
+}
+func setProcessingState(_ state: ProcessingState?, for assetIdentifier: String) {
+    ProcessingStateUpdateQueue.sync(flags: .barrier) {
+        for everyState in ItemIdentifiersInProcessByState.keys {
+            if let state = state {
+                if everyState == state {
+                    ItemIdentifiersInProcessByState[state]!.insert(assetIdentifier)
+                } else {
+                    ItemIdentifiersInProcessByState[state]!.remove(assetIdentifier)
+                }
+            } else {
+                ItemIdentifiersInProcessByState[everyState]!.remove(assetIdentifier)
+            }
+        }
+    }
+}
 
 ///
 /// Asset <=> User knowledge graph

@@ -447,18 +447,18 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
         
         for item in items {
-            guard ItemIdentifiersInProcessByState[.uploading]?.contains(item.identifier) == false else {
+            guard processingState(for: item.identifier) != .uploading else {
                 continue
             }
             
             log.info("uploading item \(item.identifier) created at \(item.createdAt)")
             
-            ItemIdentifiersInProcessByState[.uploading]?.insert(item.identifier)
+            setProcessingState(.uploading, for: item.identifier)
             
             DispatchQueue.global(qos: .background).async { [self] in
                 guard !isCancelled else {
                     log.info("upload task cancelled. Finishing")
-                    ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+                    setProcessingState(nil, for: item.identifier)
                     return
                 }
                 do {
@@ -468,7 +468,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                     log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
                 }
                 
-                ItemIdentifiersInProcessByState[.uploading]?.remove(item.identifier)
+                setProcessingState(nil, for: item.identifier)
             }
             
             guard !isCancelled else {
