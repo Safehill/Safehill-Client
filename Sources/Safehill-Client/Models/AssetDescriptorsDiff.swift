@@ -56,12 +56,13 @@ struct AssetDescriptorsDiff {
                                                        localIdentifier: localDescriptor.localIdentifier)
                 if let index = onlyLocal.firstIndex(of: assetRef) {
                     switch localDescriptor.uploadState {
-                    case .notStarted:
+                    case .notStarted, .partial:
                         ///
                         /// Assets and its details (like the secrets) are stored locally at encryption time
                         /// As this method can be called while an upload happens, all assets that are not on the server yet,
-                        /// but are in the local server with state `.notStarted`, are assumed to be assets that the user is uploading
-                        /// (and will make it to the server eventually).
+                        /// but are in the local server with state `.notStarted`, are assumed to be assets that the user is uploading but didn't start
+                        /// or that is in flight. `.partial` will be returned for instance when the low resultion is marked as uploaded but the high res isn't.
+                        /// These will make it to the server eventually, if no errors.
                         /// Do not mark them as removed
                         ///
                         onlyLocal.remove(at: index)
@@ -72,12 +73,6 @@ struct AssetDescriptorsDiff {
                         /// but marked as failed locally
                         ///
                         onlyLocal.remove(at: index)
-                    case .partial:
-                        ///
-                        /// Local assets will never be marked as partial locally.
-                        /// `not_started` and `completed` are the only possible states
-                        ///
-                        break
                     default:
                         break
                     }

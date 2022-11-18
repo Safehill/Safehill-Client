@@ -346,16 +346,17 @@ struct LocalServer : SHServerAPI {
                         groupInfoById: groupInfoById
                     )
                     
-                    let combinedUploadState = versionUploadState.reduce(SHAssetDescriptorUploadState.notStarted, {
-                        (partialResult: SHAssetDescriptorUploadState, item) in
-                        let (_, value) = item
-                        if partialResult == .completed {
-                            if value == .completed { return .completed }
-                            else { return .partial }
-                        } else {
-                            return value
-                        }
-                    })
+                    var combinedUploadState: SHAssetDescriptorUploadState = .notStarted
+                    if versionUploadState.allSatisfy({ (_, value) in value == .completed }) {
+                        // ALL completed successfully
+                        combinedUploadState = .completed
+                    } else if versionUploadState.allSatisfy({ (_, value) in value == .notStarted }) {
+                        // ALL didn't start
+                        combinedUploadState = .notStarted
+                    } else if versionUploadState.contains(where: { (_, value) in value == .failed }) {
+                        // SOME failed
+                        combinedUploadState = .failed
+                    }
                     
                     let descriptor = SHGenericAssetDescriptor(
                         globalIdentifier: globalIdentifier,
