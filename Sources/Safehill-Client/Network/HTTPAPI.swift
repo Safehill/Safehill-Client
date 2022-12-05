@@ -465,7 +465,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
-                var dictionary = [String: any SHEncryptedAsset]()
+                let manifest = ThreadSafeAssetsDict()
                 var errors = [String: Error]()
                 
                 let group = DispatchGroup()
@@ -477,7 +477,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                         S3Proxy.retrieve(asset, version) { result in
                             switch result {
                             case .success(let encryptedAsset):
-                                dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
+                                manifest.add(encryptedAsset)
                             case .failure(let err):
                                 errors[asset.globalIdentifier + "::" + version.versionName] = err
                             }
@@ -495,7 +495,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 guard errors.count == 0 else {
                     return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errors.keys)")))
                 }
-                completionHandler(.success(dictionary))
+                completionHandler(.success(manifest.dictionary))
                 
             case .failure(let error):
                 completionHandler(.failure(error))

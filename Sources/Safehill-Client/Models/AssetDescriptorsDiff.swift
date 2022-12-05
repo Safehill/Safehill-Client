@@ -37,7 +37,8 @@ struct AssetDescriptorsDiff {
     /// - Returns: the diff
     ///
     static func generateUsing(server serverDescriptors: [any SHAssetDescriptor],
-                              local localDescriptors: [any SHAssetDescriptor]) -> AssetDescriptorsDiff {
+                              local localDescriptors: [any SHAssetDescriptor],
+                              for user: SHLocalUser) -> AssetDescriptorsDiff {
         var onlyLocal = localDescriptors
             .map({
                 d in SHRemoteAssetIdentifier(globalIdentifier: d.globalIdentifier,
@@ -57,15 +58,17 @@ struct AssetDescriptorsDiff {
                 if let index = onlyLocal.firstIndex(of: assetRef) {
                     switch localDescriptor.uploadState {
                     case .notStarted, .partial:
-                        ///
-                        /// Assets and its details (like the secrets) are stored locally at encryption time
-                        /// As this method can be called while an upload happens, all assets that are not on the server yet,
-                        /// but are in the local server with state `.notStarted`, are assumed to be assets that the user is uploading but didn't start
-                        /// or that is in flight. `.partial` will be returned for instance when the low resultion is marked as uploaded but the high res isn't.
-                        /// These will make it to the server eventually, if no errors.
-                        /// Do not mark them as removed
-                        ///
-                        onlyLocal.remove(at: index)
+                        if localDescriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
+                            ///
+                            /// Assets and its details (like the secrets) are stored locally at encryption time
+                            /// As this method can be called while an upload happens, all assets that are not on the server yet,
+                            /// but are in the local server with state `.notStarted`, are assumed to be assets that the user is uploading but didn't start
+                            /// or that is in flight. `.partial` will be returned for instance when the low resultion is marked as uploaded but the high res isn't.
+                            /// These will make it to the server eventually, if no errors.
+                            /// Do not mark them as removed
+                            ///
+                            onlyLocal.remove(at: index)
+                        }
                     case .failed:
                         ///
                         /// Assets can be recorded on device but not on server, when uploading/sharing fails.

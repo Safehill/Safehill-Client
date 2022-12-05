@@ -68,6 +68,10 @@ extension LocalServer {
         // Low Res migrations
         var condition = KBGenericCondition(.beginsWith, value: "low::")
         
+        let group = DispatchGroup()
+        var errors = [Error]()
+        
+        group.enter()
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
@@ -79,19 +83,22 @@ extension LocalServer {
                 }
                 do {
                     let _ = try self.moveDataToNewKeyFormat(for: keyValues)
-                    completionHandler(.success(()))
                 } catch {
                     log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
-                    completionHandler(.failure(error))
+                    errors.append(error)
                 }
             case .failure(let error):
-                completionHandler(.failure(error))
+                errors.append(error)
             }
+            group.leave()
+        }
+        
+        guard errors.count == 0 else {
+            completionHandler(.failure(errors.first!))
+            return
         }
         
         // Hi Res migrations
-        let group = DispatchGroup()
-        var errors = [Error]()
         condition = KBGenericCondition(.beginsWith, value: "hi::")
 
         for chunk in Array(assetIdentifiers).chunked(into: 10) {

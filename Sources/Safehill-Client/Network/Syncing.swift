@@ -53,7 +53,9 @@ extension SHServerProxy {
         /// 4. The local upload state doesn't match the remote state
         ///     -> inefficient solution is to verify the asset is in S3. Efficient is to trust the value from the server
         ///
-        let diff = AssetDescriptorsDiff.generateUsing(server: remoteDescriptors, local: localDescriptors)
+        let diff = AssetDescriptorsDiff.generateUsing(server: remoteDescriptors,
+                                                      local: localDescriptors,
+                                                      for: self.localServer.requestor)
         
         if diff.assetsRemovedOnServer.count > 0 {
             let globalIdentifiers = diff.assetsRemovedOnServer.compactMap { $0.globalIdentifier }
