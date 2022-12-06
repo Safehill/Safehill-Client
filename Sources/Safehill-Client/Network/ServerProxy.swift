@@ -12,9 +12,21 @@ public struct SHServerProxy {
         self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
     
+}
+
+
+// MARK: - Migrations
+extension SHServerProxy {
+    
     public func runLocalMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.localServer.runDataMigrations(completionHandler: completionHandler)
     }
+    
+}
+
+
+// MARK: - Users & Devices
+extension SHServerProxy {
     
     public func createUser(name: String,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
@@ -182,6 +194,14 @@ public struct SHServerProxy {
     public func deleteLocalAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.localServer.deleteAccount(completionHandler: completionHandler)
     }
+    
+    public func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.registerDevice(deviceName, token: token, completionHandler: completionHandler)
+    }
+}
+    
+// MARK: - Assets
+extension SHServerProxy {
     
     public func getLocalAssetDescriptors(originalServerError: Error? = nil,
                                          completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
@@ -515,6 +535,8 @@ public struct SHServerProxy {
     }
 }
 
+
+// MARK: - Subscriptions
 extension SHServerProxy {
     public func validateTransaction(originalTransactionId: String,
                                     receipt: String,

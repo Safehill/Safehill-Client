@@ -436,6 +436,21 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
     }
+    
+    func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let parameters = [
+            "deviceId": deviceName,
+            "token": token
+        ]
+        self.post("/users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
