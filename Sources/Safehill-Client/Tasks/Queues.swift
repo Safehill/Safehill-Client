@@ -56,7 +56,7 @@ func setProcessingState(_ state: ProcessingState?, for assetIdentifier: String) 
                 if everyState == state {
                     ItemIdentifiersInProcessByState[state]!.insert(assetIdentifier)
                 } else {
-                    ItemIdentifiersInProcessByState[state]!.remove(assetIdentifier)
+                    ItemIdentifiersInProcessByState[everyState]!.remove(assetIdentifier)
                 }
             } else {
                 ItemIdentifiersInProcessByState[everyState]!.remove(assetIdentifier)
