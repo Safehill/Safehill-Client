@@ -290,8 +290,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             throw SHBackgroundOperationError.fatalError("failed to retrieve asset from Apple library")
         }
         
-        log.info("[√] fetch task completed for item \(item.identifier)")
-        
         do {
             try self.markAsSuccessful(
                 kbPhotoAsset: kbPhotoAsset,

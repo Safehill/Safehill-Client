@@ -79,24 +79,13 @@ extension SHServerProxy {
         completionHandler(.success(diff))
     }
     
-    public func sync() {
+    public func sync(delegate: SHAssetSyncingDelegate?) {
         self.syncDescriptors { result in
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
-                    ///
-                    /// Remove asset from local queues
-                    ///
-                    let condition = diff.assetsRemovedOnServer.reduce(KBGenericCondition(value: false), { partialResult, assetIdentifier in
-                        if let localIdentifier = assetIdentifier.localIdentifier {
-                            return partialResult.or(KBGenericCondition(.beginsWith, value: localIdentifier))
-                        }
-                        return partialResult
-                    })
-                    _ = try? FailedUploadQueue.removeValues(forKeysMatching: condition)
-                    _ = try? UploadHistoryQueue.removeValues(forKeysMatching: condition)
-                    _ = try? FailedShareQueue.removeValues(forKeysMatching: condition)
-                    _ = try? ShareHistoryQueue.removeValues(forKeysMatching: condition)
+                    // TODO: The deletion from the queues defined in the framework is taken care of by the `AssetUploadController` which is a client of the framework. Consider moving `AssetUploadController` and the sister controllers to the framework
+                    delegate?.handleDeletion(of: diff.assetsRemovedOnServer)
                 }
                 if diff.stateDifferentOnServer.count > 0 {
                     // TODO: Do we need to mark things as failed/pending depending on state?
@@ -116,16 +105,19 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     let user: SHLocalUser
     
+    let delegate: SHAssetSyncingDelegate?
+    
     public var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     
-    public init(user: SHLocalUser) {
+    public init(user: SHLocalUser, delegate: SHAssetSyncingDelegate?) {
         self.user = user
+        self.delegate = delegate
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
-        SHSyncOperation(user: self.user)
+        SHSyncOperation(user: self.user, delegate: self.delegate)
     }
     
     public override func main() {
@@ -136,7 +128,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         state = .executing
         
-        self.serverProxy.sync()
+        self.serverProxy.sync(delegate: delegate)
         
         self.state = .finished
     }

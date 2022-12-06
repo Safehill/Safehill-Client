@@ -7,6 +7,10 @@ public protocol SHAssetDescriptorsChangeDelegate {
 /// Inbound operation delegate.
 public protocol SHInboundAssetOperationDelegate {}
 
+public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
+    func handleDeletion(of assets: [SHRemoteAssetIdentifier])
+}
+
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func localIdentifiersInCache() -> [String]
     func globalIdentifiersInCache() -> [String]
