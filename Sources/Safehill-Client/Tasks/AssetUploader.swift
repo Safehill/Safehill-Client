@@ -307,6 +307,16 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
     }
     
+    ///
+    /// Best attempt to remove the same item from the any other queue in the same pipeline
+    ///
+    private func tryRemoveExistingQueueItems(with localIdentifier: String) {
+        for queue in [UploadHistoryQueue, FailedUploadQueue] {
+            let condition = KBGenericCondition(.equal, value: localIdentifier)
+            let _ = try? queue.removeValues(forKeysMatching: condition)
+        }
+    }
+    
     private func process(_ item: KBQueueItem) throws {
         
         let uploadRequest: SHUploadRequestQueueItem
@@ -331,6 +341,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         let localIdentifier = uploadRequest.assetId
         
         do {
+            self.tryRemoveExistingQueueItems(with: localIdentifier)
+            
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetUploaderDelegate {
                     delegate.didStartUpload(

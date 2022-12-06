@@ -298,6 +298,22 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
+    ///
+    /// Best attempt to remove the same item from the any other queue in the same pipeline
+    ///
+    private func tryRemoveExistingQueueItems(
+        localIdentifier: String,
+        groupId: String,
+        sharedWith users: [SHServerUser]
+    ) {
+        for queue in [ShareHistoryQueue, FailedShareQueue] {
+
+            let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            let condition = KBGenericCondition(.equal, value: key)
+            let _ = try? queue.removeValues(forKeysMatching: condition)
+        }
+    }
+    
     private func process(_ item: KBQueueItem) throws {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
         
@@ -328,6 +344,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
                 throw SHBackgroundOperationError.fatalError("sharingWith emtpy. No sharing info")
             }
+            
+            self.tryRemoveExistingQueueItems(
+                localIdentifier: asset.phAsset.localIdentifier,
+                groupId: shareRequest.groupId,
+                sharedWith: shareRequest.sharedWith
+            )
 
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
 
