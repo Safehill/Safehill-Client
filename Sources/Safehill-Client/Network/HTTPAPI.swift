@@ -13,11 +13,7 @@ public class SHNetwork {
     }
     
     internal func setSpeed(bytesPerSecond: Double) {
-        /// HEURISTICS on network speed
-        /// Optimistic approximation of actual network speed calculated on small payloads
-        /// On relatively fast connections, the speed calculated on a small payload is far lower
-        /// than the peak speed uploading a large file once the connection has been established
-        self._bytesPerSecond = bytesPerSecond * 17
+        self._bytesPerSecond = bytesPerSecond
     }
 }
 
@@ -63,7 +59,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     var productionURLComponents: URLComponents {
         var components = URLComponents()
         components.scheme = "https"
-        components.host = "safehill.herokuapp.com"
+        components.host = "app.safehill.io"
         components.port = 443
         return components
     }
