@@ -4,21 +4,44 @@ import Safehill_Crypto
 import UIKit
 #endif
 
+let imageSizeForGlobalIdCalculation = CGSize(width: 320.0, height: 320.0)
+
 public extension PHAsset {
     
     func globalIdentifier(using imageManager: PHImageManager? = nil) throws -> String{
         var error: Error? = nil
         var data: Data? = nil
-        self.data(forSize: CGSize(width: 320.0, height: 320.0),
-                  usingImageManager: imageManager ?? PHImageManager(),
-                  synchronousFetch: true) { result in
+        
+        ///
+        /// Do not call `data(forSize:usingImageManager:synchronousFetch:deliveryMode:)`
+        /// for global id calculation as that method optimizes cache hits over size precision.
+        /// That means that if a higher image size is cached, that will be returned, which will result in an unstable globalidentifier.
+        /// We need to fetch the exact image size based on `imageSizeForGlobalIdCalculation`, regardless of what's in the cache
+        ///
+        self.image(forSize: imageSizeForGlobalIdCalculation,
+                   usingImageManager: imageManager ?? PHImageManager(),
+                   synchronousFetch: true,
+                   deliveryMode: .highQualityFormat) { result in
             switch result {
-            case .success(let d):
-                data = d
+            case .success(let image):
+#if os(iOS)
+                if let d = image.pngData() {
+                    data = d
+                } else {
+                    error = SHBackgroundOperationError.unexpectedData(image)
+                }
+#else
+                if let d = image.png {
+                    data = d
+                } else {
+                    error = SHBackgroundOperationError.unexpectedData(image)
+                }
+#endif
             case .failure(let err):
                 error = err
             }
         }
+        
         guard error == nil else {
             throw error!
         }
