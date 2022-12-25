@@ -363,7 +363,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             }
             
             guard globalIdentifier == encryptedAsset.globalIdentifier else {
-                throw SHBackgroundOperationError.globalIdentifierDisagreement
+                throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
             }
             
 #if DEBUG
@@ -383,7 +383,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             }
             
             guard globalIdentifier == serverAsset.globalIdentifier else {
-                throw SHBackgroundOperationError.globalIdentifierDisagreement
+                throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
             }
             
 #if DEBUG

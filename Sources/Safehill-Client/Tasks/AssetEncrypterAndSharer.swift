@@ -209,7 +209,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         guard let decryptedSecretData = decryptedSecretData else {
             log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
-            throw SHBackgroundOperationError.fatalError("failed to retrieve shared secret for asset \(globalIdentifier)")
+            throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
         }
 
         return decryptedSecretData
