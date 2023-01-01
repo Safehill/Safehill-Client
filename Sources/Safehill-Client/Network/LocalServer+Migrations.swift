@@ -63,6 +63,13 @@ extension LocalServer {
     public func runDataMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
+        /// Remove KnowledgeGraph entries at launch
+        do {
+            let _ = try KnowledgeGraph.removeAll()
+        } catch {
+            log.warning("Failed to remove deprecated data from the KnowledgeGraph")
+        }
+        
         var assetIdentifiers = Set<String>()
         
         // Low Res migrations
