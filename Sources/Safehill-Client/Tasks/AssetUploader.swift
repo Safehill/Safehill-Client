@@ -460,7 +460,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         
         for item in items {
             guard processingState(for: item.identifier) != .uploading else {
-                continue
+                break
             }
             
             log.info("uploading item \(item.identifier) created at \(item.createdAt)")

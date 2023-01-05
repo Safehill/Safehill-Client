@@ -462,7 +462,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         for item in items {
             guard processingState(for: item.identifier) != .sharing else {
-                continue
+                break
             }
             
             log.info("sharing item \(item.identifier) created at \(item.createdAt)")

@@ -324,7 +324,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         for item in items {
             guard processingState(for: item.identifier) != .fetching else {
-                continue
+                break
             }
             
             log.info("fetching item \(item.identifier) created at \(item.createdAt)")

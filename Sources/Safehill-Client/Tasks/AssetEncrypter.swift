@@ -472,7 +472,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         for item in items {
             guard processingState(for: item.identifier) != .encrypting else {
-                continue
+                break
             }
             
             log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
