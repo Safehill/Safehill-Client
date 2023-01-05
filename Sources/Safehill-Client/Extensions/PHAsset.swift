@@ -2,9 +2,29 @@ import Photos
 import Safehill_Crypto
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+
+public extension NSBitmapImageRep {
+    var png: Data? { representation(using: .png, properties: [:]) }
+}
+public extension Data {
+    var bitmap: NSBitmapImageRep? { NSBitmapImageRep(data: self) }
+}
+public extension NSImage {
+    var png: Data? { tiffRepresentation?.bitmap?.png }
+}
 #endif
 
 let imageSizeForGlobalIdCalculation = CGSize(width: 320.0, height: 320.0)
+
+public enum NSUIImage {
+#if os(iOS)
+    case uiKit(UIImage)
+#else
+    case appKit(NSImage)
+#endif
+}
 
 public extension PHAsset {
     
@@ -21,20 +41,22 @@ public extension PHAsset {
         self.image(forSize: imageSizeForGlobalIdCalculation,
                    usingImageManager: imageManager ?? PHImageManager(),
                    synchronousFetch: true,
-                   deliveryMode: .highQualityFormat) { result in
+                   deliveryMode: .highQualityFormat) { (result: Result<NSUIImage, Error>) in
             switch result {
-            case .success(let image):
+            case .success(let nsuiimage):
 #if os(iOS)
-                if let d = image.pngData() {
+                if case .uiKit(let image) = nsuiimage,
+                   let d = image.pngData() {
                     data = d
                 } else {
-                    error = SHBackgroundOperationError.unexpectedData(image)
+                    error = SHBackgroundOperationError.unexpectedData(nsuiimage)
                 }
 #else
-                if let d = image.png {
+                if case .appKit(let image) = nsuiimage,
+                   let d = image.png {
                     data = d
                 } else {
-                    error = SHBackgroundOperationError.unexpectedData(image)
+                    error = SHBackgroundOperationError.unexpectedData(nsuiimage)
                 }
 #endif
             case .failure(let err):
@@ -70,11 +92,17 @@ public extension PHAsset {
             return
         }
         
-        self.image(forSize: size, usingImageManager: imageManager, synchronousFetch: synchronousFetch, deliveryMode: deliveryMode) {
-            result in
+        self.image(forSize: size,
+                   usingImageManager: imageManager,
+                   synchronousFetch: synchronousFetch,
+                   deliveryMode: deliveryMode) { (result: Result<NSUIImage, Error>) in
             switch result {
-            case .success(let image):
+            case .success(let nsuiimage):
 #if os(iOS)
+                guard case .uiKit(let image) = nsuiimage else {
+                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nsuiimage)))
+                    return
+                }
                 if let data = image.pngData() {
                     completionHandler(.success(data))
                     if shouldCache {
@@ -84,13 +112,18 @@ public extension PHAsset {
                     completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
                 }
 #else
+                guard case .appKit(let image) = nsuiimage else {
+                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nsuiimage)))
+                    return
+                }
+
                 if let data = image.png {
                     completionHandler(.success(data))
                     if shouldCache {
-                        localPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
+                        SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
                     }
                 } else {
-                    completionHandler(.failure(SHAssetFetchError.unexpectedData(image)))
+                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
                 }
 #endif
             case .failure(let error):
@@ -105,7 +138,7 @@ public extension PHAsset {
                deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
                // TODO: Implement iCloud progress handler when downloading the image
                progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
-               completionHandler: @escaping (Swift.Result<UIImage, Error>) -> ()) {
+               completionHandler: @escaping (Swift.Result<NSUIImage, Error>) -> ()) {
         
         let options = PHImageRequestOptions()
         options.isSynchronous = synchronousFetch
@@ -121,7 +154,11 @@ public extension PHAsset {
             imageManager.requestImage(for: self, targetSize: targetSize, contentMode: PHImageContentMode.default, options: options) {
                 image, _ in
                 if let image = image {
-                    completionHandler(.success(image))
+#if os(iOS)
+                    completionHandler(.success(NSUIImage.uiKit(image)))
+#else
+                    completionHandler(.success(NSUIImage.appKit(image)))
+#endif
                     return
                 }
                 completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
