@@ -3,20 +3,19 @@ import Safehill_Crypto
 import KnowledgeBase
 import Photos
 import os
-import Async
 
-open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-FETCH")
     }
     
-    public let limit: Int?
+    public let limit: Int
     public var delegates: [SHOutboundAssetOperationDelegate]
     var imageManager: PHCachingImageManager
     
     public init(delegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil,
+                limitPerRun limit: Int,
                 imageManager: PHCachingImageManager? = nil) {
         self.limit = limit
         self.delegates = delegates
@@ -56,7 +55,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         let photoIndexer = KBPhotosIndexer()
         var kbPhotoAsset: KBPhotoAsset? = nil
         var error: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         photoIndexer.fetchCameraRollAssets(withFilters: [KBPhotosFilter.withLocalIdentifiers([localIdentifier])]) { result in
@@ -112,8 +111,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .seconds(30))
+        guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
         guard error == nil else {
@@ -177,6 +176,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
     {
         let localIdentifier = kbPhotoAsset.phAsset.localIdentifier
         
+        ///
+        /// Enqueue in the next queue
+        /// - Encryption queue for items to upload
+        /// - Share queue for items to share
+        ///
         if shouldUpload {
             let encryptionRequest = SHEncryptionRequestQueueItem(asset: kbPhotoAsset,
                                                                  groupId: groupId,
@@ -206,7 +210,9 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
             }
         }
         
-        // Dequeue from FetchQueue
+        ///
+        /// Dequeue from FetchQueue
+        ///
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
         
         do { _ = try FetchQueue.dequeue() }
@@ -216,10 +222,12 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
         
 #if DEBUG
-        log.debug("items in the FETCH queue after dequeueing \((try? FetchQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
+        log.debug("items in the FETCH queue after dequeueing \((try? FetchQueue.peekNext(100))?.count ?? 0)")
 #endif
         
-        // Notify the delegates
+        ///
+        /// Notify the delegates
+        ///
         for delegate in delegates {
             if let delegate = delegate as? SHAssetFetcherDelegate {
                 delegate.didCompleteFetching(
@@ -231,6 +239,71 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         }
     }
     
+    private func process(_ item: KBQueueItem) throws {
+        
+        let fetchRequest: SHLocalFetchRequestQueueItem
+        
+        do {
+            let content = try content(ofQueueItem: item)
+            guard let content = content as? SHLocalFetchRequestQueueItem else {
+                log.error("unexpected data found in FETCH queue. Dequeueing")
+                // Delegates can't be called as item content can't be read and it will be silently removed from the queue
+                throw SHBackgroundOperationError.unexpectedData(item.content)
+            }
+            fetchRequest = content
+        } catch {
+            do { _ = try FetchQueue.dequeue(item: item) }
+            catch {
+                log.warning("dequeuing failed of unexpected data in FETCH queue. This task will be attempted again.")
+            }
+            throw error
+        }
+        
+        for delegate in delegates {
+            if let delegate = delegate as? SHAssetFetcherDelegate {
+                delegate.didStartFetching(
+                    itemWithLocalIdentifier: fetchRequest.assetId,
+                    groupId: fetchRequest.groupId,
+                    sharedWith: fetchRequest.sharedWith
+                )
+            }
+        }
+        
+        guard let kbPhotoAsset = try? self.retrieveAsset(
+            withLocalIdentifier: fetchRequest.assetId,
+            groupId: fetchRequest.groupId,
+            sharedWith: fetchRequest.sharedWith
+        ) else {
+            log.error("failed to fetch data for item \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
+            do {
+                try self.markAsFailed(
+                    localIdentifier: fetchRequest.assetId,
+                    groupId: fetchRequest.groupId,
+                    eventOriginator: fetchRequest.eventOriginator,
+                    sharedWith: fetchRequest.sharedWith
+                )
+            } catch {
+                log.critical("failed to mark FETCH as failed. This will likely cause infinite loops")
+                // TODO: Handle
+            }
+            
+            throw SHBackgroundOperationError.fatalError("failed to retrieve asset from Apple library")
+        }
+        
+        do {
+            try self.markAsSuccessful(
+                kbPhotoAsset: kbPhotoAsset,
+                groupId: fetchRequest.groupId,
+                eventOriginator: fetchRequest.eventOriginator,
+                sharedWith: fetchRequest.sharedWith,
+                shouldUpload: fetchRequest.shouldUpload
+            )
+        } catch {
+            log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
+            // TODO: Handle
+        }
+    }
+    
     public override func main() {
         guard !self.isCancelled else {
             state = .finished
@@ -239,97 +312,54 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundOpe
         
         state = .executing
         
+        let items: [KBQueueItem]
+        
         do {
-            // Retrieve assets in the queue
-            
-            var count = 1
-            
-            while let item = try FetchQueue.peek() {
-                if let limit = limit {
-                    guard count <= limit else {
-                        break
-                    }
-                }
-                
-                log.info("fetching item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
-                
-                guard let fetchRequest = try? content(ofQueueItem: item) as? SHLocalFetchRequestQueueItem else {
-                    log.error("unexpected data found in FETCH queue. Dequeueing")
-                    
-                    do { _ = try FetchQueue.dequeue() }
-                    catch {
-                        log.fault("dequeuing failed of unexpected data in FETCH queue. ATTENTION: this operation will be attempted again.")
-                        throw error
-                    }
-                    
-                    throw KBError.unexpectedData(item.content)
-                }
-                
-                for delegate in delegates {
-                    if let delegate = delegate as? SHAssetFetcherDelegate {
-                        delegate.didStartFetching(
-                            itemWithLocalIdentifier: fetchRequest.assetId,
-                            groupId: fetchRequest.groupId,
-                            sharedWith: fetchRequest.sharedWith
-                        )
-                    }
-                }
-                
-                guard let kbPhotoAsset = try? self.retrieveAsset(
-                    withLocalIdentifier: fetchRequest.assetId,
-                    groupId: fetchRequest.groupId,
-                    sharedWith: fetchRequest.sharedWith
-                ) else {
-                    log.error("failed to fetch data for item \(count), with identifier \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
-                    do {
-                        try self.markAsFailed(
-                            localIdentifier: fetchRequest.assetId,
-                            groupId: fetchRequest.groupId,
-                            eventOriginator: fetchRequest.eventOriginator,
-                            sharedWith: fetchRequest.sharedWith
-                        )
-                    } catch {
-                        log.critical("failed to mark FETCH as failed. This will likely cause infinite loops")
-                        // TODO: Handle
-                    }
-                    
-                    continue
-                }
-                
-                log.info("[√] fetch task completed for item \(item.identifier)")
-                
-                do {
-                    try self.markAsSuccessful(
-                        kbPhotoAsset: kbPhotoAsset,
-                        groupId: fetchRequest.groupId,
-                        eventOriginator: fetchRequest.eventOriginator,
-                        sharedWith: fetchRequest.sharedWith,
-                        shouldUpload: fetchRequest.shouldUpload
-                    )
-                } catch {
-                    log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
-                    // TODO: Handle
-                }
-                
-                count += 1
-                
-                guard !self.isCancelled else {
-                    log.info("fetch task cancelled. Finishing")
-                    break
-                }
-            }
+            items = try FetchQueue.peekNext(self.limit)
         } catch {
-            log.error("error executing fetch task: \(error.localizedDescription)")
+            log.error("failed to fetch items from the FETCH queue")
+            state = .finished
+            return
+        }
+        
+        for item in items {
+            guard processingState(for: item.identifier) != .fetching else {
+                break
+            }
+            
+            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
+            setProcessingState(.fetching, for: item.identifier)
+            
+            DispatchQueue.global(qos: .background).async { [self] in
+                guard !isCancelled else {
+                    log.info("fetch task cancelled. Finishing")
+                    setProcessingState(nil, for: item.identifier)
+                    return
+                }
+                do {
+                    try self.process(item)
+                    log.info("[√] fetch task completed for item \(item.identifier)")
+                } catch {
+                    log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
+                }
+                
+                setProcessingState(nil, for: item.identifier)
+            }
+                
+            guard !self.isCancelled else {
+                log.info("fetch task cancelled. Finishing")
+                break
+            }
         }
         
         state = .finished
     }
 }
 
-public class SHAssetsFetcherQueueProcessor : SHOperationQueueProcessor<SHLocalFetchOperation> {
+public class SHAssetsFetcherQueueProcessor : SHBackgroundOperationProcessor<SHLocalFetchOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsFetcherQueueProcessor(
-        delayedStartInSeconds: 2,
+        delayedStartInSeconds: 1,
         dispatchIntervalInSeconds: 3
     )
     

@@ -12,9 +12,25 @@ public let kSHFullResPictureSize: CGSize? = nil
 let kSHSimulateBackgroundOperationFailures = false
 
 
-public enum SHBackgroundOperationError : Error {
+public enum SHBackgroundOperationError : Error, CustomStringConvertible {
     case unexpectedData(Any?)
     case fatalError(String)
     case timedOut
-    case globalIdentifierDisagreement
+    case globalIdentifierDisagreement(String)
+    case missingAssetInLocalServer(String)
+    
+    public var description: String {
+        switch self {
+        case .missingAssetInLocalServer(let globalIdentifier):
+            return "Missing \(globalIdentifier) in local server assets"
+        case .fatalError(let errorString):
+            return "Fatal error: \(errorString)"
+        case .timedOut:
+            return "The operation timed out"
+        case .globalIdentifierDisagreement(let localIdentifier):
+            return "The global identifier for local id \(localIdentifier) doesn't match the one previously computed"
+        case .unexpectedData(let data):
+            return "unexpected data: \(String(describing: data))"
+        }
+    }
 }

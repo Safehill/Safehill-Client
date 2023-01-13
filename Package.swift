@@ -18,7 +18,7 @@ let package = Package(
         // Dependencies declare other packages that this package depends on.
         .package(name: "Safehill-Crypto", path: "../Safehill-Crypto"),
         .package(name: "KnowledgeBase", path: "../KnowledgeBase/KnowledgeBase"),
-        .package(url: "https://github.com/duemunk/Async", from: "2.1.0"),
+        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.1")
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -28,7 +28,7 @@ let package = Package(
             dependencies: [
                 "Safehill-Crypto",
                 "KnowledgeBase",
-                "Async",
+                "Yams"
             ]
         ),
         .testTarget(

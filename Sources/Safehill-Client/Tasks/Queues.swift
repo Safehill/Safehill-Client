@@ -1,4 +1,9 @@
+import Foundation
 import KnowledgeBase
+
+///
+/// All queues for background operation
+///
 
 public let FetchQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetFetchQueue", type: .fifo)
 
@@ -18,8 +23,51 @@ public let FailedShareQueue = KBQueueStore.store(withName: "com.gf.safehill.Phot
 
 public let DownloadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetDownloadQueue", type: .fifo)
 
+///
+/// Queue item reservations
+///
+enum ProcessingState { case fetching, encrypting, uploading, sharing }
 
-// Asset <=> User knowledge graph
+private let ProcessingStateUpdateQueue = DispatchQueue(label: "com.gf.safehill.ProcessingStateUpdateQueue", attributes: .concurrent)
+
+private var ItemIdentifiersInProcessByState: [ProcessingState: Set<String>] = [
+    .fetching: Set<String>(),
+    .encrypting: Set<String>(),
+    .uploading: Set<String>(),
+    .sharing: Set<String>(),
+]
+
+func processingState(for assetIdentifier: String) -> ProcessingState? {
+    var state: ProcessingState? = nil
+    ProcessingStateUpdateQueue.sync(flags: .barrier) {
+        for everyState in ItemIdentifiersInProcessByState.keys {
+            if ItemIdentifiersInProcessByState[everyState]!.contains(assetIdentifier) {
+                state = everyState
+                break
+            }
+        }
+    }
+    return state
+}
+func setProcessingState(_ state: ProcessingState?, for assetIdentifier: String) {
+    ProcessingStateUpdateQueue.sync(flags: .barrier) {
+        for everyState in ItemIdentifiersInProcessByState.keys {
+            if let state = state {
+                if everyState == state {
+                    ItemIdentifiersInProcessByState[state]!.insert(assetIdentifier)
+                } else {
+                    ItemIdentifiersInProcessByState[everyState]!.remove(assetIdentifier)
+                }
+            } else {
+                ItemIdentifiersInProcessByState[everyState]!.remove(assetIdentifier)
+            }
+        }
+    }
+}
+
+///
+/// Asset <=> User knowledge graph
+///
 
 public let KnowledgeGraph = KBKnowledgeStore.store(withName: "com.gf.safehill.KnowledgeGraph")
 

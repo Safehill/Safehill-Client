@@ -1,6 +1,7 @@
 import Foundation
 import KnowledgeBase
-import Async
+
+public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
 let userStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.users")
 let assetStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.assets")
@@ -53,6 +54,27 @@ struct LocalServer : SHServerAPI {
             case .failure(let err):
                 completionHandler(.failure(err))
                 return
+            }
+        }
+    }
+    
+    internal func createUser(identifier: String,
+                            name: String,
+                            publicKeyData: Data,
+                            publicSignatureData: Data,
+                            completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+        let value = [
+            "identifier": identifier,
+            "publicKey": publicKeyData,
+            "publicSignature": publicSignatureData,
+            "name": name,
+        ] as [String : Any]
+        userStore.set(value: value, for: identifier) { (postResult: Swift.Result) in
+            switch postResult {
+            case .success:
+                completionHandler(.success(requestor))
+            case .failure(let err):
+                completionHandler(.failure(err))
             }
         }
     }
@@ -112,10 +134,14 @@ struct LocalServer : SHServerAPI {
         self.deleteAccount(completionHandler: completionHandler)
     }
     
+    func deleteAllAssets(completionHandler: @escaping (Swift.Result<[String], Error>) -> ()) {
+        assetStore.removeAll(completionHandler: completionHandler)
+    }
+    
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
-        let group = AsyncGroup()
+        let group = DispatchGroup()
         
         group.enter()
         userStore.removeAll { result in
@@ -126,15 +152,15 @@ struct LocalServer : SHServerAPI {
         }
         
         group.enter()
-        assetStore.removeAll { result in
+        self.deleteAllAssets { result in
             if case .failure(let err) = result {
                 assetsRemovalError = err
             }
             group.leave()
         }
         
-        let dispatchResult = group.wait()
-        guard dispatchResult != .timedOut else {
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 2))
+        guard dispatchResult == .success else {
             return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
         }
         guard userRemovalError == nil else {
@@ -201,7 +227,9 @@ struct LocalServer : SHServerAPI {
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         /// No need to pull all versions when constructing descriptor, pulling "low" version only.
         /// This assumes that sharing information and other metadata are common across all versions (low and hi)
-        let condition = KBGenericCondition(.beginsWith, value: "low::").or(KBGenericCondition(.beginsWith, value: "hi::"))
+        let condition = KBGenericCondition(.beginsWith, value: "low::")
+            .or(KBGenericCondition(.beginsWith, value: "hi::"))
+        
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
@@ -213,7 +241,7 @@ struct LocalServer : SHServerAPI {
                     guard let value = v as? [String: Any],
                           let phAssetIdentifier = value["applePhotosAssetIdentifier"] as? String?,
                           let creationDate = value["creationDate"] as? Date? else {
-                        break
+                        continue
                     }
                     
                     if let range = k.range(of: "low::") {
@@ -234,11 +262,11 @@ struct LocalServer : SHServerAPI {
                             versionUploadState[.hiResolution] = .notStarted
                         }
                         
-                        break
+                        continue
                         // Terminate here, as from this point there's no version-specific information
                         // All the asset descriptor details will be pulled from the "low::" version
                     } else {
-                        break
+                        continue
                     }
                     
                     var sharedBy: String? = nil
@@ -289,6 +317,12 @@ struct LocalServer : SHServerAPI {
                                     continue
                                 }
                                 let components = key.components(separatedBy: "::")
+                                /// Components:
+                                /// 0) "receiver"
+                                /// 1) receiver user public identifier
+                                /// 2) version quality
+                                /// 3) asset identifier
+                                
                                 if components.count == 4, let groupId = value["groupId"] {
                                     sharedWithUsersInGroup[components[1]] = groupId
                                 } else {
@@ -312,16 +346,17 @@ struct LocalServer : SHServerAPI {
                         groupInfoById: groupInfoById
                     )
                     
-                    let combinedUploadState = versionUploadState.reduce(SHAssetDescriptorUploadState.notStarted, {
-                        (partialResult: SHAssetDescriptorUploadState, item) in
-                        let (_, value) = item
-                        if partialResult == .completed {
-                            if value == .completed { return .completed }
-                            else { return .partial }
-                        } else {
-                            return value
-                        }
-                    })
+                    var combinedUploadState: SHAssetDescriptorUploadState = .notStarted
+                    if versionUploadState.allSatisfy({ (_, value) in value == .completed }) {
+                        // ALL completed successfully
+                        combinedUploadState = .completed
+                    } else if versionUploadState.allSatisfy({ (_, value) in value == .notStarted }) {
+                        // ALL didn't start
+                        combinedUploadState = .notStarted
+                    } else if versionUploadState.contains(where: { (_, value) in value == .failed }) {
+                        // SOME failed
+                        combinedUploadState = .failed
+                    }
                     
                     let descriptor = SHGenericAssetDescriptor(
                         globalIdentifier: globalIdentifier,
@@ -344,11 +379,18 @@ struct LocalServer : SHServerAPI {
                    versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
         
+        guard assetIdentifiers.count > 0 else {
+            completionHandler(.success([:]))
+            return
+        }
+        
         var prefixCondition = KBGenericCondition(value: false)
         
         let versions = versions ?? SHAssetQuality.all
         for quality in versions {
-            prefixCondition = prefixCondition.or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
+            prefixCondition = prefixCondition
+                .or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
+                .or(KBGenericCondition(.beginsWith, value: "data::" + quality.rawValue + "::"))
         }
         
         var assetCondition = KBGenericCondition(value: false)
@@ -376,34 +418,145 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func create(assets: [SHEncryptedAsset],
-                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
-        self.create(assets: assets, senderUserIdentifier: requestor.identifier, completionHandler: completionHandler)
+    func getDecryptedAssets(withGlobalIdentifiers assetIdentifiers: [String],
+                            versions: [SHAssetQuality],
+                            completionHandler: @escaping (Swift.Result<[String: SHDecryptedAsset], Error>) -> ()) {
+        var descriptorsByGlobalId = [String: any SHAssetDescriptor]()
+        var usersByIdentifier = [String: SHServerUser]()
+        
+        let group = DispatchGroup()
+        
+        group.enter()
+        self.getAssetDescriptors { descriptorsResult in
+            switch descriptorsResult {
+            case .success(let descriptors):
+                let relevantDescriptorsByGlobalId = descriptors.filter {
+                    d in assetIdentifiers.contains(d.globalIdentifier)
+                }.reduce([String: any SHAssetDescriptor]()) { partialResult, descriptor in
+                    var result = partialResult
+                    result[descriptor.globalIdentifier] = descriptor
+                    return result
+                }
+                
+                descriptorsByGlobalId = relevantDescriptorsByGlobalId
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+            group.leave()
+        }
+        
+        var dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+            return
+        }
+        
+        guard descriptorsByGlobalId.count > 0 else {
+            completionHandler(.success([:]))
+            return
+        }
+        
+        var userIdentifiers = Set(descriptorsByGlobalId.values.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(descriptorsByGlobalId.values.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+         
+        group.enter()
+        self.getUsers(withIdentifiers: Array(userIdentifiers)) { usersResult in
+            switch usersResult {
+            case .success(let users):
+                usersByIdentifier = users.reduce([:]) { partialResult, user in
+                    var result = partialResult
+                    result[user.identifier] = user
+                    return result
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+                return
+            }
+            group.leave()
+        }
+            
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+            return
+        }
+        
+        self.getAssets(withGlobalIdentifiers: assetIdentifiers) { assetsResult in
+            switch assetsResult {
+            case .success(let assetsDict):
+                guard assetsDict.count > 0 else {
+                    completionHandler(.success([:]))
+                    return
+                }
+                
+                var decryptedAssetsByGlobalId = [String: any SHDecryptedAsset]()
+                for (assetIdentifier, encryptedAsset) in assetsDict {
+                    guard let sharerIdentifier = descriptorsByGlobalId[assetIdentifier]?.sharingInfo.sharedByUserIdentifier,
+                          let sharer = usersByIdentifier[sharerIdentifier] else {
+                        continue
+                    }
+                    
+                    do {
+                        for version in versions {
+                            let decryptedAssetVersion = try self.requestor.decrypt(encryptedAsset,
+                                                                                   quality: version,
+                                                                                   receivedFrom: sharer)
+                            if decryptedAssetsByGlobalId[assetIdentifier] == nil {
+                                decryptedAssetsByGlobalId[assetIdentifier] = decryptedAssetVersion
+                            } else {
+                                decryptedAssetsByGlobalId[assetIdentifier]?.decryptedVersions[version] = decryptedAssetVersion.decryptedVersions[version]
+                            }
+                        }
+                    } catch {
+                        log.error("failed to decrypt asset in local server with identifier \(assetIdentifier): \(error)")
+                        continue
+                    }
+                }
+                
+                completionHandler(.success(decryptedAssetsByGlobalId))
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
+                return
+            }
+        }
     }
     
-    func create(assets: [SHEncryptedAsset],
+    func create(assets: [any SHEncryptedAsset],
+                groupId: String,
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        self.create(assets: assets,
+                    groupId: groupId,
+                    senderUserIdentifier: requestor.identifier,
+                    completionHandler: completionHandler)
+    }
+    
+    func create(assets: [any SHEncryptedAsset],
+                groupId: String,
                 senderUserIdentifier: String,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         
         let writeBatch = assetStore.writeBatch()
         
         for asset in assets {
-            for encryptedVersion in asset.encryptedVersions {
-                let version: [String: Any?] = [
+            for encryptedVersion in asset.encryptedVersions.values {
+                let versionMetadata: [String: Any?] = [
                     "quality": encryptedVersion.quality.rawValue,
                     "assetIdentifier": asset.globalIdentifier,
                     "applePhotosAssetIdentifier": asset.localIdentifier,
-                    "encryptedData": encryptedVersion.encryptedData,
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret,
-                    "groupId": asset.groupId,
-                    "groupCreationDate": Date().iso8601withFractionalSeconds, // TODO: Should this be the creation value we get from the server?
                     "publicKey": encryptedVersion.publicKeyData,
                     "publicSignature": encryptedVersion.publicSignatureData,
                     "creationDate": asset.creationDate,
                     "uploadState": SHAssetDescriptorUploadState.notStarted.rawValue
                 ]
+                let versionData: [String: Any?] = [
+                    "assetIdentifier": asset.globalIdentifier,
+                    "encryptedData": encryptedVersion.encryptedData
+                ]
                 
-                writeBatch.set(value: version, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
+                writeBatch.set(value: versionMetadata, for: "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
+                writeBatch.set(value: versionData, for: "data::" + "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier)
                 writeBatch.set(value: true,
                                for: [
                                 "sender",
@@ -416,7 +569,7 @@ struct LocalServer : SHServerAPI {
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
                     "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
                     "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
-                    "groupId": asset.groupId,
+                    "groupId": groupId,
                     "groupCreationDate": Date().iso8601withFractionalSeconds
                 ]
                 writeBatch.set(value: sharedVersionDetails,
@@ -436,7 +589,7 @@ struct LocalServer : SHServerAPI {
                 var serverAssets = [SHServerAsset]()
                 for asset in assets {
                     var serverAssetVersions = [SHServerAssetVersion]()
-                    for encryptedVersion in asset.encryptedVersions {
+                    for encryptedVersion in asset.encryptedVersions.values {
                         serverAssetVersions.append(
                             SHServerAssetVersion(
                                 versionName: encryptedVersion.quality.rawValue,
@@ -452,7 +605,7 @@ struct LocalServer : SHServerAPI {
                     let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
                                                     localIdentifier: asset.localIdentifier,
                                                     creationDate: asset.creationDate,
-                                                    groupId: asset.groupId,
+                                                    groupId: groupId,
                                                     versions: serverAssetVersions)
                     serverAssets.append(serverAsset)
                 }
@@ -465,15 +618,29 @@ struct LocalServer : SHServerAPI {
     }
     
     func upload(serverAsset: SHServerAsset,
-                asset: SHEncryptedAsset,
+                asset: any SHEncryptedAsset,
                 completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let group = DispatchGroup()
+        for encryptedAssetVersion in asset.encryptedVersions.values {
+            group.enter()
+            self.markAsset(with: asset.globalIdentifier,
+                           quality: encryptedAssetVersion.quality,
+                           as: .completed) { _ in
+                group.leave()
+            }
+        }
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * asset.encryptedVersions.count))
+        guard dispatchResult == .success else {
+            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+        }
         completionHandler(.success(()))
     }
     
-    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
-                        assetGlobalIdentifier globalAssetId: String,
-                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let condition = KBGenericCondition(.beginsWith, value: "\(assetVersion.quality.rawValue)::\(globalAssetId)")
+    func markAsset(with assetGlobalIdentifier: String,
+                   quality: SHAssetQuality,
+                   as state: SHAssetDescriptorUploadState,
+                   completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let condition = KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::\(assetGlobalIdentifier)")
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
@@ -485,7 +652,7 @@ struct LocalServer : SHServerAPI {
                         return
                     }
                     
-                    value["uploadState"] = SHAssetDescriptorUploadState.completed.rawValue
+                    value["uploadState"] = state.rawValue
                     let writeBatch = assetStore.writeBatch()
                     writeBatch.set(value: value, for: k)
                     writeBatch.write(completionHandler: completionHandler)
@@ -619,12 +786,20 @@ struct LocalServer : SHServerAPI {
     }
     
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
+        guard globalIdentifiers.count > 0 else {
+            completionHandler(.success([]))
+            return
+        }
         var condition = KBGenericCondition(value: true)
         for globalIdentifier in globalIdentifiers {
             condition = condition.or(
                 KBGenericCondition(.equal, value: "low::" + globalIdentifier)
             ).or(
                 KBGenericCondition(.equal, value: "hi::" + globalIdentifier)
+            ).or(
+                KBGenericCondition(.equal, value: "data::low::" + globalIdentifier)
+            ).or(
+                KBGenericCondition(.equal, value: "data::hi::" + globalIdentifier)
             ).or(
                 KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
             ).or(
@@ -639,10 +814,10 @@ struct LocalServer : SHServerAPI {
             case .success(let keysRemoved):
                 var removedGids = Set<String>()
                 for key in keysRemoved {
-                    if key.contains("low::") {
-                        removedGids.insert(String(key.suffix(key.count - 5)))
-                    } else if key.contains("hi::") {
-                        removedGids.insert(String(key.suffix(key.count - 4)))
+                    if key.contains("data::low::") {
+                        removedGids.insert(String(key.suffix(key.count - 11)))
+                    } else if key.contains("data::hi::") {
+                        removedGids.insert(String(key.suffix(key.count - 10)))
                     }
                 }
                 completionHandler(.success(Array(removedGids)))

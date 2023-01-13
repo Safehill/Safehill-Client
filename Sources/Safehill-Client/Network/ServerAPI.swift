@@ -80,8 +80,10 @@ public protocol SHServerAPI {
     /// Create encrypted asset and versions (low res and hi res)
     /// - Parameters:
     ///   - assets: the encrypted data for each asset
+    ///   - groupId: the group identifier used for the first upload
     ///   - completionHandler: the callback method
-    func create(assets: [SHEncryptedAsset],
+    func create(assets: [any SHEncryptedAsset],
+                groupId: String,
                 completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ())
     
     /// Shares one or more assets with a set of users
@@ -93,13 +95,19 @@ public protocol SHServerAPI {
     
     /// Upload encrypted asset versions data to the CDN.
     func upload(serverAsset: SHServerAsset,
-                asset: SHEncryptedAsset,
+                asset: any SHEncryptedAsset,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Mark encrypted asset versions data as uploaded to the CDN.
-    func markAsUploaded(_ assetVersion: SHEncryptedAssetVersion,
-                        assetGlobalIdentifier globalId: String,
-                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    /// - Parameters:
+    ///   - assetGlobalIdentifier: the global identifier of the asset
+    ///   - quality: the version of the asset
+    ///   - as: the new state
+    ///   - completionHandler: the callback method
+    func markAsset(with assetGlobalIdentifier: String,
+                   quality: SHAssetQuality,
+                   as: SHAssetDescriptorUploadState,
+                   completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Removes assets from the CDN
     /// - Parameters:
