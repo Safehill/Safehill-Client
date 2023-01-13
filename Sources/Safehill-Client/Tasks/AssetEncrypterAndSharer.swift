@@ -168,51 +168,31 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     /// - Returns: the decrypted shared secret for this asset
     /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
     ///
-    private func retrieveEncryptionKey(
+    private func retrieveCommonEncryptionKey(
         for asset: KBPhotoAsset,
         item: KBQueueItem,
         request shareRequest: SHEncryptionForSharingRequestQueueItem) throws -> Data
     {
-        let quality = SHAssetQuality.lowResolution
+        let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions
         let globalIdentifier = try asset.generateGlobalIdentifier(using: imageManager)
         
-        var decryptedSecretData: Data? = nil
-        let group = DispatchGroup()
-        group.enter()
-        self.serverProxy.getLocalAssets(
-            withGlobalIdentifiers: [globalIdentifier],
-            versions: [quality]
-        ) { result in
-            if case .success(let assetsDict) = result {
-                if assetsDict.count == 1,
-                   let asset = assetsDict.values.first,
-                   let version = asset.encryptedVersions[quality] {
-                    let encryptedSecret = SHShareablePayload(
-                        ephemeralPublicKeyData: version.publicKeyData,
-                        cyphertext: version.encryptedSecret,
-                        signature: version.publicSignatureData
-                    )
-                    decryptedSecretData = try? SHCypher.decrypt(
-                        encryptedSecret,
-                        using: self.user.shUser.privateKeyData,
-                        from: self.user.publicSignatureData
-                    )
-                }
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .seconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHHTTPError.TransportError.timedOut
-        }
-        
-        guard let decryptedSecretData = decryptedSecretData else {
+        let encryptedAsset = try SHLocalAssetStoreController(user: self.user)
+            .encryptedAsset(with: globalIdentifier)
+        guard let version = encryptedAsset.encryptedVersions[quality] else {
             log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
             throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
         }
-
-        return decryptedSecretData
+        
+        let encryptedSecret = SHShareablePayload(
+            ephemeralPublicKeyData: version.publicKeyData,
+            cyphertext: version.encryptedSecret,
+            signature: version.publicSignatureData
+        )
+        return try SHCypher.decrypt(
+            encryptedSecret,
+            using: self.user.shUser.privateKeyData,
+            from: self.user.publicSignatureData
+        )
     }
     
     private func storeSecrets(
@@ -363,7 +343,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
             }
             
-            let decryptedSecretData: Data = try self.retrieveEncryptionKey(
+            let decryptedSecretData: Data = try self.retrieveCommonEncryptionKey(
                 for: asset,
                 item: item,
                 request: shareRequest

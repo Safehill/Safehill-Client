@@ -63,53 +63,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             limitPerRun: self.limit)
     }
     
-    internal func getUsers(withIdentifiers userIdentifiers: [String]) throws -> [SHServerUser] {
-        var error: Error? = nil
-        var users = [SHServerUser]()
-        let group = DispatchGroup()
-        
-        group.enter()
-        serverProxy.getUsers(
-            withIdentifiers: userIdentifiers
-        ) { result in
-            switch result {
-            case .success(let serverUsers):
-                users = serverUsers
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        return users
-    }
-    
-    internal func decrypt(encryptedAsset: any SHEncryptedAsset,
-                          descriptor: any SHAssetDescriptor,
-                          quality: SHAssetQuality) throws -> any SHDecryptedAsset {
-        var sender: SHServerUser? = nil
-        if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-            sender = self.user
-        } else {
-            let users = try self.getUsers(withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier])
-            guard users.count == 1, let serverUser = users.first,
-                  serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
-            else {
-                throw SHBackgroundOperationError.unexpectedData(users)
-            }
-            sender = serverUser
-        }
-        
-        return try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: sender!)
-    }
-    
     private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: String,
                                   quality: SHAssetQuality,
                                   request: SHDownloadRequestQueueItem,
@@ -130,7 +83,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 if assetsDict.count > 0 {
                     for (assetId, asset) in assetsDict {
                         do {
-                            let decryptedAsset = try self.decrypt(
+                            let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
                                 encryptedAsset: asset,
                                 descriptor: request.assetDescriptor,
                                 quality: quality
@@ -144,6 +97,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                 self.delegate.completed(decryptedAsset.globalIdentifier, groupId: request.groupId)
                             case .hiResolution:
                                 self.delegate.handleHiResAsset(decryptedAsset)
+                            default:
+                                // Not supported yet
+                                break
                             }
                         }
                         catch {
@@ -238,7 +194,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
                 
                 do {
-                    users = try self.getUsers(withIdentifiers: Array(userIdentifiers))
+                    users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
                 } catch {
                     self.log.error("Unable to fetch users from server: \(error.localizedDescription)")
                     completionHandler(.failure(error))
@@ -607,7 +563,7 @@ extension SHDownloadOperation {
 public class SHAssetsDownloadQueueProcessor : SHBackgroundOperationProcessor<SHDownloadOperation> {
     
     public static var shared = SHAssetsDownloadQueueProcessor(
-        delayedStartInSeconds: 2,
+        delayedStartInSeconds: 0,
         dispatchIntervalInSeconds: 5
     )
     private override init(delayedStartInSeconds: Int,

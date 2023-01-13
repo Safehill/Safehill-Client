@@ -47,97 +47,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         return uploadRequest
     }
     
-    private func getLocalAsset(with globalIdentifier: String) throws -> any SHEncryptedAsset {
-        var asset: (any SHEncryptedAsset)? = nil
-        var error: Error? = nil
-        
-        let group = DispatchGroup()
-        group.enter()
-        self.serverProxy.getLocalAssets(withGlobalIdentifiers: [globalIdentifier],
-                                        versions: SHAssetQuality.all) { result in
-            switch result {
-            case .success(let dict):
-                if let a = dict[globalIdentifier] {
-                    asset = a
-                } else {
-                    error = SHBackgroundOperationError.unexpectedData(dict)
-                }
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        
-        guard error == nil else {
-            throw error!
-        }
-
-        return asset!
-    }
-    
-    private func createRemoteAsset(_ asset: any SHEncryptedAsset, groupId: String) throws -> SHServerAsset {
-        var serverAsset: SHServerAsset? = nil
-        var error: Error? = nil
-        
-        let group = DispatchGroup()
-        
-        group.enter()
-        self.serverProxy.createRemoteAssets([asset], groupId: groupId) { result in
-            switch result {
-            case .success(let serverAssets):
-                if serverAssets.count == 1 {
-                    serverAsset = serverAssets.first!
-                } else {
-                    error = SHBackgroundOperationError.unexpectedData(serverAssets)
-                }
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        
-        guard error == nil else {
-            throw error!
-        }
-
-        return serverAsset!
-    }
-    
-    private func upload(serverAsset: SHServerAsset,
-                        asset: any SHEncryptedAsset) throws {
-        var error: Error? = nil
-        
-        let group = DispatchGroup()
-        group.enter()
-        self.serverProxy.upload(serverAsset: serverAsset, asset: asset) { result in
-            if case .failure(let err) = result {
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHUploadTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        
-        if let error = error {
-            throw error
-        }
-    }
-    
     private func markLocalAssetAsFailed(globalIdentifier: String) throws {
         let group = DispatchGroup()
         for quality in SHAssetQuality.all {
@@ -151,25 +60,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
         
         let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-    }
-    
-    private func deleteAssetFromServer(globalIdentifier: String) throws {
-        log.info("deleting asset \(globalIdentifier) from server")
-        
-        let group = DispatchGroup()
-        group.enter()
-        self.serverProxy.remoteServer.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { [weak self] result in
-            if case .failure(let err) = result {
-                self?.log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
         
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
@@ -356,7 +246,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
             let encryptedAsset: any SHEncryptedAsset
             do {
-                encryptedAsset = try self.getLocalAsset(with: globalIdentifier)
+                encryptedAsset = try SHLocalAssetStoreController(user: self.user).encryptedAsset(with: globalIdentifier)
             } catch {
                 log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
                 throw SHBackgroundOperationError.fatalError("failed to retrieved encrypted asset from local server")
@@ -372,38 +262,21 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 throw SHBackgroundOperationError.fatalError("failed to create server asset")
             }
 #endif
-            
-            log.info("requesting to create asset on the server: \(String(describing: encryptedAsset.globalIdentifier))")
             let serverAsset: SHServerAsset
             do {
-                serverAsset = try self.createRemoteAsset(encryptedAsset, groupId: uploadRequest.groupId)
+                serverAsset = try SHAssetStoreController(user: self.user)
+                    .upload(
+                        asset: encryptedAsset,
+                        with: uploadRequest.groupId
+                    )
             } catch {
-                log.error("failed to create server asset for item with localIdentifier \(localIdentifier). Dequeueing item, as it's unlikely to succeed again. error=\(error.localizedDescription)")
-                throw SHBackgroundOperationError.fatalError("failed to create server asset")
+                log.error("failed to upload asset for item with localIdentifier \(localIdentifier). Dequeueing item, as to let the user control the retry. error=\(error.localizedDescription)")
+                throw SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
             }
             
             guard globalIdentifier == serverAsset.globalIdentifier else {
                 throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
             }
-            
-#if DEBUG
-            guard kSHSimulateBackgroundOperationFailures == false || arc4random() % 5 != 0 else {
-                log.debug("simulating UPLOAD TO CDN failure")
-                try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
-                throw SHBackgroundOperationError.fatalError("upload to CDN failed")
-            }
-#endif
-            
-            log.info("uploading asset to the CDN: \(String(describing: serverAsset.globalIdentifier))")
-            do {
-                try self.upload(serverAsset: serverAsset, asset: encryptedAsset)
-            } catch {
-                log.error("failed to upload data for item with localIdentifier \(localIdentifier). error=\(error.localizedDescription)")
-                
-                try self.deleteAssetFromServer(globalIdentifier: globalIdentifier)
-                throw SHBackgroundOperationError.fatalError("upload to CDN failed")
-            }
-            
         } catch {
             do {
                 try self.markAsFailed(item: item,

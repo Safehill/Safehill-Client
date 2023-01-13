@@ -3,10 +3,16 @@ import Safehill_Crypto
 
 /// Safehill clients store 2 versions per asset, one low resolution for the thumbnail, one full size
 public enum SHAssetQuality: String {
-    case lowResolution = "low", hiResolution = "hi"
+    case lowResolution = "low",
+         midResolution = "mid",
+         hiResolution = "hi"
     
     static var all: [SHAssetQuality] {
-        return [.lowResolution, .hiResolution]
+        return [
+            .lowResolution,
+            .midResolution,
+            .hiResolution
+        ]
     }
 }
 
