@@ -51,14 +51,16 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     private func retrieveAsset(withLocalIdentifier localIdentifier: String,
                                groupId: String,
-                               sharedWith users: [SHServerUser]) throws -> KBPhotoAsset {
-        let photoIndexer = KBPhotosIndexer()
-        var kbPhotoAsset: KBPhotoAsset? = nil
+                               sharedWith users: [SHServerUser]) throws -> SHApplePhotoAsset {
+        let photoIndexer = SHPhotosIndexer()
+        let assetIdFilter = SHPhotosFilter.withLocalIdentifiers([localIdentifier])
+        var photoAsset: SHApplePhotoAsset? = nil
         var error: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
-        photoIndexer.fetchCameraRollAssets(withFilters: [KBPhotosFilter.withLocalIdentifiers([localIdentifier])]) { result in
+        photoIndexer.fetchCameraRollAssets(withFilters: [assetIdFilter]) {
+            result in
             if case .failure(let err) = result {
                 error = err
                 group.leave()
@@ -73,18 +75,19 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             ///
             /// Fetch the hi-resolution asset if not in the cache, using the same imageManager used to display the asset
-            /// Doing this here avoids fetching large amounts of data in the SHEncryptOperation,
-            /// as cachedData on the KBPhotoAsset will be set here
+            /// Doing this here avoids fetching large assets from the Apple Photos library in the SHEncryptOperation,
+            /// as cachedImage on the SHApplePhotoAsset will be set here, and will be resized to generate the SHAssetQuality versions
             ///
-            var cachedData: Data? = nil
-            phAsset.data(
-                forSize: kSHHiResPictureSize,
+            var cachedImage: NSUIImage? = nil
+            phAsset.image(
+                forSize: kSHMidResPictureSize, // kSHMaxPictureSize.size,
                 usingImageManager: self.imageManager,
-                synchronousFetch: true
+                synchronousFetch: true,
+                deliveryMode: .highQualityFormat
             ) { result in
                 switch result {
-                case .success(let d):
-                    cachedData = d
+                case .success(let i):
+                    cachedImage = i
                 case .failure(let err):
                     error = err
                 }
@@ -94,17 +97,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 return
             }
             
-            self.log.info("caching hi res data in a KBPhotoAsset for later consumption")
-            #if DEBUG
-            let bcf = ByteCountFormatter()
-            bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
-            bcf.countStyle = .file
-            self.log.debug("hiRes bytes (\(bcf.string(fromByteCount: Int64(cachedData!.count))))")
-            #endif
+            self.log.info("caching MAX res image in a SHApplePhotoAsset for later consumption")
             
-            kbPhotoAsset = KBPhotoAsset(
+            photoAsset = SHApplePhotoAsset(
                 for: phAsset,
-                cachedData: cachedData,
+                cachedImage: cachedImage?.platformImage,
                 usingCachingImageManager: self.imageManager
             )
             
@@ -119,7 +116,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             throw error!
         }
         
-        return kbPhotoAsset!
+        return photoAsset!
     }
     
     public func markAsFailed(
@@ -168,13 +165,13 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     public func markAsSuccessful(
-        kbPhotoAsset: KBPhotoAsset,
+        photoAsset: SHApplePhotoAsset,
         groupId: String,
         eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser],
         shouldUpload: Bool) throws
     {
-        let localIdentifier = kbPhotoAsset.phAsset.localIdentifier
+        let localIdentifier = photoAsset.phAsset.localIdentifier
         
         ///
         /// Enqueue in the next queue
@@ -182,7 +179,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// - Share queue for items to share
         ///
         if shouldUpload {
-            let encryptionRequest = SHEncryptionRequestQueueItem(asset: kbPhotoAsset,
+            let encryptionRequest = SHEncryptionRequestQueueItem(asset: photoAsset,
                                                                  groupId: groupId,
                                                                  eventOriginator: eventOriginator,
                                                                  sharedWith: users)
@@ -194,7 +191,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 throw error
             }
         } else {
-            let encryptionForSharingRequest = SHEncryptionForSharingRequestQueueItem(asset: kbPhotoAsset,
+            let encryptionForSharingRequest = SHEncryptionForSharingRequestQueueItem(asset: photoAsset,
                                                                                      groupId: groupId,
                                                                                      eventOriginator: eventOriginator,
                                                                                      sharedWith: users)
@@ -269,7 +266,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
         }
         
-        guard let kbPhotoAsset = try? self.retrieveAsset(
+        guard let photoAsset = try? self.retrieveAsset(
             withLocalIdentifier: fetchRequest.assetId,
             groupId: fetchRequest.groupId,
             sharedWith: fetchRequest.sharedWith
@@ -292,7 +289,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         do {
             try self.markAsSuccessful(
-                kbPhotoAsset: kbPhotoAsset,
+                photoAsset: photoAsset,
                 groupId: fetchRequest.groupId,
                 eventOriginator: fetchRequest.eventOriginator,
                 sharedWith: fetchRequest.sharedWith,
@@ -301,6 +298,26 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         } catch {
             log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
             // TODO: Handle
+        }
+    }
+    
+    public func runOnce() throws {
+        while let item = try FetchQueue.peek() {
+            guard processingState(for: item.identifier) != .fetching else {
+                continue
+            }
+            
+            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
+            setProcessingState(.fetching, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] fetch task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
         }
     }
     

@@ -109,6 +109,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
+        configuration.allowsCellularAccess = true
         URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
             
             guard error == nil else {
@@ -516,25 +517,31 @@ struct SHServerHTTPAPI : SHServerAPI {
 
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.count == 1, let asset = assets.first else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
             return
         }
         
+        var assetVersions = [[String: Any]]()
+        for encryptedVersion in asset.encryptedVersions.values {
+            guard filterVersions == nil || filterVersions!.contains(encryptedVersion.quality) else {
+                continue
+            }
+            assetVersions.append([
+                "versionName": encryptedVersion.quality.rawValue,
+                "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
+                "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
+                "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
+            ])
+        }
         let createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
             "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
             "groupId": groupId,
-            "versions": asset.encryptedVersions.values.map { encryptedVersion in
-                [
-                    "versionName": encryptedVersion.quality.rawValue,
-                    "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
-                    "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
-                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
-                ]
-            }
+            "versions": assetVersions
         ]
         
         self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
@@ -621,6 +628,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)",
                                        qos: .background)
@@ -629,12 +637,17 @@ struct SHServerHTTPAPI : SHServerAPI {
         let group = DispatchGroup()
         
         for encryptedAssetVersion in asset.encryptedVersions.values {
+            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
+                continue
+            }
+            
+            log.info("uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            
             group.enter()
             
             let serverAssetVersion = serverAsset.versions.first { sav in
                 sav.versionName == encryptedAssetVersion.quality.rawValue
             }
-            
             guard let serverAssetVersion = serverAssetVersion else {
                 results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ClientError.badRequest("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)"))
                 break

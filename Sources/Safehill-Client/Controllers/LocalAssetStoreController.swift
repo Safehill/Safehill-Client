@@ -12,10 +12,11 @@ public struct SHLocalAssetStoreController {
     
     public func encryptedAsset(
         with globalIdentifier: GlobalIdentifier,
-        filteringVersions: [SHAssetQuality]? = nil
+        versions: [SHAssetQuality]? = nil
     ) throws -> any SHEncryptedAsset
     {
-        let result = try self.encryptedAssets(with: [globalIdentifier])
+        let result = try self.encryptedAssets(with: [globalIdentifier],
+                                              versions: versions)
         guard let asset = result[globalIdentifier] else {
             throw SHBackgroundOperationError.unexpectedData(result)
         }
@@ -24,7 +25,7 @@ public struct SHLocalAssetStoreController {
     
     public func encryptedAssets(
         with globalIdentifiers: [GlobalIdentifier],
-        filteringVersions: [SHAssetQuality]? = nil
+        versions: [SHAssetQuality]? = nil
     ) throws -> [GlobalIdentifier: any SHEncryptedAsset]
     {
         var assets = [GlobalIdentifier: any SHEncryptedAsset]()
@@ -34,7 +35,7 @@ public struct SHLocalAssetStoreController {
         group.enter()
         self.serverProxy.getLocalAssets(
             withGlobalIdentifiers: globalIdentifiers,
-            versions: filteringVersions ?? SHAssetQuality.all
+            versions: versions ?? SHAssetQuality.all
         ) { result in
             switch result {
             case .success(let dict):

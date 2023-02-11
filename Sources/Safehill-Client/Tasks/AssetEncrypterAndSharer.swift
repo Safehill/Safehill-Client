@@ -169,15 +169,18 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
     ///
     private func retrieveCommonEncryptionKey(
-        for asset: KBPhotoAsset,
+        for asset: SHApplePhotoAsset,
         item: KBQueueItem,
         request shareRequest: SHEncryptionForSharingRequestQueueItem) throws -> Data
     {
-        let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions
+        let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions. Any SHAssetQuality will return the same value
         let globalIdentifier = try asset.generateGlobalIdentifier(using: imageManager)
         
         let encryptedAsset = try SHLocalAssetStoreController(user: self.user)
-            .encryptedAsset(with: globalIdentifier)
+            .encryptedAsset(
+                with: globalIdentifier,
+                versions: [quality]
+            )
         guard let version = encryptedAsset.encryptedVersions[quality] else {
             log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
             throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
@@ -201,7 +204,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     ) throws {
         var shareableEncryptedVersions = [SHShareableEncryptedAssetVersion]()
         for otherUser in request.sharedWith {
-            for quality in SHAssetQuality.all {
+            for quality in encryptedAsset.encryptedVersions.keys {
                 let encryptedVersion = encryptedAsset.encryptedVersions[quality]!
                 let shareableEncryptedVersion = SHGenericShareableEncryptedAssetVersion(
                     quality: quality,
@@ -343,17 +346,19 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
             }
             
+            ///
+            /// This is the common asset private key that allows anyone to decrypt the asset.
+            /// This secret will be encrypted for each user with their public key, so that
+            /// they are the only one that can decrypt the secret to decrypt the asset.
+            ///
             let decryptedSecretData: Data = try self.retrieveCommonEncryptionKey(
                 for: asset,
                 item: item,
                 request: shareRequest
             )
-            
-            ///
-            /// Encrypt asset for the users it's being shared with
-            ///
             encryptedAsset = try self.generateEncryptedAsset(
                 for: asset,
+                versions: [.lowResolution, .midResolution],
                 usingPrivateSecret: decryptedSecretData,
                 recipients: shareRequest.sharedWith,
                 request: shareRequest
@@ -420,6 +425,27 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             eventOriginator: shareRequest.eventOriginator,
             sharedWith: shareRequest.sharedWith
         )
+    }
+    
+    public override func runOnce() throws {
+        while let item = try ShareQueue.peek() {
+            guard processingState(for: item.identifier) != .sharing else {
+                break
+            }
+            
+            log.info("sharing item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.sharing, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] share task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+        }
     }
     
     public override func main() {

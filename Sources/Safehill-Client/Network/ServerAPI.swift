@@ -84,6 +84,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ())
     
     /// Shares one or more assets with a set of users
@@ -96,6 +97,7 @@ public protocol SHServerAPI {
     /// Upload encrypted asset versions data to the CDN.
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Mark encrypted asset versions data as uploaded to the CDN.

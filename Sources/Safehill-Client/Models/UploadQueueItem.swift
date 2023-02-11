@@ -318,9 +318,9 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     
     public static var supportsSecureCoding: Bool = true
     
-    public let asset: KBPhotoAsset
+    public let asset: SHApplePhotoAsset
     
-    public init(asset: KBPhotoAsset,
+    public init(asset: SHApplePhotoAsset,
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = []) {
@@ -338,9 +338,9 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     
     public required convenience init?(coder decoder: NSCoder) {
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
-            let asset = decoder.decodeObject(of: KBPhotoAsset.self, forKey: AssetKey)
+            let asset = decoder.decodeObject(of: SHApplePhotoAsset.self, forKey: AssetKey)
             
-            guard let asset = asset as KBPhotoAsset? else {
+            guard let asset = asset as SHApplePhotoAsset? else {
                 log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
                 return nil
             }

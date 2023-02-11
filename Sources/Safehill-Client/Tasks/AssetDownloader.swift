@@ -71,10 +71,16 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         var errorsByAssetId = [String: Error]()
         
+        ///
+        /// Since `.midResolution` is a surrogate for `.hiResolution`
+        /// fetch that version too when fetching `.hiResolution` (in case hi isn't yet uploaded at this point in time)
+        ///
+        let versions: [SHAssetQuality] = quality == .hiResolution ? [.hiResolution, .midResolution] : [.lowResolution]
+        
         log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
-            versions: [quality],
+            versions: versions,
             saveLocallyWithSenderIdentifier: request.assetDescriptor.sharingInfo.sharedByUserIdentifier
         )
         { result in
@@ -83,23 +89,31 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 if assetsDict.count > 0 {
                     for (assetId, asset) in assetsDict {
                         do {
+                            ///
+                            /// When looking for the`.hiResolution` version, we are asking for both `.hiResolution` and `.midResolution`.
+                            /// Since the former trumps the latter, use `.hiResolution` is such version is present in the response, `.midResolution` otherwise.
+                            /// For all other cases, return the only version asked for and retrieved from the server
+                            ///
+                            guard let version = asset.encryptedVersions.keys.contains(.hiResolution) ? .hiResolution : asset.encryptedVersions.keys.first else {
+                                self.log.critical("Mismatch between version in the request \(quality.rawValue) and the retrieved versions from the server \(asset.encryptedVersions.keys)")
+                                completionHandler(.failure(SHBackgroundOperationError.fatalError("Mismatch between version in the request \(quality.rawValue) and the retrieved versions from the server \(asset.encryptedVersions.keys)")))
+                                return
+                            }
+                            
                             let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
                                 encryptedAsset: asset,
                                 descriptor: request.assetDescriptor,
-                                quality: quality
+                                quality: version
                             )
                             
                             DownloadBlacklist.shared.remove(globalIdentifier: assetId)
                             
-                            switch quality {
+                            switch version {
                             case .lowResolution:
                                 self.delegate.handleLowResAsset(decryptedAsset)
                                 self.delegate.completed(decryptedAsset.globalIdentifier, groupId: request.groupId)
-                            case .hiResolution:
+                            case .midResolution, .hiResolution:
                                 self.delegate.handleHiResAsset(decryptedAsset)
-                            default:
-                                // Not supported yet
-                                break
                             }
                         }
                         catch {
@@ -117,7 +131,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 completionHandler(.success(errorsByAssetId))
             case .failure(let err):
                 DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
-                self.log.critical("Unable to download assets \(globalIdentifier) version \(SHAssetQuality.hiResolution.rawValue) from server: \(err)")
+                self.log.critical("Unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
                 completionHandler(.failure(err))
             }
             let end = CFAbsoluteTimeGetCurrent()
@@ -386,11 +400,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     group.leave()
                 }
                 
-                // MARK: Get Hi Res asset (asynchronously)
+                // MARK: Get mid Res asset (asynchronously)
                 
                 DispatchQueue.global(qos: .background).async {
                     self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,
-                                          quality: .hiResolution,
+                                          quality: .midResolution,
                                           request: downloadRequest) { _ in }
                 }
                 

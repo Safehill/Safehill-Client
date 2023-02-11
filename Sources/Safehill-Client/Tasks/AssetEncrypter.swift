@@ -6,34 +6,7 @@ import os
 import CryptoKit
 
 
-extension KBPhotoAsset {
-    public func getCachedData(using imageManager: PHImageManager, forSize size: CGSize?) throws -> Data {
-        guard self.cachedData == nil else {
-            log.trace("retriving high resolution asset \(self.phAsset.localIdentifier) from cache")
-            return self.cachedData!
-        }
-        
-        log.info("retrieving high resolution asset \(self.phAsset.localIdentifier) from Photos library")
-        var error: Error? = nil
-        var hiResData: Data? = nil
-        self.phAsset.data(forSize: size,
-                          usingImageManager: imageManager,
-                          synchronousFetch: true) { result in
-            switch result {
-            case .success(let d):
-                hiResData = d
-            case .failure(let err):
-                error = err
-            }
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        self.cachedData = hiResData
-        return hiResData!
-    }
-    
+extension SHApplePhotoAsset {
     
     /// This operation is expensive if the asset is not cached. Use it carefully
     func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
@@ -97,7 +70,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return encryptionRequest
     }
     
-    private func retrieveAssetData(for asset: KBPhotoAsset, versions: [SHAssetQuality]) throws -> [SHAssetQuality: Result<Data, Error>] {
+    private func retrieveAssetData(for asset: SHApplePhotoAsset, versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
         var dict = [SHAssetQuality: Result<Data, Error>]()
         
         let sizeForVersion: [SHAssetQuality: CGSize] = versions.reduce([:]) { partialResult, quality in
@@ -116,27 +89,29 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         for version in versions {
-            if version == .hiResolution {
-                do {
-                    let data = try asset.getCachedData(using: imageManager, forSize: kSHHiResPictureSize)
+            let size = sizeForVersion[version]!
+            
+            do {
+                let data = try asset.cachedData(forSize: size)
+                if let data = data {
                     dict[version] = Result<Data, Error>.success(data)
-                } catch {
-                    dict[version] = Result.failure(error)
-                }
-            } else {
-                asset.phAsset.data(forSize: sizeForVersion[version]!,
-                                   usingImageManager: imageManager,
-                                   synchronousFetch: true) { result in
-                    dict[version] = result
+                } else {
+                    asset.phAsset.data(forSize: size,
+                                       usingImageManager: imageManager,
+                                       synchronousFetch: true) { (result: Result<Data, Error>) in
+                        dict[version] = result
 #if DEBUG
-                    if case .success(let data) = result {
-                        let bcf = ByteCountFormatter()
-                        bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
-                        bcf.countStyle = .file
-                        self.log.debug("\(version.rawValue) bytes (\(bcf.string(fromByteCount: Int64(data.count))))")
-                    }
+                        if case .success(let data) = result {
+                            let bcf = ByteCountFormatter()
+                            bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
+                            bcf.countStyle = .file
+                            self.log.debug("\(version.rawValue) bytes (\(bcf.string(fromByteCount: Int64(data.count))))")
+                        }
 #endif
+                    }
                 }
+            } catch {
+                dict[version] = Result.failure(error)
             }
         }
 
@@ -144,7 +119,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     private func encrypt(
-        asset: KBPhotoAsset,
+        asset: SHApplePhotoAsset,
         usingSecret privateSecret: Data,
         payloads: [SHAssetQuality: Data],
         forSharingWith users: [SHServerUser]) throws -> any SHEncryptedAsset
@@ -153,17 +128,21 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         log.info("encrypting asset \(globalIdentifier) versions to be shared with users \(users.map { $0.identifier }) using symmetric key \(privateSecret.base64EncodedString(), privacy: .private(mask: .hash))")
         
-        // encrypt this asset with the symmetric keys generated at encryption time
+        ///
+        /// Encrypt all asset versions with a new symmetric keys generated at encryption time
+        ///
         let privateSecret = try SymmetricKey(rawRepresentation: privateSecret)
         let encryptedPayloads = try payloads.mapValues {
-            try SHEncryptedData(clearData: $0)
+            try SHEncryptedData(privateSecret: privateSecret, clearData: $0)
         }
         
         var versions = [SHAssetQuality: SHEncryptedAssetVersion]()
         
         for user in users {
+            ///
             /// Encrypt the secret using the recipient's public key
             /// so that it can be stored securely on the server
+            ///
             let encryptedAssetSecret = try self.user.shareable(
                 data: privateSecret.rawRepresentation,
                 with: user
@@ -196,7 +175,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///   - request: the corresponding request
     /// - Returns: the encrypted asset
     func generateEncryptedAsset(
-        for asset: KBPhotoAsset,
+        for asset: SHApplePhotoAsset,
+        versions: [SHAssetQuality],
         usingPrivateSecret privateSecret: Data,
         recipients: [SHServerUser],
         request: SHEncryptionRequestQueueItem) throws -> any SHEncryptedAsset
@@ -205,9 +185,9 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         var payloads: [SHAssetQuality: Data]
         
         do {
-            let retrieveResults = try self.retrieveAssetData(
+            let retrieveResults = self.retrieveAssetData(
                 for: asset,
-                versions: [.lowResolution, .hiResolution]
+                versions: versions
             )
             payloads = try retrieveResults.mapValues({
                 switch $0 {
@@ -395,13 +375,22 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
             }
             
-            // Generate a new symmetric key, which will be used to encrypt this asset moving forward
-            // The key is only stored clear in the local database, but encrypted for each user (including self)
-            // as the encryptedSecret
+            ///
+            /// Generate a new symmetric key, which will be used to encrypt this asset (all of its version) moving forward
+            /// The key is stored unencrypted only in the local database, but encrypted for each user (including self)
+            /// before leaving the device
+            ///
             let privateSecret = SymmetricKey(size: .bits256)
+            
+            let versions: [SHAssetQuality] = [
+                .lowResolution,
+                .midResolution,
+//                .hiResolution
+            ]
             
             encryptedAsset = try self.generateEncryptedAsset(
                 for: asset,
+                versions: versions,
                 usingPrivateSecret: privateSecret.rawRepresentation,
                 recipients: [self.user],
                 request: encryptionRequest
@@ -459,6 +448,27 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         } catch {
             log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
             // TODO: Handle
+        }
+    }
+    
+    public func runOnce() throws {
+        while let item = try EncryptionQueue.peek() {
+            guard processingState(for: item.identifier) != .encrypting else {
+                break
+            }
+            
+            log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.encrypting, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] encryption task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
         }
     }
     

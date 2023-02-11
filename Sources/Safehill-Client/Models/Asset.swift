@@ -21,7 +21,7 @@ public protocol SHAssetGroupInfo {
     var name: String? { get }
     /// ISO8601 formatted datetime, representing the time the asset group was created
     var createdAt: Date? { get }
- }
+}
 
 public struct SHGenericAssetGroupInfo : SHAssetGroupInfo, Codable {
     public let name: String?
@@ -355,32 +355,65 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
         self.encryptedVersions = encryptedVersions
     }
     
-    public static func fromDicts(_ dicts: [[String: Any]]) throws -> [String: any SHEncryptedAsset] {
+    /// Deserialize key-values coming from DB into `SHEncryptedAsset` objects
+    /// - Parameter keyValues: the keys and values retrieved from DB
+    /// - Returns: the `SHEncryptedAsset` objects, organized by assetIdentifier
+    public static func fromDicts(_ keyValues: [String: [String: Any]]) throws -> [String: any SHEncryptedAsset] {
         var encryptedAssetById = [String: any SHEncryptedAsset]()
         
-        let assetDataByGlobalIdentifier: [String: Data] = dicts.reduce([:]) { partialResult, nextValue in
-            var result = partialResult
-            if let identifier = nextValue["assetIdentifier"] as? String,
-               let data = nextValue["encryptedData"] as? Data {
-                result[identifier] = data
+        ///
+        /// Snoog 1.1.3 and earlier store the data along with the metadata.
+        /// More precisely, the value under key '<quality>::<assetIdentifier>' stores both the `encryptedData` and metadata associated with it.
+        /// Since Snoog 1.1.4, data metadata are stored under two different keys:
+        /// 1. '<quality>::<assetIdentifier>' for the metadata
+        /// 2. 'data::<quality>::<assetIdentifier>' for the data
+        ///
+        /// The `dicts` param will then have either `N * quality` values (for 1.1.3), or `N * quality * 2` values (for 1.1.4 and later)
+        ///
+        /// `assetDataByGlobalIdentifierAndQuality` is version-agnostic, and retrieves the data for each asset identifier and quality.
+        ///
+        var assetDataByGlobalIdentifierAndQuality = [String: [SHAssetQuality: Data]]()
+        for (key, value) in keyValues {
+            let keyComponents = key.components(separatedBy: "::")
+            var quality: SHAssetQuality? = nil
+            
+            if keyComponents.count == 3, keyComponents.first == "data" {
+                /// Snoog 1.1.4 and later
+                quality = SHAssetQuality(rawValue: keyComponents[1])
+            } else if keyComponents.count == 2 {
+                /// Snoog 1.1.3 and earlier
+                quality = SHAssetQuality(rawValue: keyComponents[0])
             }
-            return result
+                
+            guard let quality = quality else {
+                log.critical("failed to retrieve `quality` from key value object in the local asset store. Skipping")
+                continue
+            }
+                
+            if let identifier = value["assetIdentifier"] as? String,
+               let data = value["encryptedData"] as? Data {
+                if assetDataByGlobalIdentifierAndQuality[identifier] == nil {
+                    assetDataByGlobalIdentifierAndQuality[identifier] = [quality: data]
+                } else {
+                    assetDataByGlobalIdentifierAndQuality[identifier]![quality] = data
+                }
+            }
         }
         
-        for dict in dicts {
-            guard dict.keys.count > 2 else {
+        for (key, dict) in keyValues {
+            let keyComponents = key.components(separatedBy: "::")
+            guard keyComponents.count == 2, dict.keys.count > 2 else {
                 ///
-                /// Snoog 1.1.3 and earlier store the data along with the metadata.
-                /// More precisely, the value under key '<quality>::<assetIdentifier>' stores both the `encryptedData` and metadata associated with it.
-                /// Since Snoog 1.1.4, data metadata are stored under two different keys:
-                /// 1. '<quality>::<assetIdentifier>' for the metadata
-                /// 2. 'data::<quality>::<assetIdentifier>' for the data
+                /// Because both elements keyed by `data::<quality>::identifier` (data) and  `<quality>::identifier`
+                /// (data & metadata or just metadata for Snoog >= 1.4) are present in `dicts`, we can skip elements of `dicts` that
+                /// refer to the data (`data::<quality>::<identifier>` keys). Those were already retreived in the
+                /// `assetDataByGlobalIdentifierAndQuality` by the logic in the for statement above.
                 ///
-                /// The `dicts` param will then have either `N * quality` values (for 1.1.3), or `N * quality * 2` values (for 1.1.4 and later)
-                /// `assetDataByGlobalIdentifier` is created to retrieve the data from the values regardless of the underlying schema.
-                /// However, because both data and metadata values are present in `dicts`, we can skip elements of `dicts` that refer to the data,
-                /// as they were already retreived in the `assetDataByGlobalIdentifier` by the logic above.
-                ///
+                continue
+            }
+            
+            guard let quality = SHAssetQuality(rawValue: keyComponents.first ?? "") else {
+                log.critical("failed to retrieve `quality` from key value object in the local asset store. Skipping")
                 continue
             }
             
@@ -389,7 +422,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 throw SHBackgroundOperationError.unexpectedData(dict)
             }
             
-            guard let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: assetDataByGlobalIdentifier[assetIdentifier]) else {
+            guard let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: assetDataByGlobalIdentifierAndQuality[assetIdentifier]![quality]) else {
                 log.critical("could not deserialize asset version information from dictionary=\(dict)")
                 throw SHBackgroundOperationError.unexpectedData(dict)
             }

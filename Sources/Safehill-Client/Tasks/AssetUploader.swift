@@ -120,14 +120,20 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
     }
     
+    private func shouldShareItToo(_ sharedWith: [SHServerUser]) -> Bool {
+        return sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.user.identifier)
+    }
+    
     public func markAsSuccessful(
         item: KBQueueItem,
-        localIdentifier: String,
-        globalIdentifier: String,
-        groupId: String,
-        eventOriginator: SHServerUser,
-        sharedWith: [SHServerUser]
+        uploadRequest: SHUploadRequestQueueItem
     ) throws {
+        let localIdentifier = uploadRequest.assetId
+        let globalIdentifier = uploadRequest.globalAssetId
+        let groupId = uploadRequest.groupId
+        let eventOriginator = uploadRequest.eventOriginator
+        let sharedWith = uploadRequest.sharedWith
+        
         ///
         /// Dequeue from Upload queue
         ///
@@ -157,12 +163,16 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             throw error
         }
         
+        do { try uploadRequest.enqueue(in: HiResUploadQueue, with: localIdentifier) }
+        catch {
+            log.fault("asset \(localIdentifier) was upload but the hi resolution will not be uploaded because enqueueing to HIRESUPLOAD queue failed")
+            throw error
+        }
+        
         ///
         /// Start the sharing part if needed
         ///
-        let willShare = sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.user.identifier)
-        
-        if willShare {
+        if shouldShareItToo(sharedWith) {
             ///
             /// Enquque to FETCH queue (fetch is needed for encrypting for sharing)
             ///
@@ -243,10 +253,21 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 }
             }
             
+            /// Upload low and mid resolution.
+            /// Once successful, enqueue hi resolution upload in the HiResUploadQueue
+            let versions: [SHAssetQuality] = [
+                .lowResolution,
+                .midResolution
+            ]
+            
             log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
             let encryptedAsset: any SHEncryptedAsset
             do {
-                encryptedAsset = try SHLocalAssetStoreController(user: self.user).encryptedAsset(with: globalIdentifier)
+                encryptedAsset = try SHLocalAssetStoreController(user: self.user)
+                    .encryptedAsset(
+                        with: globalIdentifier,
+                        versions: versions
+                    )
             } catch {
                 log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
                 throw SHBackgroundOperationError.fatalError("failed to retrieved encrypted asset from local server")
@@ -267,7 +288,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 serverAsset = try SHAssetStoreController(user: self.user)
                     .upload(
                         asset: encryptedAsset,
-                        with: uploadRequest.groupId
+                        with: uploadRequest.groupId,
+                        filterVersions: versions
                     )
             } catch {
                 log.error("failed to upload asset for item with localIdentifier \(localIdentifier). Dequeueing item, as to let the user control the retry. error=\(error.localizedDescription)")
@@ -301,15 +323,32 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         do {
             try self.markAsSuccessful(
                 item: item,
-                localIdentifier: localIdentifier,
-                globalIdentifier: globalIdentifier,
-                groupId: uploadRequest.groupId,
-                eventOriginator: uploadRequest.eventOriginator,
-                sharedWith: uploadRequest.sharedWith
+                uploadRequest: uploadRequest
             )
         } catch {
             log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
             // TODO: Handle
+        }
+    }
+    
+    public func runOnce() throws {
+        while let item = try UploadQueue.peek() {
+            guard processingState(for: item.identifier) != .uploading else {
+                break
+            }
+            
+            log.info("uploading item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.uploading, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] upload task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
         }
     }
     

@@ -31,11 +31,12 @@ struct SHAssetStoreController {
     {
         let serverAsset = try self.createRemoteAsset(
             encryptedAsset,
-            groupId: groupId
+            groupId: groupId,
+            filterVersions: filterVersions
         )
         
         do {
-            try self.upload(serverAsset: serverAsset, asset: encryptedAsset)
+            try self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
         } catch {
             try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
             throw error
@@ -52,7 +53,9 @@ struct SHAssetStoreController {
 
 extension SHAssetStoreController {
     
-    private func createRemoteAsset(_ asset: any SHEncryptedAsset, groupId: String) throws -> SHServerAsset {
+    private func createRemoteAsset(_ asset: any SHEncryptedAsset,
+                                   groupId: String,
+                                   filterVersions: [SHAssetQuality]?) throws -> SHServerAsset {
         log.info("creating asset \(asset.globalIdentifier) on server")
         
         var serverAsset: SHServerAsset? = nil
@@ -61,7 +64,7 @@ extension SHAssetStoreController {
         let group = DispatchGroup()
         
         group.enter()
-        self.serverProxy.createRemoteAssets([asset], groupId: groupId) { result in
+        self.serverProxy.createRemoteAssets([asset], groupId: groupId, filterVersions: filterVersions) { result in
             switch result {
             case .success(let serverAssets):
                 if serverAssets.count == 1 {
@@ -107,14 +110,15 @@ extension SHAssetStoreController {
     }
     
     private func upload(serverAsset: SHServerAsset,
-                        asset: any SHEncryptedAsset) throws {
+                        asset: any SHEncryptedAsset,
+                        filterVersions: [SHAssetQuality]?) throws {
         log.info("uploading asset \(asset.globalIdentifier) to the CDN")
         
         var error: Error? = nil
         
         let group = DispatchGroup()
         group.enter()
-        self.serverProxy.upload(serverAsset: serverAsset, asset: asset) { result in
+        self.serverProxy.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions) { result in
             if case .failure(let err) = result {
                 error = err
             }

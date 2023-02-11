@@ -126,7 +126,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 let localAssetsStore = SHLocalAssetStoreController(user: self.user)
                 guard let encryptedAssets = try? localAssetsStore.encryptedAssets(
                         with: Array(descriptorsByGlobalIdentifier.keys),
-                        filteringVersions: [.lowResolution]
+                        versions: [.lowResolution]
                 ) else {
                     self.log.error("unable to fetch local assets")
                     completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))

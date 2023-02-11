@@ -8,6 +8,9 @@ public let kSHMidResPictureSize = CGSize(width: 960.0, height: 960.0)
 public let kSHHiResPictureSize = CGSize(width: 2400.0, height: 2400.0)
 public let kSHFullResPictureSize: CGSize? = nil
 
+// TODO: This should change to `kSHFullResPictureSize` for premium accounts
+public let kSHMaxPictureSize = (quality: SHAssetQuality.hiResolution, size: kSHHiResPictureSize)
+
 
 /* Set this to true to randomly simulate failures */
 let kSHSimulateBackgroundOperationFailures = false

@@ -463,21 +463,24 @@ extension SHServerProxy {
     
     public func createRemoteAssets(_ assets: [any SHEncryptedAsset],
                                    groupId: String,
+                                   filterVersions: [SHAssetQuality]? = nil,
                                    completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ()) {
         log.info("Creating server assets \(assets.map { $0.globalIdentifier })")
         
         self.remoteServer.create(assets: assets,
                                  groupId: groupId,
+                                 filterVersions: filterVersions,
                                  completionHandler: completionHandler)
     }
     
     public func upload(serverAsset: SHServerAsset,
                        asset: any SHEncryptedAsset,
+                       filterVersions: [SHAssetQuality]? = nil,
                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.upload(serverAsset: serverAsset, asset: asset) { result in
+        self.remoteServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions) { result in
             switch result {
             case .success():
-                self.localServer.upload(serverAsset: serverAsset, asset: asset, completionHandler: completionHandler)
+                self.localServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions, completionHandler: completionHandler)
             case .failure(let error):
                 log.critical("failed to mark asset as uploaded on the server. This asset is not marked as backed up: \(error.localizedDescription)")
                 // TODO: wanna retry later? Or the server should have a background process to update these states from S3?
