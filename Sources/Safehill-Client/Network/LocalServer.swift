@@ -417,6 +417,12 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        // TODO: Implement
+        completionHandler(.failure(SHAssetStoreError.notImplemented))
+    }
+    
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
@@ -456,110 +462,6 @@ struct LocalServer : SHServerAPI {
                 }
             case .failure(let err):
                 completionHandler(.failure(err))
-            }
-        }
-    }
-    
-    func getDecryptedAssets(withGlobalIdentifiers assetIdentifiers: [String],
-                            versions: [SHAssetQuality],
-                            completionHandler: @escaping (Swift.Result<[String: SHDecryptedAsset], Error>) -> ()) {
-        var descriptorsByGlobalId = [String: any SHAssetDescriptor]()
-        var usersByIdentifier = [String: SHServerUser]()
-        
-        let group = DispatchGroup()
-        
-        group.enter()
-        self.getAssetDescriptors { descriptorsResult in
-            switch descriptorsResult {
-            case .success(let descriptors):
-                let relevantDescriptorsByGlobalId = descriptors.filter {
-                    d in assetIdentifiers.contains(d.globalIdentifier)
-                }.reduce([String: any SHAssetDescriptor]()) { partialResult, descriptor in
-                    var result = partialResult
-                    result[descriptor.globalIdentifier] = descriptor
-                    return result
-                }
-                
-                descriptorsByGlobalId = relevantDescriptorsByGlobalId
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-            group.leave()
-        }
-        
-        var dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        guard descriptorsByGlobalId.count > 0 else {
-            completionHandler(.success([:]))
-            return
-        }
-        
-        var userIdentifiers = Set(descriptorsByGlobalId.values.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptorsByGlobalId.values.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-         
-        group.enter()
-        self.getUsers(withIdentifiers: Array(userIdentifiers)) { usersResult in
-            switch usersResult {
-            case .success(let users):
-                usersByIdentifier = users.reduce([:]) { partialResult, user in
-                    var result = partialResult
-                    result[user.identifier] = user
-                    return result
-                }
-            case .failure(let error):
-                completionHandler(.failure(error))
-                return
-            }
-            group.leave()
-        }
-            
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        self.getAssets(withGlobalIdentifiers: assetIdentifiers) { assetsResult in
-            switch assetsResult {
-            case .success(let assetsDict):
-                guard assetsDict.count > 0 else {
-                    completionHandler(.success([:]))
-                    return
-                }
-                
-                var decryptedAssetsByGlobalId = [String: any SHDecryptedAsset]()
-                for (assetIdentifier, encryptedAsset) in assetsDict {
-                    guard let sharerIdentifier = descriptorsByGlobalId[assetIdentifier]?.sharingInfo.sharedByUserIdentifier,
-                          let sharer = usersByIdentifier[sharerIdentifier] else {
-                        continue
-                    }
-                    
-                    do {
-                        for version in versions {
-                            let decryptedAssetVersion = try self.requestor.decrypt(encryptedAsset,
-                                                                                   quality: version,
-                                                                                   receivedFrom: sharer)
-                            if decryptedAssetsByGlobalId[assetIdentifier] == nil {
-                                decryptedAssetsByGlobalId[assetIdentifier] = decryptedAssetVersion
-                            } else {
-                                decryptedAssetsByGlobalId[assetIdentifier]?.decryptedVersions[version] = decryptedAssetVersion.decryptedVersions[version]
-                            }
-                        }
-                    } catch {
-                        log.error("failed to decrypt asset in local server with identifier \(assetIdentifier): \(error)")
-                        continue
-                    }
-                }
-                
-                completionHandler(.success(decryptedAssetsByGlobalId))
-                
-            case .failure(let error):
-                completionHandler(.failure(error))
-                return
             }
         }
     }

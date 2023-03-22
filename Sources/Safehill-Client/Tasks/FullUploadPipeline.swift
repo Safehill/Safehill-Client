@@ -131,12 +131,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         state = .executing
         
-        log.info("starting upload pipeline cycle")
-        
         self.runOnce()
         
-        log.info("finished upload pipeline cycle")
-    
         state = .finished
     }
 }
@@ -145,7 +141,7 @@ public class SHFullUploadPipelineProcessor : SHBackgroundOperationProcessor<SHFu
     /// Singleton (with private initializer)
     public static var shared = SHFullUploadPipelineProcessor(
         delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 10
+        dispatchIntervalInSeconds: 5
     )
     
     private override init(delayedStartInSeconds: Int = 0,

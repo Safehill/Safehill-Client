@@ -4,12 +4,25 @@ import os
 internal let log = Logger(subsystem: "com.gf.safehill", category: "SafehillClient")
 
 public let kSHLowResPictureSize = CGSize(width: 480.0, height: 480.0)
-public let kSHMidResPictureSize = CGSize(width: 960.0, height: 960.0)
-public let kSHHiResPictureSize = CGSize(width: 2400.0, height: 2400.0)
+public let kSHMidResPictureSize = CGSize(width: 1440.0, height: 1440.0)
+public let kSHHiResPictureSize = CGSize(width: 4800.0, height: 4800.0)
 public let kSHFullResPictureSize: CGSize? = nil
 
 // TODO: This should change to `kSHFullResPictureSize` for premium accounts
 public let kSHMaxPictureSize = (quality: SHAssetQuality.hiResolution, size: kSHHiResPictureSize)
+
+public func kSHSizeForQuality(quality: SHAssetQuality) -> CGSize {
+    switch quality {
+    case .lowResolution:
+        return kSHLowResPictureSize
+    case .midResolution:
+        return kSHMidResPictureSize
+    case .hiResolution:
+        return kSHHiResPictureSize
+//    case .fullResolution:
+//        return kSHFullResPictureSize
+    }
+}
 
 
 /* Set this to true to randomly simulate failures */

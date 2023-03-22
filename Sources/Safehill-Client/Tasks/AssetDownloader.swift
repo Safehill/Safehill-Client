@@ -52,7 +52,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         self.outboundDelegates = outboundDelegates
     }
     
-    public var serverProxy: SHServerProxy {
+    var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     
@@ -71,17 +71,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         var errorsByAssetId = [String: Error]()
         
-        ///
-        /// Since `.midResolution` is a surrogate for `.hiResolution`
-        /// fetch that version too when fetching `.hiResolution` (in case hi isn't yet uploaded at this point in time)
-        ///
-        let versions: [SHAssetQuality] = quality == .hiResolution ? [.hiResolution, .midResolution] : [.lowResolution]
-        
         log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
-            versions: versions,
-            saveLocallyWithSenderIdentifier: request.assetDescriptor.sharingInfo.sharedByUserIdentifier
+            versions: [quality]
         )
         { result in
             switch result {
@@ -89,26 +82,15 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 if assetsDict.count > 0 {
                     for (assetId, asset) in assetsDict {
                         do {
-                            ///
-                            /// When looking for the`.hiResolution` version, we are asking for both `.hiResolution` and `.midResolution`.
-                            /// Since the former trumps the latter, use `.hiResolution` is such version is present in the response, `.midResolution` otherwise.
-                            /// For all other cases, return the only version asked for and retrieved from the server
-                            ///
-                            guard let version = asset.encryptedVersions.keys.contains(.hiResolution) ? .hiResolution : asset.encryptedVersions.keys.first else {
-                                self.log.critical("Mismatch between version in the request \(quality.rawValue) and the retrieved versions from the server \(asset.encryptedVersions.keys)")
-                                completionHandler(.failure(SHBackgroundOperationError.fatalError("Mismatch between version in the request \(quality.rawValue) and the retrieved versions from the server \(asset.encryptedVersions.keys)")))
-                                return
-                            }
-                            
                             let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
                                 encryptedAsset: asset,
-                                descriptor: request.assetDescriptor,
-                                quality: version
+                                quality: quality,
+                                descriptor: request.assetDescriptor
                             )
                             
                             DownloadBlacklist.shared.remove(globalIdentifier: assetId)
                             
-                            switch version {
+                            switch quality {
                             case .lowResolution:
                                 self.delegate.handleLowResAsset(decryptedAsset)
                                 self.delegate.completed(decryptedAsset.globalIdentifier, groupId: request.groupId)
@@ -218,12 +200,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 ///
                 /// Download scenarios:
                 ///
-                /// 1. Assets on server and in the Photos library (local identifiers match) don't need to be downloaded. If shared by
+                /// 1. Assets on server and in the Photos library (local identifiers match) don't need to be downloaded.
                 ///     -> The delegate responsible to mark local assets "backed up" will be called
                 ///     -> If shared by "this" user, `UploadHistoryQueue` items will be created when they don't already exist.
                 ///
                 /// 2. Assets on the server not in the Photos library (local identifiers don't match), need to be downloaded.
-                ///     -> The delegate methods are responsible for adding the assets to the cache. The `ServerProxy` is responsible to cache these in the `LocalServer`
+                ///     -> The delegate methods are responsible for adding the assets to the in-memory cache.
+                ///     -> The `SHServerProxy` is responsible to cache these in the `LocalServer`
                 ///
                 
                 if descriptorsByLocalIdentifier.count > 0 {
@@ -400,7 +383,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     group.leave()
                 }
                 
-                // MARK: Get mid Res asset (asynchronously)
+                // MARK: Get mid resolution asset (asynchronously)
                 
                 DispatchQueue.global(qos: .background).async {
                     self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,

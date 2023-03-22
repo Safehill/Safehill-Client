@@ -108,6 +108,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
+        /// ** Note that only .lowResolution assets are fetched from the local server here.**
+        /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
+        ///
         self.fetchLocalDescriptors { result in
             switch result {
             case .failure(let error):
@@ -125,8 +128,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 
                 let localAssetsStore = SHLocalAssetStoreController(user: self.user)
                 guard let encryptedAssets = try? localAssetsStore.encryptedAssets(
-                        with: Array(descriptorsByGlobalIdentifier.keys),
-                        versions: [.lowResolution]
+                    with: Array(descriptorsByGlobalIdentifier.keys),
+                    versions: [.lowResolution],
+                    cacheHiResolution: false
                 ) else {
                     self.log.error("unable to fetch local assets")
                     completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
@@ -144,8 +148,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     do {
                         let decryptedAsset = try localAssetsStore.decryptedAsset(
                             encryptedAsset: encryptedAsset,
-                            descriptor: descriptor,
-                            quality: .lowResolution
+                            quality: .lowResolution,
+                            descriptor: descriptor
                         )
                         
                         self.delegate.handleLowResAsset(decryptedAsset)

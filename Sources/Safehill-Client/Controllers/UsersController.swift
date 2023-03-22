@@ -44,7 +44,7 @@ public class SHUsersController {
         self.localUser = localUser
     }
     
-    public var serverProxy: SHServerProxy {
+    private var serverProxy: SHServerProxy {
         SHServerProxy(user: self.localUser)
     }
     

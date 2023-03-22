@@ -21,7 +21,7 @@ struct SHAssetStoreController {
     
     public let user: SHLocalUser
     
-    public var serverProxy: SHServerProxy {
+    private var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     

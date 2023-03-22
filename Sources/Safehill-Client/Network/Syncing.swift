@@ -107,7 +107,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     let delegate: SHAssetSyncingDelegate?
     
-    public var serverProxy: SHServerProxy {
+    private var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     

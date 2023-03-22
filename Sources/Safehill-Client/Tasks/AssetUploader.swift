@@ -10,6 +10,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
     public let user: SHLocalUser
     public var delegates: [SHOutboundAssetOperationDelegate]
     
+    var queue: KBQueueStore {
+        UploadQueue
+    }
+    
     public init(user: SHLocalUser,
                 delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int) {
@@ -18,7 +22,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         self.delegates = delegates
     }
     
-    public var serverProxy: SHServerProxy {
+    private var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     
@@ -67,35 +71,42 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
     }
     
     public func markAsFailed(item: KBQueueItem,
-                             localIdentifier: String,
-                             globalIdentifier: String,
-                             groupId: String,
-                             eventOriginator: SHServerUser,
-                             sharedWith: [SHServerUser],
+                             uploadRequest request: SHUploadRequestQueueItem,
                              error: Error) throws {
-        ///
+        let localIdentifier = request.localIdentifier
+        let globalIdentifier = request.globalAssetId
+        let versions = request.versions
+        let groupId = request.groupId
+        let eventOriginator = request.eventOriginator
+        let sharedWith = request.sharedWith
+        
         /// Dequeque from UploadQueue
-        ///
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
         
-        do { _ = try UploadQueue.dequeue(item: item) }
+        do { _ = try self.queue.dequeue(item: item) }
         catch {
             log.error("asset \(localIdentifier) failed to upload but dequeuing from UPLOAD queue failed, so this operation will be attempted again.")
             throw error
         }
         
 #if DEBUG
-        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekNext(100))?.count ?? 0)")
+        log.debug("items in the UPLOAD queue after dequeueing \((try? self.queue.peekNext(100))?.count ?? 0)")
 #endif
         
-        ///
+        guard request.isBackground == false else {
+            /// Avoid other side-effects for background  `SHUploadRequestQueueItem`
+            return
+        }
+        
         /// Enquque to FailedUpload queue
-        ///
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(localIdentifier: localIdentifier,
-                                                                   groupId: groupId,
-                                                                   eventOriginator: eventOriginator,
-                                                                   sharedWith: sharedWith)
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
+            localIdentifier: localIdentifier,
+            versions: versions,
+            groupId: groupId,
+            eventOriginator: eventOriginator,
+            sharedWith: sharedWith
+        )
         
         do {
             try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier)
@@ -106,7 +117,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             throw error
         }
         
-        // Notify the delegates
+        /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetUploaderDelegate {
                 delegate.didFailUpload(
@@ -120,66 +131,60 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
     }
     
-    private func shouldShareItToo(_ sharedWith: [SHServerUser]) -> Bool {
-        return sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.user.identifier)
-    }
-    
     public func markAsSuccessful(
         item: KBQueueItem,
-        uploadRequest: SHUploadRequestQueueItem
+        uploadRequest request: SHUploadRequestQueueItem
     ) throws {
-        let localIdentifier = uploadRequest.assetId
-        let globalIdentifier = uploadRequest.globalAssetId
-        let groupId = uploadRequest.groupId
-        let eventOriginator = uploadRequest.eventOriginator
-        let sharedWith = uploadRequest.sharedWith
+        let localIdentifier = request.localIdentifier
+        let globalIdentifier = request.globalAssetId
+        let versions = request.versions
+        let groupId = request.groupId
+        let eventOriginator = request.eventOriginator
+        let sharedWith = request.sharedWith
         
-        ///
         /// Dequeue from Upload queue
-        ///
         log.info("dequeueing item \(item.identifier) from the UPLOAD queue")
         
-        do { _ = try UploadQueue.dequeue(item: item) }
+        do { _ = try self.queue.dequeue(item: item) }
         catch {
             log.warning("item \(item.identifier) was completed but dequeuing from UPLOAD queue failed. This task will be attempted again")
+            throw error
         }
 #if DEBUG
-        log.debug("items in the UPLOAD queue after dequeueing \((try? UploadQueue.peekNext(100))?.count ?? 0)")
+        log.debug("items in the UPLOAD queue after dequeueing \((try? self.queue.peekNext(100))?.count ?? 0)")
 #endif
         
-        ///
-        /// Enquque to success history
-        ///
-        log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
-        
-        let succesfulUploadQueueItem = SHUploadHistoryItem(localIdentifier: localIdentifier,
-                                                           groupId: groupId,
-                                                           eventOriginator: eventOriginator,
-                                                           sharedWith: [self.user])
-        
-        do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
-        catch {
-            log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
-            throw error
-        }
-        
-        do { try uploadRequest.enqueue(in: HiResUploadQueue, with: localIdentifier) }
-        catch {
-            log.fault("asset \(localIdentifier) was upload but the hi resolution will not be uploaded because enqueueing to HIRESUPLOAD queue failed")
-            throw error
+        if request.isBackground == false {
+            /// Enquque to success history
+            log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
+            
+            let succesfulUploadQueueItem = SHUploadHistoryItem(
+                localIdentifier: localIdentifier,
+                versions: versions,
+                groupId: groupId,
+                eventOriginator: eventOriginator,
+                sharedWith: [self.user]
+            )
+            
+            do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
+            catch {
+                log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
+                throw error
+            }
         }
         
         ///
         /// Start the sharing part if needed
         ///
-        if shouldShareItToo(sharedWith) {
+        if request.isSharingWithOtherUsers {
             ///
-            /// Enquque to FETCH queue (fetch is needed for encrypting for sharing)
+            /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
             ///
             log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier)")
 
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
+                versions: versions,
                 groupId: groupId,
                 eventOriginator: eventOriginator,
                 sharedWith: sharedWith,
@@ -191,11 +196,40 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to FETCH queue failed")
                 throw error
             }
+            
+            if request.versions?.contains(.hiResolution) == false,
+               request.isBackground == false {
+                ///
+                /// Enquque to FETCH queue cause for sharing we only upload the `.midResolution` version so far.
+                /// `.hiResolution` will be uploaded via this operation (note: `versions=[.hiResolution]` and `shouldUpload=true`).
+                /// Avoid unintentional recursion by not having a background request calling another background request.
+                ///
+                let fetchQueueItem = SHLocalFetchRequestQueueItem(
+                    localIdentifier: request.localIdentifier,
+                    versions: [.hiResolution],
+                    groupId: request.groupId,
+                    eventOriginator: request.eventOriginator,
+                    sharedWith: request.sharedWith,
+                    shouldUpload: true,
+                    isBackground: true
+                )
+                do {
+                    try fetchQueueItem.enqueue(in: FetchQueue, with: localIdentifier)
+                    log.info("equeueing asset \(localIdentifier) HI RESOLUTION for upload")
+                }
+                catch {
+                    log.fault("asset \(localIdentifier) was upload but the hi resolution will not be uploaded because enqueueing to FETCH queue failed")
+                    throw error
+                }
+            }
         }
         
-        ///
+        guard request.isBackground == false else {
+            /// Avoid other side-effects for background  `SHUploadRequestQueueItem`
+            return
+        }
+        
         /// Notify the delegates
-        ///
         for delegate in delegates {
             if let delegate = delegate as? SHAssetUploaderDelegate {
                 delegate.didCompleteUpload(
@@ -217,7 +251,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
     }
     
-    private func process(_ item: KBQueueItem) throws {
+    func process(_ item: KBQueueItem) throws {
         
         let uploadRequest: SHUploadRequestQueueItem
         
@@ -230,7 +264,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             }
             uploadRequest = content
         } catch {
-            do { _ = try UploadQueue.dequeue(item: item) }
+            do { _ = try self.queue.dequeue(item: item) }
             catch {
                 log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
             }
@@ -238,39 +272,37 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
         
         let globalIdentifier = uploadRequest.globalAssetId
-        let localIdentifier = uploadRequest.assetId
+        let localIdentifier = uploadRequest.localIdentifier
         
         do {
             self.tryRemoveExistingQueueItems(with: localIdentifier)
             
-            for delegate in delegates {
-                if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didStartUpload(
-                        itemWithLocalIdentifier: localIdentifier,
-                        globalIdentifier: globalIdentifier,
-                        groupId: uploadRequest.groupId
-                    )
+            if uploadRequest.isBackground == false {
+                for delegate in delegates {
+                    if let delegate = delegate as? SHAssetUploaderDelegate {
+                        delegate.didStartUpload(
+                            itemWithLocalIdentifier: localIdentifier,
+                            globalIdentifier: globalIdentifier,
+                            groupId: uploadRequest.groupId
+                        )
+                    }
                 }
             }
             
-            /// Upload low and mid resolution.
-            /// Once successful, enqueue hi resolution upload in the HiResUploadQueue
-            let versions: [SHAssetQuality] = [
-                .lowResolution,
-                .midResolution
-            ]
+            let versions = uploadRequest.versions ?? SHUploadPipeline.defaultVersions(for: uploadRequest)
             
-            log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier)")
+            log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
             let encryptedAsset: any SHEncryptedAsset
             do {
                 encryptedAsset = try SHLocalAssetStoreController(user: self.user)
                     .encryptedAsset(
                         with: globalIdentifier,
-                        versions: versions
+                        versions: versions,
+                        cacheHiResolution: false
                     )
             } catch {
                 log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
-                throw SHBackgroundOperationError.fatalError("failed to retrieved encrypted asset from local server")
+                throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
             }
             
             guard globalIdentifier == encryptedAsset.globalIdentifier else {
@@ -302,11 +334,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         } catch {
             do {
                 try self.markAsFailed(item: item,
-                                      localIdentifier: localIdentifier,
-                                      globalIdentifier: globalIdentifier,
-                                      groupId: uploadRequest.groupId,
-                                      eventOriginator: uploadRequest.eventOriginator,
-                                      sharedWith: uploadRequest.sharedWith,
+                                      uploadRequest: uploadRequest,
                                       error: error)
             } catch {
                 log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
@@ -332,7 +360,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
     }
     
     public func runOnce() throws {
-        while let item = try UploadQueue.peek() {
+        while let item = try self.queue.peek() {
             guard processingState(for: item.identifier) != .uploading else {
                 break
             }
@@ -363,7 +391,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         let items: [KBQueueItem]
         
         do {
-            items = try UploadQueue.peekNext(self.limit)
+            items = try self.queue.peekNext(self.limit)
         } catch {
             log.error("failed to fetch items from the UPLOAD queue")
             state = .finished

@@ -23,8 +23,6 @@ public let FailedShareQueue = KBQueueStore.store(withName: "com.gf.safehill.Phot
 
 public let DownloadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetDownloadQueue", type: .fifo)
 
-public let HiResUploadQueue = KBQueueStore.store(withName: "com.gf.safehill.HiResPhotoAssetUploadQueue", type: .fifo)
-
 ///
 /// Queue item reservations
 ///

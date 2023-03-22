@@ -66,6 +66,9 @@ public protocol SHServerAPI {
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
     
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
+    
     /// Retrieve assets data and metadata
     /// - Parameters:
     ///   - withGlobalIdentifiers: filtering by global identifier

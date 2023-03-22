@@ -453,7 +453,23 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
-                return completionHandler(.success(descriptors))
+                completionHandler(.success(descriptors))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    // TODO: Replace this with server filtering
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+            switch result {
+            case .success(let descriptors):
+                let filteredDescriptors = descriptors.filter { descriptor in
+                    forAssetGlobalIdentifiers.contains(descriptor.globalIdentifier)
+                }
+                return completionHandler(.success(filteredDescriptors))
             case .failure(let error):
                 return completionHandler(.failure(error))
             }
@@ -541,7 +557,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             "localIdentifier": asset.localIdentifier,
             "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
             "groupId": groupId,
-            "versions": assetVersions
+            "versions": assetVersions,
+            "forceUpdateVersions": true
         ]
         
         self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
@@ -658,20 +675,45 @@ struct SHServerHTTPAPI : SHServerAPI {
                 break
             }
             
-            S3Proxy.save(encryptedAssetVersion.encryptedData,
-                         usingPresignedURL: url) { result in
-                writeQueue.sync {
-                    results[encryptedAssetVersion.quality] = result
-                }
-                
-                if case .success(_) = result {
-                    self.markAsset(with: asset.globalIdentifier,
-                                   quality: encryptedAssetVersion.quality,
-                                   as: .completed) { _ in
+            let inBackground = serverAssetVersion.versionName == SHAssetQuality.lowResolution.rawValue ? false : true
+            
+            if inBackground {
+                S3Proxy.saveInBackground(
+                    encryptedAssetVersion.encryptedData,
+                    usingPresignedURL: url,
+                    sessionIdentifier: [
+                        self.requestor.shUser.identifier,
+                        serverAsset.globalIdentifier,
+                        serverAssetVersion.versionName
+                    ].joined(separator: "::")
+                ) {
+                        result in
+                        if case .success(_) = result {
+                            self.markAsset(with: asset.globalIdentifier,
+                                           quality: encryptedAssetVersion.quality,
+                                           as: .completed) { _ in
+                            }
+                        }
+                    }
+                group.leave()
+            } else {
+                S3Proxy.save(
+                    encryptedAssetVersion.encryptedData,
+                    usingPresignedURL: url
+                ) { result in
+                    writeQueue.sync {
+                        results[encryptedAssetVersion.quality] = result
+                    }
+                    
+                    if case .success(_) = result {
+                        self.markAsset(with: asset.globalIdentifier,
+                                       quality: encryptedAssetVersion.quality,
+                                       as: .completed) { _ in
+                            group.leave()
+                        }
+                    } else {
                         group.leave()
                     }
-                } else {
-                    group.leave()
                 }
             }
         }
