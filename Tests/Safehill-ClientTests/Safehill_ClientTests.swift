@@ -31,7 +31,7 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         let aLocalUser = SHLocalCryptoUser(key: aPrivateKey, signature: aPrivateSignature)
         
         /// Remote user A (same user)
-        let aRemoteUser = try SHRemoteCryptoUser(publicKeyData: aPrivateKey.publicKey.rawRepresentation, publicSignatureData: aPrivateSignature.publicKey.rawRepresentation)
+        let aRemoteUser = try SHRemoteCryptoUser(publicKeyData: aPrivateKey.publicKey.derRepresentation, publicSignatureData: aPrivateSignature.publicKey.derRepresentation)
         
         /// A encrypts image for A
         let encryptedImage = try SHEncryptedData(clearData: imageData)
