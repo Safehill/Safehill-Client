@@ -389,9 +389,9 @@ struct SHServerHTTPAPI : SHServerAPI {
                     let signatureForDigest = try self.requestor.shUser.signature(for: digest512)
                     let parameters = [
                         "userIdentifier": self.requestor.identifier,
-                        "signedChallenge": signatureForData.rawRepresentation.base64EncodedString(),
+                        "signedChallenge": signatureForData.derRepresentation.base64EncodedString(),
                         "digest": digest512.base64EncodedString(),
-                        "signedDigest": signatureForDigest.rawRepresentation.base64EncodedString()
+                        "signedDigest": signatureForDigest.derRepresentation.base64EncodedString()
                     ]
                     self.post("signin/challenge/verify", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
                 }
