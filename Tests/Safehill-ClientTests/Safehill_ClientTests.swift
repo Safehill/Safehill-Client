@@ -242,7 +242,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         }
     }
     
-    func _testUploadAndDownload() throws {
+    func testUploadAndDownload() throws {
         let plainText = "example data"
         let data = plainText.data(using: .utf8)!
         let sender = user.shUser
@@ -286,9 +286,8 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
         group.enter()
         serverProxy.getAssets(
             withGlobalIdentifiers: [encryptedAsset.globalIdentifier],
-            versions: [.lowResolution],
-            saveLocallyWithSenderIdentifier: user.identifier)
-        { result in
+            versions: [.lowResolution]
+        ) { result in
             switch result {
             case .success(let assetsDict):
                 XCTAssert(assetsDict.count == 1)

@@ -109,6 +109,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
+        configuration.allowsCellularAccess = true
         URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
             
             guard error == nil else {
@@ -452,7 +453,23 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
-                return completionHandler(.success(descriptors))
+                completionHandler(.success(descriptors))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    // TODO: Replace this with server filtering
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+            switch result {
+            case .success(let descriptors):
+                let filteredDescriptors = descriptors.filter { descriptor in
+                    forAssetGlobalIdentifiers.contains(descriptor.globalIdentifier)
+                }
+                return completionHandler(.success(filteredDescriptors))
             case .failure(let error):
                 return completionHandler(.failure(error))
             }
@@ -516,25 +533,32 @@ struct SHServerHTTPAPI : SHServerAPI {
 
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.count == 1, let asset = assets.first else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
             return
         }
         
+        var assetVersions = [[String: Any]]()
+        for encryptedVersion in asset.encryptedVersions.values {
+            guard filterVersions == nil || filterVersions!.contains(encryptedVersion.quality) else {
+                continue
+            }
+            assetVersions.append([
+                "versionName": encryptedVersion.quality.rawValue,
+                "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
+                "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
+                "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
+            ])
+        }
         let createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
             "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
             "groupId": groupId,
-            "versions": asset.encryptedVersions.values.map { encryptedVersion in
-                [
-                    "versionName": encryptedVersion.quality.rawValue,
-                    "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
-                    "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
-                    "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
-                ]
-            }
+            "versions": assetVersions,
+            "forceUpdateVersions": true
         ]
         
         self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
@@ -621,6 +645,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)",
                                        qos: .background)
@@ -629,12 +654,17 @@ struct SHServerHTTPAPI : SHServerAPI {
         let group = DispatchGroup()
         
         for encryptedAssetVersion in asset.encryptedVersions.values {
+            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
+                continue
+            }
+            
+            log.info("uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            
             group.enter()
             
             let serverAssetVersion = serverAsset.versions.first { sav in
                 sav.versionName == encryptedAssetVersion.quality.rawValue
             }
-            
             guard let serverAssetVersion = serverAssetVersion else {
                 results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ClientError.badRequest("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)"))
                 break
@@ -645,20 +675,45 @@ struct SHServerHTTPAPI : SHServerAPI {
                 break
             }
             
-            S3Proxy.save(encryptedAssetVersion.encryptedData,
-                         usingPresignedURL: url) { result in
-                writeQueue.sync {
-                    results[encryptedAssetVersion.quality] = result
-                }
-                
-                if case .success(_) = result {
-                    self.markAsset(with: asset.globalIdentifier,
-                                   quality: encryptedAssetVersion.quality,
-                                   as: .completed) { _ in
+            let inBackground = serverAssetVersion.versionName == SHAssetQuality.lowResolution.rawValue ? false : true
+            
+            if inBackground {
+                S3Proxy.saveInBackground(
+                    encryptedAssetVersion.encryptedData,
+                    usingPresignedURL: url,
+                    sessionIdentifier: [
+                        self.requestor.shUser.identifier,
+                        serverAsset.globalIdentifier,
+                        serverAssetVersion.versionName
+                    ].joined(separator: "::")
+                ) {
+                        result in
+                        if case .success(_) = result {
+                            self.markAsset(with: asset.globalIdentifier,
+                                           quality: encryptedAssetVersion.quality,
+                                           as: .completed) { _ in
+                            }
+                        }
+                    }
+                group.leave()
+            } else {
+                S3Proxy.save(
+                    encryptedAssetVersion.encryptedData,
+                    usingPresignedURL: url
+                ) { result in
+                    writeQueue.sync {
+                        results[encryptedAssetVersion.quality] = result
+                    }
+                    
+                    if case .success(_) = result {
+                        self.markAsset(with: asset.globalIdentifier,
+                                       quality: encryptedAssetVersion.quality,
+                                       as: .completed) { _ in
+                            group.leave()
+                        }
+                    } else {
                         group.leave()
                     }
-                } else {
-                    group.leave()
                 }
             }
         }

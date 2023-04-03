@@ -73,6 +73,5 @@ public let KnowledgeGraph = KBKnowledgeStore.store(withName: "com.gf.safehill.Kn
 
 public enum KGPredicates: String {
     case shares = "shares"
-    case knows = "knows"
     case sharedWith = "sharedWith"
 }

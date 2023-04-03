@@ -65,7 +65,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
                 
                 do {
-                    users = try self.getUsers(withIdentifiers: Array(userIdentifiers))
+                    users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
                 } catch {
                     self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
                     completionHandler(.failure(error))
@@ -87,61 +87,19 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         }
     }
     
-    private func decrypt(descriptorsByGlobalIdentifier: [String: any SHAssetDescriptor],
-                         assetsDict: [String: any SHEncryptedAsset]) {
-        guard assetsDict.count > 0 else {
-            return
-        }
-        
-        for (assetId, asset) in assetsDict {
-            guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
-                fatalError("malformed descriptorsByGlobalIdentifier")
-            }
-            
-            var groupId: String? = nil
-            for (userId, gid) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                if userId == user.identifier {
-                    groupId = gid
-                    break
-                }
-            }
-            
-            guard let groupId = groupId else {
-                log.warning("The asset descriptor sharing information doesn't seem to include the event originator")
-                continue
-            }
-            
-            do {
-                let decryptedAsset = try self.decrypt(
-                    encryptedAsset: asset,
-                    descriptor: descriptor,
-                    quality: .lowResolution
-                )
-                self.delegate.handleLowResAsset(decryptedAsset)
-                self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
-            } catch {
-                self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+    private func findGroupIdForSelfUser(for descriptor: any SHAssetDescriptor) -> String? {
+        var groupId: String? = nil
+        for (userId, gid) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+            if userId == user.identifier {
+                groupId = gid
+                break
             }
         }
-    }
-    
-    private func decryptLocalAssets(descriptorsByGlobalIdentifier: [String: any SHAssetDescriptor],
-                             completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
-        serverProxy.getLocalAssets(withGlobalIdentifiers: Array(descriptorsByGlobalIdentifier.keys),
-                                   versions: [.lowResolution])
-        { result in
-            switch result {
-            case .success(let assetsDict):
-                self.decrypt(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    assetsDict: assetsDict
-                )
-                completionHandler(.success(()))
-            case .failure(let err):
-                self.log.error("unable to fetch local assets: \(err.localizedDescription)")
-                completionHandler(.failure(err))
-            }
+        guard let groupId = groupId else {
+            log.warning("The asset descriptor sharing information doesn't seem to include the event originator")
+            return nil
         }
+        return groupId
     }
     
     public func runOnce(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
@@ -149,6 +107,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
+        ///
+        /// ** Note that only .lowResolution assets are fetched from the local server here.**
+        /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
         ///
         self.fetchLocalDescriptors { result in
             switch result {
@@ -164,15 +125,41 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     completionHandler(.success(()))
                     return
                 }
-                self.decryptLocalAssets(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) {
-                    result in
-                    if case .failure(let error) = result {
-                        self.log.error("failed to fetch local assets: \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                    } else {
-                        completionHandler(.success(()))
+                
+                let localAssetsStore = SHLocalAssetStoreController(user: self.user)
+                guard let encryptedAssets = try? localAssetsStore.encryptedAssets(
+                    with: Array(descriptorsByGlobalIdentifier.keys),
+                    versions: [.lowResolution],
+                    cacheHiResolution: false
+                ) else {
+                    self.log.error("unable to fetch local assets")
+                    completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
+                    return
+                }
+                
+                for (assetId, encryptedAsset) in encryptedAssets {
+                    guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
+                        fatalError("malformed descriptorsByGlobalIdentifier")
+                    }
+                    guard let groupId = self.findGroupIdForSelfUser(for: descriptor) else {
+                        continue
+                    }
+                    
+                    do {
+                        let decryptedAsset = try localAssetsStore.decryptedAsset(
+                            encryptedAsset: encryptedAsset,
+                            quality: .lowResolution,
+                            descriptor: descriptor
+                        )
+                        
+                        self.delegate.handleLowResAsset(decryptedAsset)
+                        self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                    } catch {
+                        self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
                     }
                 }
+                
+                completionHandler(.success(()))
             }
         }
     }

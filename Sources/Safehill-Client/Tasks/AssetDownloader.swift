@@ -52,7 +52,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         self.outboundDelegates = outboundDelegates
     }
     
-    public var serverProxy: SHServerProxy {
+    var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     
@@ -61,53 +61,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             delegate: self.delegate,
                             outboundDelegates: self.outboundDelegates,
                             limitPerRun: self.limit)
-    }
-    
-    internal func getUsers(withIdentifiers userIdentifiers: [String]) throws -> [SHServerUser] {
-        var error: Error? = nil
-        var users = [SHServerUser]()
-        let group = DispatchGroup()
-        
-        group.enter()
-        serverProxy.getUsers(
-            withIdentifiers: userIdentifiers
-        ) { result in
-            switch result {
-            case .success(let serverUsers):
-                users = serverUsers
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        return users
-    }
-    
-    internal func decrypt(encryptedAsset: any SHEncryptedAsset,
-                          descriptor: any SHAssetDescriptor,
-                          quality: SHAssetQuality) throws -> any SHDecryptedAsset {
-        var sender: SHServerUser? = nil
-        if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-            sender = self.user
-        } else {
-            let users = try self.getUsers(withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier])
-            guard users.count == 1, let serverUser = users.first,
-                  serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
-            else {
-                throw SHBackgroundOperationError.unexpectedData(users)
-            }
-            sender = serverUser
-        }
-        
-        return try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: sender!)
     }
     
     private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: String,
@@ -121,8 +74,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
-            versions: [quality],
-            saveLocallyWithSenderIdentifier: request.assetDescriptor.sharingInfo.sharedByUserIdentifier
+            versions: [quality]
         )
         { result in
             switch result {
@@ -130,10 +82,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 if assetsDict.count > 0 {
                     for (assetId, asset) in assetsDict {
                         do {
-                            let decryptedAsset = try self.decrypt(
+                            let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
                                 encryptedAsset: asset,
-                                descriptor: request.assetDescriptor,
-                                quality: quality
+                                quality: quality,
+                                descriptor: request.assetDescriptor
                             )
                             
                             DownloadBlacklist.shared.remove(globalIdentifier: assetId)
@@ -142,7 +94,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             case .lowResolution:
                                 self.delegate.handleLowResAsset(decryptedAsset)
                                 self.delegate.completed(decryptedAsset.globalIdentifier, groupId: request.groupId)
-                            case .hiResolution:
+                            case .midResolution, .hiResolution:
                                 self.delegate.handleHiResAsset(decryptedAsset)
                             }
                         }
@@ -161,7 +113,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 completionHandler(.success(errorsByAssetId))
             case .failure(let err):
                 DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
-                self.log.critical("Unable to download assets \(globalIdentifier) version \(SHAssetQuality.hiResolution.rawValue) from server: \(err)")
+                self.log.critical("Unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
                 completionHandler(.failure(err))
             }
             let end = CFAbsoluteTimeGetCurrent()
@@ -238,7 +190,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
                 
                 do {
-                    users = try self.getUsers(withIdentifiers: Array(userIdentifiers))
+                    users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
                 } catch {
                     self.log.error("Unable to fetch users from server: \(error.localizedDescription)")
                     completionHandler(.failure(error))
@@ -248,12 +200,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 ///
                 /// Download scenarios:
                 ///
-                /// 1. Assets on server and in the Photos library (local identifiers match) don't need to be downloaded. If shared by
+                /// 1. Assets on server and in the Photos library (local identifiers match) don't need to be downloaded.
                 ///     -> The delegate responsible to mark local assets "backed up" will be called
                 ///     -> If shared by "this" user, `UploadHistoryQueue` items will be created when they don't already exist.
                 ///
                 /// 2. Assets on the server not in the Photos library (local identifiers don't match), need to be downloaded.
-                ///     -> The delegate methods are responsible for adding the assets to the cache. The `ServerProxy` is responsible to cache these in the `LocalServer`
+                ///     -> The delegate methods are responsible for adding the assets to the in-memory cache.
+                ///     -> The `SHServerProxy` is responsible to cache these in the `LocalServer`
                 ///
                 
                 if descriptorsByLocalIdentifier.count > 0 {
@@ -430,11 +383,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     group.leave()
                 }
                 
-                // MARK: Get Hi Res asset (asynchronously)
+                // MARK: Get mid resolution asset (asynchronously)
                 
                 DispatchQueue.global(qos: .background).async {
                     self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,
-                                          quality: .hiResolution,
+                                          quality: .midResolution,
                                           request: downloadRequest) { _ in }
                 }
                 
@@ -607,7 +560,7 @@ extension SHDownloadOperation {
 public class SHAssetsDownloadQueueProcessor : SHBackgroundOperationProcessor<SHDownloadOperation> {
     
     public static var shared = SHAssetsDownloadQueueProcessor(
-        delayedStartInSeconds: 2,
+        delayedStartInSeconds: 0,
         dispatchIntervalInSeconds: 5
     )
     private override init(delayedStartInSeconds: Int,

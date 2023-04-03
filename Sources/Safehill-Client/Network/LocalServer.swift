@@ -227,48 +227,64 @@ struct LocalServer : SHServerAPI {
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         /// No need to pull all versions when constructing descriptor, pulling "low" version only.
         /// This assumes that sharing information and other metadata are common across all versions (low and hi)
-        let condition = KBGenericCondition(.beginsWith, value: "low::")
-            .or(KBGenericCondition(.beginsWith, value: "hi::"))
+        var condition = KBGenericCondition(value: false)
+        
+        for quality in SHAssetQuality.all {
+            condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
+        }
         
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
-                var versionUploadState = [SHAssetQuality: SHAssetDescriptorUploadState]()
+                var versionUploadStateByIdentifierQuality = [String: [SHAssetQuality: SHAssetDescriptorUploadState]]()
+                var localInfoByGlobalIdentifier = [String: (phAssetId: String?, creationDate: Date?)]()
                 var descriptors = [SHGenericAssetDescriptor]()
+                
                 for (k, v) in keyValues {
-                    let globalIdentifier: String
-                    
                     guard let value = v as? [String: Any],
                           let phAssetIdentifier = value["applePhotosAssetIdentifier"] as? String?,
                           let creationDate = value["creationDate"] as? Date? else {
                         continue
                     }
                     
-                    if let range = k.range(of: "low::") {
+                    let doProcessState = { (globalIdentifier: String, quality: SHAssetQuality) in
+                        let state: SHAssetDescriptorUploadState
+                        
+                        if let uploadStateStr = value["uploadState"] as? String,
+                           let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
+                            state = uploadState
+                        } else {
+                            state = .notStarted
+                        }
+                        
+                        if versionUploadStateByIdentifierQuality[globalIdentifier] == nil {
+                            versionUploadStateByIdentifierQuality[globalIdentifier] = [quality: state]
+                        } else {
+                            versionUploadStateByIdentifierQuality[globalIdentifier]![quality] = state
+                        }
+                    }
+                    
+                    let globalIdentifier: String
+                    if let range = k.range(of: "\(SHAssetQuality.lowResolution.rawValue)::") {
                         globalIdentifier = "" + k[range.upperBound...]
-                        
-                        if let uploadStateStr = value["uploadState"] as? String,
-                           let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
-                            versionUploadState[.lowResolution] = uploadState
-                        } else {
-                            versionUploadState[.hiResolution] = .notStarted
-                        }
-                        
-                    } else if let _ = k.range(of: "hi::") {
-                        if let uploadStateStr = value["uploadState"] as? String,
-                           let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
-                            versionUploadState[.hiResolution] = uploadState
-                        } else {
-                            versionUploadState[.hiResolution] = .notStarted
-                        }
-                        
-                        continue
-                        // Terminate here, as from this point there's no version-specific information
-                        // All the asset descriptor details will be pulled from the "low::" version
+                        doProcessState(globalIdentifier, .lowResolution)
+                    } else if let range = k.range(of: "\(SHAssetQuality.midResolution.rawValue)::") {
+                        globalIdentifier = "" + k[range.upperBound...]
+                        doProcessState(globalIdentifier, .midResolution)
+                    } else if let range = k.range(of: "\(SHAssetQuality.hiResolution.rawValue)::") {
+                        globalIdentifier = "" + k[range.upperBound...]
+                        doProcessState(globalIdentifier, .hiResolution)
                     } else {
                         continue
                     }
                     
+                    localInfoByGlobalIdentifier[globalIdentifier] = (
+                        phAssetId: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId ?? phAssetIdentifier,
+                        creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate ?? creationDate
+                    )
+                }
+                
+                for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
                     var sharedBy: String? = nil
                     var err: Error? = nil
                     
@@ -306,7 +322,7 @@ struct LocalServer : SHServerAPI {
                         ).and(KBGenericCondition(
                             .endsWith, value: globalIdentifier)
                         ).and(KBGenericCondition(
-                            .contains, value: "::low::")
+                            .contains, value: "::low::") // Can safely assume all versions are shared using the same group id
                         )
 
                         let keysAndValues = try assetStore.dictionaryRepresentation(forKeysMatching: condition)
@@ -346,22 +362,48 @@ struct LocalServer : SHServerAPI {
                         groupInfoById: groupInfoById
                     )
                     
+                    
+                    // MARK: Calculate combined upload state
+                    ///
+                    /// Before doing so, adjust upload state as follows:
+                    /// - if .mid is completed set .hi as completed
+                    /// - if .hi is completed set .mid as completed
+                    /// - if one between .mid or .hi are failed but the other one isn't, use the other one's state
+                    /// 
+                    /// Because .mid is a surrogate for .hi, if that is completed, the client can assume that the asset was completely uploaded.
+                    ///
+                    if versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] == .completed ||
+                        versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] == .completed {
+                        versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = .completed
+                        versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] = .completed
+                    }
+                    if versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] == .failed,
+                       versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] != .failed {
+                        versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution]
+                    }
+                    if versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] == .failed,
+                       versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] != .failed {
+                        versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution]
+                    }
+                    
                     var combinedUploadState: SHAssetDescriptorUploadState = .notStarted
-                    if versionUploadState.allSatisfy({ (_, value) in value == .completed }) {
-                        // ALL completed successfully
-                        combinedUploadState = .completed
-                    } else if versionUploadState.allSatisfy({ (_, value) in value == .notStarted }) {
-                        // ALL didn't start
-                        combinedUploadState = .notStarted
-                    } else if versionUploadState.contains(where: { (_, value) in value == .failed }) {
-                        // SOME failed
-                        combinedUploadState = .failed
+                    if let uploadStates = versionUploadStateByIdentifierQuality[globalIdentifier] {
+                        if uploadStates.allSatisfy({ (_, value) in value == .completed }) {
+                            // ALL completed successfully
+                            combinedUploadState = .completed
+                        } else if uploadStates.allSatisfy({ (_, value) in value == .notStarted }) {
+                            // ALL didn't start
+                            combinedUploadState = .notStarted
+                        } else if uploadStates.contains(where: { (_, value) in value == .failed }) {
+                            // SOME failed
+                            combinedUploadState = .failed
+                        }
                     }
                     
                     let descriptor = SHGenericAssetDescriptor(
                         globalIdentifier: globalIdentifier,
-                        localIdentifier: phAssetIdentifier,
-                        creationDate: creationDate,
+                        localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
+                        creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
                         uploadState: combinedUploadState,
                         sharingInfo: sharingInfo
                     )
@@ -373,6 +415,12 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(err))
             }
         }
+    }
+    
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        // TODO: Implement
+        completionHandler(.failure(SHAssetStoreError.notImplemented))
     }
     
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
@@ -398,17 +446,17 @@ struct LocalServer : SHServerAPI {
             assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
         }
         
-        assetStore.values(forKeysMatching: prefixCondition.and(assetCondition)) {
+        assetStore.dictionaryRepresentation(forKeysMatching: prefixCondition.and(assetCondition)) {
             (result: Swift.Result) in
             switch result {
-            case .success(let values):
-                guard let values = values as? [[String: Any]] else {
-                    completionHandler(.failure(KBError.unexpectedData(values)))
+            case .success(let keyValues):
+                guard let keyValues = keyValues as? [String: [String: Any]] else {
+                    completionHandler(.failure(KBError.unexpectedData(keyValues)))
                     return
                 }
                 
                 do {
-                    completionHandler(.success(try SHGenericEncryptedAsset.fromDicts(values)))
+                    completionHandler(.success(try SHGenericEncryptedAsset.fromDicts(keyValues)))
                 } catch {
                     completionHandler(.failure(error))
                 }
@@ -418,112 +466,9 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func getDecryptedAssets(withGlobalIdentifiers assetIdentifiers: [String],
-                            versions: [SHAssetQuality],
-                            completionHandler: @escaping (Swift.Result<[String: SHDecryptedAsset], Error>) -> ()) {
-        var descriptorsByGlobalId = [String: any SHAssetDescriptor]()
-        var usersByIdentifier = [String: SHServerUser]()
-        
-        let group = DispatchGroup()
-        
-        group.enter()
-        self.getAssetDescriptors { descriptorsResult in
-            switch descriptorsResult {
-            case .success(let descriptors):
-                let relevantDescriptorsByGlobalId = descriptors.filter {
-                    d in assetIdentifiers.contains(d.globalIdentifier)
-                }.reduce([String: any SHAssetDescriptor]()) { partialResult, descriptor in
-                    var result = partialResult
-                    result[descriptor.globalIdentifier] = descriptor
-                    return result
-                }
-                
-                descriptorsByGlobalId = relevantDescriptorsByGlobalId
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-            group.leave()
-        }
-        
-        var dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        guard descriptorsByGlobalId.count > 0 else {
-            completionHandler(.success([:]))
-            return
-        }
-        
-        var userIdentifiers = Set(descriptorsByGlobalId.values.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptorsByGlobalId.values.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-         
-        group.enter()
-        self.getUsers(withIdentifiers: Array(userIdentifiers)) { usersResult in
-            switch usersResult {
-            case .success(let users):
-                usersByIdentifier = users.reduce([:]) { partialResult, user in
-                    var result = partialResult
-                    result[user.identifier] = user
-                    return result
-                }
-            case .failure(let error):
-                completionHandler(.failure(error))
-                return
-            }
-            group.leave()
-        }
-            
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        self.getAssets(withGlobalIdentifiers: assetIdentifiers) { assetsResult in
-            switch assetsResult {
-            case .success(let assetsDict):
-                guard assetsDict.count > 0 else {
-                    completionHandler(.success([:]))
-                    return
-                }
-                
-                var decryptedAssetsByGlobalId = [String: any SHDecryptedAsset]()
-                for (assetIdentifier, encryptedAsset) in assetsDict {
-                    guard let sharerIdentifier = descriptorsByGlobalId[assetIdentifier]?.sharingInfo.sharedByUserIdentifier,
-                          let sharer = usersByIdentifier[sharerIdentifier] else {
-                        continue
-                    }
-                    
-                    do {
-                        for version in versions {
-                            let decryptedAssetVersion = try self.requestor.decrypt(encryptedAsset,
-                                                                                   quality: version,
-                                                                                   receivedFrom: sharer)
-                            if decryptedAssetsByGlobalId[assetIdentifier] == nil {
-                                decryptedAssetsByGlobalId[assetIdentifier] = decryptedAssetVersion
-                            } else {
-                                decryptedAssetsByGlobalId[assetIdentifier]?.decryptedVersions[version] = decryptedAssetVersion.decryptedVersions[version]
-                            }
-                        }
-                    } catch {
-                        log.error("failed to decrypt asset in local server with identifier \(assetIdentifier): \(error)")
-                        continue
-                    }
-                }
-                
-                completionHandler(.success(decryptedAssetsByGlobalId))
-                
-            case .failure(let error):
-                completionHandler(.failure(error))
-                return
-            }
-        }
-    }
-    
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         self.create(assets: assets,
                     groupId: groupId,
@@ -540,6 +485,30 @@ struct LocalServer : SHServerAPI {
         
         for asset in assets {
             for encryptedVersion in asset.encryptedVersions.values {
+                
+                if encryptedVersion.quality == .hiResolution,
+                   asset.encryptedVersions.keys.contains(.midResolution) == false {
+                    ///
+                    /// `.midResolution` is a surrogate for high-resolution when sharing only
+                    /// If creation of the `.hiResolution` version happens after the `.midResolution`
+                    /// there's no need to keep a copy of the mid-resolution in the local store
+                    ///
+                    writeBatch.set(value: nil, for: "\(SHAssetQuality.midResolution.rawValue)::" + asset.globalIdentifier)
+                    writeBatch.set(value: nil, for: "data::" + "\(SHAssetQuality.midResolution.rawValue)::" + asset.globalIdentifier)
+                    writeBatch.set(value: nil, for: [
+                        "sender",
+                        senderUserIdentifier,
+                        SHAssetQuality.midResolution.rawValue,
+                        asset.globalIdentifier
+                       ].joined(separator: "::"))
+                    writeBatch.set(value: nil, for: [
+                        "receiver",
+                        requestor.identifier,
+                        SHAssetQuality.midResolution.rawValue,
+                        asset.globalIdentifier
+                       ].joined(separator: "::"))
+                }
+                
                 let versionMetadata: [String: Any?] = [
                     "quality": encryptedVersion.quality.rawValue,
                     "assetIdentifier": asset.globalIdentifier,
@@ -619,9 +588,14 @@ struct LocalServer : SHServerAPI {
     
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
+                filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let group = DispatchGroup()
         for encryptedAssetVersion in asset.encryptedVersions.values {
+            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
+                continue
+            }
+            
             group.enter()
             self.markAsset(with: asset.globalIdentifier,
                            quality: encryptedAssetVersion.quality,
@@ -792,15 +766,16 @@ struct LocalServer : SHServerAPI {
         }
         var condition = KBGenericCondition(value: true)
         for globalIdentifier in globalIdentifiers {
+            for quality in SHAssetQuality.all {
+                condition = condition
+                    .or(
+                        KBGenericCondition(.equal, value: "\(quality.rawValue)::\(globalIdentifier)"
+                    ))
+                    .or(
+                        KBGenericCondition(.equal, value: "data::\(quality.rawValue)::\(globalIdentifier)"
+                    ))
+            }
             condition = condition.or(
-                KBGenericCondition(.equal, value: "low::" + globalIdentifier)
-            ).or(
-                KBGenericCondition(.equal, value: "hi::" + globalIdentifier)
-            ).or(
-                KBGenericCondition(.equal, value: "data::low::" + globalIdentifier)
-            ).or(
-                KBGenericCondition(.equal, value: "data::hi::" + globalIdentifier)
-            ).or(
                 KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
             ).or(
                 KBGenericCondition(.beginsWith, value: "receiver::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
@@ -814,10 +789,10 @@ struct LocalServer : SHServerAPI {
             case .success(let keysRemoved):
                 var removedGids = Set<String>()
                 for key in keysRemoved {
-                    if key.contains("data::low::") {
-                        removedGids.insert(String(key.suffix(key.count - 11)))
-                    } else if key.contains("data::hi::") {
-                        removedGids.insert(String(key.suffix(key.count - 10)))
+                    for quality in SHAssetQuality.all {
+                        if key.contains("data::\(quality.rawValue)::") {
+                            removedGids.insert(String(key.suffix(key.count - 11)))
+                        }
                     }
                 }
                 completionHandler(.success(Array(removedGids)))
