@@ -2,6 +2,15 @@
   "object": {
     "pins": [
       {
+        "package": "KnowledgeBase",
+        "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase",
+        "state": {
+          "branch": "0.9.1",
+          "revision": "23bfdb2f83e897b4283aa9e15f4e7d2f80d8e851",
+          "version": null
+        }
+      },
+      {
         "package": "Safehill-Crypto",
         "repositoryURL": "https://github.com/Safehill/Safehill-Crypto",
         "state": {
