@@ -1,0 +1,34 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "Safehill-Crypto",
+        "repositoryURL": "https://github.com/Safehill/Safehill-Crypto",
+        "state": {
+          "branch": null,
+          "revision": "eac107a89809b2008fd95740e017ec03c888e3de",
+          "version": "1.1.6"
+        }
+      },
+      {
+        "package": "swift-crypto",
+        "repositoryURL": "https://github.com/apple/swift-crypto.git",
+        "state": {
+          "branch": null,
+          "revision": "da0fe44138ab86e380f40a2acbd8a611b07d3f64",
+          "version": "2.4.0"
+        }
+      },
+      {
+        "package": "Yams",
+        "repositoryURL": "https://github.com/jpsim/Yams.git",
+        "state": {
+          "branch": null,
+          "revision": "f47ba4838c30dbd59998a4e4c87ab620ff959e8a",
+          "version": "5.0.5"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
