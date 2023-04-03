@@ -16,7 +16,7 @@ let package = Package(
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
-        .package(name: "Safehill-Crypto", path: "../Safehill-Crypto"),
+        .package(name: "Safehill-Crypto", path: "deps/Safehill-Crypto"),
         .package(name: "KnowledgeBase", path: "../KnowledgeBase/KnowledgeBase"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.1")
     ],
