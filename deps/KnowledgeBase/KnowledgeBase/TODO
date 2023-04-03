@@ -1,0 +1,15 @@
+[x] removeValues(matching condition:) should be removeValues(forKeysMatching condition:)?
+[x] new Apple logging API
+[ ] Verify String AnyHashable casting (search for dictionary as! KBKVPairs)
+[ ] Return NSNull for values set to null, nil for missing kv pairs
+[ ] Support named UserDefaults store (currently one common using KB bundle identifier)
+[ ] WriteBatch save is not async
+[ ] Remove raptor_config.h in favor of cSettings in PackageDescription
+[ ] Test SPARQL
+[x] Add XPC service for macOS
+[~] Port tests
+[ ] Check serialization of nil
+[ ] OBJC support
+[ ] Rename Event and related API to more generic LinkedList
+[x] Change _setValue(forKey:) to set(value:forKey:)
+[~] CloudKit KnowledgeBase support
