@@ -1,1 +1,0 @@
-./Rasqal/win32_rasqal_config.h

@@ -1,5 +1,0 @@
-module RDFStorage [system] {
-    umbrella header "RDFStorage_BridgingHeader.h"
-    export *
-    module * { export * }
-}

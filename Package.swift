@@ -15,10 +15,9 @@ let package = Package(
             targets: ["Safehill-Client"]),
     ],
     dependencies: [
-        // Dependencies declare other packages that this package depends on.
         .package(url: "https://github.com/Safehill/Safehill-Crypto", from: "1.1.6"),
-        .package(url: "https://github.com/gennarinoos/KnowledgeBase", from: "0.9.1"),
-        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.1")
+        .package(url: "https://github.com/gennarinoos/KnowledgeBase", from: "0.9.2"),
+        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.5")
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
