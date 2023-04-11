@@ -653,6 +653,11 @@ extension SHServerProxy {
                 else { return nil }
             }
             
+            guard encryptedAssets.count > 0 else {
+                log.info("No assets found on server for identifiers \(assetIdentifiers)")
+                continue
+            }
+            
             guard let senderId = groupIdToSenderId[groupId] else {
                 log.error("could not save downloaded server asset to the local cache because sender could not be retrieved. This operation will be attempted again, but for now the cache is out of sync.")
                 continue
