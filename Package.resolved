@@ -3,7 +3,7 @@
     "pins": [
       {
         "package": "KnowledgeBase",
-        "repositoryURL": "git@github.com:gennarinoos/KnowledgeBase.git",
+        "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase.git",
         "state": {
           "branch": null,
           "revision": "8a854c9045267a357cfad0bd2df0ac2757287bb0",
@@ -12,16 +12,16 @@
       },
       {
         "package": "Safehill-Crypto",
-        "repositoryURL": "git@github.com:Safehill/Safehill-Crypto.git",
+        "repositoryURL": "https://github.com/Safehill/Safehill-Crypto.git",
         "state": {
           "branch": null,
-          "revision": "bde42553bb1da345f0533d0cf8c364ad6bf43c72",
+          "revision": "8e28301440bf2d4d59e9c346def90c6784433872",
           "version": "1.1.6"
         }
       },
       {
         "package": "swift-crypto",
-        "repositoryURL": "git@github.com:apple/swift-crypto.git",
+        "repositoryURL": "https://github.com/apple/swift-crypto.git",
         "state": {
           "branch": null,
           "revision": "da0fe44138ab86e380f40a2acbd8a611b07d3f64",
@@ -30,7 +30,7 @@
       },
       {
         "package": "Yams",
-        "repositoryURL": "git@github.com:jpsim/Yams.git",
+        "repositoryURL": "https://github.com/jpsim/Yams.git",
         "state": {
           "branch": null,
           "revision": "f47ba4838c30dbd59998a4e4c87ab620ff959e8a",
