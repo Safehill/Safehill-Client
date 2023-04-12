@@ -155,7 +155,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
 #endif
         
         if request.isBackground == false {
-            /// Enquque to success history
+            /// Enqueue to success history
             log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
             
             let succesfulUploadQueueItem = SHUploadHistoryItem(
@@ -190,6 +190,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 sharedWith: sharedWith,
                 shouldUpload: false
             )
+            let queueItemIdentifier = [
+                localIdentifier,
+                (versions ?? SHAssetQuality.all).map({ $0.rawValue }).joined(separator: "+")
+            ].joined(separator: "::")
 
             do { try fetchRequest.enqueue(in: FetchQueue, with: localIdentifier) }
             catch {
@@ -214,8 +218,12 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                     isBackground: true
                 )
                 do {
-                    try fetchQueueItem.enqueue(in: FetchQueue, with: localIdentifier)
-                    log.info("equeueing asset \(localIdentifier) HI RESOLUTION for upload")
+                    let hiVersionQueueItemIdentifier = [
+                        localIdentifier,
+                        SHAssetQuality.hiResolution.rawValue
+                    ].joined(separator: "::")
+                    try fetchQueueItem.enqueue(in: FetchQueue, with: hiVersionQueueItemIdentifier)
+                    log.info("enqueueing asset \(localIdentifier) HI RESOLUTION for upload")
                 }
                 catch {
                     log.fault("asset \(localIdentifier) was upload but the hi resolution will not be uploaded because enqueueing to FETCH queue failed")

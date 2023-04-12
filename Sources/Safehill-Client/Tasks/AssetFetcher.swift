@@ -205,7 +205,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 eventOriginator: eventOriginator,
                 sharedWith: users
             )
-            log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier)")
+            log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier) versions \(versions ?? [])")
             
             do { try encryptionRequest.enqueue(in: EncryptionQueue, with: localIdentifier) }
             catch {
@@ -220,7 +220,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 eventOriginator: eventOriginator,
                 sharedWith: users
             )
-            log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier)")
+            log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions ?? [])")
             
             let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
             do {
