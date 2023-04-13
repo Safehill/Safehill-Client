@@ -432,37 +432,63 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        var prefixCondition = KBGenericCondition(value: false)
+        var resultDictionary = [String: any SHEncryptedAsset]()
+        var err: Error? = nil
         
-        let versions = versions ?? SHAssetQuality.all
-        for quality in versions {
-            prefixCondition = prefixCondition
-                .or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
-                .or(KBGenericCondition(.beginsWith, value: "data::" + quality.rawValue + "::"))
-        }
+        let group = DispatchGroup()
         
-        var assetCondition = KBGenericCondition(value: false)
-        for assetIdentifier in assetIdentifiers {
-            assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
-        }
-        
-        assetStore.dictionaryRepresentation(forKeysMatching: prefixCondition.and(assetCondition)) {
-            (result: Swift.Result) in
-            switch result {
-            case .success(let keyValues):
-                guard let keyValues = keyValues as? [String: [String: Any]] else {
-                    completionHandler(.failure(KBError.unexpectedData(keyValues)))
-                    return
-                }
-                
-                do {
-                    completionHandler(.success(try SHGenericEncryptedAsset.fromDicts(keyValues)))
-                } catch {
-                    completionHandler(.failure(error))
-                }
-            case .failure(let err):
-                completionHandler(.failure(err))
+        for assetIdentifiersChunk in assetIdentifiers.chunked(into: 10) {
+            var prefixCondition = KBGenericCondition(value: false)
+            
+            let versions = versions ?? SHAssetQuality.all
+            for quality in versions {
+                prefixCondition = prefixCondition
+                    .or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
+                    .or(KBGenericCondition(.beginsWith, value: "data::" + quality.rawValue + "::"))
             }
+            
+            var assetCondition = KBGenericCondition(value: false)
+            for assetIdentifier in assetIdentifiersChunk {
+                assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
+            }
+            
+            group.enter()
+            assetStore.dictionaryRepresentation(forKeysMatching: prefixCondition.and(assetCondition)) {
+                (result: Swift.Result) in
+                switch result {
+                case .success(let keyValues):
+                    guard let keyValues = keyValues as? [String: [String: Any]] else {
+                        err = KBError.unexpectedData(keyValues)
+                        group.leave()
+                        return
+                    }
+                    
+                    do {
+                        resultDictionary.merge(
+                            try SHGenericEncryptedAsset.fromDicts(keyValues),
+                            uniquingKeysWith: { (_, b) in return b }
+                        )
+                        
+                    } catch {
+                        err = error
+                    }
+                    group.leave()
+                case .failure(let error):
+                    err = error
+                    group.leave()
+                }
+            }
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 10))
+        guard dispatchResult == .success else {
+            return completionHandler(.failure(SHBackgroundOperationError.timedOut))
+        }
+        
+        if let err = err {
+            completionHandler(.failure(err))
+        } else {
+            completionHandler(.success(resultDictionary))
         }
     }
     
@@ -764,39 +790,57 @@ struct LocalServer : SHServerAPI {
             completionHandler(.success([]))
             return
         }
-        var condition = KBGenericCondition(value: true)
-        for globalIdentifier in globalIdentifiers {
-            for quality in SHAssetQuality.all {
-                condition = condition
-                    .or(
-                        KBGenericCondition(.equal, value: "\(quality.rawValue)::\(globalIdentifier)"
-                    ))
-                    .or(
-                        KBGenericCondition(.equal, value: "data::\(quality.rawValue)::\(globalIdentifier)"
-                    ))
-            }
-            condition = condition.or(
-                KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
-            ).or(
-                KBGenericCondition(.beginsWith, value: "receiver::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
-            )
-        }
         
-        assetStore.removeValues(forKeysMatching: condition) { result in
-            switch result {
-            case .failure(let err):
-                completionHandler(.failure(err))
-            case .success(let keysRemoved):
-                var removedGids = Set<String>()
-                for key in keysRemoved {
-                    for quality in SHAssetQuality.all {
-                        if key.contains("data::\(quality.rawValue)::") {
-                            removedGids.insert(String(key.suffix(key.count - 11)))
+        var removedGlobalIdentifiers = Set<String>()
+        var err: Error? = nil
+        let group = DispatchGroup()
+        
+        for globalIdentifierBatch in globalIdentifiers.chunked(into: 5) {
+            for globalIdentifier in globalIdentifierBatch {
+                var condition = KBGenericCondition(value: true)
+                for quality in SHAssetQuality.all {
+                    condition = condition
+                        .or(
+                            KBGenericCondition(.equal, value: "\(quality.rawValue)::\(globalIdentifier)"
+                                              ))
+                        .or(
+                            KBGenericCondition(.equal, value: "data::\(quality.rawValue)::\(globalIdentifier)"
+                                              ))
+                }
+                condition = condition.or(
+                    KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
+                ).or(
+                    KBGenericCondition(.beginsWith, value: "receiver::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
+                )
+                
+                group.enter()
+                assetStore.removeValues(forKeysMatching: condition) { result in
+                    switch result {
+                    case .failure(let error):
+                        err = error
+                    case .success(let keysRemoved):
+                        for key in keysRemoved {
+                            for quality in SHAssetQuality.all {
+                                if key.contains("data::\(quality.rawValue)::") {
+                                    removedGlobalIdentifiers.insert(String(key.suffix(key.count - 11)))
+                                }
+                            }
                         }
                     }
+                    group.leave()
                 }
-                completionHandler(.success(Array(removedGids)))
             }
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 5))
+        guard dispatchResult == .success else {
+            return completionHandler(.failure(SHBackgroundOperationError.timedOut))
+        }
+        
+        if let err = err {
+            completionHandler(.failure(err))
+        } else {
+            completionHandler(.success(Array(removedGlobalIdentifiers)))
         }
     }
 }
