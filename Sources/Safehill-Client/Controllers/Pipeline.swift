@@ -1,4 +1,5 @@
 import Foundation
+import Safehill_Crypto
 
 ///
 /// For Sharing requests (where `sharedWith` is not empty):
@@ -54,17 +55,22 @@ public struct SHUploadPipeline {
         ? [.lowResolution, .midResolution]
         : [.lowResolution, .hiResolution]
         
-        let queueItem = SHLocalFetchRequestQueueItem(
-            localIdentifier: localIdentifier,
-            versions: versions,
+        
+        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
             groupId: groupId,
-            eventOriginator: sender,
-            sharedWith: recipients,
-            shouldUpload: true
+            assetLocalIdentifier: localIdentifier
         )
         
         do {
-            try queueItem.enqueue(in: FetchQueue, with: localIdentifier)
+            let queueItem = SHLocalFetchRequestQueueItem(
+                localIdentifier: localIdentifier,
+                versions: versions,
+                groupId: groupId,
+                eventOriginator: sender,
+                sharedWith: recipients,
+                shouldUpload: true
+            )
+            try queueItem.enqueue(in: FetchQueue, with: queueItemIdentifier)
         } catch {
             let failedQueueItem = SHFailedUploadRequestQueueItem(
                 localIdentifier: localIdentifier,
@@ -73,9 +79,10 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients
             )
-            try? failedQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier)
+            try? failedQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
             
             if recipients.count > 0 {
+                let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: recipients)
                 let failedQueueItem = SHFailedShareRequestQueueItem(
                     localIdentifier: localIdentifier,
                     versions: versions,
@@ -83,7 +90,7 @@ public struct SHUploadPipeline {
                     eventOriginator: sender,
                     sharedWith: recipients
                 )
-                try? failedQueueItem.enqueue(in: FailedShareQueue, with: localIdentifier)
+                try? failedQueueItem.enqueue(in: FailedShareQueue, with: shareQueueItemIdentifier)
             }
             
             throw error
@@ -124,18 +131,22 @@ public struct SHUploadPipeline {
             versions = [.lowResolution, .midResolution]
         }
         
-        let queueItem = SHLocalFetchRequestQueueItem(
-            localIdentifier: localIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: sender,
-            sharedWith: recipients,
-            shouldUpload: forceUpload
-        )
-        
         do {
-            try queueItem.enqueue(in: FetchQueue, with: localIdentifier)
+            let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+                groupId: groupId,
+                assetLocalIdentifier: localIdentifier
+            )
+            let queueItem = SHLocalFetchRequestQueueItem(
+                localIdentifier: localIdentifier,
+                versions: versions,
+                groupId: groupId,
+                eventOriginator: sender,
+                sharedWith: recipients,
+                shouldUpload: forceUpload
+            )
+            try queueItem.enqueue(in: FetchQueue, with: queueItemIdentifier)
         } catch {
+            let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: recipients)
             let failedQueueItem = SHFailedShareRequestQueueItem(
                 localIdentifier: localIdentifier,
                 versions: versions,
@@ -143,7 +154,34 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients
             )
-            try? failedQueueItem.enqueue(in: FailedShareQueue, with: localIdentifier)
+            try? failedQueueItem.enqueue(in: FailedShareQueue, with: shareQueueItemIdentifier)
         }
+    }
+}
+
+public extension SHUploadPipeline {
+    
+    static func uploadQueueItemKey(groupId: String, assetLocalIdentifier: String) -> String {
+        return [assetLocalIdentifier, groupId].joined(separator: "+")
+    }
+    
+    static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
+        return (
+            assetId + "+" +
+            groupId + "+" +
+            SHHash.stringDigest(for: users
+                .map({ $0.identifier })
+                .sorted()
+                .joined(separator: "+").data(using: .utf8)!
+            )
+        )
+    }
+    
+    static func hiResUploadQueueItemKey(groupId: String, assetLocalIdentifier: String) -> String {
+        return [
+            assetLocalIdentifier,
+            groupId,
+            SHAssetQuality.hiResolution.rawValue
+        ].joined(separator: "+")
     }
 }

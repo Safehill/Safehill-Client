@@ -63,9 +63,9 @@ public protocol SHAssetFetcherDelegate: SHOutboundAssetOperationDelegate {
 }
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
-    func didStartEncryption(itemWithLocalIdentifier: String, groupId: String)
-    func didCompleteEncryption(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didFailEncryption(itemWithLocalIdentifier: String, groupId: String)
+    func didStartEncryption(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didCompleteEncryption(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didFailEncryption(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
 }
 
 

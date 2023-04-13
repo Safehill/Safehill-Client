@@ -363,6 +363,10 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         
+        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+            groupId: groupId,
+            assetLocalIdentifier: localIdentifier
+        )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
             versions: versions,
@@ -372,7 +376,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         )
         
         do {
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier)
+            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -384,7 +388,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             if let delegate = delegate as? SHAssetEncrypterDelegate {
                 delegate.didFailEncryption(
                     itemWithLocalIdentifier: localIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    sharedWith: users
                 )
             }
         }
@@ -419,6 +424,10 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         /// Enqueue to Upload queue
         ///
+        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+            groupId: groupId,
+            assetLocalIdentifier: localIdentifier
+        )
         let uploadRequest = SHUploadRequestQueueItem(
             localAssetId: localIdentifier,
             globalAssetId: globalIdentifier,
@@ -429,7 +438,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         )
         log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier)")
         
-        do { try uploadRequest.enqueue(in: UploadQueue, with: localIdentifier) }
+        do { try uploadRequest.enqueue(in: UploadQueue, with: queueItemIdentifier) }
         catch {
             log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
@@ -449,7 +458,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 delegate.didCompleteEncryption(
                     itemWithLocalIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
-                    groupId: groupId
+                    groupId: groupId,
+                    sharedWith: users
                 )
             }
         }
@@ -484,7 +494,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
                         delegate.didStartEncryption(
                             itemWithLocalIdentifier: asset.phAsset.localIdentifier,
-                            groupId: encryptionRequest.groupId
+                            groupId: encryptionRequest.groupId,
+                            sharedWith: encryptionRequest.sharedWith
                         )
                     }
                 }

@@ -154,6 +154,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Enquque to failed
         log.info("enqueueing fetch request for asset \(localIdentifier) in the FAILED queue")
         
+        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+            groupId: groupId,
+            assetLocalIdentifier: localIdentifier
+        )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
             versions: versions,
@@ -162,8 +166,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             sharedWith: users
         )
         
-        do { try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier) }
-        catch {
+        do {
+            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
+            
+        } catch {
             /// Be forgiving for failed Fetch operations
             log.fault("asset \(localIdentifier) failed to fetch but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
         }
@@ -198,6 +204,13 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// - Share queue for items to share
         ///
         if shouldUpload {
+            log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier) versions \(versions ?? [])")
+            
+            
+            let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+                groupId: groupId,
+                assetLocalIdentifier: localIdentifier
+            )
             let encryptionRequest = SHEncryptionRequestQueueItem(
                 asset: photoAsset,
                 versions: versions,
@@ -205,10 +218,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 eventOriginator: eventOriginator,
                 sharedWith: users
             )
-            log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier) versions \(versions ?? [])")
             
-            do { try encryptionRequest.enqueue(in: EncryptionQueue, with: localIdentifier) }
-            catch {
+            do {
+                try encryptionRequest.enqueue(in: EncryptionQueue, with: queueItemIdentifier)
+            } catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
                 throw error
             }
@@ -222,9 +235,9 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             )
             log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions ?? [])")
             
-            let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
             do {
-                try encryptionForSharingRequest.enqueue(in: ShareQueue, with: key)
+                try encryptionForSharingRequest.enqueue(in: ShareQueue, with: queueItemIdentifier)
             }
             catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be shared because enqueueing to SHARE queue failed")

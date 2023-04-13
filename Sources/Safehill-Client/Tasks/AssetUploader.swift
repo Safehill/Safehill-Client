@@ -100,6 +100,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         
         /// Enquque to FailedUpload queue
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
+        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+            groupId: groupId,
+            assetLocalIdentifier: localIdentifier
+        )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
             versions: versions,
@@ -110,7 +114,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         
         do {
             try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier)
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: localIdentifier)
+            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -154,6 +158,11 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         log.debug("items in the UPLOAD queue after dequeueing \((try? self.queue.peekNext(100))?.count ?? 0)")
 #endif
         
+        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+            groupId: groupId,
+            assetLocalIdentifier: localIdentifier
+        )
+        
         if request.isBackground == false {
             /// Enqueue to success history
             log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
@@ -166,7 +175,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 sharedWith: [self.user]
             )
             
-            do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: localIdentifier) }
+            do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: queueItemIdentifier) }
             catch {
                 log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
                 throw error
@@ -190,12 +199,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 sharedWith: sharedWith,
                 shouldUpload: false
             )
-            let queueItemIdentifier = [
-                localIdentifier,
-                (versions ?? SHAssetQuality.all).map({ $0.rawValue }).joined(separator: "+")
-            ].joined(separator: "::")
-
-            do { try fetchRequest.enqueue(in: FetchQueue, with: localIdentifier) }
+            do { try fetchRequest.enqueue(in: FetchQueue, with: queueItemIdentifier) }
             catch {
                 log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to FETCH queue failed")
                 throw error
@@ -208,6 +212,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 /// `.hiResolution` will be uploaded via this operation (note: `versions=[.hiResolution]` and `shouldUpload=true`).
                 /// Avoid unintentional recursion by not having a background request calling another background request.
                 ///
+                /// NOTE: This is only necessary when the user shares assets, because in that case `.lowResolution` and `.midResolution` are uploaded first, and `.hiResolution` later
+                /// When assets are only backed up, there's no `.midResolution` used as a surrogate.
+                ///
                 let fetchQueueItem = SHLocalFetchRequestQueueItem(
                     localIdentifier: request.localIdentifier,
                     versions: [.hiResolution],
@@ -218,10 +225,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                     isBackground: true
                 )
                 do {
-                    let hiVersionQueueItemIdentifier = [
-                        localIdentifier,
-                        SHAssetQuality.hiResolution.rawValue
-                    ].joined(separator: "::")
+                    let hiVersionQueueItemIdentifier = SHUploadPipeline.hiResUploadQueueItemKey(groupId: groupId, assetLocalIdentifier: request.localIdentifier)
                     try fetchQueueItem.enqueue(in: FetchQueue, with: hiVersionQueueItemIdentifier)
                     log.info("enqueueing asset \(localIdentifier) HI RESOLUTION for upload")
                 }

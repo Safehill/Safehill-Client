@@ -1,7 +1,6 @@
 import Foundation
 import os
 import KnowledgeBase
-import Safehill_Crypto
 
 
 open class SHEncryptAndShareOperation: SHEncryptionOperation {
@@ -47,18 +46,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                               globalIdentifier: "")
     }
     
-    public static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
-        return (
-            assetId + "+" +
-            groupId + "+" +
-            SHHash.stringDigest(for: users
-                .map({ $0.identifier })
-                .sorted()
-                .joined(separator: "+").data(using: .utf8)!
-            )
-        )
-    }
-    
     public func markAsFailed(
         encryptionRequest request: SHEncryptionRequestQueueItem,
         globalIdentifier: String
@@ -83,14 +70,14 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Enquque to failed
         log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
         
+        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
         let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier,
                                                         versions: versions,
                                                         groupId: groupId,
                                                         eventOriginator: eventOriginator,
                                                         sharedWith: users)
-        let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
         do {
-            try failedShare.enqueue(in: FailedShareQueue, with: key)
+            try failedShare.enqueue(in: FailedShareQueue, with: queueItemIdentifier)
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -137,15 +124,15 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Enquque to success history
         log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
         
+        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
         let succesfulUploadQueueItem = SHShareHistoryItem(localIdentifier: localIdentifier,
                                                           versions: versions,
                                                           groupId: groupId,
                                                           eventOriginator: eventOriginator,
                                                           sharedWith: users)
         
-        let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
         do {
-            try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: key)
+            try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: queueItemIdentifier)
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
@@ -247,8 +234,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     ) {
         for queue in [ShareHistoryQueue, FailedShareQueue] {
 
-            let key = SHEncryptAndShareOperation.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
-            let condition = KBGenericCondition(.equal, value: key)
+            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            let condition = KBGenericCondition(.equal, value: queueItemIdentifier)
             let _ = try? queue.removeValues(forKeysMatching: condition)
         }
     }
