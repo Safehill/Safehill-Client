@@ -2,15 +2,17 @@ import Foundation
 import KnowledgeBase
 
 
-enum SHOperationHistory {
+public enum SHQueueOperation {
     
     static func removeItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
-        SHOperationHistory.removeUploadItems(correspondingTo: assetLocalIdentifiers)
-        SHOperationHistory.removeShareItems(correspondingTo: assetLocalIdentifiers, groupId: groupId)
+        SHQueueOperation.removeUploadItems(correspondingTo: assetLocalIdentifiers)
+        SHQueueOperation.removeShareItems(correspondingTo: assetLocalIdentifiers, groupId: groupId)
     }
     
     static func removeUploadItems(correspondingTo assetLocalIdentifiers: [String]) {
-        Dispatch.dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
+        guard assetLocalIdentifiers.count > 0 else {
+            return
+        }
         
         let condition = assetLocalIdentifiers.reduce(KBGenericCondition(value: false), { partialResult, localIdentifier in
             return partialResult.or(KBGenericCondition(.beginsWith, value: [localIdentifier, ""].joined(separator: "+")))
@@ -32,7 +34,9 @@ enum SHOperationHistory {
     }
     
     static func removeShareItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
-        Dispatch.dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
+        guard assetLocalIdentifiers.count > 0 else {
+            return
+        }
         
         let condition = assetLocalIdentifiers.reduce(KBGenericCondition(value: false), { partialResult, localIdentifier in
             return partialResult.or(KBGenericCondition(.beginsWith, value: [localIdentifier, groupId ?? ""].joined(separator: "+")))
