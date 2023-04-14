@@ -4,12 +4,12 @@ import KnowledgeBase
 
 public enum SHQueueOperation {
     
-    static func removeItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
+    public static func removeItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
         SHQueueOperation.removeUploadItems(correspondingTo: assetLocalIdentifiers)
         SHQueueOperation.removeShareItems(correspondingTo: assetLocalIdentifiers, groupId: groupId)
     }
     
-    static func removeUploadItems(correspondingTo assetLocalIdentifiers: [String]) {
+    public static func removeUploadItems(correspondingTo assetLocalIdentifiers: [String]) {
         guard assetLocalIdentifiers.count > 0 else {
             return
         }
@@ -33,7 +33,7 @@ public enum SHQueueOperation {
         }
     }
     
-    static func removeShareItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
+    public static func removeShareItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
         guard assetLocalIdentifiers.count > 0 else {
             return
         }
