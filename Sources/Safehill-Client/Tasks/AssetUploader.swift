@@ -145,6 +145,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
+        let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
         log.info("dequeueing item \(item.identifier) from the UPLOAD queue")
@@ -163,7 +164,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             assetLocalIdentifier: localIdentifier
         )
         
-        if request.isBackground == false {
+        if isBackground == false {
             /// Enqueue to success history
             log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
             
@@ -197,7 +198,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 groupId: groupId,
                 eventOriginator: eventOriginator,
                 sharedWith: sharedWith,
-                shouldUpload: false
+                shouldUpload: false,
+                isBackground: isBackground
             )
             do { try fetchRequest.enqueue(in: FetchQueue, with: queueItemIdentifier) }
             catch {
@@ -206,7 +208,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             }
             
             if request.versions?.contains(.hiResolution) == false,
-               request.isBackground == false {
+               isBackground == false {
                 ///
                 /// Enquque to FETCH queue cause for sharing we only upload the `.midResolution` version so far.
                 /// `.hiResolution` will be uploaded via this operation (note: `versions=[.hiResolution]` and `shouldUpload=true`).
@@ -236,7 +238,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             }
         }
         
-        guard request.isBackground == false else {
+        guard isBackground == false else {
             /// Avoid other side-effects for background  `SHUploadRequestQueueItem`
             return
         }
