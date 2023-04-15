@@ -314,9 +314,9 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             )
         }
         
-        var isBackground = false
-        if let isBg = bg?.boolValue {
-            isBackground = isBg
+        guard let isBg = bg else {
+            log.error("unexpected value for isBackground when decoding \(Self.Type.self) object")
+            return nil
         }
         
         self.init(localIdentifier: assetId,
@@ -324,7 +324,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
                   groupId: groupId,
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
-                  isBackground: isBackground)
+                  isBackground: isBg.boolValue)
     }
 }
 
@@ -359,7 +359,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             let shouldUpload = decoder.decodeObject(of: NSNumber.self, forKey: AssetShouldUploadKey)
             
-            guard let shouldUpload = shouldUpload?.boolValue else {
+            guard let su = shouldUpload else {
                 log.error("unexpected value for shouldUpload when decoding SHLocalFetchRequestQueueItem object")
                 return nil
             }
@@ -369,7 +369,8 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
-                      shouldUpload: shouldUpload)
+                      shouldUpload: su.boolValue,
+                      isBackground: superSelf.isBackground)
             return
         }
        
@@ -418,7 +419,8 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
                       versions: superSelf.versions,
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
-                      sharedWith: superSelf.sharedWith)
+                      sharedWith: superSelf.sharedWith,
+                      isBackground: superSelf.isBackground)
             return
         }
        
