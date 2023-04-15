@@ -168,7 +168,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         do {
             try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
-            
         } catch {
             /// Be forgiving for failed Fetch operations
             log.fault("asset \(localIdentifier) failed to fetch but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -197,6 +196,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let shouldUpload = request.shouldUpload
+        let isBackground = request.isBackground
         
         ///
         /// Enqueue in the next queue
@@ -216,7 +216,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 versions: versions,
                 groupId: groupId,
                 eventOriginator: eventOriginator,
-                sharedWith: users
+                sharedWith: users,
+                isBackground: isBackground
             )
             
             do {
@@ -231,7 +232,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 versions: versions,
                 groupId: groupId,
                 eventOriginator: eventOriginator,
-                sharedWith: users
+                sharedWith: users,
+                isBackground: isBackground
             )
             log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions ?? [])")
             

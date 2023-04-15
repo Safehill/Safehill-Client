@@ -405,6 +405,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let isBackground = request.isBackground
         
         ///
         /// Dequeue from Encryption queue
@@ -434,7 +435,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: users
+            sharedWith: users,
+            isBackground: isBackground
         )
         log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier)")
         
