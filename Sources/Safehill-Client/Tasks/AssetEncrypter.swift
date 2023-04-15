@@ -438,7 +438,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             sharedWith: users,
             isBackground: isBackground
         )
-        log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier)")
+        log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
         
         do { try uploadRequest.enqueue(in: UploadQueue, with: queueItemIdentifier) }
         catch {

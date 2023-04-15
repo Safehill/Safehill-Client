@@ -204,7 +204,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// - Share queue for items to share
         ///
         if shouldUpload {
-            log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier) versions \(versions ?? [])")
+            log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
             
             
             let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
@@ -235,7 +235,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 sharedWith: users,
                 isBackground: isBackground
             )
-            log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions ?? [])")
+            log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
             
             let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
             do {

@@ -190,7 +190,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             ///
             /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
             ///
-            log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier)")
+            log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
 
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
@@ -211,7 +211,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                isBackground == false {
                 ///
                 /// Enquque to FETCH queue cause for sharing we only upload the `.midResolution` version so far.
-                /// `.hiResolution` will be uploaded via this operation (note: `versions=[.hiResolution]` and `shouldUpload=true`).
+                /// `.hiResolution` will be uploaded via this operation (note: `versions=[.hiResolution]`, `isBackground=true` and `shouldUpload=true`).
                 /// Avoid unintentional recursion by not having a background request calling another background request.
                 ///
                 /// NOTE: This is only necessary when the user shares assets, because in that case `.lowResolution` and `.midResolution` are uploaded first, and `.hiResolution` later
