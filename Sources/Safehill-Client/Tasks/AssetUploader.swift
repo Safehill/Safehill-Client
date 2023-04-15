@@ -159,15 +159,14 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         log.debug("items in the UPLOAD queue after dequeueing \((try? self.queue.peekNext(100))?.count ?? 0)")
 #endif
         
-        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-            groupId: groupId,
-            assetLocalIdentifier: localIdentifier
-        )
-        
         if isBackground == false {
             /// Enqueue to success history
             log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
             
+            let uploadedQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+                groupId: groupId,
+                assetLocalIdentifier: localIdentifier
+            )
             let succesfulUploadQueueItem = SHUploadHistoryItem(
                 localIdentifier: localIdentifier,
                 versions: versions,
@@ -176,7 +175,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 sharedWith: [self.user]
             )
             
-            do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: queueItemIdentifier) }
+            do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: uploadedQueueItemIdentifier) }
             catch {
                 log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
                 throw error
@@ -192,6 +191,11 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             ///
             log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
 
+            let shareFetchQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                groupId: groupId,
+                assetId: localIdentifier,
+                users: sharedWith
+            )
             let fetchRequest = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
                 versions: versions,
@@ -201,7 +205,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 shouldUpload: false,
                 isBackground: isBackground
             )
-            do { try fetchRequest.enqueue(in: FetchQueue, with: queueItemIdentifier) }
+            do { try fetchRequest.enqueue(in: FetchQueue, with: shareFetchQueueItemIdentifier) }
             catch {
                 log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to FETCH queue failed")
                 throw error

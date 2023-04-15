@@ -132,10 +132,19 @@ public struct SHUploadPipeline {
         }
         
         do {
-            let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-                groupId: groupId,
-                assetLocalIdentifier: localIdentifier
-            )
+            let queueItemIdentifier: String
+            if forceUpload {
+                queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+                    groupId: groupId,
+                    assetLocalIdentifier: localIdentifier
+                )
+            } else {
+                queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                    groupId: groupId,
+                    assetId: localIdentifier,
+                    users: recipients
+                )
+            }
             let queueItem = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
                 versions: versions,
@@ -146,7 +155,11 @@ public struct SHUploadPipeline {
             )
             try queueItem.enqueue(in: FetchQueue, with: queueItemIdentifier)
         } catch {
-            let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: recipients)
+            let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                groupId: groupId,
+                assetId: localIdentifier,
+                users: recipients
+            )
             let failedQueueItem = SHFailedShareRequestQueueItem(
                 localIdentifier: localIdentifier,
                 versions: versions,
