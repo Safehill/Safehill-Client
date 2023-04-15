@@ -486,7 +486,8 @@ extension SHDownloadOperation {
     private func updateHistoryQueues(with descriptorsByLocalIdentifier: [String: any SHAssetDescriptor],
                                     users: [SHServerUser]) {
         for (localIdentifier, descriptor) in descriptorsByLocalIdentifier {
-            if let keys = try? UploadHistoryQueue.keys(matching: KBGenericCondition(.equal, value: localIdentifier)),
+            let condition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
+            if let keys = try? UploadHistoryQueue.keys(matching: condition),
                keys.count > 0 {
                 ///
                 /// Nothing to do, the asset is already marked as uploaded in the queue

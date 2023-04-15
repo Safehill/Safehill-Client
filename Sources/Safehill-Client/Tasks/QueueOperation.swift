@@ -4,6 +4,10 @@ import KnowledgeBase
 
 public enum SHQueueOperation {
     
+    public static func queueIdentifier(for localIdentifier: String, groupId: String? = nil) -> String {
+        return [localIdentifier, groupId ?? ""].joined(separator: "+")
+    }
+    
     public static func removeItems(correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil) {
         SHQueueOperation.removeUploadItems(correspondingTo: assetLocalIdentifiers)
         SHQueueOperation.removeShareItems(correspondingTo: assetLocalIdentifiers, groupId: groupId)
@@ -15,7 +19,7 @@ public enum SHQueueOperation {
         }
         
         let condition = assetLocalIdentifiers.reduce(KBGenericCondition(value: false), { partialResult, localIdentifier in
-            return partialResult.or(KBGenericCondition(.beginsWith, value: [localIdentifier, ""].joined(separator: "+")))
+            return partialResult.or(KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier)))
         })
         
         do {
@@ -39,7 +43,7 @@ public enum SHQueueOperation {
         }
         
         let condition = assetLocalIdentifiers.reduce(KBGenericCondition(value: false), { partialResult, localIdentifier in
-            return partialResult.or(KBGenericCondition(.beginsWith, value: [localIdentifier, groupId ?? ""].joined(separator: "+")))
+            return partialResult.or(KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier, groupId: groupId)))
         })
         
         do {
