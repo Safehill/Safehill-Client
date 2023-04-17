@@ -293,7 +293,17 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         let localIdentifier = uploadRequest.localIdentifier
         
         do {
-            self.tryRemoveExistingQueueItems(with: localIdentifier)
+            if uploadRequest.isBackground == false {
+                ///
+                /// Background requests have no side effects, so they shouldn't remove items
+                /// in the SUCCESS or FAILED queues created by non-background requests.
+                ///
+                let uploadedQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
+                    groupId: uploadRequest.groupId,
+                    assetLocalIdentifier: localIdentifier
+                )
+                self.tryRemoveExistingQueueItems(with: uploadedQueueItemIdentifier)
+            }
             
             if uploadRequest.isBackground == false {
                 for delegate in delegates {

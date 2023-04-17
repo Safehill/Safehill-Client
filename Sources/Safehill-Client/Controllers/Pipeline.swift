@@ -82,7 +82,11 @@ public struct SHUploadPipeline {
             try? failedQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
             
             if recipients.count > 0 {
-                let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: recipients)
+                let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                    groupId: groupId,
+                    assetId: localIdentifier,
+                    users: recipients
+                )
                 let failedQueueItem = SHFailedShareRequestQueueItem(
                     localIdentifier: localIdentifier,
                     versions: versions,

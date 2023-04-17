@@ -237,7 +237,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             )
             log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
             
-            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                groupId: groupId,
+                assetId: localIdentifier,
+                users: users
+            )
             do {
                 try encryptionForSharingRequest.enqueue(in: ShareQueue, with: queueItemIdentifier)
             }

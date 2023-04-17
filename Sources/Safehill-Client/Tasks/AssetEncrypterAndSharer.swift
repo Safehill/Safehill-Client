@@ -70,7 +70,11 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Enquque to failed
         log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
         
-        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+            groupId: groupId,
+            assetId: localIdentifier,
+            users: users
+        )
         let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier,
                                                         versions: versions,
                                                         groupId: groupId,
@@ -124,7 +128,11 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Enquque to success history
         log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
         
-        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+            groupId: groupId,
+            assetId: localIdentifier,
+            users: users
+        )
         let succesfulUploadQueueItem = SHShareHistoryItem(localIdentifier: localIdentifier,
                                                           versions: versions,
                                                           groupId: groupId,
@@ -233,8 +241,11 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         sharedWith users: [SHServerUser]
     ) {
         for queue in [ShareHistoryQueue, FailedShareQueue] {
-
-            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(groupId: groupId, assetId: localIdentifier, users: users)
+            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                groupId: groupId,
+                assetId: localIdentifier,
+                users: users
+            )
             let condition = KBGenericCondition(.equal, value: queueItemIdentifier)
             let _ = try? queue.removeValues(forKeysMatching: condition)
         }
@@ -271,11 +282,17 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 throw SHBackgroundOperationError.fatalError("sharingWith emtpy. No sharing info")
             }
             
-            self.tryRemoveExistingQueueItems(
-                localIdentifier: asset.phAsset.localIdentifier,
-                groupId: shareRequest.groupId,
-                sharedWith: shareRequest.sharedWith
-            )
+            if shareRequest.isBackground == false {
+                ///
+                /// Background requests have no side effects, so they shouldn't remove items
+                /// in the SUCCESS or FAILED queues created by non-background requests.
+                ///
+                self.tryRemoveExistingQueueItems(
+                    localIdentifier: asset.phAsset.localIdentifier,
+                    groupId: shareRequest.groupId,
+                    sharedWith: shareRequest.sharedWith
+                )
+            }
 
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
 
