@@ -136,14 +136,14 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             assetId: localIdentifier,
             users: users
         )
-        let succesfulUploadQueueItem = SHShareHistoryItem(localIdentifier: localIdentifier,
-                                                          versions: versions,
-                                                          groupId: groupId,
-                                                          eventOriginator: eventOriginator,
-                                                          sharedWith: users)
+        let queueItem = SHShareHistoryItem(localIdentifier: localIdentifier,
+                                           versions: versions,
+                                           groupId: groupId,
+                                           eventOriginator: eventOriginator,
+                                           sharedWith: users)
         
         do {
-            try succesfulUploadQueueItem.enqueue(in: ShareHistoryQueue, with: queueItemIdentifier)
+            try queueItem.enqueue(in: ShareHistoryQueue, with: queueItemIdentifier)
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
