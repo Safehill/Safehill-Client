@@ -82,6 +82,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                                                         sharedWith: users)
         do {
             try failedShare.enqueue(in: FailedShareQueue, with: queueItemIdentifier)
+            
+            /// Remove items in the `ShareHistoryQueue` for the same identifier
+            let _ = try ShareHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: queueItemIdentifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -232,25 +235,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
-    ///
-    /// Best attempt to remove the same item from the any other queue in the same pipeline
-    ///
-    private func tryRemoveExistingQueueItems(
-        localIdentifier: String,
-        groupId: String,
-        sharedWith users: [SHServerUser]
-    ) {
-        for queue in [ShareHistoryQueue, FailedShareQueue] {
-            let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
-                groupId: groupId,
-                assetId: localIdentifier,
-                users: users
-            )
-            let condition = KBGenericCondition(.equal, value: queueItemIdentifier)
-            let _ = try? queue.removeValues(forKeysMatching: condition)
-        }
-    }
-    
     private func process(_ item: KBQueueItem) throws {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
         
@@ -282,18 +266,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 throw SHBackgroundOperationError.fatalError("sharingWith emtpy. No sharing info")
             }
             
-            if shareRequest.isBackground == false {
-                ///
-                /// Background requests have no side effects, so they shouldn't remove items
-                /// in the SUCCESS or FAILED queues created by non-background requests.
-                ///
-                self.tryRemoveExistingQueueItems(
-                    localIdentifier: asset.phAsset.localIdentifier,
-                    groupId: shareRequest.groupId,
-                    sharedWith: shareRequest.sharedWith
-                )
-            }
-
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
 
             if shareRequest.isBackground == false {

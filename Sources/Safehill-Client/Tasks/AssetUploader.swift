@@ -115,6 +115,12 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         do {
             try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier)
             try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
+            
+            /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset
+            /// This ensures that the queue stays clean and both are in sync (self-healing)
+            let baseCondition = KBGenericCondition(.beginsWith, value: localIdentifier)
+            let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: queueItemIdentifier, negated: true)))
+            let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition)
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -175,7 +181,15 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 sharedWith: [self.user]
             )
             
-            do { try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: uploadedQueueItemIdentifier) }
+            do {
+                try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: uploadedQueueItemIdentifier)
+                
+                /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset
+                /// This is necessary as we don't want duplicates when uploading an asset multiple times (for whatever reason)
+                let baseCondition = KBGenericCondition(.beginsWith, value: localIdentifier)
+                let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: uploadedQueueItemIdentifier, negated: true)))
+                let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition)
+            }
             catch {
                 log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
                 throw error
@@ -259,16 +273,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         }
     }
     
-    ///
-    /// Best attempt to remove the same item from the any other queue in the same pipeline
-    ///
-    private func tryRemoveExistingQueueItems(with localIdentifier: String) {
-        for queue in [UploadHistoryQueue, FailedUploadQueue] {
-            let condition = KBGenericCondition(.equal, value: localIdentifier)
-            let _ = try? queue.removeValues(forKeysMatching: condition)
-        }
-    }
-    
     func process(_ item: KBQueueItem) throws {
         
         let uploadRequest: SHUploadRequestQueueItem
@@ -293,18 +297,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         let localIdentifier = uploadRequest.localIdentifier
         
         do {
-            if uploadRequest.isBackground == false {
-                ///
-                /// Background requests have no side effects, so they shouldn't remove items
-                /// in the SUCCESS or FAILED queues created by non-background requests.
-                ///
-                let uploadedQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-                    groupId: uploadRequest.groupId,
-                    assetLocalIdentifier: localIdentifier
-                )
-                self.tryRemoveExistingQueueItems(with: uploadedQueueItemIdentifier)
-            }
-            
             if uploadRequest.isBackground == false {
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {

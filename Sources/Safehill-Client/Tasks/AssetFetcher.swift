@@ -303,6 +303,20 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         if fetchRequest.isBackground == false {
+            ///
+            /// Background requests have no side effects, so they shouldn't remove items in the SUCCESS or FAILED queues created by non-background requests.
+            /// All other requests when triggered (by adding them to the FetchQueue) should remove previous side effects in the following queues:
+            /// - `FailedUploadQueue` (all items with same local identifier)
+            /// - `FailedShareQueue` (all items with same local identifier, group and users (there can be many with same local identifier and group, when asset is shared with different users at different times)
+            ///
+            let _ = try? FailedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: fetchRequest.localIdentifier))
+            let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
+                groupId: fetchRequest.groupId,
+                assetId: fetchRequest.localIdentifier,
+                users: fetchRequest.sharedWith
+            )
+            let _ = try? FailedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: shareQueueItemIdentifier))
+            
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetFetcherDelegate {
                     delegate.didStartFetching(
