@@ -644,19 +644,19 @@ struct LocalServer : SHServerAPI {
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
+                let writeBatch = assetStore.writeBatch()
                 for (k, v) in keyValues {
                     guard var value = v as? [String: Any],
                           let _ = value["uploadState"] as? String?
                     else {
-                        completionHandler(.failure(KBError.unexpectedData(v)))
-                        return
+                        log.error("unexpected uploadState data for key \(k): \(String(describing: v))")
+                        continue
                     }
                     
                     value["uploadState"] = state.rawValue
-                    let writeBatch = assetStore.writeBatch()
                     writeBatch.set(value: value, for: k)
-                    writeBatch.write(completionHandler: completionHandler)
                 }
+                writeBatch.write(completionHandler: completionHandler)
             case .failure(let err):
                 completionHandler(.failure(err))
             }
