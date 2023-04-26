@@ -312,13 +312,16 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return encryptedAsset
     }
     
-    private func markLocalAssetAsFailed(globalIdentifier: String) throws {
+    private func markLocalAssetAsFailed(globalIdentifier: String, versions: [SHAssetQuality]) throws {
         let group = DispatchGroup()
-        for quality in SHAssetQuality.all {
+        for quality in versions {
             group.enter()
             self.serverProxy.localServer.markAsset(with: globalIdentifier, quality: quality, as: .failed) { result in
                 if case .failure(let err) = result {
-                    self.log.info("failed to mark local asset \(globalIdentifier) as failed: \(err.localizedDescription)")
+                    if case SHAssetStoreError.noEntries = err {
+                        self.log.error("No entries found when trying to update local asset upload state for \(globalIdentifier)::\(quality.rawValue)")
+                    }
+                    self.log.info("failed to mark local asset \(globalIdentifier) as failed in local server: \(err.localizedDescription)")
                 }
                 group.leave()
             }
@@ -333,7 +336,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     public func markAsFailed(
         item: KBQueueItem,
-        encryptionRequest request: SHEncryptionRequestQueueItem
+        encryptionRequest request: SHEncryptionRequestQueueItem,
+        globalIdentifier: String
     ) throws
     {
         let localIdentifier = request.localIdentifier
@@ -376,6 +380,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         )
         
         do {
+            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions ?? SHAssetQuality.all)
             try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
         }
         catch {
@@ -490,21 +495,21 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let asset = encryptionRequest.asset
         let encryptedAsset: any SHEncryptedAsset
         
-        do {
-            if encryptionRequest.isBackground == false {
-                for delegate in delegates {
-                    if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didStartEncryption(
-                            itemWithLocalIdentifier: asset.phAsset.localIdentifier,
-                            groupId: encryptionRequest.groupId,
-                            sharedWith: encryptionRequest.sharedWith
-                        )
-                    }
+        if encryptionRequest.isBackground == false {
+            for delegate in delegates {
+                if let delegate = delegate as? SHAssetEncrypterDelegate {
+                    delegate.didStartEncryption(
+                        itemWithLocalIdentifier: asset.phAsset.localIdentifier,
+                        groupId: encryptionRequest.groupId,
+                        sharedWith: encryptionRequest.sharedWith
+                    )
                 }
             }
-            
-            let globalIdentifier = try asset.generateGlobalIdentifier(using: self.imageManager)
-            
+        }
+        
+        let globalIdentifier = try asset.generateGlobalIdentifier(using: self.imageManager)
+        
+        do {
             ///
             /// The symmetric key is used to encrypt this asset (all of its version) moving forward.
             /// For assets that are already in the local store, do a best effort to retrieve the key from the store.
@@ -551,7 +556,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
         } catch {
             do {
-                try self.markAsFailed(item: item, encryptionRequest: encryptionRequest)
+                try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
             } catch {
                 log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
                 // TODO: Handle

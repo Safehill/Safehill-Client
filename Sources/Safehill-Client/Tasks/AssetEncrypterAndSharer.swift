@@ -39,11 +39,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     public override func markAsFailed(
         item: KBQueueItem,
-        encryptionRequest request: SHEncryptionRequestQueueItem
+        encryptionRequest request: SHEncryptionRequestQueueItem,
+        globalIdentifier: String
     ) throws
     {
         try self.markAsFailed(encryptionRequest: request,
-                              globalIdentifier: "")
+                              globalIdentifier: globalIdentifier)
     }
     
     public func markAsFailed(

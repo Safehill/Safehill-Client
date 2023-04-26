@@ -71,7 +71,7 @@ extension SHServerProxy {
                                        quality: stateChangeDiff.quality,
                                        as: stateChangeDiff.newUploadState) { result in
                 if case .failure(let error) = result {
-                    log.error("some assets were marked as uploaded on server but couldn't be deleted from lcoal cache. THis operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    log.error("some assets were marked as uploaded on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
             }
         }

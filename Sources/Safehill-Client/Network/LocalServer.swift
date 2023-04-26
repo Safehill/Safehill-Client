@@ -645,6 +645,10 @@ struct LocalServer : SHServerAPI {
             switch result {
             case .success(let keyValues):
                 let writeBatch = assetStore.writeBatch()
+                guard keyValues.count > 0 else {
+                    completionHandler(.failure(SHAssetStoreError.noEntries))
+                    return
+                }
                 for (k, v) in keyValues {
                     guard var value = v as? [String: Any],
                           let _ = value["uploadState"] as? String?

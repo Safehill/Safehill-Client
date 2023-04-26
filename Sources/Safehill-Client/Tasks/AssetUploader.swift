@@ -51,13 +51,16 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         return uploadRequest
     }
     
-    private func markLocalAssetAsFailed(globalIdentifier: String) throws {
+    private func markLocalAssetAsFailed(globalIdentifier: String, versions: [SHAssetQuality]) throws {
         let group = DispatchGroup()
-        for quality in SHAssetQuality.all {
+        for quality in versions {
             group.enter()
             self.serverProxy.localServer.markAsset(with: globalIdentifier, quality: quality, as: .failed) { result in
                 if case .failure(let err) = result {
-                    self.log.info("failed to mark local asset \(globalIdentifier) as failed: \(err.localizedDescription)")
+                    if case SHAssetStoreError.noEntries = err {
+                        self.log.error("No entries found when trying to update local asset upload state for \(globalIdentifier)::\(quality.rawValue)")
+                    }
+                    self.log.info("failed to mark local asset \(globalIdentifier) as failed in local server: \(err.localizedDescription)")
                 }
                 group.leave()
             }
@@ -113,7 +116,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         )
         
         do {
-            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier)
+            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions ?? SHAssetQuality.all)
             try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
             
             /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset

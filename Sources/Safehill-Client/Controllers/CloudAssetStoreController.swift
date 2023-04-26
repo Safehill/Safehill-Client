@@ -5,12 +5,15 @@ public typealias GlobalIdentifier = String
 
 public enum SHAssetStoreError: Error, LocalizedError {
     case notImplemented
+    case noEntries
     case failedToCreateRemoteAsset
     
     public var errorDescription: String? {
         switch self {
         case .notImplemented:
             return "Not implemented"
+        case .noEntries:
+            return "Could not find an entry for the requested asset(s)"
         case .failedToCreateRemoteAsset:
             return "Failed to create remote asset"
         }
