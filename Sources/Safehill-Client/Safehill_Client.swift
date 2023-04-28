@@ -25,8 +25,11 @@ public func kSHSizeForQuality(quality: SHAssetQuality) -> CGSize {
 }
 
 
-/* Set this to true to randomly simulate failures */
-let kSHSimulateBackgroundOperationFailures = false
+/* Set these to a value greater than 0 to randomly simulate failures */
+enum ErrorSimulator {
+    static let percentageUploadFailures: UInt32 = 100
+    static let percentageShareFailures: UInt32 = 100
+}
 
 
 public enum SHBackgroundOperationError : Error, CustomStringConvertible {
