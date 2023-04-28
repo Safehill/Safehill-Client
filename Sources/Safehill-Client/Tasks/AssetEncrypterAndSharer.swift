@@ -299,7 +299,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             /// Share using Safehill Server API
             ///
 #if DEBUG
-            guard arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
+            guard ErrorSimulator.percentageShareFailures == 0
+                  || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
                 log.debug("simulating SHARE failure")
                 throw SHBackgroundOperationError.fatalError("share failed")
             }

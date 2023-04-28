@@ -333,7 +333,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             }
             
 #if DEBUG
-            guard arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
+            guard ErrorSimulator.percentageUploadFailures == 0
+                  || arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
                 log.debug("simulating CREATE ASSET failure")
                 throw SHBackgroundOperationError.fatalError("failed to create server asset")
             }
