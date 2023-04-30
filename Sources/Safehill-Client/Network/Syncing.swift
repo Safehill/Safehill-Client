@@ -120,6 +120,7 @@ extension SHServerProxy {
     }
     
     public func sync(delegate: SHAssetSyncingDelegate?) {
+        let semaphore = DispatchSemaphore(value: 0)
         self.syncDescriptors { result in
             switch result {
             case .success(let diff):
@@ -133,7 +134,10 @@ extension SHServerProxy {
             case .failure(let err):
                 log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
             }
+            semaphore.signal()
         }
+        
+        semaphore.wait()
     }
 }
 
