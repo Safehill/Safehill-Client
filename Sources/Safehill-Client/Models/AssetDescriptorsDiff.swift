@@ -39,7 +39,7 @@ struct AssetDescriptorsDiff {
     ///
     static func generateUsing(server serverDescriptors: [any SHAssetDescriptor],
                               local localDescriptors: [any SHAssetDescriptor],
-                              remoteUserIds: [String],
+                              serverUserIds: [String],
                               localUserIds: [String],
                               for user: SHLocalUser) -> AssetDescriptorsDiff {
         var onlyLocal = localDescriptors
@@ -92,8 +92,8 @@ struct AssetDescriptorsDiff {
         /// 2. Upload state changes?
         
         var userIdsToRemove = [String]()
-        if remoteUserIds.count != localUserIds.count {
-            let difference = remoteUserIds.difference(from: localUserIds)
+        if serverUserIds.count != localUserIds.count {
+            let difference = serverUserIds.difference(from: localUserIds)
             for change in difference {
                 if case .remove(_, let oldElement, _) = change {
                     userIdsToRemove.append(oldElement)
@@ -109,7 +109,7 @@ struct AssetDescriptorsDiff {
                 print("[XXX] userId \(localDescriptor.sharingInfo.sharedByUserIdentifier) was REMOVED. Removing asset with identifier \(localDescriptor.globalIdentifier)")
             }
             let userIdByGroup = localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup
-            while let (groupId, userId) = userIdByGroup.first(where: { userIdsToRemove.contains($0.value) }) {
+            for (userId, groupId) in userIdByGroup.filter({ userIdsToRemove.contains($0.key) }) {
                 if userIdsToRemoveFromGroup[groupId] == nil {
                     userIdsToRemoveFromGroup[groupId] = [userId]
                 } else {

@@ -49,7 +49,7 @@ extension SHServerProxy {
         var userIdsInDescriptorsSet = Set<String>()
         for localDescriptor in localDescriptors {
             userIdsInDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
-            localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.values.forEach({ userIdsInDescriptorsSet.insert($0) })
+            localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInDescriptorsSet.insert($0) })
         }
         userIdsInDescriptorsSet.remove(self.remoteServer.requestor.identifier)
         let userIdsInDescriptors = Array(userIdsInDescriptorsSet)
@@ -89,7 +89,7 @@ extension SHServerProxy {
         ///
         let diff = AssetDescriptorsDiff.generateUsing(server: remoteDescriptors,
                                                       local: localDescriptors,
-                                                      remoteUserIds: remoteUserIds,
+                                                      serverUserIds: remoteUserIds,
                                                       localUserIds: userIdsInDescriptors,
                                                       for: self.localServer.requestor)
         
