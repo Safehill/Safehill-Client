@@ -51,6 +51,7 @@ extension SHServerProxy {
             userIdsInDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
             localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.values.forEach({ userIdsInDescriptorsSet.insert($0) })
         }
+        userIdsInDescriptorsSet.remove(self.remoteServer.requestor.identifier)
         let userIdsInDescriptors = Array(userIdsInDescriptorsSet)
         
         group.enter()
