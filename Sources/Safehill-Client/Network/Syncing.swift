@@ -112,8 +112,8 @@ extension SHServerProxy {
             }
         }
         
-        for (groupId, userId) in diff.userIdsToRemoveFromGroup {
-            print("[XXX] userId \(userId) was REMOVED. Removing from group \(groupId)")
+        for (groupId, userIds) in diff.userIdsToRemoveFromGroup {
+            print("[XXX] Removing \(userIds) from group \(groupId)")
         }
         
         completionHandler(.success(diff))

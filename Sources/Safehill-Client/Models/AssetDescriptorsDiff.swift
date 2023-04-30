@@ -87,19 +87,7 @@ struct AssetDescriptorsDiff {
             }
         }
         
-        // TODO: Handle missing cases
-        /// 1. Deleted users should be removed from the shares, and from the knowledge graph
-        /// 2. Upload state changes?
-        
-        var userIdsToRemove = [String]()
-        if serverUserIds.count != localUserIds.count {
-            let difference = serverUserIds.difference(from: localUserIds)
-            for change in difference {
-                if case .remove(_, let oldElement, _) = change {
-                    userIdsToRemove.append(oldElement)
-                }
-            }
-        }
+        var userIdsToRemove = localUserIds.subtract(serverUserIds)
         
         var userIdsToRemoveFromGroup = [String: [String]]()
         for localDescriptor in localDescriptors {
@@ -117,6 +105,9 @@ struct AssetDescriptorsDiff {
                 }
             }
         }
+        
+        // TODO: Handle missing cases
+        /// - Upload state changes?
 
         return AssetDescriptorsDiff(
             assetsRemovedOnServer: onlyLocal,
