@@ -40,7 +40,7 @@ public class SHUsersController {
     
     public let localUser: SHLocalUser
     
-    init(localUser: SHLocalUser) {
+    public init(localUser: SHLocalUser) {
         self.localUser = localUser
     }
     
