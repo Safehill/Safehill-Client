@@ -54,9 +54,7 @@ extension SHServerProxy {
         let userIdsInDescriptors = Array(userIdsInDescriptorsSet)
         
         group.enter()
-        self.getUsers(
-            withIdentifiers: userIdsInDescriptors
-        ) { result in
+        self.remoteServer.getUsers(withIdentifiers: nil) { result in
             switch result {
             case .success(let serverUsers):
                 remoteUserIds = serverUsers.map({ $0.identifier })

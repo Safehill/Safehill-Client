@@ -93,8 +93,8 @@ extension SHServerProxy {
         self.remoteServer.signIn(name: name, completionHandler: completionHandler)
     }
     
-    public func getUsers(withIdentifiers userIdentifiersToFetch: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
-        guard userIdentifiersToFetch.count > 0 else {
+    public func getUsers(withIdentifiers userIdentifiersToFetch: [String]?, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
+        guard userIdentifiersToFetch == nil || userIdentifiersToFetch!.count > 0 else {
             return completionHandler(.success([]))
         }
         
@@ -117,7 +117,8 @@ extension SHServerProxy {
                 self.localServer.getUsers(withIdentifiers: userIdentifiersToFetch) { localResult in
                     switch localResult {
                     case .success(let serverUsers):
-                        if serverUsers.count == userIdentifiersToFetch.count {
+                        if userIdentifiersToFetch != nil,
+                           serverUsers.count == userIdentifiersToFetch!.count {
                             completionHandler(localResult)
                         } else {
                             completionHandler(.failure(error))

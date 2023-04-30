@@ -404,10 +404,15 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
-        let parameters = [
-            "userIdentifiers": userIdentifiers
-        ] as [String : Any]
+    func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+        let parameters: [String: Any]?
+        if let ids = userIdentifiers {
+            parameters = [
+                "userIdentifiers": ids
+            ] as [String : Any]
+        } else {
+            parameters = nil
+        }
         self.post("users/retrieve", parameters: parameters) { (result: Result<[SHRemoteUser], Error>) in
             switch result {
             case .success(let users):

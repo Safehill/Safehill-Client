@@ -193,8 +193,8 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func getUsers(withIdentifiers userIdentifiers: [String], completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
-        userStore.values(for: userIdentifiers) { result in
+    func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+        let callback: (Result<[Any], Error>) -> () = { result in
             switch result {
             case .success(let resList):
                 var userList = [SHServerUser]()
@@ -216,6 +216,16 @@ struct LocalServer : SHServerAPI {
             case .failure(let err):
                 completionHandler(.failure(err))
             }
+        }
+        
+        if let ids = userIdentifiers {
+            userStore.values(for: ids) { result in
+                if case .success(let resList) = result {
+                    callback(.success(resList.filter({ $0 != nil }) as [Any]))
+                }
+            }
+        } else {
+            userStore.values(completionHandler: callback)
         }
     }
     

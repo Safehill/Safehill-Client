@@ -52,9 +52,9 @@ public protocol SHServerAPI {
     
     /// Get a User's public key and public signature
     /// - Parameters:
-    ///   - userIdentifier: the unique identifier for the user
+    ///   - userIdentifiers: the unique identifiers for the users. If NULL, retrieves all the connected users
     ///   - completionHandler: the callback method
-    func getUsers(withIdentifiers: [String], completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
+    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
