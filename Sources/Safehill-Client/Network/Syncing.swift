@@ -7,7 +7,9 @@ extension SHServerProxy {
     
     private func syncDescriptors(completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
+        var remoteUserIds = [String]()
         var localError: Error? = nil, remoteError: Error? = nil
+        var remoteUsersError: Error? = nil
         
         let group = DispatchGroup()
         group.enter()
@@ -16,6 +18,7 @@ extension SHServerProxy {
             case .success(let descriptors):
                 localDescriptors = descriptors
             case .failure(let err):
+                log.error("failed to fetch descriptors from LOCAL server when calculating diff: \(err.localizedDescription)")
                 localError = err
             }
             group.leave()
@@ -27,6 +30,7 @@ extension SHServerProxy {
             case .success(let descriptors):
                 remoteDescriptors = descriptors
             case .failure(let err):
+                log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
                 remoteError = err
             }
             group.leave()
@@ -39,6 +43,37 @@ extension SHServerProxy {
         }
         guard localError == nil, remoteError == nil else {
             completionHandler(.failure(localError ?? remoteError!))
+            return
+        }
+        
+        var userIdsInDescriptorsSet = Set<String>()
+        for localDescriptor in localDescriptors {
+            userIdsInDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
+            localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.values.forEach({ userIdsInDescriptorsSet.insert($0) })
+        }
+        let userIdsInDescriptors = Array(userIdsInDescriptorsSet)
+        
+        group.enter()
+        self.getUsers(
+            withIdentifiers: userIdsInDescriptors
+        ) { result in
+            switch result {
+            case .success(let serverUsers):
+                remoteUserIds = serverUsers.map({ $0.identifier })
+            case .failure(let err):
+                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
+                remoteUsersError = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            completionHandler(.failure(SHBackgroundOperationError.timedOut))
+            return
+        }
+        guard remoteUsersError == nil else {
+            completionHandler(.failure(remoteUsersError!))
             return
         }
         
@@ -55,6 +90,8 @@ extension SHServerProxy {
         ///
         let diff = AssetDescriptorsDiff.generateUsing(server: remoteDescriptors,
                                                       local: localDescriptors,
+                                                      remoteUserIds: remoteUserIds,
+                                                      localUserIds: userIdsInDescriptors,
                                                       for: self.localServer.requestor)
         
         if diff.assetsRemovedOnServer.count > 0 {
@@ -74,6 +111,10 @@ extension SHServerProxy {
                     log.error("some assets were marked as uploaded on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
             }
+        }
+        
+        for (groupId, userId) in diff.userIdsToRemoveFromGroup {
+            print("[XXX] userId \(userId) was REMOVED. Removing from group \(groupId)")
         }
         
         completionHandler(.success(diff))
