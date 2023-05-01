@@ -6,10 +6,10 @@ import os
 extension SHServerProxy {
     
     /// Replaces the items in the ShareHistoryQueue with the same items by omitting the users removed
-    /// Returns the queueItemIdentifiers replaced
+    /// Returns the queueItemIdentifiers replaced and the ones removed
     /// - Parameter userIdsToRemoveFromGroup: <#userIdsToRemoveFromGroup description#>
     /// - Returns: <#description#>
-    private func removeUsersFromShareHistory(_ userIdsToRemoveFromGroup: [String: [String]]) -> [String] {
+    private func removeUsersFromShareHistory(_ userIdsToRemoveFromGroup: [String: [String]]) -> (changed: [String], removed: [String]) {
         
         var oldShareHistoryItems = [String: (item: SHShareHistoryItem, timestamp: Date)]()
         
@@ -49,31 +49,41 @@ extension SHServerProxy {
             log.critical("Failed to fetch SHShareHistoryItem items in the ShareHistoryQueue with groupIds \(userIdsToRemoveFromGroup.keys)")
         }
         
-        var queueItemsChanged = Set<String>()
+        var (queueItemsChanged, queueItemsRemoved) = (Set<String>(), Set<String>())
         for (groupId, userIds) in userIdsToRemoveFromGroup {
             let matchShares = oldShareHistoryItems.filter({
                 $0.value.item.groupId == groupId
                 && $0.value.item.sharedWith.contains { userIds.contains($0.identifier) }
             })
             for share in matchShares {
-                let newShareHistoryItem = SHShareHistoryItem(
-                    localIdentifier: share.value.item.localIdentifier,
-                    versions: share.value.item.versions,
-                    groupId: share.value.item.groupId,
-                    eventOriginator: share.value.item.eventOriginator,
-                    sharedWith: share.value.item.sharedWith.filter { !userIds.contains($0.identifier) }
-                )
-//                do {
-//                    try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
-                    queueItemsChanged.insert(share.key)
-//                } catch {
-//                    log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
-//                }
-                print("[XXX] Removing userIds \(userIds) from ShareHistoryItem with identifier \(share.key) (was at \(share.value.timestamp))")
+                let newSharedWith = share.value.item.sharedWith.filter { !userIds.contains($0.identifier) }
+                if newSharedWith.count > 0 {
+                    let newShareHistoryItem = SHShareHistoryItem(
+                        localIdentifier: share.value.item.localIdentifier,
+                        versions: share.value.item.versions,
+                        groupId: share.value.item.groupId,
+                        eventOriginator: share.value.item.eventOriginator,
+                        sharedWith: newSharedWith
+                    )
+    //                do {
+    //                    try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
+                        queueItemsChanged.insert(share.key)
+    //                } catch {
+    //                    log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
+    //                }
+                    print("[XXX] Removing userIds \(userIds) from ShareHistoryItem with identifier \(share.key) (was at \(share.value.timestamp))")
+                } else {
+    //                do {
+    //                    try ShareHistoryQueue.removeValue(for: share.key)
+                        queueItemsChanged.insert(share.key)
+    //                } catch {
+    //                    log.warning("failed to delete item from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
+    //                }
+                }
             }
         }
         
-        return Array(queueItemsChanged)
+        return (changed: Array(queueItemsChanged), removed: Array(queueItemsRemoved))
     }
     
     private func syncDescriptors(delegate: SHAssetSyncingDelegate?,
@@ -184,8 +194,13 @@ extension SHServerProxy {
             }
         }
         
-        let queueItemIdsChanged = self.removeUsersFromShareHistory(diff.userIdsToRemoveFromGroup)
-        delegate?.shareItemsChanged(withIdentifiers: queueItemIdsChanged)
+        let queueDiff = self.removeUsersFromShareHistory(diff.userIdsToRemoveFromGroup)
+        if queueDiff.changed.count > 0 {
+            delegate?.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
+        }
+        if queueDiff.removed.count > 0 {
+            delegate?.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
+        }
         
         completionHandler(.success(diff))
     }
