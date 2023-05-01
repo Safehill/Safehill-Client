@@ -5,7 +5,11 @@ import os
 
 extension SHServerProxy {
     
-    private func removeUsersFromShareHistory(_ userIdsToRemoveFromGroup: [String: [String]]) {
+    /// Replaces the items in the ShareHistoryQueue with the same items by omitting the users removed
+    /// Returns the queueItemIdentifiers replaced
+    /// - Parameter userIdsToRemoveFromGroup: <#userIdsToRemoveFromGroup description#>
+    /// - Returns: <#description#>
+    private func removeUsersFromShareHistory(_ userIdsToRemoveFromGroup: [String: [String]]) -> [String] {
         
         var oldShareHistoryItems = [String: (item: SHShareHistoryItem, timestamp: Date)]()
         
@@ -42,9 +46,10 @@ extension SHServerProxy {
                 )
             }
         } catch {
-            
+            log.critical("Failed to fetch SHShareHistoryItem items in the ShareHistoryQueue with groupIds \(userIdsToRemoveFromGroup.keys)")
         }
         
+        var queueItemsChanged = Set<String>()
         for (groupId, userIds) in userIdsToRemoveFromGroup {
             let matchShares = oldShareHistoryItems.filter({
                 $0.value.item.groupId == groupId
@@ -60,15 +65,19 @@ extension SHServerProxy {
                 )
 //                do {
 //                    try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
+                    queueItemsChanged.insert(share.key)
 //                } catch {
 //                    log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
 //                }
                 print("[XXX] Removing userIds \(userIds) from ShareHistoryItem with identifier \(share.key) (was at \(share.value.timestamp))")
             }
         }
+        
+        return Array(queueItemsChanged)
     }
     
-    private func syncDescriptors(completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
+    private func syncDescriptors(delegate: SHAssetSyncingDelegate?,
+                                 completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
         var remoteUserIds = [String]()
         var localError: Error? = nil, remoteError: Error? = nil
@@ -175,14 +184,15 @@ extension SHServerProxy {
             }
         }
         
-        self.removeUsersFromShareHistory(diff.userIdsToRemoveFromGroup)
+        let queueItemIdsChanged = self.removeUsersFromShareHistory(diff.userIdsToRemoveFromGroup)
+        delegate?.shareItemsChanged(withIdentifiers: queueItemIdsChanged)
         
         completionHandler(.success(diff))
     }
     
     public func sync(delegate: SHAssetSyncingDelegate?) {
         let semaphore = DispatchSemaphore(value: 0)
-        self.syncDescriptors { result in
+        self.syncDescriptors(delegate: delegate) { result in
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
@@ -191,9 +201,6 @@ extension SHServerProxy {
                 }
                 if diff.stateDifferentOnServer.count > 0 {
                     // TODO: Do we need to mark things as failed/pending depending on state?
-                }
-                if diff.userIdsToRemoveFromGroup.count > 0 {
-                    delegate?.handleUserDeletion(of: diff.userIdsToRemoveFromGroup)
                 }
             case .failure(let err):
                 log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")

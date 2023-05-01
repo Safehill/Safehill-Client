@@ -9,7 +9,7 @@ public protocol SHInboundAssetOperationDelegate {}
 
 public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func handleAssetDeletion(of assets: [SHRemoteAssetIdentifier])
-    func handleUserDeletion(of userIdsFromGroups: [String: [String]])
+    func shareItemsChanged(withIdentifiers identifiers: [String])
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
