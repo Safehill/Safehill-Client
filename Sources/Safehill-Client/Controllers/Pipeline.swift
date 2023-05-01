@@ -194,6 +194,22 @@ public extension SHUploadPipeline {
         )
     }
     
+    static func asset(fromshareQueueItemKey itemKey: String) -> String? {
+        let components = itemKey.components(separatedBy: "+")
+        guard components.count >= 3 else {
+            return nil
+        }
+        return components[0]
+    }
+    
+    static func group(fromshareQueueItemKey itemKey: String) -> String? {
+        let components = itemKey.components(separatedBy: "+")
+        guard components.count >= 3 else {
+            return nil
+        }
+        return components[1]
+    }
+    
     static func hiResUploadQueueItemKey(groupId: String, assetLocalIdentifier: String) -> String {
         return [
             assetLocalIdentifier,
