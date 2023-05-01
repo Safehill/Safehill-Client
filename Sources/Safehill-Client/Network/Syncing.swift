@@ -5,6 +5,69 @@ import os
 
 extension SHServerProxy {
     
+    private func removeUsersFromShareHistory(_ userIdsToRemoveFromGroup: [String: [String]]) {
+        
+        var oldShareHistoryItems = [String: (item: SHShareHistoryItem, timestamp: Date)]()
+        
+        do {
+            var condition = KBGenericCondition(value: false)
+            for groupId in userIdsToRemoveFromGroup.keys {
+                condition = condition.or(KBGenericCondition(.contains, value: groupId))
+            }
+            let matchingShareHistoryItem = try ShareHistoryQueue.keyValuesAndTimestamps(forKeysMatching: condition)
+            
+            for kvpairWithTimestamp in matchingShareHistoryItem {
+                guard let data = kvpairWithTimestamp.value as? Data else {
+                    log.critical("Found unexpected data in the ShareHistoryQueue")
+                    continue
+                }
+                
+                let unarchiver: NSKeyedUnarchiver
+                if #available(macOS 10.13, *) {
+                    unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+                } else {
+                    unarchiver = NSKeyedUnarchiver(forReadingWith: data)
+                }
+                
+                guard let succesfulShareQueueItem = unarchiver.decodeObject(
+                    of: SHShareHistoryItem.self,
+                    forKey: NSKeyedArchiveRootObjectKey) else {
+                    log.critical("Found undeserializable SHShareHistoryItem item in the ShareHistoryQueue")
+                    continue
+                }
+                
+                oldShareHistoryItems[kvpairWithTimestamp.key] = (
+                    item: succesfulShareQueueItem,
+                    timestamp: kvpairWithTimestamp.timestamp
+                )
+            }
+        } catch {
+            
+        }
+        
+        for (groupId, userIds) in userIdsToRemoveFromGroup {
+            let matchShares = oldShareHistoryItems.filter({
+                $0.value.item.groupId == groupId
+                && $0.value.item.sharedWith.contains { userIds.contains($0.identifier) }
+            })
+            for share in matchShares {
+                let newShareHistoryItem = SHShareHistoryItem(
+                    localIdentifier: share.value.item.localIdentifier,
+                    versions: share.value.item.versions,
+                    groupId: share.value.item.groupId,
+                    eventOriginator: share.value.item.eventOriginator,
+                    sharedWith: share.value.item.sharedWith.filter { !userIds.contains($0.identifier) }
+                )
+//                do {
+//                    try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
+//                } catch {
+//                    log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
+//                }
+                print("[XXX] Removing userIds \(userIds) from ShareHistoryItem with identifier \(share.key) (was at \(share.value.timestamp))")
+            }
+        }
+    }
+    
     private func syncDescriptors(completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
         var remoteUserIds = [String]()
@@ -112,9 +175,7 @@ extension SHServerProxy {
             }
         }
         
-        for (groupId, userIds) in diff.userIdsToRemoveFromGroup {
-            print("[XXX] Removing \(userIds) from group \(groupId)")
-        }
+        self.removeUsersFromShareHistory(diff.userIdsToRemoveFromGroup)
         
         completionHandler(.success(diff))
     }
@@ -126,10 +187,13 @@ extension SHServerProxy {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
                     // TODO: The deletion from the queues defined in the framework is taken care of by the `AssetUploadController` which is a client of the framework. Consider moving `AssetUploadController` and the sister controllers to the framework
-                    delegate?.handleDeletion(of: diff.assetsRemovedOnServer)
+                    delegate?.handleAssetDeletion(of: diff.assetsRemovedOnServer)
                 }
                 if diff.stateDifferentOnServer.count > 0 {
                     // TODO: Do we need to mark things as failed/pending depending on state?
+                }
+                if diff.userIdsToRemoveFromGroup.count > 0 {
+                    delegate?.handleUserDeletion(of: diff.userIdsToRemoveFromGroup)
                 }
             case .failure(let err):
                 log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
