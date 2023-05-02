@@ -65,20 +65,19 @@ extension SHServerProxy {
                         eventOriginator: share.value.item.eventOriginator,
                         sharedWith: newSharedWith
                     )
-    //                do {
-    //                    try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
+                    do {
+                        try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
                         queueItemsChanged.insert(share.key)
-    //                } catch {
-    //                    log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
-    //                }
-                    print("[XXX] Removing userIds \(userIds) from ShareHistoryItem with identifier \(share.key) (was at \(share.value.timestamp))")
+                    } catch {
+                        log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
+                    }
                 } else {
-    //                do {
-    //                    try ShareHistoryQueue.removeValue(for: share.key)
-                        queueItemsChanged.insert(share.key)
-    //                } catch {
-    //                    log.warning("failed to delete item from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
-    //                }
+                    do {
+                        try ShareHistoryQueue.removeValue(for: share.key)
+                        queueItemsRemoved.insert(share.key)
+                    } catch {
+                        log.warning("failed to delete item from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
+                    }
                 }
             }
         }
