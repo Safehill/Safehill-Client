@@ -68,25 +68,21 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             return
         }
 
-        /// Enquque to failed
-        log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
-        
-        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
-            groupId: groupId,
-            assetLocalIdentifier: localIdentifier,
-            versions: versions,
-            users: users
-        )
-        let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier,
-                                                        versions: versions,
-                                                        groupId: groupId,
-                                                        eventOriginator: eventOriginator,
-                                                        sharedWith: users)
         do {
-            try failedShare.enqueue(in: FailedShareQueue, with: queueItemIdentifier)
+            /// Enquque to failed
+            log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
+            
+            let failedShare = SHFailedShareRequestQueueItem(
+                localIdentifier: localIdentifier,
+                versions: versions,
+                groupId: groupId,
+                eventOriginator: eventOriginator,
+                sharedWith: users
+            )
+            try failedShare.enqueue(in: FailedShareQueue)
             
             /// Remove items in the `ShareHistoryQueue` for the same identifier
-            let _ = try ShareHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: queueItemIdentifier))
+            let _ = try? ShareHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedShare.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -130,24 +126,19 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             return
         }
         
-        /// Enquque to success history
-        log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
-        
-        let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
-            groupId: groupId,
-            assetLocalIdentifier: localIdentifier,
-            versions: versions,
-            users: users
-        )
-        let queueItem = SHShareHistoryItem(localAssetId: localIdentifier,
-                                           globalAssetId: globalIdentifier,
-                                           versions: versions,
-                                           groupId: groupId,
-                                           eventOriginator: eventOriginator,
-                                           sharedWith: users)
-        
         do {
-            try queueItem.enqueue(in: ShareHistoryQueue, with: queueItemIdentifier)
+            /// Enquque to ShareHistoryQueue
+            log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
+            
+            let queueItem = SHShareHistoryItem(
+                localAssetId: localIdentifier,
+                globalAssetId: globalIdentifier,
+                versions: versions,
+                groupId: groupId,
+                eventOriginator: eventOriginator,
+                sharedWith: users
+            )
+            try queueItem.enqueue(in: ShareHistoryQueue)
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
@@ -175,7 +166,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         let shareableEncryptedAsset = try asset.shareableEncryptedAsset(
             globalIdentifier: globalIdentifier,
-            versions: request.versions ?? [.lowResolution, .midResolution],
+            versions: request.versions,
             sender: self.user,
             recipients: request.sharedWith,
             groupId: request.groupId

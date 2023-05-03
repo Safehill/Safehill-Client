@@ -101,29 +101,23 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             return
         }
         
-        /// Enquque to FailedUpload queue
-        log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
-        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-            groupId: groupId,
-            assetLocalIdentifier: localIdentifier,
-            versions: versions
-        )
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
-            localIdentifier: localIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: sharedWith
-        )
-        
         do {
-            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions ?? SHAssetQuality.all)
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
+            /// Enquque to FailedUpload queue
+            log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
+            let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
+                localIdentifier: localIdentifier,
+                versions: versions,
+                groupId: groupId,
+                eventOriginator: eventOriginator,
+                sharedWith: sharedWith
+            )
+            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
+            try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
             
             /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset
             /// This ensures that the queue stays clean and both are in sync (self-healing)
             let baseCondition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
-            let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: queueItemIdentifier, negated: true)))
+            let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: failedUploadQueueItem.identifier, negated: true)))
             let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition)
         }
         catch {
@@ -170,30 +164,25 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
 #endif
         
         if isBackground == false {
-            /// Enqueue to success history
-            log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
-            
-            let uploadedQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-                groupId: groupId,
-                assetLocalIdentifier: localIdentifier,
-                versions: versions
-            )
-            let succesfulUploadQueueItem = SHUploadHistoryItem(
-                localAssetId: localIdentifier,
-                globalAssetId: globalIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: eventOriginator,
-                sharedWith: [self.user]
-            )
-            
             do {
-                try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue, with: uploadedQueueItemIdentifier)
+                /// Enqueue to success history
+                log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
+                
+                let succesfulUploadQueueItem = SHUploadHistoryItem(
+                    localAssetId: localIdentifier,
+                    globalAssetId: globalIdentifier,
+                    versions: versions,
+                    groupId: groupId,
+                    eventOriginator: eventOriginator,
+                    sharedWith: [self.user]
+                )
+                
+                try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue)
                 
                 /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset
                 /// This is necessary as we don't want duplicates when uploading an asset multiple times (for whatever reason)
                 let baseCondition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
-                let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: uploadedQueueItemIdentifier, negated: true)))
+                let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: succesfulUploadQueueItem.identifier, negated: true)))
                 let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition)
             }
             catch {
@@ -206,33 +195,28 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         /// Start the sharing part if needed
         ///
         if request.isSharingWithOtherUsers {
-            ///
-            /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
-            ///
-            log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
+            do {
+                ///
+                /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
+                ///
+                log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
 
-            let shareFetchQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
-                groupId: groupId,
-                assetLocalIdentifier: localIdentifier,
-                versions: versions,
-                users: sharedWith
-            )
-            let fetchRequest = SHLocalFetchRequestQueueItem(
-                localIdentifier: localIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: eventOriginator,
-                sharedWith: sharedWith,
-                shouldUpload: false,
-                isBackground: isBackground
-            )
-            do { try fetchRequest.enqueue(in: FetchQueue, with: shareFetchQueueItemIdentifier) }
-            catch {
+                let fetchRequest = SHLocalFetchRequestQueueItem(
+                    localIdentifier: localIdentifier,
+                    versions: versions,
+                    groupId: groupId,
+                    eventOriginator: eventOriginator,
+                    sharedWith: sharedWith,
+                    shouldUpload: false,
+                    isBackground: isBackground
+                )
+                try fetchRequest.enqueue(in: FetchQueue)
+            } catch {
                 log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to FETCH queue failed")
                 throw error
             }
             
-            if request.versions?.contains(.hiResolution) == false,
+            if request.versions.contains(.hiResolution) == false,
                isBackground == false {
                 ///
                 /// Enquque to FETCH queue cause for sharing we only upload the `.midResolution` version so far.
@@ -242,20 +226,17 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 /// NOTE: This is only necessary when the user shares assets, because in that case `.lowResolution` and `.midResolution` are uploaded first, and `.hiResolution` later
                 /// When assets are only backed up, there's no `.midResolution` used as a surrogate.
                 ///
-                let fetchQueueItem = SHLocalFetchRequestQueueItem(
-                    localIdentifier: request.localIdentifier,
-                    versions: [.hiResolution],
-                    groupId: request.groupId,
-                    eventOriginator: request.eventOriginator,
-                    sharedWith: request.sharedWith,
-                    shouldUpload: true,
-                    isBackground: true
-                )
                 do {
-                    let hiVersionQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(groupId: groupId,
-                                                                                           assetLocalIdentifier: request.localIdentifier,
-                                                                                           versions: [.hiResolution])
-                    try fetchQueueItem.enqueue(in: FetchQueue, with: hiVersionQueueItemIdentifier)
+                    let hiResFetchQueueItem = SHLocalFetchRequestQueueItem(
+                        localIdentifier: request.localIdentifier,
+                        versions: [.hiResolution],
+                        groupId: request.groupId,
+                        eventOriginator: request.eventOriginator,
+                        sharedWith: request.sharedWith,
+                        shouldUpload: true,
+                        isBackground: true
+                    )
+                    try hiResFetchQueueItem.enqueue(in: FetchQueue)
                     log.info("enqueueing asset \(localIdentifier) HI RESOLUTION for upload")
                 }
                 catch {
@@ -304,6 +285,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         
         let globalIdentifier = uploadRequest.globalAssetId
         let localIdentifier = uploadRequest.localIdentifier
+        let versions = uploadRequest.versions
         
         do {
             if uploadRequest.isBackground == false {
@@ -317,8 +299,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                     }
                 }
             }
-            
-            let versions = uploadRequest.versions ?? SHUploadPipeline.defaultVersions(for: uploadRequest)
             
             log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
             let encryptedAsset: any SHEncryptedAsset

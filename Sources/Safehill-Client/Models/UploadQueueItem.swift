@@ -214,17 +214,40 @@ public extension SHShareableGroupableQueueItem {
 
 public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupableQueueItem {
     
+    public var identifier: String {
+        return SHUploadPipeline.queueItemIdentifier(
+            groupId: self.groupId,
+            assetLocalIdentifier: self.localIdentifier,
+            versions: self.versions,
+            users: self.sharedWith
+        )
+    }
+    
     public let localIdentifier: String
     
     ///
-    /// `versions` semantics
-    /// empty => all
-    /// nil => not specified (older client version)
+    /// The `versions` to fetch/encrypt/upload/share as part of this request
     ///
-    public let versions: [SHAssetQuality]?
+    public let versions: [SHAssetQuality]
     public let groupId: String
     public let eventOriginator: SHServerUser
     public let sharedWith: [SHServerUser] // Empty if it's just a backup request
+    
+    ///
+    /// The recommended versions based on the type of request.
+    /// If the requested is constructed with no versions specified, these versions will be used for this request.
+    /// To be precise, this method controls the logic around which versions to upload based on whether the purpose is to share the asset or just upload it.
+    /// If shared (because we want the recipient to see it asap) we upload a surrogate for the `.hiResolution` first, namely the `.midResolution`.
+    /// - Parameter forSharingWith: the list of users to share it with
+    /// - Returns: the list of asset versions
+    ///
+    public static func recommendedVersions(forSharingWith users: [SHServerUser]) -> [SHAssetQuality] {
+        if users.count > 0 {
+            return [.lowResolution, .midResolution]
+        } else {
+            return [.lowResolution, .hiResolution]
+        }
+    }
     
     ///
     /// If set to true avoids side-effects, such as:
@@ -234,7 +257,20 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
     public let isBackground: Bool
     
     public init(localIdentifier: String,
-                versions: [SHAssetQuality]?,
+                groupId: String,
+                eventOriginator: SHServerUser,
+                sharedWith users: [SHServerUser],
+                isBackground: Bool = false) {
+        self.localIdentifier = localIdentifier
+        self.versions = SHAbstractShareableGroupableQueueItem.recommendedVersions(forSharingWith: users)
+        self.groupId = groupId
+        self.eventOriginator = eventOriginator
+        self.sharedWith = users
+        self.isBackground = isBackground
+    }
+    
+    public init(localIdentifier: String,
+                versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
@@ -250,7 +286,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
     public func encode(with coder: NSCoder) {
         coder.encode(self.localIdentifier, forKey: AssetIdKey)
         coder.encode(NSNumber(booleanLiteral: self.isBackground), forKey: IsBackgroundKey)
-        coder.encode(self.versions?.map({ $0.rawValue }), forKey: VersionsKey)
+        coder.encode(self.versions.map({ $0.rawValue }), forKey: VersionsKey)
         coder.encode(self.groupId, forKey: GroupIdKey)
         // Convert to SHRemoteUserClass
         let remoteSender = SHRemoteUserClass(identifier: self.eventOriginator.identifier,
@@ -277,14 +313,14 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             return nil
         }
         
-        guard let versions = versions as? [String]? else {
+        guard let versions = versions as? [String] else {
             log.error("unexpected value for versions when decoding \(Self.Type.self) object")
             return nil
         }
         
-        let parsedVersions: [SHAssetQuality]?
+        let parsedVersions: [SHAssetQuality]
         do {
-            parsedVersions = try versions?.map({
+            parsedVersions = try versions.map({
                 let quality = SHAssetQuality(rawValue: $0)
                 if quality == nil {
                     throw SHBackgroundOperationError.fatalError("unexpected asset version \($0)")
@@ -335,6 +371,15 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
                   sharedWith: remoteReceivers,
                   isBackground: isBg.boolValue)
     }
+    
+    public func enqueue(in queue: KBQueueStore) throws {
+        let data = try? NSKeyedArchiver.archivedData(withRootObject: self, requiringSecureCoding: true)
+        if let data = data {
+            try queue.enqueue(data, withIdentifier: self.identifier)
+        } else {
+            throw SHBackgroundOperationError.fatalError("failed to enqueue item with id \(identifier)")
+        }
+    }
 }
 
 public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
@@ -344,7 +389,21 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     public let shouldUpload: Bool
     
     public init(localIdentifier: String,
-                versions: [SHAssetQuality]?,
+                groupId: String,
+                eventOriginator: SHServerUser,
+                sharedWith users: [SHServerUser],
+                shouldUpload: Bool,
+                isBackground: Bool = false) {
+        self.shouldUpload = shouldUpload
+        super.init(localIdentifier: localIdentifier,
+                   groupId: groupId,
+                   eventOriginator: eventOriginator,
+                   sharedWith: users,
+                   isBackground: isBackground)
+    }
+    
+    public init(localIdentifier: String,
+                versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
@@ -396,7 +455,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     public let asset: SHApplePhotoAsset
     
     public init(asset: SHApplePhotoAsset,
-                versions: [SHAssetQuality]?,
+                versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],
@@ -445,7 +504,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
     
     public init(localAssetId: String,
                 globalAssetId: String,
-                versions: [SHAssetQuality]?,
+                versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],

@@ -268,7 +268,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         recipients: [SHServerUser],
         request: SHEncryptionRequestQueueItem) throws -> any SHEncryptedAsset
     {
-        let versions = request.versions ?? SHUploadPipeline.defaultVersions(for: request)
+        let versions = request.versions
         
         let localIdentifier = asset.phAsset.localIdentifier
         var payloads: [SHAssetQuality: Data]
@@ -367,11 +367,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         
-        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-            groupId: groupId,
-            assetLocalIdentifier: localIdentifier,
-            versions: versions
-        )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
             versions: versions,
@@ -381,8 +376,11 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         )
         
         do {
-            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions ?? SHAssetQuality.all)
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue, with: queueItemIdentifier)
+            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
+            try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
+            
+            /// Remove items in the `UploadHistoryQueue` for the same identifier
+            let _ = try? UploadHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -431,11 +429,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         /// Enqueue to Upload queue
         ///
-        let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
-            groupId: groupId,
-            assetLocalIdentifier: localIdentifier,
-            versions: versions
-        )
         let uploadRequest = SHUploadRequestQueueItem(
             localAssetId: localIdentifier,
             globalAssetId: globalIdentifier,
@@ -445,9 +438,11 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             sharedWith: users,
             isBackground: isBackground
         )
-        log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
+        log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
         
-        do { try uploadRequest.enqueue(in: UploadQueue, with: queueItemIdentifier) }
+        do {
+            try uploadRequest.enqueue(in: UploadQueue)
+        }
         catch {
             log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
