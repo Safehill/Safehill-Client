@@ -148,7 +148,7 @@ extension SHApplePhotoAsset {
     }
 }
 
-open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-ENCRYPT")
@@ -312,28 +312,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return encryptedAsset
     }
     
-    private func markLocalAssetAsFailed(globalIdentifier: String, versions: [SHAssetQuality]) throws {
-        let group = DispatchGroup()
-        for quality in versions {
-            group.enter()
-            self.serverProxy.localServer.markAsset(with: globalIdentifier, quality: quality, as: .failed) { result in
-                if case .failure(let err) = result {
-                    if case SHAssetStoreError.noEntries = err {
-                        self.log.error("No entries found when trying to update local asset upload state for \(globalIdentifier)::\(quality.rawValue)")
-                    }
-                    self.log.info("failed to mark local asset \(globalIdentifier) as failed in local server: \(err.localizedDescription)")
-                }
-                group.leave()
-            }
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-    }
-    
     public func markAsFailed(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
@@ -357,16 +335,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             throw error
         }
         
-        guard request.isBackground == false else {
-            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
-            return
-        }
-        
-        ///
-        /// Enqueue to FailedUpload queue
-        ///
-        log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
-        
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
             versions: versions,
@@ -376,15 +344,24 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         )
         
         do {
+            ///
+            /// Enqueue to FailedUpload queue
+            ///
+            log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
+            
             try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
             try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
             
             /// Remove items in the `UploadHistoryQueue` for the same identifier
             let _ = try? UploadHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
-        }
-        catch {
+        } catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
             throw error
+        }
+        
+        guard request.isBackground == false else {
+            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
+            return
         }
         
         /// Notify the delegates
@@ -407,24 +384,18 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let users = request.sharedWith
         let isBackground = request.isBackground
         
-        ///
-        /// Dequeue from Encryption queue
-        ///
-        log.info("dequeueing item \(item.identifier) from the ENCRYPT queue")
-        
-        do { _ = try EncryptionQueue.dequeue(item: item) }
-        catch {
+        do {
+            ///
+            /// Dequeue from Encryption queue
+            ///
+            log.info("dequeueing item \(item.identifier) from the ENCRYPT queue")
+            _ = try EncryptionQueue.dequeue(item: item)
+        } catch {
             log.warning("item \(item.identifier) was completed but dequeuing failed. This task will be attempted again.")
             throw error
         }
         
-#if DEBUG
-        log.debug("items in the ENCRYPT queue after dequeueing \((try? EncryptionQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
-#endif
         
-        ///
-        /// Enqueue to Upload queue
-        ///
         let uploadRequest = SHUploadRequestQueueItem(
             localAssetId: localIdentifier,
             globalAssetId: globalIdentifier,
@@ -434,19 +405,18 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             sharedWith: users,
             isBackground: isBackground
         )
-        log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
         
         do {
+            ///
+            /// Enqueue to Upload queue
+            ///
+            log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
+            
             try uploadRequest.enqueue(in: UploadQueue)
-        }
-        catch {
+        } catch {
             log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
         }
-        
-#if DEBUG
-        log.debug("items in the UPLOAD queue after enqueueing \((try? UploadQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
-#endif
         
         guard request.isBackground == false else {
             /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
@@ -455,7 +425,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
-                delegate.didCompleteEncryption(queueItemIdentifier: request.identifier)
+                delegate.didCompleteEncryption(queueItemIdentifier: uploadRequest.identifier)
             }
         }
     }

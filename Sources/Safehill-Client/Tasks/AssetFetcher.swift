@@ -138,10 +138,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             throw error
         }
         
-#if DEBUG
-        log.debug("items in the FETCH queue after dequeueing \((try? FetchQueue.peekItems(createdWithin: DateInterval(start: .distantPast, end: Date())))?.count ?? 0)")
-#endif
-        
         guard request.isBackground == false else {
             /// Avoid other side-effects for background  `SHLocalFetchRequestQueueItem`
             return
@@ -149,7 +145,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         do {
             /// Enquque to failed
-            log.info("enqueueing fetch request for asset \(localIdentifier) in the FAILED queue")
+            log.info("enqueueing fetch request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
             
             let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
                 localIdentifier: localIdentifier,
@@ -207,6 +203,15 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
                 throw error
             }
+            
+            if request.isBackground == false {
+                /// Notify the delegates
+                for delegate in delegates {
+                    if let delegate = delegate as? SHAssetFetcherDelegate {
+                        delegate.didCompleteFetching(queueItemIdentifier: request.identifier)
+                    }
+                }
+            }
         } else {
             do {
                 log.info("enqueueing encryption request in the SHARE queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
@@ -220,8 +225,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     isBackground: isBackground
                 )
                 try encryptionForSharingRequest.enqueue(in: ShareQueue)
-            }
-            catch {
+            } catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be shared because enqueueing to SHARE queue failed")
                 throw error
             }
@@ -236,21 +240,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         catch {
             log.warning("asset \(localIdentifier) was fetched but dequeuing failed, so this operation will be attempted again.")
             throw error
-        }
-        
-#if DEBUG
-        log.debug("items in the FETCH queue after dequeueing \((try? FetchQueue.peekNext(100))?.count ?? 0)")
-#endif
-        
-        guard request.isBackground == false else {
-            /// Avoid other side-effects for background  `SHLocalFetchRequestQueueItem`
-            return
-        }
-        /// Notify the delegates
-        for delegate in delegates {
-            if let delegate = delegate as? SHAssetFetcherDelegate {
-                delegate.didCompleteFetching(queueItemIdentifier: request.identifier)
-            }
         }
     }
     

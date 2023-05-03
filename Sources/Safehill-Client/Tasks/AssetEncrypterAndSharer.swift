@@ -63,22 +63,18 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             throw error
         }
         
-        guard request.isBackground == false else {
-            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
-            return
-        }
+        /// Enquque to failed
+        log.info("enqueueing share request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
+        
+        let failedShare = SHFailedShareRequestQueueItem(
+            localIdentifier: localIdentifier,
+            versions: versions,
+            groupId: groupId,
+            eventOriginator: eventOriginator,
+            sharedWith: users
+        )
 
         do {
-            /// Enquque to failed
-            log.info("enqueueing share request for asset \(localIdentifier) in the FAILED queue")
-            
-            let failedShare = SHFailedShareRequestQueueItem(
-                localIdentifier: localIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: eventOriginator,
-                sharedWith: users
-            )
             try failedShare.enqueue(in: FailedShareQueue)
             
             /// Remove items in the `ShareHistoryQueue` for the same identifier
@@ -89,10 +85,15 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             throw error
         }
         
+        guard request.isBackground == false else {
+            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
+            return
+        }
+        
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                delegate.didFailSharing(queueItemIdentifier: failedShare.identifier)
             }
         }
     }
@@ -116,34 +117,38 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
         }
         
-        guard request.isBackground == false else {
-            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
-            return
-        }
+        
+        let successfulShare = SHShareHistoryItem(
+            localAssetId: localIdentifier,
+            globalAssetId: globalIdentifier,
+            versions: versions,
+            groupId: groupId,
+            eventOriginator: eventOriginator,
+            sharedWith: users
+        )
         
         do {
             /// Enquque to ShareHistoryQueue
             log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
+            try successfulShare.enqueue(in: ShareHistoryQueue)
             
-            let queueItem = SHShareHistoryItem(
-                localAssetId: localIdentifier,
-                globalAssetId: globalIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: eventOriginator,
-                sharedWith: users
-            )
-            try queueItem.enqueue(in: ShareHistoryQueue)
+            /// Remove items in the `FailedShareQueue` for the same identifier
+            let _ = try? FailedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: successfulShare.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
             throw error
         }
         
+        guard request.isBackground == false else {
+            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
+            return
+        }
+        
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didCompleteSharing(queueItemIdentifier: request.identifier)
+                delegate.didCompleteSharing(queueItemIdentifier: successfulShare.identifier)
             }
         }
     }
@@ -248,7 +253,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         do {
             guard shareRequest.sharedWith.count > 0 else {
                 log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
-                throw SHBackgroundOperationError.fatalError("sharingWith emtpy. No sharing info")
+                fatalError("sharingWith emtpy. No sharing info")
             }
             
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
