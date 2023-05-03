@@ -390,11 +390,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
-                delegate.didFailEncryption(
-                    itemWithLocalIdentifier: localIdentifier,
-                    groupId: groupId,
-                    sharedWith: users
-                )
+                delegate.didFailEncryption(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -459,12 +455,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
-                delegate.didCompleteEncryption(
-                    itemWithLocalIdentifier: localIdentifier,
-                    globalIdentifier: globalIdentifier,
-                    groupId: groupId,
-                    sharedWith: users
-                )
+                delegate.didCompleteEncryption(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -495,11 +486,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         if encryptionRequest.isBackground == false {
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didStartEncryption(
-                        itemWithLocalIdentifier: asset.phAsset.localIdentifier,
-                        groupId: encryptionRequest.groupId,
-                        sharedWith: encryptionRequest.sharedWith
-                    )
+                    delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
                 }
             }
         }

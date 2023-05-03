@@ -59,32 +59,28 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
 public protocol SHOutboundAssetOperationDelegate {}
 
 public protocol SHAssetFetcherDelegate: SHOutboundAssetOperationDelegate {
-    func didStartFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
-    func didCompleteFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
-    func didFailFetching(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didStartFetching(queueItemIdentifier: String)
+    func didCompleteFetching(queueItemIdentifier: String)
+    func didFailFetching(queueItemIdentifier: String)
 }
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
-    func didStartEncryption(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
-    func didCompleteEncryption(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
-    func didFailEncryption(itemWithLocalIdentifier: String, groupId: String, sharedWith: [SHServerUser])
+    func didStartEncryption(queueItemIdentifier: String)
+    func didCompleteEncryption(queueItemIdentifier: String)
+    func didFailEncryption(queueItemIdentifier: String)
 }
 
 
 public protocol SHAssetUploaderDelegate: SHOutboundAssetOperationDelegate {
-    func didStartUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didCompleteUpload(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String)
-    func didFailUpload(itemWithLocalIdentifier: String,
-                       globalIdentifier: String,
-                       groupId: String,
-                       sharedWith users: [SHServerUser],
-                       error: Error)
+    func didStartUpload(queueItemIdentifier: String)
+    func didCompleteUpload(queueItemIdentifier: String)
+    func didFailUpload(queueItemIdentifier: String, error: Error)
 }
 
 
 public protocol SHAssetSharerDelegate: SHOutboundAssetOperationDelegate {
-    func didStartSharing(itemWithLocalIdentifier: String, groupId: String, with users: [SHServerUser])
-    func didCompleteSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, with users: [SHServerUser])
-    func didFailSharing(itemWithLocalIdentifier: String, globalIdentifier: String, groupId: String, with users: [SHServerUser])
+    func didStartSharing(queueItemIdentifier: String)
+    func didCompleteSharing(queueItemIdentifier: String)
+    func didFailSharing(queueItemIdentifier: String)
 }
 

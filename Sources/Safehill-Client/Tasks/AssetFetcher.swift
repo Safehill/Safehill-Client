@@ -167,11 +167,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetFetcherDelegate {
-                delegate.didFailFetching(
-                    itemWithLocalIdentifier: localIdentifier,
-                    groupId: groupId,
-                    sharedWith: users
-                )
+                delegate.didFailFetching(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -253,11 +249,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetFetcherDelegate {
-                delegate.didCompleteFetching(
-                    itemWithLocalIdentifier: localIdentifier,
-                    groupId: groupId,
-                    sharedWith: users
-                )
+                delegate.didCompleteFetching(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -294,11 +286,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetFetcherDelegate {
-                    delegate.didStartFetching(
-                        itemWithLocalIdentifier: fetchRequest.localIdentifier,
-                        groupId: fetchRequest.groupId,
-                        sharedWith: fetchRequest.sharedWith
-                    )
+                    delegate.didStartFetching(queueItemIdentifier: fetchRequest.identifier)
                 }
             }
         }

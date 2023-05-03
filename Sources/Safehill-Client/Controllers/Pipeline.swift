@@ -125,7 +125,7 @@ public struct SHUploadPipeline {
 
 public extension SHUploadPipeline {
     
-    static func queueItemIdentifier(groupId: String, assetLocalIdentifier: String, versions: [SHAssetQuality]?, users: [SHServerUser]) -> String {
+    static func queueItemIdentifier(groupId: String, assetLocalIdentifier: String, versions: [SHAssetQuality], users: [SHServerUser]) -> String {
         var components = [
             assetLocalIdentifier,
             groupId
@@ -137,8 +137,8 @@ public extension SHUploadPipeline {
                 .joined(separator: "+").data(using: .utf8)!
             ))
         }
-        if versions?.count ?? 0 > 0 {
-            components.append(versions!.map { $0.rawValue }.joined(separator: ":"))
+        if versions.count > 0 {
+            components.append(versions.map { $0.rawValue }.joined(separator: ":"))
         }
         return components.joined(separator: "+")
     }

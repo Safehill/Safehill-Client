@@ -92,12 +92,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didFailSharing(
-                    itemWithLocalIdentifier: localIdentifier,
-                    globalIdentifier: globalIdentifier,
-                    groupId: groupId,
-                    with: users
-                )
+                delegate.didFailSharing(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -148,12 +143,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didCompleteSharing(
-                    itemWithLocalIdentifier: localIdentifier,
-                    globalIdentifier: globalIdentifier,
-                    groupId: groupId,
-                    with: users
-                )
+                delegate.didCompleteSharing(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -266,11 +256,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             if shareRequest.isBackground == false {
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(
-                            itemWithLocalIdentifier: asset.phAsset.localIdentifier,
-                            groupId: shareRequest.groupId,
-                            with: shareRequest.sharedWith
-                        )
+                        delegate.didStartSharing(queueItemIdentifier: shareRequest.identifier)
                     }
                 }
             }

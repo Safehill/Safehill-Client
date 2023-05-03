@@ -128,13 +128,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetUploaderDelegate {
-                delegate.didFailUpload(
-                    itemWithLocalIdentifier: localIdentifier,
-                    globalIdentifier: globalIdentifier,
-                    groupId: groupId,
-                    sharedWith: sharedWith,
-                    error: error
-                )
+                delegate.didFailUpload(queueItemIdentifier: request.identifier, error: error)
             }
         }
     }
@@ -254,11 +248,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetUploaderDelegate {
-                delegate.didCompleteUpload(
-                    itemWithLocalIdentifier: localIdentifier,
-                    globalIdentifier: globalIdentifier,
-                    groupId: groupId
-                )
+                delegate.didCompleteUpload(queueItemIdentifier: request.identifier)
             }
         }
     }
@@ -291,11 +281,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             if uploadRequest.isBackground == false {
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didStartUpload(
-                            itemWithLocalIdentifier: localIdentifier,
-                            globalIdentifier: globalIdentifier,
-                            groupId: uploadRequest.groupId
-                        )
+                        delegate.didStartUpload(queueItemIdentifier: uploadRequest.identifier)
                     }
                 }
             }
