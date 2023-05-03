@@ -119,6 +119,8 @@ public struct SHUploadPipeline {
                 sharedWith: recipients
             )
             try? failedQueueItem.enqueue(in: FailedShareQueue)
+            
+            throw error
         }
     }
 }
