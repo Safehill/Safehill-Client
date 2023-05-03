@@ -24,7 +24,6 @@ open class SHAbstractBackgroundOperation : Operation {
     }
     
     private let stateQueue = DispatchQueue(label: "com.gf.safehill.BackgroundOperation.stateQueue",
-                                           qos: .background,
                                            attributes: .concurrent)
     private var _state: State = .ready
     
@@ -77,10 +76,8 @@ open class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     
     private var started = false
     private let stateQueue = DispatchQueue(label: "com.sh.AssetsUploadQueueProcessor.stateQueue",
-                                           qos: .background,
                                            attributes: .concurrent)
     private let timerQueue = DispatchQueue(label: "com.sh.AssetsUploadQueueProcessor.timerQueue",
-                                           qos: .background,
                                            attributes: .concurrent)
     private var timer: Timer? = nil
     

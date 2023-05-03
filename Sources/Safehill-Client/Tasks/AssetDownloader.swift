@@ -385,7 +385,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 // MARK: Get mid resolution asset (asynchronously)
                 
-                DispatchQueue.global(qos: .background).async {
+                DispatchQueue.global().async {
                     self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,
                                           quality: .midResolution,
                                           request: downloadRequest) { _ in }

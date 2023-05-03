@@ -629,7 +629,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             setProcessingState(.encrypting, for: item.identifier)
             
-            DispatchQueue.global(qos: .background).async { [self] in
+            DispatchQueue.global().async { [self] in
                 guard !isCancelled else {
                     log.info("encryption task cancelled. Finishing")
                     setProcessingState(nil, for: item.identifier)

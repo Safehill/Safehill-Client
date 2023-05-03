@@ -432,7 +432,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             
             setProcessingState(.uploading, for: item.identifier)
             
-            DispatchQueue.global(qos: .background).async { [self] in
+            DispatchQueue.global().async { [self] in
                 guard !isCancelled else {
                     log.info("upload task cancelled. Finishing")
                     setProcessingState(nil, for: item.identifier)

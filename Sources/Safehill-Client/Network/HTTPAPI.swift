@@ -651,8 +651,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 asset: any SHEncryptedAsset,
                 filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)",
-                                       qos: .background)
+        let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)", attributes: .concurrent)
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
         let group = DispatchGroup()

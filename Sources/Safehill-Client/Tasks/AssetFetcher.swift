@@ -397,7 +397,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             log.info("fetching item \(item.identifier) created at \(item.createdAt)")
             setProcessingState(.fetching, for: item.identifier)
             
-            DispatchQueue.global(qos: .background).async { [self] in
+            DispatchQueue.global().async { [self] in
                 guard !isCancelled else {
                     log.info("fetch task cancelled. Finishing")
                     setProcessingState(nil, for: item.identifier)

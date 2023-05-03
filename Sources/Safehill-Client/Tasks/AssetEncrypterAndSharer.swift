@@ -383,7 +383,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             setProcessingState(.sharing, for: item.identifier)
             
-            DispatchQueue.global(qos: .background).async { [self] in
+            DispatchQueue.global().async { [self] in
                 guard !isCancelled else {
                     log.info("share task cancelled. Finishing")
                     setProcessingState(nil, for: item.identifier)
