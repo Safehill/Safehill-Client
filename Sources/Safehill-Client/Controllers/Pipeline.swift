@@ -58,7 +58,8 @@ public struct SHUploadPipeline {
         
         let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
             groupId: groupId,
-            assetLocalIdentifier: localIdentifier
+            assetLocalIdentifier: localIdentifier,
+            versions: versions
         )
         
         do {
@@ -84,7 +85,8 @@ public struct SHUploadPipeline {
             if recipients.count > 0 {
                 let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
                     groupId: groupId,
-                    assetId: localIdentifier,
+                    assetLocalIdentifier: localIdentifier,
+                    versions: versions,
                     users: recipients
                 )
                 let failedQueueItem = SHFailedShareRequestQueueItem(
@@ -140,12 +142,14 @@ public struct SHUploadPipeline {
             if forceUpload {
                 queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
                     groupId: groupId,
-                    assetLocalIdentifier: localIdentifier
+                    assetLocalIdentifier: localIdentifier,
+                    versions: versions
                 )
             } else {
                 queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
                     groupId: groupId,
-                    assetId: localIdentifier,
+                    assetLocalIdentifier: localIdentifier,
+                    versions: versions,
                     users: recipients
                 )
             }
@@ -161,7 +165,8 @@ public struct SHUploadPipeline {
         } catch {
             let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
                 groupId: groupId,
-                assetId: localIdentifier,
+                assetLocalIdentifier: localIdentifier,
+                versions: versions,
                 users: recipients
             )
             let failedQueueItem = SHFailedShareRequestQueueItem(
@@ -178,20 +183,31 @@ public struct SHUploadPipeline {
 
 public extension SHUploadPipeline {
     
-    static func uploadQueueItemKey(groupId: String, assetLocalIdentifier: String) -> String {
-        return [assetLocalIdentifier, groupId].joined(separator: "+")
+    static func uploadQueueItemKey(groupId: String, assetLocalIdentifier: String, versions: [SHAssetQuality]?) -> String {
+        var components = [
+            assetLocalIdentifier,
+            groupId
+        ]
+        if versions?.count ?? 0 > 0 {
+            components.append(versions!.map { $0.rawValue }.joined(separator: ":"))
+        }
+        return components.joined(separator: "+")
     }
     
-    static func shareQueueItemKey(groupId: String, assetId: String, users: [SHServerUser]) -> String {
-        return (
-            assetId + "+" +
-            groupId + "+" +
+    static func shareQueueItemKey(groupId: String, assetLocalIdentifier: String, versions: [SHAssetQuality]?, users: [SHServerUser]) -> String {
+        var components = [
+            assetLocalIdentifier,
+            groupId,
             SHHash.stringDigest(for: users
                 .map({ $0.identifier })
                 .sorted()
                 .joined(separator: "+").data(using: .utf8)!
             )
-        )
+        ]
+        if versions?.count ?? 0 > 0 {
+            components.append(versions!.map { $0.rawValue }.joined(separator: ":"))
+        }
+        return components.joined(separator: "+")
     }
     
     static func asset(fromshareQueueItemKey itemKey: String) -> String? {
@@ -208,13 +224,5 @@ public extension SHUploadPipeline {
             return nil
         }
         return components[1]
-    }
-    
-    static func hiResUploadQueueItemKey(groupId: String, assetLocalIdentifier: String) -> String {
-        return [
-            assetLocalIdentifier,
-            groupId,
-            SHAssetQuality.hiResolution.rawValue
-        ].joined(separator: "+")
     }
 }

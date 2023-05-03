@@ -105,7 +105,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
         log.info("enqueueing upload request for asset \(localIdentifier) in the FAILED queue")
         let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
             groupId: groupId,
-            assetLocalIdentifier: localIdentifier
+            assetLocalIdentifier: localIdentifier,
+            versions: versions
         )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
@@ -121,7 +122,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             
             /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset
             /// This ensures that the queue stays clean and both are in sync (self-healing)
-            let baseCondition = KBGenericCondition(.beginsWith, value: localIdentifier)
+            let baseCondition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
             let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: queueItemIdentifier, negated: true)))
             let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition)
         }
@@ -174,7 +175,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
             
             let uploadedQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
                 groupId: groupId,
-                assetLocalIdentifier: localIdentifier
+                assetLocalIdentifier: localIdentifier,
+                versions: versions
             )
             let succesfulUploadQueueItem = SHUploadHistoryItem(
                 localAssetId: localIdentifier,
@@ -190,7 +192,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 
                 /// Remove items in the `UploadHistoryQueue` and `FailedUploadQueue` for the same asset
                 /// This is necessary as we don't want duplicates when uploading an asset multiple times (for whatever reason)
-                let baseCondition = KBGenericCondition(.beginsWith, value: localIdentifier)
+                let baseCondition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
                 let _ = try UploadHistoryQueue.removeValues(forKeysMatching: baseCondition.and(KBGenericCondition(.equal, value: uploadedQueueItemIdentifier, negated: true)))
                 let _ = try FailedUploadQueue.removeValues(forKeysMatching: baseCondition)
             }
@@ -211,7 +213,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
 
             let shareFetchQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
                 groupId: groupId,
-                assetId: localIdentifier,
+                assetLocalIdentifier: localIdentifier,
+                versions: versions,
                 users: sharedWith
             )
             let fetchRequest = SHLocalFetchRequestQueueItem(
@@ -249,7 +252,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                     isBackground: true
                 )
                 do {
-                    let hiVersionQueueItemIdentifier = SHUploadPipeline.hiResUploadQueueItemKey(groupId: groupId, assetLocalIdentifier: request.localIdentifier)
+                    let hiVersionQueueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(groupId: groupId,
+                                                                                           assetLocalIdentifier: request.localIdentifier,
+                                                                                           versions: [.hiResolution])
                     try fetchQueueItem.enqueue(in: FetchQueue, with: hiVersionQueueItemIdentifier)
                     log.info("enqueueing asset \(localIdentifier) HI RESOLUTION for upload")
                 }

@@ -156,7 +156,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
             groupId: groupId,
-            assetLocalIdentifier: localIdentifier
+            assetLocalIdentifier: localIdentifier,
+            versions: versions
         )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
@@ -206,10 +207,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         if shouldUpload {
             log.info("enqueueing encryption request in the ENCRYPT queue for asset \(localIdentifier) versions \(versions ?? []) isBackground=\(isBackground)")
             
-            
             let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
                 groupId: groupId,
-                assetLocalIdentifier: localIdentifier
+                assetLocalIdentifier: localIdentifier,
+                versions: versions
             )
             let encryptionRequest = SHEncryptionRequestQueueItem(
                 asset: photoAsset,
@@ -239,7 +240,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
                 groupId: groupId,
-                assetId: localIdentifier,
+                assetLocalIdentifier: localIdentifier,
+                versions: versions,
                 users: users
             )
             do {
@@ -309,10 +311,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - `FailedUploadQueue` (all items with same local identifier)
             /// - `FailedShareQueue` (all items with same local identifier, group and users (there can be many with same local identifier and group, when asset is shared with different users at different times)
             ///
-            let _ = try? FailedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: fetchRequest.localIdentifier))
+            let _ = try? FailedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: fetchRequest.localIdentifier)))
             let shareQueueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
                 groupId: fetchRequest.groupId,
-                assetId: fetchRequest.localIdentifier,
+                assetLocalIdentifier: fetchRequest.localIdentifier,
+                versions: fetchRequest.versions,
                 users: fetchRequest.sharedWith
             )
             let _ = try? FailedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: shareQueueItemIdentifier))

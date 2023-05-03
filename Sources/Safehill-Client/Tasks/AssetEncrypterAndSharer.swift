@@ -73,7 +73,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
             groupId: groupId,
-            assetId: localIdentifier,
+            assetLocalIdentifier: localIdentifier,
+            versions: versions,
             users: users
         )
         let failedShare = SHFailedShareRequestQueueItem(localIdentifier: localIdentifier,
@@ -134,7 +135,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         let queueItemIdentifier = SHUploadPipeline.shareQueueItemKey(
             groupId: groupId,
-            assetId: localIdentifier,
+            assetLocalIdentifier: localIdentifier,
+            versions: versions,
             users: users
         )
         let queueItem = SHShareHistoryItem(localAssetId: localIdentifier,

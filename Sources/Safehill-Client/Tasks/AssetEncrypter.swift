@@ -369,7 +369,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
             groupId: groupId,
-            assetLocalIdentifier: localIdentifier
+            assetLocalIdentifier: localIdentifier,
+            versions: versions
         )
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
@@ -432,7 +433,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         let queueItemIdentifier = SHUploadPipeline.uploadQueueItemKey(
             groupId: groupId,
-            assetLocalIdentifier: localIdentifier
+            assetLocalIdentifier: localIdentifier,
+            versions: versions
         )
         let uploadRequest = SHUploadRequestQueueItem(
             localAssetId: localIdentifier,
