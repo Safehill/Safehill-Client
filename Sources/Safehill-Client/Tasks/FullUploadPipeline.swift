@@ -88,7 +88,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     private func runFetchCycle() throws {
         let fetchOperation = SHLocalFetchOperation(
             delegates: delegates,
-            limitPerRun: 0,
+            limitPerRun: 5,
             imageManager: imageManager
         )
         try fetchOperation.runOnce()
@@ -98,7 +98,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let encryptOperation = SHEncryptionOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: 0,
+            limitPerRun: 5,
             imageManager: imageManager
         )
         try encryptOperation.runOnce()
@@ -108,7 +108,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let uploadOperation = SHUploadOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: 0
+            limitPerRun: 2
         )
         try uploadOperation.runOnce()
     }
@@ -117,7 +117,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let shareOperation = SHEncryptAndShareOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: 0,
+            limitPerRun: 3,
             imageManager: imageManager
         )
         try shareOperation.runOnce()
@@ -141,7 +141,7 @@ public class SHFullUploadPipelineProcessor : SHBackgroundOperationProcessor<SHFu
     /// Singleton (with private initializer)
     public static var shared = SHFullUploadPipelineProcessor(
         delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 5
+        dispatchIntervalInSeconds: 7
     )
     
     private override init(delayedStartInSeconds: Int = 0,
