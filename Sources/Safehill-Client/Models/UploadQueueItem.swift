@@ -437,7 +437,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     }
 }
 
-public class SHUploadRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
     
     public static var supportsSecureCoding: Bool = true
     
@@ -469,7 +469,7 @@ public class SHUploadRequestQueueItem: SHAbstractShareableGroupableQueueItem, NS
             let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
             
             guard let globalAssetId = globalAssetId as String? else {
-                log.error("unexpected value for globalAssetId when decoding SHUploadRequestQueueItem object")
+                log.error("unexpected value for globalAssetId when decoding SHConcreteShareableGroupableQueueItem object")
                 return nil
             }
             
@@ -489,7 +489,7 @@ public class SHUploadRequestQueueItem: SHAbstractShareableGroupableQueueItem, NS
     }
 }
 
-public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+public class SHFailedQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
     public static var supportsSecureCoding: Bool = true
     
     public required convenience init?(coder decoder: NSCoder) {
@@ -509,10 +509,11 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
 
 public typealias SHEncryptionRequestQueueItem = SHConcreteEncryptionRequestQueueItem
 public typealias SHEncryptionForSharingRequestQueueItem = SHConcreteEncryptionRequestQueueItem
+public typealias SHUploadRequestQueueItem = SHConcreteShareableGroupableQueueItem
 public typealias SHUploadHistoryItem = SHConcreteShareableGroupableQueueItem
 public typealias SHShareHistoryItem = SHConcreteShareableGroupableQueueItem
-public typealias SHFailedShareRequestQueueItem = SHConcreteShareableGroupableQueueItem
-public typealias SHFailedUploadRequestQueueItem = SHConcreteShareableGroupableQueueItem
+public typealias SHFailedShareRequestQueueItem = SHFailedQueueItem
+public typealias SHFailedUploadRequestQueueItem = SHFailedQueueItem
 
 
 /// A placeholder for a SHServerUser when only its identifier is available

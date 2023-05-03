@@ -177,7 +177,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHBackgroundQueuePr
                 assetLocalIdentifier: localIdentifier
             )
             let succesfulUploadQueueItem = SHUploadHistoryItem(
-                localIdentifier: localIdentifier,
+                localAssetId: localIdentifier,
+                globalAssetId: globalIdentifier,
                 versions: versions,
                 groupId: groupId,
                 eventOriginator: eventOriginator,

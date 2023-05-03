@@ -607,6 +607,10 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func unshare(assetId: GlobalIdentifier, with userPublicIdentifier: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func markAsset(with assetGlobalIdentifier: String,
                    quality: SHAssetQuality,
                    as: SHAssetDescriptorUploadState,

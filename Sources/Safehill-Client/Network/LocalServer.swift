@@ -703,6 +703,31 @@ struct LocalServer : SHServerAPI {
         writeBatch.write(completionHandler: completionHandler)
     }
     
+    func unshare(assetId: GlobalIdentifier,
+                 with userPublicIdentifier: String,
+                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let writeBatch = assetStore.writeBatch()
+        
+        var condition = KBGenericCondition(value: false)
+        for quality in SHAssetQuality.all {
+            condition = condition.or(KBGenericCondition(.equal, value: [
+                "receiver",
+                userPublicIdentifier,
+                quality.rawValue,
+                assetId
+               ].joined(separator: "::")))
+        }
+        
+        assetStore.removeValues(forKeysMatching: condition) { result in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     public func getSharingInfo(forAssetIdentifier globalIdentifier: String,
                                for users: [SHServerUser],
                                completionHandler: @escaping (Swift.Result<SHShareableEncryptedAsset?, Error>) -> ()) {

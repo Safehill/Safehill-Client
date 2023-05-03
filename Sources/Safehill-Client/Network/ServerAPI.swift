@@ -97,6 +97,15 @@ public protocol SHServerAPI {
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
+    /// Unshares one asset (all of its versions) with a user. If the asset or the user don't exist, or the asset is not shared with the user, it's a no-op
+    /// - Parameters:
+    ///   - assetId: the identifier of asset previously shared
+    ///   - with: the public identifier of the user it was previously shared with
+    ///   - completionHandler: the callback method
+    func unshare(assetId: GlobalIdentifier,
+                 with userPublicIdentifier: String,
+                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    
     /// Upload encrypted asset versions data to the CDN.
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,

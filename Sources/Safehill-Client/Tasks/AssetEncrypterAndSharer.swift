@@ -137,7 +137,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             assetId: localIdentifier,
             users: users
         )
-        let queueItem = SHShareHistoryItem(localIdentifier: localIdentifier,
+        let queueItem = SHShareHistoryItem(localAssetId: localIdentifier,
+                                           globalAssetId: globalIdentifier,
                                            versions: versions,
                                            groupId: groupId,
                                            eventOriginator: eventOriginator,

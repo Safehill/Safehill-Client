@@ -5,11 +5,15 @@ import os
 
 extension SHServerProxy {
     
-    /// Replaces the items in the ShareHistoryQueue with the same items by omitting the users removed
+    /// Removes any evidence of the users removed from the local storage:
+    /// - Replaces the items in the `ShareHistoryQueue` with the same items by omitting the users removed.
+    /// - Removes the sharing information from the `assetsStore`
+    ///
     /// Returns the queueItemIdentifiers replaced and the ones removed
-    /// - Parameter userIdsToRemoveFromGroup: <#userIdsToRemoveFromGroup description#>
-    /// - Returns: <#description#>
-    private func removeUsersFromShareHistory(_ userIdsToRemoveFromGroup: [String: [String]]) -> (changed: [String], removed: [String]) {
+    /// - Parameter userIdsToRemoveFromGroup: maps groupId -> list of user ids to remove
+    /// - Returns: the list of keys changed and removed in the `SHShareHistoryQueue`
+    /// 
+    private func removeUsersFromStores(_ userIdsToRemoveFromGroup: [String: [String]]) -> (changed: [String], removed: [String]) {
         
         var oldShareHistoryItems = [String: (item: SHShareHistoryItem, timestamp: Date)]()
         
@@ -55,11 +59,33 @@ extension SHServerProxy {
                 $0.value.item.groupId == groupId
                 && $0.value.item.sharedWith.contains { userIds.contains($0.identifier) }
             })
+            
+            guard matchShares.count > 0 else {
+                log.warning("Unable to retrieve item in ShareHistoryQueue with groupId=\(groupId) having users \(userIds)")
+                continue
+            }
+            
+            
             for share in matchShares {
+                ///
+                /// Remove asset sharing information
+                ///
+                for userId in userIds {
+                    self.localServer.unshare(assetId: share.value.item.globalAssetId, with: userId) { result in
+                        if case .failure(let error) = result {
+                            log.error("some assets were unshared on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                        }
+                    }
+                }
+                
+                ///
+                /// Remove user from existing `SHShareHistoryItem`
+                ///
                 let newSharedWith = share.value.item.sharedWith.filter { !userIds.contains($0.identifier) }
                 if newSharedWith.count > 0 {
                     let newShareHistoryItem = SHShareHistoryItem(
-                        localIdentifier: share.value.item.localIdentifier,
+                        localAssetId: share.value.item.localIdentifier,
+                        globalAssetId: share.value.item.globalAssetId,
                         versions: share.value.item.versions,
                         groupId: share.value.item.groupId,
                         eventOriginator: share.value.item.eventOriginator,
@@ -193,7 +219,7 @@ extension SHServerProxy {
             }
         }
         
-        let queueDiff = self.removeUsersFromShareHistory(diff.userIdsToRemoveFromGroup)
+        let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
             delegate?.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
         }
