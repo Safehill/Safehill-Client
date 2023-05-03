@@ -7,7 +7,7 @@ public enum SHAssetQuality: String {
          midResolution = "mid",
          hiResolution = "hi"
     
-    static var all: [SHAssetQuality] {
+    public static var all: [SHAssetQuality] {
         return [
             .lowResolution,
             .midResolution,
