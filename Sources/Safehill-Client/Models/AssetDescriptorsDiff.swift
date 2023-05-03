@@ -91,11 +91,6 @@ struct AssetDescriptorsDiff {
         
         var userIdsToRemoveFromGroup = [String: [String]]()
         for localDescriptor in localDescriptors {
-            if userIdsToRemove.contains(localDescriptor.sharingInfo.sharedByUserIdentifier) {
-                // TODO: Wait, shouldn't the descriptor not exist in this case?
-//                onlyLocal.append(SHRemoteAssetIdentifier(globalIdentifier: localDescriptor.globalIdentifier, localIdentifier: nil))
-                print("[XXX] userId \(localDescriptor.sharingInfo.sharedByUserIdentifier) was REMOVED. Removing asset with identifier \(localDescriptor.globalIdentifier)")
-            }
             let userIdByGroup = localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup
             for (userId, groupId) in userIdByGroup.filter({ userIdsToRemove.contains($0.key) }) {
                 if userIdsToRemoveFromGroup[groupId] == nil {
