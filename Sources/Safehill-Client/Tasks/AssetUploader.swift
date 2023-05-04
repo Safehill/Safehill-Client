@@ -107,7 +107,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: sharedWith
+            sharedWith: sharedWith,
+            isBackground: request.isBackground
         )
           
         do {
@@ -166,7 +167,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: sharedWith
+            sharedWith: sharedWith,
+            isBackground: isBackground
         )
         
         do {

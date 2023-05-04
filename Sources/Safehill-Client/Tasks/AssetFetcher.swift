@@ -143,17 +143,18 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
+        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
+            localIdentifier: localIdentifier,
+            versions: versions,
+            groupId: groupId,
+            eventOriginator: eventOriginator,
+            sharedWith: users,
+            isBackground: request.isBackground
+        )
+        
         do {
             /// Enquque to failed
             log.info("enqueueing fetch request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
-            
-            let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
-                localIdentifier: localIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: eventOriginator,
-                sharedWith: users
-            )
             try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
         } catch {
             /// Be forgiving for failed Fetch operations
@@ -164,9 +165,9 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         for delegate in delegates {
             if let delegate = delegate as? SHAssetFetcherDelegate {
                 if request.shouldUpload == true {
-                    delegate.didFailFetchingForUpload(queueItemIdentifier: request.identifier)
+                    delegate.didFailFetchingForUpload(queueItemIdentifier: failedUploadQueueItem.identifier)
                 } else {
-                    delegate.didFailFetchingForSharing(queueItemIdentifier: request.identifier)
+                    delegate.didFailFetchingForSharing(queueItemIdentifier: failedUploadQueueItem.identifier)
                 }
             }
         }

@@ -71,7 +71,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: users
+            sharedWith: users,
+            isBackground: request.isBackground
         )
 
         do {
@@ -124,7 +125,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: users
+            sharedWith: users,
+            isBackground: request.isBackground
         )
         
         do {

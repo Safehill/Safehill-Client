@@ -340,7 +340,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: users
+            sharedWith: users,
+            isBackground: request.isBackground
         )
         
         do {

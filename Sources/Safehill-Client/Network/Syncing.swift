@@ -89,7 +89,8 @@ extension SHServerProxy {
                         versions: share.value.item.versions,
                         groupId: share.value.item.groupId,
                         eventOriginator: share.value.item.eventOriginator,
-                        sharedWith: newSharedWith
+                        sharedWith: newSharedWith,
+                        isBackground: share.value.item.isBackground
                     )
                     do {
                         try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
