@@ -59,9 +59,12 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
 public protocol SHOutboundAssetOperationDelegate {}
 
 public protocol SHAssetFetcherDelegate: SHOutboundAssetOperationDelegate {
-    func didStartFetching(queueItemIdentifier: String)
-    func didCompleteFetching(queueItemIdentifier: String)
-    func didFailFetching(queueItemIdentifier: String)
+    func didStartFetchingForUpload(queueItemIdentifier: String)
+    func didStartFetchingForSharing(queueItemIdentifier: String)
+    func didCompleteFetchingForUpload(queueItemIdentifier: String)
+    func didCompleteFetchingForSharing(queueItemIdentifier: String)
+    func didFailFetchingForUpload(queueItemIdentifier: String)
+    func didFailFetchingForSharing(queueItemIdentifier: String)
 }
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {

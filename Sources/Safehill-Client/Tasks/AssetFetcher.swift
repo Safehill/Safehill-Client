@@ -163,7 +163,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetFetcherDelegate {
-                delegate.didFailFetching(queueItemIdentifier: request.identifier)
+                if request.shouldUpload == true {
+                    delegate.didFailFetchingForUpload(queueItemIdentifier: request.identifier)
+                } else {
+                    delegate.didFailFetchingForSharing(queueItemIdentifier: request.identifier)
+                }
             }
         }
     }
@@ -208,7 +212,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 /// Notify the delegates
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetFetcherDelegate {
-                        delegate.didCompleteFetching(queueItemIdentifier: request.identifier)
+                        if request.shouldUpload == true {
+                            delegate.didCompleteFetchingForUpload(queueItemIdentifier: request.identifier)
+                        } else {
+                            delegate.didCompleteFetchingForSharing(queueItemIdentifier: request.identifier)
+                        }
                     }
                 }
             }
@@ -275,7 +283,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetFetcherDelegate {
-                    delegate.didStartFetching(queueItemIdentifier: fetchRequest.identifier)
+                    if fetchRequest.shouldUpload == true {
+                        delegate.didStartFetchingForUpload(queueItemIdentifier: fetchRequest.identifier)
+                    } else {
+                        delegate.didStartFetchingForSharing(queueItemIdentifier: fetchRequest.identifier)
+                    }
                 }
             }
         }
