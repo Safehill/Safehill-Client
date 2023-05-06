@@ -220,6 +220,9 @@ extension SHServerProxy {
             }
         }
         
+        let userIdsToRemove = userIdsInDescriptors.subtract(remoteUserIds)
+        ServerUserCache.shared.evict(usersWithIdentifiers: userIdsToRemove)
+        
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
             delegate?.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)

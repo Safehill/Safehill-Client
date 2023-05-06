@@ -4,6 +4,8 @@ public typealias UserIdentifier = String
 
 internal struct ServerUserCache {
     
+    private let writeQueue = DispatchQueue(label: "ServerUserCache.write", attributes: .concurrent)
+    
     static var shared = ServerUserCache()
     
     private var cache = NSCache<NSString, SHRemoteUserClass>()
@@ -25,14 +27,26 @@ internal struct ServerUserCache {
     
     mutating func cache(_ user: any SHServerUser) {
         let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
-        cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
         
-        evictors[user.identifier]?.invalidate()
-        
-        // Cache retention policy: TTL = 5 minutes
-        evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 5, repeats: false, block: { [self] (timer) in
-            cache.removeObject(forKey: NSString(string: user.identifier))
-        })
+        writeQueue.sync {
+            cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
+            
+            evictors[user.identifier]?.invalidate()
+            
+            // Cache retention policy: TTL = 5 minutes
+            evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 5, repeats: false, block: { [self] (timer) in
+                cache.removeObject(forKey: NSString(string: user.identifier))
+            })
+        }
+    }
+    
+    mutating func evict(usersWithIdentifiers userIdentifiers: [String]) {
+        writeQueue.sync {
+            for userIdentifier in userIdentifiers {
+                cache.removeObject(forKey: NSString(string: userIdentifier))
+                evictors[userIdentifier]?.invalidate()
+            }
+        }
     }
 }
 

@@ -636,6 +636,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             case .success(_):
                 completionHandler(.success(()))
             case .failure(let err):
+                log.warning("(attempt \(retryCount)/3) failed to mark asset \(assetGlobalIdentifier) version \(quality.rawValue) as uploaded")
                 guard retryCount <= 3 else {
                     return completionHandler(.failure(err))
                 }
