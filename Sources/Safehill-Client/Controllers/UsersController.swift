@@ -28,7 +28,7 @@ internal struct ServerUserCache {
     mutating func cache(_ user: any SHServerUser) {
         let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
         
-        writeQueue.sync {
+        writeQueue.sync(flags: .barrier) {
             cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
             
             evictors[user.identifier]?.invalidate()
@@ -41,7 +41,7 @@ internal struct ServerUserCache {
     }
     
     mutating func evict(usersWithIdentifiers userIdentifiers: [String]) {
-        writeQueue.sync {
+        writeQueue.sync(flags: .barrier) {
             for userIdentifier in userIdentifiers {
                 cache.removeObject(forKey: NSString(string: userIdentifier))
                 evictors[userIdentifier]?.invalidate()
