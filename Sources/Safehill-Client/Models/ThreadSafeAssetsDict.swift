@@ -1,5 +1,23 @@
 import Foundation
 
+
+final class ThreadSafeS3Errors {
+    private var queue = DispatchQueue(label: "com.gf.safehill.Snoog.ThreadSafeS3Errors", attributes: .concurrent)
+    
+    private var _dictionary = [String: Error]()
+    
+    func set(_ error: Error, forKey key: String) {
+        queue.sync {
+            _dictionary[key] = error
+        }
+    }
+    
+    func toDict() -> [String: Error] {
+        return _dictionary
+    }
+}
+
+
 final class ThreadSafeAssetsDict {
     
     private var queue = DispatchQueue(label: "com.gf.safehill.Snoog.ThreadSafeAssetsDict", attributes: .concurrent)

@@ -494,7 +494,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             switch result {
             case .success(let assets):
                 let manifest = ThreadSafeAssetsDict()
-                var errors = [String: Error]()
+                let errors = ThreadSafeS3Errors()
                 
                 let group = DispatchGroup()
                 
@@ -507,7 +507,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                             case .success(let encryptedAsset):
                                 manifest.add(encryptedAsset)
                             case .failure(let err):
-                                errors[asset.globalIdentifier + "::" + version.versionName] = err
+                                errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
                             }
                             group.leave()
                         }
@@ -520,8 +520,9 @@ struct SHServerHTTPAPI : SHServerAPI {
                     return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
                 }
                 
-                guard errors.count == 0 else {
-                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errors.keys)")))
+                let errorsDict = errors.toDict()
+                guard errorsDict.count == 0 else {
+                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
                 }
                 completionHandler(.success(manifest.dictionary))
                 
