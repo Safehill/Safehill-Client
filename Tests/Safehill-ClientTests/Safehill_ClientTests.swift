@@ -5,7 +5,6 @@ import CryptoKit
 
 final class Safehill_ClientBaseUnitTests: XCTestCase {
     
-    
     func testSubtract() throws {
         let first = ["Alice", "Bob", "Cindy"]
         let second = ["Bob", "Mary"]
@@ -18,6 +17,17 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         XCTAssert(!subtract.contains("Mary"))
     }
     
+    func testInitQueue() throws {
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .fetch)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .encryption)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .upload)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .share)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .successfulUpload)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .successfulShare)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .failedUpload)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .failedShare)
+        let _ = try BackgroundOperationQueue.initWithRetries(type: .download)
+    }
 }
 
 final class Safehill_ClientEncryptionUnitTests: XCTestCase {

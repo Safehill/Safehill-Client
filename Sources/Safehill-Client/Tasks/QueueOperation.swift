@@ -23,11 +23,11 @@ public enum SHQueueOperation {
         })
         
         do {
-            var removed =  try FetchQueue.removeValues(forKeysMatching: condition)
-            removed += try EncryptionQueue.removeValues(forKeysMatching: condition)
-            removed += try UploadQueue.removeValues(forKeysMatching: condition)
-            removed += try FailedUploadQueue.removeValues(forKeysMatching: condition)
-            removed += try UploadHistoryQueue.removeValues(forKeysMatching: condition)
+            var removed =  try BackgroundOperationQueue.of(type: .fetch).removeValues(forKeysMatching: condition)
+            removed += try BackgroundOperationQueue.of(type: .encryption).removeValues(forKeysMatching: condition)
+            removed += try BackgroundOperationQueue.of(type: .upload).removeValues(forKeysMatching: condition)
+            removed += try BackgroundOperationQueue.of(type: .failedUpload).removeValues(forKeysMatching: condition)
+            removed += try BackgroundOperationQueue.of(type: .successfulUpload).removeValues(forKeysMatching: condition)
             
             if removed.count > 0 {
                 log.info("removed \(removed.count) related items from the queues")
@@ -47,9 +47,9 @@ public enum SHQueueOperation {
         })
         
         do {
-            var removed = try ShareQueue.removeValues(forKeysMatching: condition)
-            removed += try FailedShareQueue.removeValues(forKeysMatching: condition)
-            removed += try ShareHistoryQueue.removeValues(forKeysMatching: condition)
+            var removed = try BackgroundOperationQueue.of(type: .share).removeValues(forKeysMatching: condition)
+            removed += try BackgroundOperationQueue.of(type: .failedShare).removeValues(forKeysMatching: condition)
+            removed += try BackgroundOperationQueue.of(type: .successfulShare).removeValues(forKeysMatching: condition)
             if removed.count > 0 {
                 log.info("removed \(removed.count) related items from the queues")
             }

@@ -3,15 +3,22 @@ import KnowledgeBase
 
 public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
-let userStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.users")
-let assetStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.assets")
-
 struct LocalServer : SHServerAPI {
+    
+    let userStore: KBKVStore
+    let assetStore: KBKVStore
     
     let requestor: SHLocalUser
     
     init(requestor: SHLocalUser) {
         self.requestor = requestor
+        
+        do {
+            userStore = try KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.users")
+            assetStore = try KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.assets")
+        } catch {
+            fatalError("user and asset local database handlers could not be initialized")
+        }
     }
     
     private func createUser(name: String,

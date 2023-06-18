@@ -329,7 +329,10 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         ///
         log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
         
-        do { _ = try EncryptionQueue.dequeue(item: item) }
+        do {
+            let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+            _ = try encryptionQueue.dequeue(item: item)
+        }
         catch {
             log.warning("dequeuing failed of unexpected data in ENCRYPT queue. This task will be attempted again.")
             throw error
@@ -350,11 +353,14 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             ///
             log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
             
+            let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
+            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
+            
             try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
+            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
             
             /// Remove items in the `UploadHistoryQueue` for the same identifier
-            let _ = try? UploadHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
+            let _ = try? successfulUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
         } catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
             throw error
@@ -390,7 +396,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             /// Dequeue from Encryption queue
             ///
             log.info("dequeueing item \(item.identifier) from the ENCRYPT queue")
-            _ = try EncryptionQueue.dequeue(item: item)
+            let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+            _ = try encryptionQueue.dequeue(item: item)
         } catch {
             log.warning("item \(item.identifier) was completed but dequeuing failed. This task will be attempted again.")
             throw error
@@ -413,7 +420,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             ///
             log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
             
-            try uploadRequest.enqueue(in: UploadQueue)
+            let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+            try uploadRequest.enqueue(in: uploadQueue)
         } catch {
             log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
@@ -444,7 +452,10 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             }
             encryptionRequest = content
         } catch {
-            do { _ = try EncryptionQueue.dequeue(item: item) }
+            do {
+                let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+                _ = try encryptionQueue.dequeue(item: item)
+            }
             catch {
                 log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
             }
@@ -537,7 +548,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     }
     
     public func runOnce() throws {
-        while let item = try EncryptionQueue.peek() {
+        let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        while let item = try encryptionQueue.peek() {
             guard processingState(for: item.identifier) != .encrypting else {
                 break
             }
@@ -568,7 +580,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         let items: [KBQueueItem]
 
         do {
-            items = try EncryptionQueue.peekNext(self.limit)
+            let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+            items = try encryptionQueue.peekNext(self.limit)
         } catch {
             log.error("failed to fetch items from the ENCRYPT queue")
             state = .finished

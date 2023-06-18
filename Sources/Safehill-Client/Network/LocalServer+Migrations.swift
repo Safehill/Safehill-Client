@@ -65,7 +65,7 @@ extension LocalServer {
         
         /// Remove KnowledgeGraph entries at launch
         do {
-            let _ = try KnowledgeGraph.removeAll()
+            let _ = try shareGraph.store.removeAll()
         } catch {
             log.warning("Failed to remove deprecated data from the KnowledgeGraph")
         }

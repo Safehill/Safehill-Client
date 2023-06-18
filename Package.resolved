@@ -5,9 +5,9 @@
         "package": "KnowledgeBase",
         "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase.git",
         "state": {
-          "branch": null,
-          "revision": "c3eaedb8e4a0a2b1dbbc3fc7b5597e5612bacfff",
-          "version": "0.9.3"
+          "branch": "unstable",
+          "revision": "4016bfefb4e004f35d2b6568e19de4ef7106945e",
+          "version": null
         }
       },
       {
