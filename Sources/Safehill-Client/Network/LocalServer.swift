@@ -797,8 +797,6 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let writeBatch = assetStore.writeBatch()
-        
         var condition = KBGenericCondition(value: false)
         for quality in SHAssetQuality.all {
             condition = condition.or(KBGenericCondition(.equal, value: [
