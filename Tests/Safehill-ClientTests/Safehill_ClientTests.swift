@@ -59,7 +59,7 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         let expectation = expectation(description: "kg")
         
         DispatchQueue.global(qos: .userInteractive).async {
-            KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.KnowledgeGraph") { result in
+            KBKVStore.initKVStoreWithRetries(dbName: "com.gf.safehill.KnowledgeGraph") { result in
                 if case .success(_) = result {
                     // OK
                     expectation.fulfill()

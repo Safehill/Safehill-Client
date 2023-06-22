@@ -14,6 +14,8 @@ extension Array {
 extension LocalServer {
     
     func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws -> Bool {
+        let assetStore = try SHDBManager.sharedInstance.assetStore()
+        
         var pre_1_4_keys = [String]()
         let writeBatch = assetStore.writeBatch()
         
@@ -63,9 +65,17 @@ extension LocalServer {
     public func runDataMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         /// Remove KnowledgeGraph entries at launch
         do {
-            let _ = try SHDBManager.sharedInstance.graph.removeAll()
+            let _ = try SHDBManager.sharedInstance.graph().removeAll()
         } catch {
             log.warning("Failed to remove deprecated data from the KnowledgeGraph")
         }
