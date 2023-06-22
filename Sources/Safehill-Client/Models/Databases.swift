@@ -36,24 +36,31 @@ extension KBKVStore {
 }
 
 
-class SHDBManager {
+public class SHDBManager {
+    
+    private enum DBName: String {
+        case userStore = "com.gf.safehill.LocalServer.users"
+        case assetsStore = "com.gf.safehill.LocalServer.assets"
+        case knowledgeGraph = "com.gf.safehill.KnowledgeGraph"
+    }
+    
     public static var sharedInstance = SHDBManager()
     
-    var _userStore: KBKVStore? = nil
-    var _assetStore: KBKVStore? = nil
+    private var _userStore: KBKVStore? = nil
+    private var _assetStore: KBKVStore? = nil
     
-    var userStore: KBKVStore {
+    public var userStore: KBKVStore {
         if let s = _userStore {
             return s
         } else {
-            fatalError("user store handler could not be initialized")
+            fatalError("\(DBName.userStore.rawValue) handler could not be initialized")
         }
     }
-    var assetStore: KBKVStore {
+    public var assetStore: KBKVStore {
         if let s = _assetStore {
             return s
         } else {
-            fatalError("asset store handler could not be initialized")
+            fatalError("\(DBName.assetsStore.rawValue) handler could not be initialized")
         }
     }
     
@@ -63,16 +70,16 @@ class SHDBManager {
         if let g = _graph {
             return g
         } else {
-            fatalError("knowledge graph database handler could not be initialized")
+            fatalError("\(DBName.assetsStore.rawValue) handler could not be initialized")
         }
     }
     
-    init() {
-        if let s = KBKnowledgeStore.store(withName: "com.gf.safehill.LocalServer.users") {
+    private init() {
+        if let s = KBKnowledgeStore.store(withName: DBName.userStore.rawValue) {
             self._userStore = s
         } else {
             DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.users") { result in
+                KBKVStore.initDBHandlerWithRetries(dbName: DBName.userStore.rawValue) { result in
                     if case .success(let kvStore) = result {
                         self._userStore = kvStore
                     }
@@ -80,11 +87,11 @@ class SHDBManager {
             }
         }
         
-        if let s = KBKnowledgeStore.store(withName: "com.gf.safehill.LocalServer.assets") {
+        if let s = KBKnowledgeStore.store(withName: DBName.assetsStore.rawValue) {
             self._assetStore = s
         } else {
             DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.assets") { result in
+                KBKVStore.initDBHandlerWithRetries(dbName: DBName.assetsStore.rawValue) { result in
                     if case .success(let kvStore) = result {
                         self._assetStore = kvStore
                     }
@@ -92,11 +99,11 @@ class SHDBManager {
             }
         }
         
-        if let s = KBKnowledgeStore.store(withName: "com.gf.safehill.KnowledgeGraph") {
+        if let s = KBKnowledgeStore.store(withName: DBName.knowledgeGraph.rawValue) {
             self._graph = s
         } else {
             DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.KnowledgeGraph") { result in
+                KBKVStore.initDBHandlerWithRetries(dbName: DBName.knowledgeGraph.rawValue) { result in
                     if case .success(let kvStore) = result {
                         /// Since we could initialize a handler to connect to the DB on this location
                         /// it should be safe to force initialize the KBKnowledgeStore at this point
