@@ -33,7 +33,7 @@ public struct BackgroundOperationQueue {
         }
     }
     
-    static func of(type: OperationType) throws -> KBQueueStore {
+    public static func of(type: OperationType) throws -> KBQueueStore {
         if let q = KBQueueStore.store(withName: type.identifier, type: .fifo) {
             return q
         }
