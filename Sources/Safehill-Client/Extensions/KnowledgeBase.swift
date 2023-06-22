@@ -2,31 +2,58 @@ import Foundation
 import KnowledgeBase
 
 extension KBKVStore {
-    static func initDBHandlerWithRetries(dbName name: String) throws -> KBKVStore {
+    static func initDBHandlerWithRetries(dbName name: String,
+                                         completionHandler: @escaping (Result<KBKVStore, Error>) -> Void) {
         if let s = KBKVStore.store(withName: name) {
-            return s
+            completionHandler(.success(s))
+            return
         }
         
-        var store: KBKVStore? = nil
-        let semaphore = DispatchSemaphore(value: 0)
-        var timer: Timer? = nil
+        let circuitBreaker = CircuitBreaker(
+            timeout: 5.0,
+            maxRetries: 10,
+            timeBetweenRetries: 0.5,
+            exponentialBackoff: true,
+            resetTimeout: 20.0
+        )
         
-        DispatchQueue.main.async {
-            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
-                if let s = KBKVStore.store(withName: name) {
-                    store = s
-                    semaphore.signal()
-                    timer?.invalidate()
-                    timer = nil
-                }
-            })
+        circuitBreaker.call = { circuitBreaker in
+            if let store = KBKVStore.store(withName: name) {
+                circuitBreaker.success()
+                completionHandler(.success(store))
+            } else {
+                circuitBreaker.failure()
+            }
         }
         
-        let dispatchResult = semaphore.wait(timeout: .now() + .seconds(5))
-        guard dispatchResult == .success else {
-            throw KBError.databaseException("Failed to connect to database")
+        circuitBreaker.didTrip = { circuitBreaker, err in
+            let error = KBError.databaseException("Could not connect to queue database: \(err?.localizedDescription ?? "")")
+            completionHandler(.failure(error))
         }
         
-        return store!
+        circuitBreaker.execute()
+
+//        
+//        var store: KBKVStore? = nil
+//        let semaphore = DispatchSemaphore(value: 0)
+//        var timer: Timer? = nil
+//        
+//        DispatchQueue.main.async {
+//            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
+//                if let s = KBKVStore.store(withName: name) {
+//                    store = s
+//                    semaphore.signal()
+//                    timer?.invalidate()
+//                    timer = nil
+//                }
+//            })
+//        }
+//        
+//        let dispatchResult = semaphore.wait(timeout: .now() + .seconds(5))
+//        guard dispatchResult == .success else {
+//            throw KBError.databaseException("Failed to connect to database")
+//        }
+//        
+//        return store!
     }
 }

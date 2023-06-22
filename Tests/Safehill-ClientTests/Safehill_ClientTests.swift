@@ -2,6 +2,7 @@ import XCTest
 @testable import Safehill_Client
 @testable import Safehill_Crypto
 import CryptoKit
+import KnowledgeBase
 
 final class Safehill_ClientBaseUnitTests: XCTestCase {
     
@@ -17,16 +18,70 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         XCTAssert(!subtract.contains("Mary"))
     }
     
+    func testCircuitBreaker() throws {
+        let expectation = expectation(description: "cb")
+        
+        let maxTimeout = 5.0
+        
+        let start = CFAbsoluteTimeGetCurrent()
+        
+        let circuitBreaker = CircuitBreaker(
+            timeout: maxTimeout,
+            maxRetries: 10,
+            timeBetweenRetries: 0.5,
+            exponentialBackoff: true,
+            resetTimeout: 20.0
+        )
+        
+        circuitBreaker.call = { circuitBreaker in
+            let end = CFAbsoluteTimeGetCurrent()
+            if CFAbsoluteTime(end - start) < 3.0 {
+                circuitBreaker.failure()
+                print("failure")
+            } else {
+                circuitBreaker.success()
+                expectation.fulfill()
+                print("success")
+            }
+        }
+        
+        circuitBreaker.didTrip = { circuitBreaker, error in
+            XCTFail("didTrip \(error?.localizedDescription ?? "")")
+            expectation.fulfill()
+        }
+        
+        circuitBreaker.execute()
+        
+        wait(for: [expectation], timeout: maxTimeout * 2)
+    }
+    
+    func testInitKGWithRetries() throws {
+        let expectation = expectation(description: "kg")
+        
+        DispatchQueue.global(qos: .userInteractive).async {
+            KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.KnowledgeGraph") { result in
+                if case .success(_) = result {
+                    // OK
+                    expectation.fulfill()
+                } else {
+                    XCTFail("Failed to initialize")
+                }
+            }
+        }
+        
+        wait(for: [expectation], timeout: 5.0)
+    }
+        
     func testInitQueue() throws {
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .fetch)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .encryption)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .upload)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .share)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .successfulUpload)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .successfulShare)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .failedUpload)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .failedShare)
-        let _ = try BackgroundOperationQueue.initWithRetries(type: .download)
+        let _ = try BackgroundOperationQueue.of(type: .fetch)
+        let _ = try BackgroundOperationQueue.of(type: .encryption)
+        let _ = try BackgroundOperationQueue.of(type: .upload)
+        let _ = try BackgroundOperationQueue.of(type: .share)
+        let _ = try BackgroundOperationQueue.of(type: .successfulUpload)
+        let _ = try BackgroundOperationQueue.of(type: .successfulShare)
+        let _ = try BackgroundOperationQueue.of(type: .failedUpload)
+        let _ = try BackgroundOperationQueue.of(type: .failedShare)
+        let _ = try BackgroundOperationQueue.of(type: .download)
     }
 }
 

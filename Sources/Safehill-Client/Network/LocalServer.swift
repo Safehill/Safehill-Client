@@ -3,21 +3,45 @@ import KnowledgeBase
 
 public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
-struct LocalServer : SHServerAPI {
+class LocalServer : SHServerAPI {
     
-    let userStore: KBKVStore
-    let assetStore: KBKVStore
+    var _userStore: KBKVStore? = nil
+    var _assetStore: KBKVStore? = nil
+    
+    var userStore: KBKVStore {
+        if let s = _userStore {
+            return s
+        } else {
+            fatalError("user store handler could not be initialized")
+        }
+    }
+    var assetStore: KBKVStore {
+        if let s = _assetStore {
+            return s
+        } else {
+            fatalError("asset store handler could not be initialized")
+        }
+    }
     
     let requestor: SHLocalUser
     
     init(requestor: SHLocalUser) {
         self.requestor = requestor
         
-        do {
-            userStore = try KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.users")
-            assetStore = try KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.assets")
-        } catch {
-            fatalError("user and asset local database handlers could not be initialized")
+        DispatchQueue.global(qos: .userInteractive).async { [self] in
+            KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.users") { result in
+                if case .success(let kvStore) = result {
+                    self._userStore = kvStore
+                }
+            }
+        }
+        
+        DispatchQueue.global(qos: .userInteractive).async { [self] in
+            KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.assets") { result in
+                if case .success(let kvStore) = result {
+                    self._assetStore = kvStore
+                }
+            }
         }
     }
     
@@ -30,30 +54,30 @@ struct LocalServer : SHServerAPI {
             case .success(let value):
                 // User already exists. Return it
                 if let value = value as? [String: Any] {
-                    guard value["publicKey"] as? Data == requestor.publicKeyData,
-                          value["publicSignature"] as? Data == requestor.publicSignatureData else {
+                    guard value["publicKey"] as? Data == self.requestor.publicKeyData,
+                          value["publicSignature"] as? Data == self.requestor.publicSignatureData else {
                               completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
                               return
                           }
                     
-                    completionHandler(.success(requestor))
+                    completionHandler(.success(self.requestor))
                     return
                 }
                 
                 // User doesn't exist. Create it
                 var value = [
                     "identifier": key,
-                    "publicKey": requestor.publicKeyData,
-                    "publicSignature": requestor.publicSignatureData,
+                    "publicKey": self.requestor.publicKeyData,
+                    "publicSignature": self.requestor.publicSignatureData,
                     "name": name,
                 ] as [String : Any]
                 if let ssoIdentifier = ssoIdentifier {
                     value["ssoIdentifier"] = ssoIdentifier
                 }
-                userStore.set(value: value, for: key) { (postResult: Swift.Result) in
+                self.userStore.set(value: value, for: key) { (postResult: Swift.Result) in
                     switch postResult {
                     case .success:
-                        completionHandler(.success(requestor))
+                        completionHandler(.success(self.requestor))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }
@@ -79,7 +103,7 @@ struct LocalServer : SHServerAPI {
         userStore.set(value: value, for: identifier) { (postResult: Swift.Result) in
             switch postResult {
             case .success:
-                completionHandler(.success(requestor))
+                completionHandler(.success(self.requestor))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -100,29 +124,29 @@ struct LocalServer : SHServerAPI {
             case .success(let user):
                 // User already exists. Return it
                 if let user = user as? [String: Any] {
-                    guard user["publicKey"] as? Data == requestor.publicKeyData,
-                          user["publicSignature"] as? Data == requestor.publicSignatureData else {
+                    guard user["publicKey"] as? Data == self.requestor.publicKeyData,
+                          user["publicSignature"] as? Data == self.requestor.publicSignatureData else {
                               completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
                               return
                           }
                     
                     let value = [
                         "identifier": key,
-                        "publicKey": requestor.publicKeyData,
-                        "publicSignature": requestor.publicSignatureData,
+                        "publicKey": self.requestor.publicKeyData,
+                        "publicSignature": self.requestor.publicSignatureData,
                         "name": name ?? user["name"]!,
                         "email": email ?? user["email"]!,
                     ] as [String : Any]
-                    userStore.set(value: value, for: key) { (postResult: Swift.Result) in
+                    self.userStore.set(value: value, for: key) { (postResult: Swift.Result) in
                         switch postResult {
                         case .success:
-                            completionHandler(.success(requestor))
+                            completionHandler(.success(self.requestor))
                         case .failure(let err):
                             completionHandler(.failure(err))
                         }
                     }
                     
-                    completionHandler(.success(requestor))
+                    completionHandler(.success(self.requestor))
                     return
                 }
             case .failure(let err):
@@ -307,7 +331,7 @@ struct LocalServer : SHServerAPI {
                     
                     do {
                         let condition = KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
-                        let keys = try assetStore.keys(matching: condition)
+                        let keys = try self.assetStore.keys(matching: condition)
                         if keys.count > 0, let key = keys.first {
                             let components = key.components(separatedBy: "::")
                             if components.count == 4 {
@@ -342,7 +366,7 @@ struct LocalServer : SHServerAPI {
                             .contains, value: "::low::") // Can safely assume all versions are shared using the same group id
                         )
 
-                        let keysAndValues = try assetStore.dictionaryRepresentation(forKeysMatching: condition)
+                        let keysAndValues = try self.assetStore.dictionaryRepresentation(forKeysMatching: condition)
                         if keysAndValues.count > 0 {
                             for (key, value) in keysAndValues {
                                 guard let value = value as? [String: String] else {
@@ -661,7 +685,7 @@ struct LocalServer : SHServerAPI {
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
-                let writeBatch = assetStore.writeBatch()
+                let writeBatch = self.assetStore.writeBatch()
                 guard keyValues.count > 0 else {
                     completionHandler(.failure(SHAssetStoreError.noEntries))
                     return
@@ -713,7 +737,7 @@ struct LocalServer : SHServerAPI {
     func unshare(assetId: GlobalIdentifier,
                  with userPublicIdentifier: String,
                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let writeBatch = assetStore.writeBatch()
+        let writeBatch = self.assetStore.writeBatch()
         
         var condition = KBGenericCondition(value: false)
         for quality in SHAssetQuality.all {
