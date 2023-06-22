@@ -3,46 +3,19 @@ import KnowledgeBase
 
 public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
-class LocalServer : SHServerAPI {
-    
-    var _userStore: KBKVStore? = nil
-    var _assetStore: KBKVStore? = nil
+struct LocalServer : SHServerAPI {
     
     var userStore: KBKVStore {
-        if let s = _userStore {
-            return s
-        } else {
-            fatalError("user store handler could not be initialized")
-        }
+        SHDBManager.sharedInstance.userStore
     }
     var assetStore: KBKVStore {
-        if let s = _assetStore {
-            return s
-        } else {
-            fatalError("asset store handler could not be initialized")
-        }
+        SHDBManager.sharedInstance.assetStore
     }
     
     let requestor: SHLocalUser
     
     init(requestor: SHLocalUser) {
         self.requestor = requestor
-        
-        DispatchQueue.global(qos: .userInteractive).async { [self] in
-            KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.users") { result in
-                if case .success(let kvStore) = result {
-                    self._userStore = kvStore
-                }
-            }
-        }
-        
-        DispatchQueue.global(qos: .userInteractive).async { [self] in
-            KBKVStore.initDBHandlerWithRetries(dbName: "com.gf.safehill.LocalServer.assets") { result in
-                if case .success(let kvStore) = result {
-                    self._assetStore = kvStore
-                }
-            }
-        }
     }
     
     private func createUser(name: String,

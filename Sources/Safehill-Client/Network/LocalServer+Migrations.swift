@@ -65,7 +65,7 @@ extension LocalServer {
         
         /// Remove KnowledgeGraph entries at launch
         do {
-            let _ = try SHShareGraph.sharedInstance.store.removeAll()
+            let _ = try SHDBManager.sharedInstance.graph.removeAll()
         } catch {
             log.warning("Failed to remove deprecated data from the KnowledgeGraph")
         }
