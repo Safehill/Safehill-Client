@@ -11,7 +11,7 @@ extension KBKVStore {
         let semaphore = DispatchSemaphore(value: 0)
         var timer: Timer? = nil
         
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.main.async {
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
                 if let s = KBKVStore.store(withName: name) {
                     store = s
@@ -20,7 +20,6 @@ extension KBKVStore {
                     timer = nil
                 }
             })
-            timer!.fire()
         }
         
         let dispatchResult = semaphore.wait(timeout: .now() + .seconds(5))

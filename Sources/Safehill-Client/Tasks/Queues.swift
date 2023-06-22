@@ -46,7 +46,7 @@ public struct BackgroundOperationQueue {
         let semaphore = DispatchSemaphore(value: 0)
         var timer: Timer? = nil
         
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.main.async {
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { _ in
                 if let q = KBQueueStore.store(withName: type.identifier, type: .fifo) {
                     queue = q
@@ -55,7 +55,6 @@ public struct BackgroundOperationQueue {
                     timer = nil
                 }
             })
-            timer!.fire()
         }
         
         let dispatchResult = semaphore.wait(timeout: .now() + .seconds(5))
