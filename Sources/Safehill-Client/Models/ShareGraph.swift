@@ -18,4 +18,4 @@ public struct SHShareGraph {
     }
 }
 
-let shareGraph = SHShareGraph()
+public let SHDefaultShareGraph = SHShareGraph()
