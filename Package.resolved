@@ -6,8 +6,8 @@
         "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase.git",
         "state": {
           "branch": null,
-          "revision": "c3eaedb8e4a0a2b1dbbc3fc7b5597e5612bacfff",
-          "version": "0.9.3"
+          "revision": "ecab50c24c5690ff73bfac1b0a0b35d6db5c75da",
+          "version": "0.9.4"
         }
       },
       {
@@ -33,8 +33,8 @@
         "repositoryURL": "https://github.com/jpsim/Yams.git",
         "state": {
           "branch": null,
-          "revision": "f47ba4838c30dbd59998a4e4c87ab620ff959e8a",
-          "version": "5.0.5"
+          "revision": "0d9ee7ea8c4ebd4a489ad7a73d5c6cad55d6fed3",
+          "version": "5.0.6"
         }
       }
     ]
