@@ -23,7 +23,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         "\(self.hashValue)"
     }
     
-    private let photosIndexerDefaults = KBKVStore.userDefaultsStore()
+    private let photosIndexerDefaults = KBKVStore.userDefaultsStore()!
     private var delegates = [String: SHPhotoAssetChangeDelegate]()
     
     /// The index of `SHApplePhotoAsset`s

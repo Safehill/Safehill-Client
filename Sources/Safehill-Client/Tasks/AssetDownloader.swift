@@ -271,9 +271,15 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 ///
                 /// Create items in the `DownloadQueue`, one per asset
                 ///
+                guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
+                    self.log.error("Unable to connect to local queue or database")
+                    completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
+                    return
+                }
+                
                 for newDescriptor in descriptorsForAssetsToDownload {
                     let queueItemIdentifier = newDescriptor.globalIdentifier
-                    guard let existingItemIdentifiers = try? DownloadQueue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
+                    guard let existingItemIdentifiers = try? queue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
                           existingItemIdentifiers.isEmpty else {
                         self.log.info("Not enqueuing item \(queueItemIdentifier) in the DOWNLOAD queue as a request with the same identifier hasn't been fulfilled yet")
                         continue
@@ -285,7 +291,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     )
                     self.log.info("enqueuing item \(queueItemIdentifier) in the DOWNLOAD queue")
                     do {
-                        try queueItem.enqueue(in: DownloadQueue, with: queueItemIdentifier)
+                        try queueItem.enqueue(in: queue, with: queueItemIdentifier)
                     } catch {
                         self.log.error("error enqueueing in the DOWNLOAD queue. \(error.localizedDescription)")
                         continue
@@ -323,8 +329,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     private func downloadAssets(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
         do {
             var count = 1
+            guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
+                self.log.error("Unable to connect to local queue or database")
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
+                return
+            }
             
-            while let item = try DownloadQueue.peek() {
+            while let item = try queue.peek() {
                 let start = CFAbsoluteTimeGetCurrent()
                 
                 log.info("downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
@@ -332,7 +343,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 guard let downloadRequest = try? content(ofQueueItem: item) as? SHDownloadRequestQueueItem else {
                     log.error("unexpected data found in DOWNLOAD queue. Dequeueing")
                     
-                    do { _ = try DownloadQueue.dequeue() }
+                    do { _ = try queue.dequeue() }
                     catch {
                         log.warning("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
@@ -344,7 +355,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 guard DownloadBlacklist.shared.isBlacklisted(globalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
                     self.log.info("Skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
                     
-                    do { _ = try DownloadQueue.dequeue() }
+                    do { _ = try queue.dequeue() }
                     catch {
                         log.warning("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
@@ -393,7 +404,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds))
                 guard dispatchResult == .success, shouldContinue == true else {
-                    do { _ = try DownloadQueue.dequeue() }
+                    do { _ = try queue.dequeue() }
                     catch {
                         log.warning("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
@@ -404,7 +415,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 let end = CFAbsoluteTimeGetCurrent()
                 log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
                 
-                do { _ = try DownloadQueue.dequeue() }
+                do { _ = try queue.dequeue() }
                 catch {
                     log.warning("asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
                 }
@@ -485,9 +496,14 @@ extension SHDownloadOperation {
     ///
     private func updateHistoryQueues(with descriptorsByLocalIdentifier: [String: any SHAssetDescriptor],
                                     users: [SHServerUser]) {
+        guard let queue = try? BackgroundOperationQueue.of(type: .successfulUpload) else {
+            self.log.error("Unable to connect to local queue or database")
+            return
+        }
+        
         for (localIdentifier, descriptor) in descriptorsByLocalIdentifier {
             let condition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
-            if let keys = try? UploadHistoryQueue.keys(matching: condition),
+            if let keys = try? queue.keys(matching: condition),
                keys.count > 0 {
                 ///
                 /// Nothing to do, the asset is already marked as uploaded in the queue

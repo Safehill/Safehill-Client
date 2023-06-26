@@ -3,9 +3,6 @@ import KnowledgeBase
 
 public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
-let userStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.users")
-let assetStore = KBKVStore.store(withName: "com.gf.safehill.LocalServer.assets")
-
 struct LocalServer : SHServerAPI {
     
     let requestor: SHLocalUser
@@ -17,27 +14,35 @@ struct LocalServer : SHServerAPI {
     private func createUser(name: String,
                             ssoIdentifier: String?,
                             completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         let key = requestor.identifier
         userStore.value(for: key) { getResult in
             switch getResult {
             case .success(let value):
                 // User already exists. Return it
                 if let value = value as? [String: Any] {
-                    guard value["publicKey"] as? Data == requestor.publicKeyData,
-                          value["publicSignature"] as? Data == requestor.publicSignatureData else {
+                    guard value["publicKey"] as? Data == self.requestor.publicKeyData,
+                          value["publicSignature"] as? Data == self.requestor.publicSignatureData else {
                               completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
                               return
                           }
                     
-                    completionHandler(.success(requestor))
+                    completionHandler(.success(self.requestor))
                     return
                 }
                 
                 // User doesn't exist. Create it
                 var value = [
                     "identifier": key,
-                    "publicKey": requestor.publicKeyData,
-                    "publicSignature": requestor.publicSignatureData,
+                    "publicKey": self.requestor.publicKeyData,
+                    "publicSignature": self.requestor.publicSignatureData,
                     "name": name,
                 ] as [String : Any]
                 if let ssoIdentifier = ssoIdentifier {
@@ -46,7 +51,7 @@ struct LocalServer : SHServerAPI {
                 userStore.set(value: value, for: key) { (postResult: Swift.Result) in
                     switch postResult {
                     case .success:
-                        completionHandler(.success(requestor))
+                        completionHandler(.success(self.requestor))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }
@@ -63,6 +68,14 @@ struct LocalServer : SHServerAPI {
                             publicKeyData: Data,
                             publicSignatureData: Data,
                             completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         let value = [
             "identifier": identifier,
             "publicKey": publicKeyData,
@@ -72,7 +85,7 @@ struct LocalServer : SHServerAPI {
         userStore.set(value: value, for: identifier) { (postResult: Swift.Result) in
             switch postResult {
             case .success:
-                completionHandler(.success(requestor))
+                completionHandler(.success(self.requestor))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -87,35 +100,43 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         let key = requestor.identifier
         userStore.value(for: key) { getResult in
             switch getResult {
             case .success(let user):
                 // User already exists. Return it
                 if let user = user as? [String: Any] {
-                    guard user["publicKey"] as? Data == requestor.publicKeyData,
-                          user["publicSignature"] as? Data == requestor.publicSignatureData else {
+                    guard user["publicKey"] as? Data == self.requestor.publicKeyData,
+                          user["publicSignature"] as? Data == self.requestor.publicSignatureData else {
                               completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
                               return
                           }
                     
                     let value = [
                         "identifier": key,
-                        "publicKey": requestor.publicKeyData,
-                        "publicSignature": requestor.publicSignatureData,
+                        "publicKey": self.requestor.publicKeyData,
+                        "publicSignature": self.requestor.publicSignatureData,
                         "name": name ?? user["name"]!,
                         "email": email ?? user["email"]!,
                     ] as [String : Any]
                     userStore.set(value: value, for: key) { (postResult: Swift.Result) in
                         switch postResult {
                         case .success:
-                            completionHandler(.success(requestor))
+                            completionHandler(.success(self.requestor))
                         case .failure(let err):
                             completionHandler(.failure(err))
                         }
                     }
                     
-                    completionHandler(.success(requestor))
+                    completionHandler(.success(self.requestor))
                     return
                 }
             case .failure(let err):
@@ -135,10 +156,26 @@ struct LocalServer : SHServerAPI {
     }
     
     func deleteAllAssets(completionHandler: @escaping (Swift.Result<[String], Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         assetStore.removeAll(completionHandler: completionHandler)
     }
     
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
         let group = DispatchGroup()
@@ -194,6 +231,14 @@ struct LocalServer : SHServerAPI {
     }
     
     func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         let callback: (Result<[Any], Error>) -> () = { result in
             switch result {
             case .success(let resList):
@@ -235,6 +280,14 @@ struct LocalServer : SHServerAPI {
     }
     
     func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         /// No need to pull all versions when constructing descriptor, pulling "low" version only.
         /// This assumes that sharing information and other metadata are common across all versions (low and hi)
         var condition = KBGenericCondition(value: false)
@@ -436,9 +489,16 @@ struct LocalServer : SHServerAPI {
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality]? = nil,
                    completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
-        
         guard assetIdentifiers.count > 0 else {
             completionHandler(.success([:]))
+            return
+        }
+        
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
             return
         }
         
@@ -516,6 +576,13 @@ struct LocalServer : SHServerAPI {
                 groupId: String,
                 senderUserIdentifier: String,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
         
         let writeBatch = assetStore.writeBatch()
         
@@ -650,6 +717,14 @@ struct LocalServer : SHServerAPI {
                    quality: SHAssetQuality,
                    as state: SHAssetDescriptorUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         let condition = KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::\(assetGlobalIdentifier)")
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
@@ -680,6 +755,14 @@ struct LocalServer : SHServerAPI {
     
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         let writeBatch = assetStore.writeBatch()
         
         for sharedVersion in asset.sharedVersions {
@@ -706,7 +789,13 @@ struct LocalServer : SHServerAPI {
     func unshare(assetId: GlobalIdentifier,
                  with userPublicIdentifier: String,
                  completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let writeBatch = assetStore.writeBatch()
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
         
         var condition = KBGenericCondition(value: false)
         for quality in SHAssetQuality.all {
@@ -731,6 +820,14 @@ struct LocalServer : SHServerAPI {
     public func getSharingInfo(forAssetIdentifier globalIdentifier: String,
                                for users: [SHServerUser],
                                completionHandler: @escaping (Swift.Result<SHShareableEncryptedAsset?, Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         var condition = KBGenericCondition(value: true)
         for user in users {
             let start = KBGenericCondition(.beginsWith, value: [
@@ -827,6 +924,14 @@ struct LocalServer : SHServerAPI {
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ()) {
         guard globalIdentifiers.count > 0 else {
             completionHandler(.success([]))
+            return
+        }
+        
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
             return
         }
         

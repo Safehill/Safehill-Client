@@ -57,7 +57,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         
-        do { _ = try ShareQueue.dequeue() }
+        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue() }
         catch {
             log.error("asset \(localIdentifier) failed to share but dequeueing from SHARE queue failed. Sharing will be attempted again")
             throw error
@@ -76,10 +76,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
 
         do {
-            try failedShare.enqueue(in: FailedShareQueue)
+            let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
+            let successfulShareQueue = try BackgroundOperationQueue.of(type: .successfulShare)
+            try failedShare.enqueue(in: failedShareQueue)
             
             /// Remove items in the `ShareHistoryQueue` for the same identifier
-            let _ = try? ShareHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedShare.identifier))
+            let _ = try? successfulShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedShare.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -113,7 +115,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
         
-        do { _ = try ShareQueue.dequeue() }
+        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue() }
         catch {
             log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
         }
@@ -132,10 +134,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         do {
             /// Enquque to ShareHistoryQueue
             log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
-            try successfulShare.enqueue(in: ShareHistoryQueue)
+            let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
+            let successfulShareQueue = try BackgroundOperationQueue.of(type: .successfulShare)
+            try successfulShare.enqueue(in: successfulShareQueue)
             
             /// Remove items in the `FailedShareQueue` for the same identifier
-            let _ = try? FailedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: successfulShare.identifier))
+            let _ = try? failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: successfulShare.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
@@ -241,7 +245,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
             shareRequest = content
         } catch {
-            do { _ = try ShareQueue.dequeue(item: item) }
+            do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
             catch {
                 log.fault("dequeuing failed of unexpected data in SHARE queue. ATTENTION: this operation will be attempted again.")
             }
@@ -322,7 +326,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     }
     
     public override func runOnce() throws {
-        while let item = try ShareQueue.peek() {
+        while let item = try BackgroundOperationQueue.of(type: .share).peek() {
             guard processingState(for: item.identifier) != .sharing else {
                 break
             }
@@ -353,7 +357,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         let items: [KBQueueItem]
         
         do {
-            items = try ShareQueue.peekNext(self.limit)
+            items = try BackgroundOperationQueue.of(type: .share).peekNext(self.limit)
         } catch {
             log.error("failed to fetch items from the ENCRYPT queue")
             state = .finished

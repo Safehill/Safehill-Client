@@ -42,7 +42,7 @@ public struct SHUploadPipeline {
                 sharedWith: recipients,
                 shouldUpload: true
             )
-            try queueItem.enqueue(in: FetchQueue)
+            try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
         } catch {
             let failedQueueItem = SHFailedUploadRequestQueueItem(
                 localIdentifier: localIdentifier,
@@ -50,7 +50,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients
             )
-            try? failedQueueItem.enqueue(in: FailedUploadQueue)
+            try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedUpload))
             
             if recipients.count > 0 {
                 let failedQueueItem = SHFailedShareRequestQueueItem(
@@ -59,7 +59,7 @@ public struct SHUploadPipeline {
                     eventOriginator: sender,
                     sharedWith: recipients
                 )
-                try? failedQueueItem.enqueue(in: FailedShareQueue)
+                try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
             }
             
             throw error
@@ -109,7 +109,7 @@ public struct SHUploadPipeline {
                 sharedWith: recipients,
                 shouldUpload: forceUpload
             )
-            try queueItem.enqueue(in: FetchQueue)
+            try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
         } catch {
             let failedQueueItem = SHFailedShareRequestQueueItem(
                 localIdentifier: localIdentifier,
@@ -118,7 +118,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients
             )
-            try? failedQueueItem.enqueue(in: FailedShareQueue)
+            try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
             
             throw error
         }

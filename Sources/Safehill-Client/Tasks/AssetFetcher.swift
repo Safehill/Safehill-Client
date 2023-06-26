@@ -131,8 +131,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         // Dequeue from FETCH queue
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
+        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+        let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
         
-        do { _ = try FetchQueue.dequeue() }
+        do { _ = try fetchQueue.dequeue() }
         catch {
             log.error("asset \(localIdentifier) failed to encrypt but dequeuing from FETCH queue failed, so this operation will be attempted again.")
             throw error
@@ -155,7 +157,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         do {
             /// Enquque to failed
             log.info("enqueueing fetch request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
+            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
         } catch {
             /// Be forgiving for failed Fetch operations
             log.fault("asset \(localIdentifier) failed to fetch but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -186,6 +188,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let shouldUpload = request.shouldUpload
         let isBackground = request.isBackground
         
+        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+        let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        let shareQueue = try BackgroundOperationQueue.of(type: .share)
+        
         ///
         /// Enqueue in the next queue
         /// - Encryption queue for items to upload
@@ -203,7 +209,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     sharedWith: users,
                     isBackground: isBackground
                 )
-                try encryptionRequest.enqueue(in: EncryptionQueue)
+                try encryptionRequest.enqueue(in: encryptionQueue)
             } catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
                 throw error
@@ -233,7 +239,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     sharedWith: users,
                     isBackground: isBackground
                 )
-                try encryptionForSharingRequest.enqueue(in: ShareQueue)
+                try encryptionForSharingRequest.enqueue(in: shareQueue)
             } catch {
                 log.fault("asset \(localIdentifier) was encrypted but will never be shared because enqueueing to SHARE queue failed")
                 throw error
@@ -245,7 +251,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
         
-        do { _ = try FetchQueue.dequeue() }
+        do { _ = try fetchQueue.dequeue() }
         catch {
             log.warning("asset \(localIdentifier) was fetched but dequeuing failed, so this operation will be attempted again.")
             throw error
@@ -253,6 +259,9 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     private func process(_ item: KBQueueItem) throws {
+        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+        let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
+        let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
         
         let fetchRequest: SHLocalFetchRequestQueueItem
         
@@ -265,7 +274,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             fetchRequest = content
         } catch {
-            do { _ = try FetchQueue.dequeue(item: item) }
+            do { _ = try fetchQueue.dequeue(item: item) }
             catch {
                 log.warning("dequeuing failed of unexpected data in FETCH queue. This task will be attempted again.")
             }
@@ -279,8 +288,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - `FailedUploadQueue` (all items with same local identifier)
             /// - `FailedShareQueue` (all items with same local identifier, group and users (there can be many with same local identifier and group, when asset is shared with different users at different times)
             ///
-            let _ = try? FailedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: fetchRequest.localIdentifier)))
-            let _ = try? FailedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: fetchRequest.identifier))
+            let _ = try? failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: fetchRequest.localIdentifier)))
+            let _ = try? failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: fetchRequest.identifier))
             
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetFetcherDelegate {
@@ -317,7 +326,9 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     public func runOnce() throws {
-        while let item = try FetchQueue.peek() {
+        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+        
+        while let item = try fetchQueue.peek() {
             guard processingState(for: item.identifier) != .fetching else {
                 continue
             }
@@ -347,7 +358,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let items: [KBQueueItem]
         
         do {
-            items = try FetchQueue.peekNext(self.limit)
+            let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+            items = try fetchQueue.peekNext(self.limit)
         } catch {
             log.error("failed to fetch items from the FETCH queue")
             state = .finished

@@ -4,24 +4,39 @@ import KnowledgeBase
 ///
 /// All queues for background operation
 ///
-
-public let FetchQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetFetchQueue", type: .fifo)
-
-public let EncryptionQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetEncryptionQueue", type: .fifo)
-
-public let UploadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetUploadQueue", type: .fifo)
-
-public let ShareQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetShareQueue", type: .fifo)
-
-public let UploadHistoryQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetUploadHistoryQueue", type: .fifo)
-
-public let ShareHistoryQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetShareHistoryQueue", type: .fifo)
-
-public let FailedUploadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetFailedUploadQueue", type: .fifo)
-
-public let FailedShareQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetFailedShareQueue", type: .fifo)
-
-public let DownloadQueue = KBQueueStore.store(withName: "com.gf.safehill.PhotoAssetDownloadQueue", type: .fifo)
+public struct BackgroundOperationQueue {
+    
+    public enum OperationType: CaseIterable {
+        case fetch, encryption, upload, share, successfulUpload, successfulShare, failedUpload, failedShare, download
+        
+        var identifier: String {
+            switch self {
+            case .fetch:
+                return "com.gf.safehill.PhotoAssetFetchQueue"
+            case .encryption:
+                return "com.gf.safehill.PhotoAssetEncryptionQueue"
+            case .upload:
+                return "com.gf.safehill.PhotoAssetUploadQueue"
+            case .share:
+                return "com.gf.safehill.PhotoAssetShareQueue"
+            case .successfulUpload:
+                return "com.gf.safehill.PhotoAssetUploadHistoryQueue"
+            case .successfulShare:
+                return "com.gf.safehill.PhotoAssetShareHistoryQueue"
+            case .failedUpload:
+                return "com.gf.safehill.PhotoAssetFailedUploadQueue"
+            case .failedShare:
+                return "com.gf.safehill.PhotoAssetFailedShareQueue"
+            case .download:
+                return "com.gf.safehill.PhotoAssetDownloadQueue"
+            }
+        }
+    }
+    
+    public static func of(type: OperationType) throws -> KBQueueStore {
+        return try SHDBManager.sharedInstance.queue(of: type)
+    }
+}
 
 ///
 /// Queue item reservations
@@ -63,15 +78,4 @@ func setProcessingState(_ state: ProcessingState?, for assetIdentifier: String) 
             }
         }
     }
-}
-
-///
-/// Asset <=> User knowledge graph
-///
-
-public let KnowledgeGraph = KBKnowledgeStore.store(withName: "com.gf.safehill.KnowledgeGraph")
-
-public enum KGPredicates: String {
-    case shares = "shares"
-    case sharedWith = "sharedWith"
 }
