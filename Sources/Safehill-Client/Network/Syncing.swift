@@ -15,6 +15,11 @@ extension SHServerProxy {
     /// 
     private func removeUsersFromStores(_ userIdsToRemoveFromGroup: [String: [String]]) -> (changed: [String], removed: [String]) {
         
+        guard let successfulShareQueue = try? BackgroundOperationQueue.of(type: .successfulShare) else {
+            log.error("failed to connect to the successful share queue. users could not be removed from stores")
+            return (changed: [], removed: [])
+        }
+        
         var oldShareHistoryItems = [String: (item: SHShareHistoryItem, timestamp: Date)]()
         
         do {
@@ -22,7 +27,7 @@ extension SHServerProxy {
             for groupId in userIdsToRemoveFromGroup.keys {
                 condition = condition.or(KBGenericCondition(.contains, value: groupId))
             }
-            let matchingShareHistoryItem = try ShareHistoryQueue.keyValuesAndTimestamps(forKeysMatching: condition)
+            let matchingShareHistoryItem = try successfulShareQueue.keyValuesAndTimestamps(forKeysMatching: condition)
             
             for kvpairWithTimestamp in matchingShareHistoryItem {
                 guard let data = kvpairWithTimestamp.value as? Data else {
@@ -93,14 +98,14 @@ extension SHServerProxy {
                         isBackground: share.value.item.isBackground
                     )
                     do {
-                        try newShareHistoryItem.insert(in: ShareHistoryQueue, with: share.key, at: share.value.timestamp)
+                        try newShareHistoryItem.insert(in: successfulShareQueue, with: share.key, at: share.value.timestamp)
                         queueItemsChanged.insert(share.key)
                     } catch {
                         log.warning("failed to delete users \(userIds) from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")
                     }
                 } else {
                     do {
-                        try ShareHistoryQueue.removeValue(for: share.key)
+                        try successfulShareQueue.removeValue(for: share.key)
                         queueItemsRemoved.insert(share.key)
                     } catch {
                         log.warning("failed to delete item from ShareHistoryItem for groupId \(groupId). This operation will be attempted again")

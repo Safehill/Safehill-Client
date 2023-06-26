@@ -42,10 +42,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
     public let user: SHLocalUser
     public var delegates: [SHOutboundAssetOperationDelegate]
     
-    var queue: KBQueueStore {
-        UploadQueue
-    }
-    
     public init(user: SHLocalUser,
                 delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int) {
@@ -96,7 +92,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
         
-        do { _ = try self.queue.dequeue(item: item) }
+        do {
+            let queue = try BackgroundOperationQueue.of(type: .upload)
+            _ = try queue.dequeue(item: item)
+        }
         catch {
             log.error("asset \(localIdentifier) failed to upload but dequeuing from UPLOAD queue failed, so this operation will be attempted again.")
             throw error
@@ -115,11 +114,14 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             /// Enquque to FailedUpload queue
             log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
             
+            let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
+            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
+            
             try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-            try failedUploadQueueItem.enqueue(in: FailedUploadQueue)
+            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
             
             /// Remove items in the `UploadHistoryQueue` for the same request identifier
-            let _ = try? UploadHistoryQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
+            let _ = try? successfulUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
@@ -155,7 +157,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         log.info("dequeueing item \(item.identifier) from the UPLOAD queue")
         
         do {
-            _ = try self.queue.dequeue(item: item)
+            let queue = try BackgroundOperationQueue.of(type: .upload)
+            _ = try queue.dequeue(item: item)
         } catch {
             log.warning("item \(item.identifier) was completed but dequeuing from UPLOAD queue failed. This task will be attempted again")
             throw error
@@ -172,12 +175,15 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         )
         
         do {
+            let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
+            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
+            
             /// Enqueue to success history
             log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
-            try succesfulUploadQueueItem.enqueue(in: UploadHistoryQueue)
+            try succesfulUploadQueueItem.enqueue(in: successfulUploadQueue)
             
             /// Remove items in the `FailedUploadQueue` for the same identifier
-            let _ = try? FailedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: succesfulUploadQueueItem.identifier))
+            let _ = try? failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: succesfulUploadQueueItem.identifier))
         } catch {
             log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
             throw error
@@ -196,6 +202,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         /// Start the sharing part if needed
         ///
         if request.isSharingWithOtherUsers {
+            let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+            
             do {
                 ///
                 /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
@@ -211,7 +219,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                     shouldUpload: false,
                     isBackground: isBackground
                 )
-                try fetchRequest.enqueue(in: FetchQueue)
+                try fetchRequest.enqueue(in: fetchQueue)
             } catch {
                 log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to FETCH queue failed")
                 throw error
@@ -237,7 +245,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                         shouldUpload: true,
                         isBackground: true
                     )
-                    try hiResFetchQueueItem.enqueue(in: FetchQueue)
+                    try hiResFetchQueueItem.enqueue(in: fetchQueue)
                     log.info("enqueueing asset \(localIdentifier) HI RESOLUTION for upload")
                 }
                 catch {
@@ -261,7 +269,10 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             }
             uploadRequest = content
         } catch {
-            do { _ = try self.queue.dequeue(item: item) }
+            do {
+                let queue = try BackgroundOperationQueue.of(type: .upload)
+                _ = try queue.dequeue(item: item)
+            }
             catch {
                 log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
             }
@@ -351,7 +362,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
     }
     
     public func runOnce() throws {
-        while let item = try self.queue.peek() {
+        let queue = try BackgroundOperationQueue.of(type: .upload)
+        while let item = try queue.peek() {
             guard processingState(for: item.identifier) != .uploading else {
                 break
             }
@@ -382,7 +394,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         let items: [KBQueueItem]
         
         do {
-            items = try self.queue.peekNext(self.limit)
+            let queue = try BackgroundOperationQueue.of(type: .upload)
+            items = try queue.peekNext(self.limit)
         } catch {
             log.error("failed to fetch items from the UPLOAD queue")
             state = .finished
