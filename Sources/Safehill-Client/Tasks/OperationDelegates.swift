@@ -22,6 +22,8 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser])
     /// Notifies there are no assets to download at this time
     func noAssetsToDownload() -> Void
+    /// Notifies there are assets to download from unknown users
+    func handleDownloadAuthorization(ofDescriptors: [any SHAssetDescriptor], users: [SHServerUser]) -> Void
     
     /// Notifies about a local asset being backed up on the cloud
     /// - Parameter descriptorsByLocalIdentifier: the list of local asset identifier to server asset descriptor

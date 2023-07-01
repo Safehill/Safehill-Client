@@ -7,7 +7,16 @@ import KnowledgeBase
 public struct BackgroundOperationQueue {
     
     public enum OperationType: CaseIterable {
-        case fetch, encryption, upload, share, successfulUpload, successfulShare, failedUpload, failedShare, download
+        case fetch, // fetching asset from Photos library
+             encryption, // encrypting assets
+             upload, // uploading encrypted assets to server and CDN
+             share, // share assets with other users
+             successfulUpload, // successful upload history
+             successfulShare, // successful share history
+             failedUpload, // failed upload history
+             failedShare, // failed share history
+             unauthorizedDownload,  // downloads that need to be accepted (from unknown users)
+             download // downloading assets
         
         var identifier: String {
             switch self {
@@ -27,6 +36,8 @@ public struct BackgroundOperationQueue {
                 return "com.gf.safehill.PhotoAssetFailedUploadQueue"
             case .failedShare:
                 return "com.gf.safehill.PhotoAssetFailedShareQueue"
+            case .unauthorizedDownload:
+                return "com.gf.safehill.PhotoAssetUnauthorizedDownloadQueue"
             case .download:
                 return "com.gf.safehill.PhotoAssetDownloadQueue"
             }

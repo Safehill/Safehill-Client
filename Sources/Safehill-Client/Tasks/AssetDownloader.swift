@@ -259,49 +259,50 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     return
                 }
                 
-                self.log.info("found \(descriptorsForAssetsToDownload.count) assets on the server. Need to download \(globalIdentifiersToDownload.count). limit=\(self.limit ?? 0)")
+                var mutableDescriptors = descriptorsForAssetsToDownload
+                let partitionIndex = mutableDescriptors.partition { descr in
+                    if descr.sharingInfo.sharedByUserIdentifier == self.user.identifier {
+                        return true
+                    }
+                    do {
+                        return try SHKGQuery.isKnownUser(withIdentifier: descr.sharingInfo.sharedByUserIdentifier)
+                    } catch {
+                        return false
+                    }
+                }
+                let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
+                let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
+                
+                self.log.info("found \(descriptorsForAssetsToDownload.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
+                
+                self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsToDownload, users: users)
                 
                 ///
                 /// Call the delegate for assets that will be downloaded using Assets with empty data, created based on their descriptor
                 ///
                 
-                self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsToDownload, users: users)
+                self.delegate.handleDownloadAuthorization(ofDescriptors: unauthorizedDownloadDescriptors, users: users)
+                
+                let downloadController = SHAssetDownloadController(user: self.user)
+                
+                downloadController.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
+                    switch result {
+                    case .failure(let error):
+                        self.log.critical("failed to enqueue unauthorized download for \(descriptors.count) descriptors. \(error.localizedDescription)")
+                    default: break
+                    }
+                }
 
-                
-                ///
-                /// Create items in the `DownloadQueue`, one per asset
-                ///
-                guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
-                    self.log.error("Unable to connect to local queue or database")
-                    completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
-                    return
-                }
-                
-                for newDescriptor in descriptorsForAssetsToDownload {
-                    let queueItemIdentifier = newDescriptor.globalIdentifier
-                    guard let existingItemIdentifiers = try? queue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
-                          existingItemIdentifiers.isEmpty else {
-                        self.log.info("Not enqueuing item \(queueItemIdentifier) in the DOWNLOAD queue as a request with the same identifier hasn't been fulfilled yet")
-                        continue
-                    }
-                    
-                    let queueItem = SHDownloadRequestQueueItem(
-                        assetDescriptor: newDescriptor,
-                        receiverUserIdentifier: self.user.identifier
-                    )
-                    self.log.info("enqueuing item \(queueItemIdentifier) in the DOWNLOAD queue")
-                    do {
-                        try queueItem.enqueue(in: queue, with: queueItemIdentifier)
-                    } catch {
-                        self.log.error("error enqueueing in the DOWNLOAD queue. \(error.localizedDescription)")
-                        continue
+                downloadController.startDownloadOf(descriptors: authorizedDownloadDescriptors) { result in
+                    switch result {
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    case .success():
+                        let end = CFAbsoluteTimeGetCurrent()
+                        self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
+                        completionHandler(.success(()))
                     }
                 }
-                
-                let end = CFAbsoluteTimeGetCurrent()
-                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
-                
-                completionHandler(.success(()))
                 
             case .failure(let err):
                 self.log.error("Unable to download descriptors from server: \(err.localizedDescription)")
