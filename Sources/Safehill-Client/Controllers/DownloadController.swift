@@ -9,6 +9,37 @@ public struct SHAssetDownloadController {
         self.user = user
     }
     
+    public func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let key = "auth-" + userId
+        
+        guard let assetGIdList = try userStore.value(for: key) as? [String] else {
+            throw SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId(userId)
+        }
+        return assetGIdList
+    }
+    
+    private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        
+        for descr in descriptors {
+            let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
+            if var assetGIdList = try userStore.value(for: key) as? [String] {
+                assetGIdList.append(descr.globalIdentifier)
+                try userStore.set(value: Array(Set(assetGIdList)), for: key)
+            } else {
+                let assetGIdList = [descr.globalIdentifier]
+                try userStore.set(value: assetGIdList, for: key)
+            }
+        }
+    }
+    
+    private func removeUnauthorizedDownloadsFromIndex(for userId: String) throws {
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let key = "auth-" + userId
+        let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
+    }
+    
     public func authorizeDownloads(for userId: String,
                                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
@@ -23,16 +54,11 @@ public struct SHAssetDownloadController {
         }
         
         do {
-            let userStore = try SHDBManager.sharedInstance.userStore()
-            let key = "auth-" + userId
-            
-            guard let assetGIdList = try userStore.value(for: key) as? [String] else {
-                throw SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId(userId)
-            }
-                
+            let assetGIdList = try self.unauthorizedDownloads(for: userId)
             let descriptors = try self.dequeue(from: unauthorizedQueue,
                                                descriptorsForItemsWithIdentifiers: assetGIdList)
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
+            try self.removeUnauthorizedDownloadsFromIndex(for: userId)
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
@@ -49,20 +75,7 @@ public struct SHAssetDownloadController {
         
         do {
             try self.enqueue(descriptors: descriptors, in: unauthorizedQueue)
-            
-            let userStore = try SHDBManager.sharedInstance.userStore()
-            
-            for descr in descriptors {
-                let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
-                if var assetGIdList = try userStore.value(for: key) as? [String] {
-                    assetGIdList.append(descr.globalIdentifier)
-                    try userStore.set(value: Array(Set(assetGIdList)), for: key)
-                } else {
-                    let assetGIdList = [descr.globalIdentifier]
-                    try userStore.set(value: assetGIdList, for: key)
-                }
-            }
-            
+            try self.indexUnauthorizedDownloads(from: descriptors)
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
