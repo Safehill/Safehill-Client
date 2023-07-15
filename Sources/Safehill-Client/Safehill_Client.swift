@@ -38,9 +38,12 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible {
     case timedOut
     case globalIdentifierDisagreement(String)
     case missingAssetInLocalServer(String)
+    case missingUnauthorizedDownloadIndexForUserId(String)
     
     public var description: String {
         switch self {
+        case .missingUnauthorizedDownloadIndexForUserId(let userId):
+            return "no unauthorized downloads indexed for user \(userId)"
         case .missingAssetInLocalServer(let globalIdentifier):
             return "Missing \(globalIdentifier) in local server assets"
         case .fatalError(let errorString):

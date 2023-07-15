@@ -1,10 +1,16 @@
+import Foundation
 import KnowledgeBase
+
 
 public struct SHAssetDownloadController {
     let user: SHLocalUser
     
-    public func authorizeDownload(ofDescriptors descriptors: [any SHAssetDescriptor],
-                                  completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public init(user: SHLocalUser) {
+        self.user = user
+    }
+    
+    public func authorizeDownloads(for userId: String,
+                                   completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
@@ -17,7 +23,15 @@ public struct SHAssetDownloadController {
         }
         
         do {
-            try self.dequeue(from: unauthorizedQueue, itemsWithIdentifiers: descriptors.map({ $0.globalIdentifier }))
+            let userStore = try SHDBManager.sharedInstance.userStore()
+            let key = "auth-" + userId
+            
+            guard let assetGIdList = try userStore.value(for: key) as? [String] else {
+                throw SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId(userId)
+            }
+                
+            let descriptors = try self.dequeue(from: unauthorizedQueue,
+                                               descriptorsForItemsWithIdentifiers: assetGIdList)
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
             completionHandler(.success(()))
         } catch {
@@ -35,6 +49,20 @@ public struct SHAssetDownloadController {
         
         do {
             try self.enqueue(descriptors: descriptors, in: unauthorizedQueue)
+            
+            let userStore = try SHDBManager.sharedInstance.userStore()
+            
+            for descr in descriptors {
+                let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
+                if var assetGIdList = try userStore.value(for: key) as? [String] {
+                    assetGIdList.append(descr.globalIdentifier)
+                    try userStore.set(value: Array(Set(assetGIdList)), for: key)
+                } else {
+                    let assetGIdList = [descr.globalIdentifier]
+                    try userStore.set(value: assetGIdList, for: key)
+                }
+            }
+            
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
@@ -87,7 +115,60 @@ public struct SHAssetDownloadController {
         }
     }
     
-    private func dequeue(from queue: KBQueueStore, itemsWithIdentifiers identifiers: [String]) throws {
+    private func dequeue(from queue: KBQueueStore, descriptorsForItemsWithIdentifiers identifiers: [String]) throws -> [any SHAssetDescriptor] {
+        let group = DispatchGroup()
+        var dequeuedDescriptors = [any SHAssetDescriptor]()
+        var errors = [String: any Error]()
         
+        for assetGId in identifiers {
+            group.enter()
+            queue.retrieveItem(withIdentifier: assetGId) { result in
+                switch result {
+                case .success(let item):
+                    do {
+                        guard let data = item?.content as? Data else {
+                            throw SHBackgroundOperationError.unexpectedData(item?.content)
+                        }
+                        
+                        let unarchiver: NSKeyedUnarchiver
+                        if #available(macOS 10.13, *) {
+                            unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+                        } else {
+                            unarchiver = NSKeyedUnarchiver(forReadingWith: data)
+                        }
+                        
+                        guard let downloadRequest = unarchiver.decodeObject(of: SHDownloadRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey) else {
+                            throw SHBackgroundOperationError.unexpectedData(data)
+                        }
+                        
+                        dequeuedDescriptors.append(downloadRequest.assetDescriptor)
+                        
+                    } catch {
+                        errors[assetGId] = error
+                    }
+                    
+                case .failure(let error):
+                    errors[assetGId] = error
+                }
+                
+                queue.removeValue(for: assetGId) { (_: Swift.Result) in
+                    group.leave()
+                }
+            }
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * identifiers.count))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        
+        if errors.count > 0 {
+            log.error("Error dequeueing from queue \(queue.name): \(errors)")
+            for (_, error) in errors {
+                throw error
+            }
+        }
+        
+        return dequeuedDescriptors
     }
 }
