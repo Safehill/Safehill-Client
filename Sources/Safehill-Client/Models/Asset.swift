@@ -47,6 +47,15 @@ public protocol SHDescriptorSharingInfo {
     var groupInfoById: [String: SHAssetGroupInfo] { get }
 }
 
+public extension SHDescriptorSharingInfo {
+    func userSharingInfo(for userId: String) -> SHAssetGroupInfo? {
+        if let groupId = self.sharedWithUserIdentifiersInGroup[userId] {
+            return self.groupInfoById[groupId]
+        }
+        return nil
+    }
+}
+
 public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable {
     public let sharedByUserIdentifier: String
     public let sharedWithUserIdentifiersInGroup: [String: String]
@@ -78,13 +87,6 @@ public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable 
         self.sharedByUserIdentifier = sharedByUserIdentifier
         self.sharedWithUserIdentifiersInGroup = sharedWithUserIdentifiersInGroup
         self.groupInfoById = groupInfoById
-    }
-    
-    public func userSharingInfo(for userId: String) -> SHAssetGroupInfo? {
-        if let groupId = self.sharedWithUserIdentifiersInGroup[userId] {
-            return self.groupInfoById[groupId]
-        }
-        return nil
     }
 }
 
