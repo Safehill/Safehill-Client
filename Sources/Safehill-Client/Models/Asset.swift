@@ -79,6 +79,13 @@ public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable 
         self.sharedWithUserIdentifiersInGroup = sharedWithUserIdentifiersInGroup
         self.groupInfoById = groupInfoById
     }
+    
+    public func userSharingInfo(for userId: String) -> SHAssetGroupInfo? {
+        if let groupId = self.sharedWithUserIdentifiersInGroup[userId] {
+            return self.groupInfoById[groupId]
+        }
+        return nil
+    }
 }
 
 public enum SHAssetDescriptorUploadState: String {
