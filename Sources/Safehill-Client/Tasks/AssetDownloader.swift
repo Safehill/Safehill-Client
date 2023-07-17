@@ -337,7 +337,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             && DownloadBlacklist.shared.isBlacklisted(globalIdentifier: $0.globalIdentifier) == false
         }
         
-        guard descriptorsForAssetsToDownload.count > 0 else {
+        if descriptorsForAssetsToDownload.count > 0 {
+            log.debug("remote descriptors = \(remoteDescriptors.count). non-blacklisted = \(descriptorsForAssetsToDownload.count)")
+        } else {
             completionHandler(.success(()))
             return
         }

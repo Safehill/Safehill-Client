@@ -56,7 +56,7 @@ public struct SHAssetDownloadController {
                                                descriptorsForItemsWithIdentifiers: assetGIdList)
             try self.removeUnauthorizedDownloadsFromIndex(for: userId)
             
-            self.startDownloadOf(descriptors: descriptors, from: [], completionHandler: completionHandler)
+            self.startDownloadOf(descriptors: descriptors, completionHandler: completionHandler)
         } catch {
             completionHandler(.failure(error))
         }
@@ -80,7 +80,7 @@ public struct SHAssetDownloadController {
     }
     
     func startDownloadOf(descriptors: [any SHAssetDescriptor],
-                         from users: [SHServerUser],
+                         from users: [SHServerUser]? = nil,
                          completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
             log.error("Unable to connect to local queue or database")
@@ -88,7 +88,23 @@ public struct SHAssetDownloadController {
             return
         }
         
-        self.delegate.handleAssetDescriptorResults(for: descriptors, users: [])
+        var usersManifest = [SHServerUser]()
+        if users == nil {
+            var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+            
+            do {
+                usersManifest = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            } catch {
+                log.error("Unable to fetch users mentioned in asset descriptors: \(error.localizedDescription)")
+                completionHandler(.failure(error))
+                return
+            }
+        } else {
+            usersManifest = users!
+        }
+        
+        self.delegate.handleAssetDescriptorResults(for: descriptors, users: usersManifest)
         
         do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
