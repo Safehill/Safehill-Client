@@ -69,6 +69,26 @@ extension LocalServer {
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
         } catch {
+            log.warning("failed to connect to the local asset store")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
+        } catch {
+            log.warning("failed to remove authorization requests from the local user store")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        do {
+            let unauthorizedDownloadsQueue = try BackgroundOperationQueue.of(type: .unauthorizedDownload)
+            let _ = try unauthorizedDownloadsQueue.removeAll()
+        } catch {
+            log.warning("failed to remove authorization requests from the unauthorized queues")
             completionHandler(.failure(error))
             return
         }
