@@ -77,10 +77,6 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     }
     
     public func requestAuthorization(completionHandler: @escaping (PHAuthorizationStatus) -> Void) {
-        guard [.authorized, .limited].contains(self.authorizationStatus) == false else {
-            completionHandler(self.authorizationStatus)
-            return
-        }
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
             self.authorizationStatus = status
             completionHandler(status)
