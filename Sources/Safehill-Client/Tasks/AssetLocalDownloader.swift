@@ -16,10 +16,21 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             switch result {
             case .success(let descriptors):
                 
-                let start = CFAbsoluteTimeGetCurrent()
+                let fetchResult: (
+                    appleLibraryIdentifiers: [String],
+                    localDescriptors: [any SHAssetDescriptor],
+                    remoteDescriptors: [any SHAssetDescriptor]
+                )
+                do { fetchResult = try self.fetchDescriptors(skipRemote: true) }
+                catch {
+                    completionHandler(.failure(error))
+                    return
+                }
                 
-                let existingGlobalIdentifiers = self.delegate.globalIdentifiersInCache()
-                let existingLocalIdentifiers = self.delegate.localIdentifiersInCache()
+                let existingGlobalIdentifiers = fetchResult.localDescriptors.map { $0.globalIdentifier }
+                let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
+                
+                let start = CFAbsoluteTimeGetCurrent()
                 
                 var descriptorsByLocalIdentifier = [String: any SHAssetDescriptor]()
                 var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()

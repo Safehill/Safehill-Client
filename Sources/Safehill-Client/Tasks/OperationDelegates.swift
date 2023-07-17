@@ -14,9 +14,6 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
-    func localIdentifiersInCache() -> [String]
-    func globalIdentifiersInCache() -> [String]
-    
     /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)
     /// - Parameter for: the descriptors
     func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser])

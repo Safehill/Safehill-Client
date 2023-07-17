@@ -65,13 +65,23 @@ extension LocalServer {
     public func runDataMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            log.warning("failed to connect to the local asset store")
-            completionHandler(.failure(error))
-            return
+        ///
+        /// STEP 1: Data cleanup at launch
+        ///
+        /// Avoid downloads in progress that are no longer relevant. Next time remote descriptors are pulled the new manifest of downloads is re-generated:
+        /// 1.1. Remove from the download queue
+        /// 1.2. Remove from the download authorization queue
+        ///
+        let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload, .download]
+        for queueType in queuesToClear {
+            do {
+                let unauthorizedDownloadsQueue = try BackgroundOperationQueue.of(type: .unauthorizedDownload)
+                let _ = try unauthorizedDownloadsQueue.removeAll()
+            } catch {
+                log.warning("failed to remove items from the \(queueType.identifier) queue")
+                completionHandler(.failure(error))
+                return
+            }
         }
         
         let userStore: KBKVStore
@@ -84,20 +94,25 @@ extension LocalServer {
             return
         }
         
+        /// Remove KnowledgeGraph entries at launch
+//        do {
+//            let _ = try SHDBManager.sharedInstance.graph().removeAll()
+//        } catch {
+//            log.warning("Failed to remove deprecated data from the KnowledgeGraph")
+//        }
+        
+        ///
+        /// STEP 2: Data migrations (for older versions)
+        /// 2.1. Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
+        ///
+        
+        let assetStore: KBKVStore
         do {
-            let unauthorizedDownloadsQueue = try BackgroundOperationQueue.of(type: .unauthorizedDownload)
-            let _ = try unauthorizedDownloadsQueue.removeAll()
+            assetStore = try SHDBManager.sharedInstance.assetStore()
         } catch {
-            log.warning("failed to remove authorization requests from the unauthorized queues")
+            log.warning("failed to connect to the local asset store")
             completionHandler(.failure(error))
             return
-        }
-        
-        /// Remove KnowledgeGraph entries at launch
-        do {
-            let _ = try SHDBManager.sharedInstance.graph().removeAll()
-        } catch {
-            log.warning("Failed to remove deprecated data from the KnowledgeGraph")
         }
         
         var assetIdentifiers = Set<String>()

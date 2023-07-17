@@ -204,12 +204,11 @@ extension SHServerProxy {
 // MARK: - Assets
 extension SHServerProxy {
     
-    func getLocalAssetDescriptors(originalServerError: Error? = nil,
-                                  completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+    func getLocalAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         self.localServer.getAssetDescriptors { result in
             switch result {
             case .failure(let err):
-                completionHandler(.failure(originalServerError ?? err))
+                completionHandler(.failure(err))
             case .success(let descriptors):
 #if DEBUG
                 if descriptors.count > 0 {
@@ -233,13 +232,7 @@ extension SHServerProxy {
         self.remoteServer.getAssetDescriptors { serverResult in
             switch serverResult {
             case .failure(let serverError):
-                if serverError is URLError || serverError is SHHTTPError.TransportError {
-                    // Can't connect to the server, get descriptors from local cache
-                    log.error("Failed to get descriptors from server. Using local descriptors. error=\(serverError.localizedDescription)")
-                    self.getLocalAssetDescriptors(originalServerError: serverError, completionHandler: completionHandler)
-                } else {
-                    completionHandler(.failure(serverError))
-                }
+                completionHandler(.failure(serverError))
             case .success(let descriptors):
 #if DEBUG
                 if descriptors.count > 0 {
