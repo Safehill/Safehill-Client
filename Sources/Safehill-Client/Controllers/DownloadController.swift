@@ -56,9 +56,7 @@ public struct SHAssetDownloadController {
                                                descriptorsForItemsWithIdentifiers: assetGIdList)
             try self.removeUnauthorizedDownloadsFromIndex(for: userId)
             
-            self.delegate.handleAssetDescriptorResults(for: descriptors, users: [])
-            
-            self.startDownloadOf(descriptors: descriptors, completionHandler: completionHandler)
+            self.startDownloadOf(descriptors: descriptors, from: [], completionHandler: completionHandler)
         } catch {
             completionHandler(.failure(error))
         }
@@ -82,12 +80,15 @@ public struct SHAssetDownloadController {
     }
     
     func startDownloadOf(descriptors: [any SHAssetDescriptor],
+                         from users: [SHServerUser],
                          completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
             return
         }
+        
+        self.delegate.handleAssetDescriptorResults(for: descriptors, users: [])
         
         do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)

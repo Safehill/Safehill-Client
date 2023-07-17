@@ -391,11 +391,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         if authorizedDownloadDescriptors.count > 0 {
             ///
             /// For downloads that don't need authorization:
+            /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
             /// - descriptors are added to the unauthorized download queue
             /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
-            /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
             ///
-            downloadController.startDownloadOf(descriptors: authorizedDownloadDescriptors) { result in
+            downloadController.startDownloadOf(descriptors: authorizedDownloadDescriptors, from: users) { result in
                 switch result {
                 case .failure(let error):
                     completionHandler(.failure(error))
@@ -405,8 +405,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     completionHandler(.success(()))
                 }
             }
-            
-            self.delegate.handleAssetDescriptorResults(for: authorizedDownloadDescriptors, users: users)
         }
     }
     
