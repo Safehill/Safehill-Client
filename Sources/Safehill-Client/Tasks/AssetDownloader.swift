@@ -4,10 +4,34 @@ import KnowledgeBase
 import os
 
 struct DownloadBlacklist {
+    
+    let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
+    
     static var shared = DownloadBlacklist()
     
     /// Give up retrying after a download for an asset after this many attempts
-    static let Threshold = 6
+    static let FailedDownloadCountThreshold = 6
+    
+    private let blacklistUserStorage = KBKVStore.userDefaultsStore()!
+    public var blacklistedUsers: [String] {
+        get {
+            do {
+                let savedList = try self.blacklistUserStorage.value(for: kSHUsersBlacklistKey)
+                if let savedList = savedList as? [String] {
+                    return savedList
+                }
+            } catch {}
+            return []
+        }
+        set {
+            do {
+                try self.blacklistUserStorage.set(value: newValue,
+                                                  for: kSHUsersBlacklistKey)
+            } catch {
+                log.warning("Unable to record kSHUserBlacklistKey status in UserDefaults KBKVStore")
+            }
+        }
+    }
     
     var repeatedDownloadFailuresByAssetId = [String: Int]()
     
@@ -20,15 +44,35 @@ struct DownloadBlacklist {
     }
     
     mutating func blacklist(globalIdentifier: String) {
-        repeatedDownloadFailuresByAssetId[globalIdentifier] = DownloadBlacklist.Threshold
+        repeatedDownloadFailuresByAssetId[globalIdentifier] = DownloadBlacklist.FailedDownloadCountThreshold
     }
     
-    mutating func remove(globalIdentifier: String) {
-        repeatedDownloadFailuresByAssetId.removeValue(forKey: globalIdentifier)
+    mutating func removeFromBlacklist(assetGlobalIdentifier: GlobalIdentifier) {
+        repeatedDownloadFailuresByAssetId.removeValue(forKey: assetGlobalIdentifier)
     }
     
-    func isBlacklisted(globalIdentifier: String) -> Bool {
-        return DownloadBlacklist.Threshold == repeatedDownloadFailuresByAssetId[globalIdentifier]
+    func isBlacklisted(assetGlobalIdentifier: GlobalIdentifier) -> Bool {
+        return DownloadBlacklist.FailedDownloadCountThreshold == repeatedDownloadFailuresByAssetId[assetGlobalIdentifier]
+    }
+    
+    mutating func blacklist(userIdentifier: String) {
+        var blUsers = blacklistedUsers
+        guard isBlacklisted(userIdentifier: userIdentifier) == false else {
+            return
+        }
+        
+        blUsers.append(userIdentifier)
+        blacklistedUsers = blUsers
+    }
+    
+    mutating func removeFromBlacklist(userIdentifier: String) {
+        var blUsers = blacklistedUsers
+        blUsers.removeAll(where: { $0 == userIdentifier })
+        blacklistedUsers = blUsers
+    }
+    
+    func isBlacklisted(userIdentifier: String) -> Bool {
+        blacklistedUsers.contains(userIdentifier)
     }
 }
 
@@ -88,7 +132,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                 descriptor: request.assetDescriptor
                             )
                             
-                            DownloadBlacklist.shared.remove(globalIdentifier: assetId)
+                            DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: assetId)
                             
                             switch quality {
                             case .lowResolution:
@@ -334,7 +378,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         let descriptorsForAssetsToDownload = remoteDescriptors.filter {
             globalIdentifiersToDownload.contains($0.globalIdentifier)
-            && DownloadBlacklist.shared.isBlacklisted(globalIdentifier: $0.globalIdentifier) == false
+            && DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
+            && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
         }
         
         if descriptorsForAssetsToDownload.count > 0 {
@@ -420,7 +465,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         for (assetId, _) in errorsByAssetIdentifier {
             // Call the delegate if the failure has occurred enough times
-            if DownloadBlacklist.shared.isBlacklisted(globalIdentifier: assetId) {
+            if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: assetId) {
                 self.delegate.unrecoverableDownloadFailure(for: assetId, groupId: groupId)
             }
         }
@@ -452,7 +497,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     continue
                 }
                 
-                guard DownloadBlacklist.shared.isBlacklisted(globalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
+                guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
                     self.log.info("Skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
                     
                     do { _ = try queue.dequeue() }
