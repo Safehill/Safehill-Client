@@ -364,33 +364,49 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         self.log.info("found \(descriptorsForAssetsToDownload.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
-        self.delegate.handleAssetDescriptorResults(for: descriptorsForAssetsToDownload, users: users)
-                
-        ///
-        /// Call the delegate for assets that will be downloaded using Assets with empty data, created based on their descriptor
-        ///
+        let downloadController = SHAssetDownloadController(user: self.user, delegate: self.delegate)
         
-        self.delegate.handleDownloadAuthorization(ofDescriptors: unauthorizedDownloadDescriptors, users: users)
-        
-        let downloadController = SHAssetDownloadController(user: self.user)
-        
-        downloadController.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
-            switch result {
-            case .failure(let error):
-                self.log.critical("failed to enqueue unauthorized download for \(remoteDescriptors.count) descriptors. \(error.localizedDescription)")
-            default: break
+        if unauthorizedDownloadDescriptors.count > 0 {
+            ///
+            /// For downloads waiting explicit authorization:
+            /// - descriptors are added to the unauthorized download queue
+            /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
+            /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
+            ///
+            /// When the authorization comes (via `SHAssetDownloadController::authorizeDownloads(for:completionHandler:)`):
+            /// - the downloads will move from the unauthorized to the authorized queue
+            /// - the delegate method `handleAssetDescriptorResults(for:user:)` is called
+            ///
+            downloadController.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
+                switch result {
+                case .failure(let error):
+                    self.log.critical("failed to enqueue unauthorized download for \(remoteDescriptors.count) descriptors. \(error.localizedDescription)")
+                default: break
+                }
             }
-        }
 
-        downloadController.startDownloadOf(descriptors: authorizedDownloadDescriptors) { result in
-            switch result {
-            case .failure(let error):
-                completionHandler(.failure(error))
-            case .success():
-                let end = CFAbsoluteTimeGetCurrent()
-                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
-                completionHandler(.success(()))
+            self.delegate.handleDownloadAuthorization(ofDescriptors: unauthorizedDownloadDescriptors, users: users)
+        }
+        
+        if authorizedDownloadDescriptors.count > 0 {
+            ///
+            /// For downloads that don't need authorization:
+            /// - descriptors are added to the unauthorized download queue
+            /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
+            /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
+            ///
+            downloadController.startDownloadOf(descriptors: authorizedDownloadDescriptors) { result in
+                switch result {
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                case .success():
+                    let end = CFAbsoluteTimeGetCurrent()
+                    self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
+                    completionHandler(.success(()))
+                }
             }
+            
+            self.delegate.handleAssetDescriptorResults(for: authorizedDownloadDescriptors, users: users)
         }
     }
     

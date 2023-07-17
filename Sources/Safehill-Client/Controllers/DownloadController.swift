@@ -4,9 +4,11 @@ import KnowledgeBase
 
 public struct SHAssetDownloadController {
     let user: SHLocalUser
+    let delegate: SHAssetDownloaderDelegate
     
-    public init(user: SHLocalUser) {
+    public init(user: SHLocalUser, delegate: SHAssetDownloaderDelegate) {
         self.user = user
+        self.delegate = delegate
     }
     
     public func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
@@ -42,11 +44,6 @@ public struct SHAssetDownloadController {
     
     public func authorizeDownloads(for userId: String,
                                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
-            log.error("Unable to connect to local queue or database")
-            completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
-            return
-        }
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
@@ -57,9 +54,11 @@ public struct SHAssetDownloadController {
             let assetGIdList = try self.unauthorizedDownloads(for: userId)
             let descriptors = try self.dequeue(from: unauthorizedQueue,
                                                descriptorsForItemsWithIdentifiers: assetGIdList)
-            try self.enqueue(descriptors: descriptors, in: authorizedQueue)
             try self.removeUnauthorizedDownloadsFromIndex(for: userId)
-            completionHandler(.success(()))
+            
+            self.delegate.handleAssetDescriptorResults(for: descriptors, users: [])
+            
+            self.startDownloadOf(descriptors: descriptors, completionHandler: completionHandler)
         } catch {
             completionHandler(.failure(error))
         }

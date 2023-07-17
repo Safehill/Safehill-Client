@@ -83,8 +83,10 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     return
                 }
                 
-                self.delegate.handleAssetDescriptorResults(for: Array(descriptorsByGlobalIdentifier.values),
-                                                           users: users)
+                let descriptors = Array(descriptorsByGlobalIdentifier.values)
+                if descriptors.count > 0 {
+                    self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
+                }
                 
                 let end = CFAbsoluteTimeGetCurrent()
                 self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
