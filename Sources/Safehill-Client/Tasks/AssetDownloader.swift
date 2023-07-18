@@ -452,6 +452,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     completionHandler(.success(()))
                 }
             }
+        } else {
+            completionHandler(.success(()))
         }
     }
     
