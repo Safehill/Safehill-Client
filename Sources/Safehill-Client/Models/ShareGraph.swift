@@ -10,7 +10,7 @@ public enum SHKGQuery {
     static func isKnownUser(withIdentifier userId: String) throws -> Bool {
         let graph = try SHDBManager.sharedInstance.graph()
         let userEntity = graph.entity(withIdentifier: userId)
-        let sharesCount = try userEntity.linkingEntities(withPredicate: SHKGPredicates.shares.rawValue).count
+        let sharesCount = try userEntity.linkedEntities(withPredicate: SHKGPredicates.shares.rawValue).count
         if sharesCount > 0 {
             return true
         }
