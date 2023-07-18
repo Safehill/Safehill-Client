@@ -6,98 +6,100 @@ import os
 
 public class SHLocalDownloadOperation: SHDownloadOperation {
     
+    let assetGlobalIdentifiersInCache: [GlobalIdentifier]
+    
+    public init(user: SHLocalUser,
+                assetGlobalIdentifiersInCache: [GlobalIdentifier],
+                delegate: SHAssetDownloaderDelegate,
+                outboundDelegates: [SHOutboundAssetOperationDelegate],
+                limitPerRun limit: Int? = nil) {
+        self.assetGlobalIdentifiersInCache = assetGlobalIdentifiersInCache
+        super.init(user: user, delegate: delegate, outboundDelegates: outboundDelegates, limitPerRun: limit)
+    }
+    
     private func fetchLocalDescriptors(completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void) {
         ///
         /// Fetching assets from the ServerProxy is a 2-step process
         /// 1. Get the descriptors (no data) to determine which assets to pull. This calls the delegate with (Assets.downloading)
         /// 2. Get the assets data for the assets not already downloaded (based on the descriptors), and call the delegate with Assets with the low-rez `encryptedData` first (synchronously), then with the hi-rez (asynchronously, in a background thread)
         ///
-        serverProxy.getLocalAssetDescriptors { result in
-            switch result {
-            case .success(let descriptors):
-                
-                let fetchResult: (
-                    appleLibraryIdentifiers: [String],
-                    localDescriptors: [any SHAssetDescriptor],
-                    remoteDescriptors: [any SHAssetDescriptor]
-                )
-                do { fetchResult = try self.fetchDescriptors(skipRemote: true) }
-                catch {
-                    completionHandler(.failure(error))
-                    return
+        
+        let fetchResult: (
+            appleLibraryIdentifiers: [String],
+            localDescriptors: [any SHAssetDescriptor],
+            remoteDescriptors: [any SHAssetDescriptor]
+        )
+        do { fetchResult = try self.fetchDescriptors(skipRemote: true) }
+        catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let existingGlobalIdentifiers = self.assetGlobalIdentifiersInCache
+        let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
+        
+        let start = CFAbsoluteTimeGetCurrent()
+        
+        var descriptorsByLocalIdentifier = [String: any SHAssetDescriptor]()
+        var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
+        
+        var globalIdentifiersToFetchFromLocalServer = [String]()
+        
+        for descriptor in fetchResult.localDescriptors {
+            if let localIdentifier = descriptor.localIdentifier,
+               existingLocalIdentifiers.contains(localIdentifier) {
+                descriptorsByLocalIdentifier[localIdentifier] = descriptor
+            } else {
+                guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
+                    continue
                 }
                 
-                let existingGlobalIdentifiers = fetchResult.localDescriptors.map { $0.globalIdentifier }
-                let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
-                
-                let start = CFAbsoluteTimeGetCurrent()
-                
-                var descriptorsByLocalIdentifier = [String: any SHAssetDescriptor]()
-                var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-                
-                var globalIdentifiersToFetchFromLocalServer = [String]()
-                
-                for descriptor in descriptors {
-                    if let localIdentifier = descriptor.localIdentifier,
-                       existingLocalIdentifiers.contains(localIdentifier) {
-                        descriptorsByLocalIdentifier[localIdentifier] = descriptor
-                    } else {
-                        guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
-                            continue
-                        }
-                        
-                        globalIdentifiersToFetchFromLocalServer.append(descriptor.globalIdentifier)
-                    }
-                }
-                
-                if descriptorsByLocalIdentifier.count > 0 {
-                    self.delegate.markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: descriptorsByLocalIdentifier)
-                }
-                
-                if globalIdentifiersToFetchFromLocalServer.count == 0 {
-                    completionHandler(.success([:]))
-                    return
-                }
-                
-                descriptorsByGlobalIdentifier = descriptors.filter {
-                    globalIdentifiersToFetchFromLocalServer.contains($0.globalIdentifier)
-                }.reduce([:]) { partialResult, descriptor in
-                    var result = partialResult
-                    result[descriptor.globalIdentifier] = descriptor
-                    return result
-                }
-                
-                ///
-                /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
-                ///
-                
-                var users = [SHServerUser]()
-                var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-                userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-                
-                do {
-                    users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
-                } catch {
-                    self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
-                    completionHandler(.failure(error))
-                    return
-                }
-                
-                let descriptors = Array(descriptorsByGlobalIdentifier.values)
-                if descriptors.count > 0 {
-                    self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
-                }
-                
-                let end = CFAbsoluteTimeGetCurrent()
-                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
-                
-                completionHandler(.success(descriptorsByGlobalIdentifier))
-                
-            case .failure(let err):
-                self.log.error("Unable to download descriptors from server: \(err.localizedDescription)")
-                completionHandler(.failure(err))
+                globalIdentifiersToFetchFromLocalServer.append(descriptor.globalIdentifier)
             }
         }
+        
+        if descriptorsByLocalIdentifier.count > 0 {
+            self.delegate.markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: descriptorsByLocalIdentifier)
+        }
+        
+        if globalIdentifiersToFetchFromLocalServer.count == 0 {
+            completionHandler(.success([:]))
+            return
+        }
+        
+        descriptorsByGlobalIdentifier = fetchResult.localDescriptors.filter {
+            globalIdentifiersToFetchFromLocalServer.contains($0.globalIdentifier)
+        }.reduce([:]) { partialResult, descriptor in
+            var result = partialResult
+            result[descriptor.globalIdentifier] = descriptor
+            return result
+        }
+        
+        ///
+        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
+        ///
+        
+        var users = [SHServerUser]()
+        var userIdentifiers = Set(fetchResult.localDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(fetchResult.localDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+        
+        do {
+            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+        } catch {
+            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let descriptors = Array(descriptorsByGlobalIdentifier.values)
+        if descriptors.count > 0 {
+            self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
+        }
+        
+        let end = CFAbsoluteTimeGetCurrent()
+        self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
+        
+        completionHandler(.success(descriptorsByGlobalIdentifier))
     }
     
     private func findGroupIdForSelfUser(for descriptor: any SHAssetDescriptor) -> String? {
