@@ -8,6 +8,14 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
     
     let assetGlobalIdentifiersInCache: [GlobalIdentifier]
     
+    override public init(user: SHLocalUser,
+                         delegate: SHAssetDownloaderDelegate,
+                         outboundDelegates: [SHOutboundAssetOperationDelegate],
+                         limitPerRun limit: Int? = nil) {
+        self.assetGlobalIdentifiersInCache = []
+        super.init(user: user, delegate: delegate, outboundDelegates: outboundDelegates, limitPerRun: limit)
+    }
+    
     public init(user: SHLocalUser,
                 assetGlobalIdentifiersInCache: [GlobalIdentifier],
                 delegate: SHAssetDownloaderDelegate,
