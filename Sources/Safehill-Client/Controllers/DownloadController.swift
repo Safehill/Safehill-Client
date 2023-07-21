@@ -62,14 +62,6 @@ public struct SHAssetDownloadController {
         }
     }
     
-    public func blacklistUser(with userId: String) {
-        DownloadBlacklist.shared.blacklist(userIdentifier: userId)
-    }
-    
-    public func whitelistUser(with userId: String) {
-        DownloadBlacklist.shared.removeFromBlacklist(userIdentifier: userId)
-    }
-    
     func waitForDownloadAuthorization(forDescriptors descriptors: [any SHAssetDescriptor],
                                       completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
@@ -207,5 +199,21 @@ public struct SHAssetDownloadController {
         }
         
         return dequeuedDescriptors
+    }
+}
+
+// - MARK: User black/white listing
+
+public extension SHAssetDownloadController {
+    var blacklistedUsers: [String] {
+        DownloadBlacklist.shared.blacklistedUsers
+    }
+    
+    func blacklistUser(with userId: String) {
+        DownloadBlacklist.shared.blacklist(userIdentifier: userId)
+    }
+    
+    func whitelistUser(with userId: String) {
+        DownloadBlacklist.shared.removeFromBlacklist(userIdentifier: userId)
     }
 }

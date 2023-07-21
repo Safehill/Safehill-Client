@@ -13,7 +13,7 @@ struct DownloadBlacklist {
     static let FailedDownloadCountThreshold = 6
     
     private let blacklistUserStorage = KBKVStore.userDefaultsStore()!
-    public var blacklistedUsers: [String] {
+    var blacklistedUsers: [String] {
         get {
             do {
                 let savedList = try self.blacklistUserStorage.value(for: kSHUsersBlacklistKey)
