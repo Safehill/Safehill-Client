@@ -23,17 +23,20 @@ public struct SHAssetDownloadController {
     
     private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
         let userStore = try SHDBManager.sharedInstance.userStore()
+        let writeBatch = userStore.writeBatch()
         
         for descr in descriptors {
             let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
             if var assetGIdList = try userStore.value(for: key) as? [String] {
                 assetGIdList.append(descr.globalIdentifier)
-                try userStore.set(value: Array(Set(assetGIdList)), for: key)
+                writeBatch.set(value: Array(Set(assetGIdList)), for: key)
             } else {
                 let assetGIdList = [descr.globalIdentifier]
-                try userStore.set(value: assetGIdList, for: key)
+                writeBatch.set(value: assetGIdList, for: key)
             }
         }
+        
+        try writeBatch.write()
     }
     
     private func removeUnauthorizedDownloadsFromIndex(for userId: String) throws {
@@ -213,7 +216,7 @@ public extension SHAssetDownloadController {
         DownloadBlacklist.shared.blacklist(userIdentifier: userId)
     }
     
-    func whitelistUser(with userId: String) {
+    func removeUserFromBlacklist(with userId: String) {
         DownloadBlacklist.shared.removeFromBlacklist(userIdentifier: userId)
     }
 }
