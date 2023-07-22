@@ -4,9 +4,9 @@ import KnowledgeBase
 
 public struct SHAssetDownloadController {
     let user: SHLocalUser
-    let delegate: SHAssetDownloaderDelegate
+    let delegate: SHAssetDownloaderDelegate?
     
-    public init(user: SHLocalUser, delegate: SHAssetDownloaderDelegate) {
+    public init(user: SHLocalUser, delegate: SHAssetDownloaderDelegate? = nil) {
         self.user = user
         self.delegate = delegate
     }
@@ -104,7 +104,7 @@ public struct SHAssetDownloadController {
             usersManifest = users!
         }
         
-        self.delegate.handleAssetDescriptorResults(for: descriptors, users: usersManifest)
+        self.delegate?.handleAssetDescriptorResults(for: descriptors, users: usersManifest)
         
         do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
