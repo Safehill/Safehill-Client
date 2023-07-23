@@ -11,6 +11,7 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
     func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
+    func noLongerConnectedWith(userIds: [String])
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {

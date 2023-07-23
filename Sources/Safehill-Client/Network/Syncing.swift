@@ -206,6 +206,10 @@ extension SHServerProxy {
                                                       localUserIds: userIdsInDescriptors,
                                                       for: self.localServer.requestor)
         
+        if diff.userIdsNoLongerReferenced.count > 0 {
+            delegate?.noLongerConnectedWith(userIds: diff.userIdsNoLongerReferenced)
+        }
+        
         if diff.assetsRemovedOnServer.count > 0 {
             let globalIdentifiers = diff.assetsRemovedOnServer.compactMap { $0.globalIdentifier }
             self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
