@@ -126,6 +126,18 @@ public struct SHAssetDownloadController {
         }
     }
     
+    func removePendingDownloadsFromQueues(for assetIdentifiers: [GlobalIdentifier]) throws {
+        let queueTypes: [BackgroundOperationQueue.OperationType] = [.download, .unauthorizedDownload]
+        for queueType in queueTypes {
+            guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
+                log.error("Unable to connect to local queue or database \(queueType.identifier)")
+                throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
+            }
+            
+            let _ = try self.dequeue(from: queue, descriptorsForItemsWithIdentifiers: assetIdentifiers)
+        }
+    }
+    
     private func enqueue(descriptors: [any SHAssetDescriptor], in queue: KBQueueStore) throws {
         var errors = [Error]()
         

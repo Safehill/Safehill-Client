@@ -245,7 +245,10 @@ extension SHServerProxy {
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
+                    //
+                    // TODO: THIS IS A BIG ONE!!!
                     // TODO: The deletion from the queues defined in the framework is taken care of by the `AssetUploadController` which is a client of the framework. Consider moving `AssetUploadController` and the sister controllers to the framework
+                    //
                     delegate?.assetsWereDeleted(diff.assetsRemovedOnServer)
                 }
                 if diff.stateDifferentOnServer.count > 0 {
