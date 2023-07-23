@@ -55,6 +55,6 @@ public enum SHQueueOperation {
             return
         }
         
-        try SHAssetDownloadController(user: user).removePendingDownloadsFromQueues(for: assetGlobalIdentifiers)x
+        try SHAssetDownloadController(user: user).removePendingDownloadsFromQueues(for: assetGlobalIdentifiers)
     }
 }
