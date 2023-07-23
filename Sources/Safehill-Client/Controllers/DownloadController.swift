@@ -237,7 +237,7 @@ public extension SHAssetDownloadController {
         DownloadBlacklist.shared.blacklist(userIdentifier: userId)
     }
     
-    func removeUserFromBlacklist(with userId: String) {
-        DownloadBlacklist.shared.removeFromBlacklist(userIdentifier: userId)
+    func removeUsersFromBlacklist(with userIds: [String]) {
+        DownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: userIds)
     }
 }

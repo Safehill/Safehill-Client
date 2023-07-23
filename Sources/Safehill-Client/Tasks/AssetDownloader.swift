@@ -65,9 +65,9 @@ struct DownloadBlacklist {
         blacklistedUsers = blUsers
     }
     
-    mutating func removeFromBlacklist(userIdentifier: String) {
+    mutating func removeFromBlacklist(userIdentifiers: [String]) {
         var blUsers = blacklistedUsers
-        blUsers.removeAll(where: { $0 == userIdentifier })
+        blUsers.removeAll(where: { userIdentifiers.contains($0) })
         blacklistedUsers = blUsers
     }
     
