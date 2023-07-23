@@ -17,7 +17,6 @@ struct AssetDescriptorsDiff {
     
     let assetsRemovedOnServer: [SHRemoteAssetIdentifier]
     let stateDifferentOnServer: [AssetVersionState]
-    let userIdsNoLongerReferenced: [String]
     let userIdsToRemoveFromGroup: [String: [String]]
     
     
@@ -108,7 +107,6 @@ struct AssetDescriptorsDiff {
         return AssetDescriptorsDiff(
             assetsRemovedOnServer: onlyLocal,
             stateDifferentOnServer: [],
-            userIdsNoLongerReferenced: userIdsToRemove,
             userIdsToRemoveFromGroup: userIdsToRemoveFromGroup
         )
     }

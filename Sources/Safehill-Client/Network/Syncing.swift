@@ -120,7 +120,7 @@ extension SHServerProxy {
     private func syncDescriptors(delegate: SHAssetSyncingDelegate?,
                                  completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
-        var remoteUserIds = [String]()
+        var remoteUsers = [SHServerUser]()
         var localError: Error? = nil, remoteError: Error? = nil
         var remoteUsersError: Error? = nil
         
@@ -171,7 +171,7 @@ extension SHServerProxy {
         self.remoteServer.getUsers(withIdentifiers: nil) { result in
             switch result {
             case .success(let serverUsers):
-                remoteUserIds = serverUsers.map({ $0.identifier })
+                remoteUsers = serverUsers
             case .failure(let err):
                 log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
                 remoteUsersError = err
@@ -189,6 +189,9 @@ extension SHServerProxy {
             return
         }
         
+        delegate?.usersAreConnectedAndVerified(remoteUsers)
+        let remoteUserIds = remoteUsers.map({ $0.identifier })
+        
         ///
         /// Handle the following cases:
         /// 1. The asset has been encrypted but not yet downloaded (so the server doesn't know about that asset yet)
@@ -205,10 +208,6 @@ extension SHServerProxy {
                                                       serverUserIds: remoteUserIds,
                                                       localUserIds: userIdsInDescriptors,
                                                       for: self.localServer.requestor)
-        
-        if diff.userIdsNoLongerReferenced.count > 0 {
-            delegate?.noLongerConnectedWith(userIds: diff.userIdsNoLongerReferenced)
-        }
         
         if diff.assetsRemovedOnServer.count > 0 {
             let globalIdentifiers = diff.assetsRemovedOnServer.compactMap { $0.globalIdentifier }
