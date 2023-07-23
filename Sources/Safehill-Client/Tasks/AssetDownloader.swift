@@ -74,6 +74,10 @@ struct DownloadBlacklist {
     func isBlacklisted(userIdentifier: String) -> Bool {
         blacklistedUsers.contains(userIdentifier)
     }
+    
+    mutating func deepClean() throws {
+        let _ = try self.blacklistUserStorage.removeAll()
+    }
 }
 
 

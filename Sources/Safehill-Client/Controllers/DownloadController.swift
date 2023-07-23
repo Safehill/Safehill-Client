@@ -11,6 +11,15 @@ public struct SHAssetDownloadController {
         self.delegate = delegate
     }
     
+    public func deepClean() throws {
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
+        
+        // Unauthorized queues are removed in LocalServer::runDataMigrations
+        
+        try DownloadBlacklist.shared.deepClean()
+    }
+    
     public func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
         let userStore = try SHDBManager.sharedInstance.userStore()
         let key = "auth-" + userId
