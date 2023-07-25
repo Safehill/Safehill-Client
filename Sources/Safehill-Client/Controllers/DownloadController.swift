@@ -224,16 +224,19 @@ private extension SHAssetDownloadController {
     private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
         let userStore = try SHDBManager.sharedInstance.userStore()
         let writeBatch = userStore.writeBatch()
+        var updatedKVs = [String: [String]]()
         
         for descr in descriptors {
             let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
+            var newAssetGIdList: [GlobalIdentifier]
             if var assetGIdList = try userStore.value(for: key) as? [String] {
-                assetGIdList.append(descr.globalIdentifier)
-                writeBatch.set(value: Array(Set(assetGIdList)), for: key)
+                newAssetGIdList = updatedKVs[key] ?? assetGIdList
             } else {
-                let assetGIdList = [descr.globalIdentifier]
-                writeBatch.set(value: assetGIdList, for: key)
+                newAssetGIdList = updatedKVs[key] ?? []
             }
+            newAssetGIdList.append(descr.globalIdentifier)
+            writeBatch.set(value: Array(Set(newAssetGIdList)), for: key)
+            updatedKVs[key] = newAssetGIdList
         }
         
         try writeBatch.write()
