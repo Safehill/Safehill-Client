@@ -281,6 +281,10 @@ internal extension SHAssetDownloadController {
     }
     
     func cleanEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
+        guard assetIdentifiers.count > 0 else {
+            return
+        }
+        
         try self.dequeueEntries(for: assetIdentifiers)
         
         let userStore = try SHDBManager.sharedInstance.userStore()
@@ -292,6 +296,10 @@ internal extension SHAssetDownloadController {
     }
     
     private func dequeueEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
+        guard assetIdentifiers.count > 0 else {
+            return
+        }
+        
         let queueTypes: [BackgroundOperationQueue.OperationType] = [.download, .unauthorizedDownload]
         for queueType in queueTypes {
             guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
