@@ -71,6 +71,12 @@ struct DownloadBlacklist {
         blacklistedUsers = blUsers
     }
     
+    mutating func removeFromBlacklistIfNotIn(userIdentifiers: [String]) {
+        var blUsers = blacklistedUsers
+        blUsers.removeAll(where: { userIdentifiers.contains($0) == false })
+        blacklistedUsers = blUsers
+    }
+    
     func isBlacklisted(userIdentifier: String) -> Bool {
         blacklistedUsers.contains(userIdentifier)
     }

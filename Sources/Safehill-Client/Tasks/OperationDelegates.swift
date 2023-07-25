@@ -12,6 +12,7 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
     func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
     func usersAreConnectedAndVerified(_: [SHServerUser])
+    func assetIdsAreSharedWithUser(_: [GlobalIdentifier])
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {

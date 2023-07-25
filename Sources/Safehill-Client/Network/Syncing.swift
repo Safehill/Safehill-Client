@@ -189,8 +189,14 @@ extension SHServerProxy {
             return
         }
         
+        let allSharedAssetGIds = remoteDescriptors
+            .filter({ $0.sharingInfo.sharedByUserIdentifier != self.localServer.requestor.identifier })
+            .map({ $0.globalIdentifier })
+        delegate?.assetIdsAreSharedWithUser(Array(Set(allSharedAssetGIds)))
         delegate?.usersAreConnectedAndVerified(remoteUsers)
         let remoteUserIds = remoteUsers.map({ $0.identifier })
+        
+        DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: remoteUserIds)
         
         ///
         /// Handle the following cases:
