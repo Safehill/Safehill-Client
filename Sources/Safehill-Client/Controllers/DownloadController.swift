@@ -126,7 +126,7 @@ public struct SHAssetDownloadController {
         }
     }
     
-    func removePendingDownloadsFromQueues(for assetIdentifiers: [GlobalIdentifier]) throws {
+    func removePendingDownloadsFromQueues(for assetIdentifiers: [GlobalIdentifier], from user: SHServerUser) throws {
         let queueTypes: [BackgroundOperationQueue.OperationType] = [.download, .unauthorizedDownload]
         for queueType in queueTypes {
             guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
@@ -135,6 +135,13 @@ public struct SHAssetDownloadController {
             }
             
             let _ = try self.dequeue(from: queue, descriptorsForItemsWithIdentifiers: assetIdentifiers)
+        }
+        
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let key = "auth-" + user.identifier
+        if var assetGIdList = try userStore.value(for: key) as? [String] {
+            assetGIdList.removeAll(where: { assetIdentifiers.contains($0) })
+            try userStore.set(value: assetGIdList, for: key)
         }
     }
     

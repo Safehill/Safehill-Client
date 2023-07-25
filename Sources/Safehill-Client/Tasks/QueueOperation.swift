@@ -50,11 +50,11 @@ public enum SHQueueOperation {
         }
     }
     
-    public static func removeDownloadItems(with assetGlobalIdentifiers: [GlobalIdentifier], for user: SHLocalUser) throws {
+    public static func removeDownloadItems(with assetGlobalIdentifiers: [GlobalIdentifier], from user: SHLocalUser) throws {
         guard assetGlobalIdentifiers.count > 0 else {
             return
         }
         
-        try SHAssetDownloadController(user: user).removePendingDownloadsFromQueues(for: assetGlobalIdentifiers)
+        try SHAssetDownloadController(user: user).removePendingDownloadsFromQueues(for: assetGlobalIdentifiers, from: user)
     }
 }
