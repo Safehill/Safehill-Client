@@ -11,6 +11,7 @@ public struct SHAssetDownloadController {
         self.delegate = delegate
     }
     
+    /// Invoked during local cleanup (when the local user is removed or a new login happens, for instance)
     public func deepClean() throws {
         let userStore = try SHDBManager.sharedInstance.userStore()
         let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
@@ -20,6 +21,8 @@ public struct SHAssetDownloadController {
         try DownloadBlacklist.shared.deepClean()
     }
     
+    /// - Parameter userId: the user identifier
+    /// - Returns: the asset identifiers that require authorization from the user
     public func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
         let userStore = try SHDBManager.sharedInstance.userStore()
         let key = "auth-" + userId
@@ -30,30 +33,12 @@ public struct SHAssetDownloadController {
         return assetGIdList
     }
     
-    private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
-        let userStore = try SHDBManager.sharedInstance.userStore()
-        let writeBatch = userStore.writeBatch()
-        
-        for descr in descriptors {
-            let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
-            if var assetGIdList = try userStore.value(for: key) as? [String] {
-                assetGIdList.append(descr.globalIdentifier)
-                writeBatch.set(value: Array(Set(assetGIdList)), for: key)
-            } else {
-                let assetGIdList = [descr.globalIdentifier]
-                writeBatch.set(value: assetGIdList, for: key)
-            }
-        }
-        
-        try writeBatch.write()
-    }
-    
-    private func removeUnauthorizedDownloadsFromIndex(for userId: String) throws {
-        let userStore = try SHDBManager.sharedInstance.userStore()
-        let key = "auth-" + userId
-        let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
-    }
-    
+    /// Authorizing downloads from a user means:
+    /// - Moving the items in the unauthorized queue to the authorized queue for that user
+    /// - Removing items from the auth index (user store) corresponding to the user identifier
+    /// - Parameters:
+    ///   - userId: the user identifier
+    ///   - completionHandler: the callback method
     public func authorizeDownloads(from userId: String,
                                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
@@ -66,7 +51,10 @@ public struct SHAssetDownloadController {
             let assetGIdList = try self.unauthorizedDownloads(for: userId)
             let descriptors = try self.dequeue(from: unauthorizedQueue,
                                                descriptorsForItemsWithIdentifiers: assetGIdList)
-            try self.removeUnauthorizedDownloadsFromIndex(for: userId)
+            
+            let userStore = try SHDBManager.sharedInstance.userStore()
+            let key = "auth-" + userId
+            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
             
             self.startDownloadOf(descriptors: descriptors, completionHandler: completionHandler)
         } catch {
@@ -74,6 +62,11 @@ public struct SHAssetDownloadController {
         }
     }
     
+    /// Enqueue items that are ready for download but not explicitly authorized in the unauthorized queue
+    /// and update the auth index (user store) with a list of global identifiers waiting download, per user
+    /// - Parameters:
+    ///   - descriptors: the list of asset descriptors that are ready for download
+    ///   - completionHandler: the callback method
     func waitForDownloadAuthorization(forDescriptors descriptors: [any SHAssetDescriptor],
                                       completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
@@ -91,6 +84,11 @@ public struct SHAssetDownloadController {
         }
     }
     
+    /// Enqueue downloads from authorized users in the authorized queue, so they'll be picked up for download
+    /// - Parameters:
+    ///   - descriptors: the list of asset descriptors for the assets that can be downloaded
+    ///   - users: the cache of user objects, if one was already retrieved by the caller method
+    ///   - completionHandler: the callback method
     func startDownloadOf(descriptors: [any SHAssetDescriptor],
                          from users: [SHServerUser]? = nil,
                          completionHandler: @escaping (Result<Void, Error>) -> Void) {
@@ -125,25 +123,11 @@ public struct SHAssetDownloadController {
             completionHandler(.failure(error))
         }
     }
-    
-    func removePendingDownloadsFromQueues(for assetIdentifiers: [GlobalIdentifier], from user: SHServerUser) throws {
-        let queueTypes: [BackgroundOperationQueue.OperationType] = [.download, .unauthorizedDownload]
-        for queueType in queueTypes {
-            guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
-                log.error("Unable to connect to local queue or database \(queueType.identifier)")
-                throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
-            }
-            
-            let _ = try self.dequeue(from: queue, descriptorsForItemsWithIdentifiers: assetIdentifiers)
-        }
-        
-        let userStore = try SHDBManager.sharedInstance.userStore()
-        let key = "auth-" + user.identifier
-        if var assetGIdList = try userStore.value(for: key) as? [String] {
-            assetGIdList.removeAll(where: { assetIdentifiers.contains($0) })
-            try userStore.set(value: assetGIdList, for: key)
-        }
-    }
+}
+
+// - MARK: Helpers for enqueueing and dequeueing
+
+private extension SHAssetDownloadController {
     
     private func enqueue(descriptors: [any SHAssetDescriptor], in queue: KBQueueStore) throws {
         var errors = [Error]()
@@ -230,6 +214,93 @@ public struct SHAssetDownloadController {
         }
         
         return dequeuedDescriptors
+    }
+}
+
+// - MARK: Index additions
+
+private extension SHAssetDownloadController {
+    
+    private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let writeBatch = userStore.writeBatch()
+        
+        for descr in descriptors {
+            let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
+            if var assetGIdList = try userStore.value(for: key) as? [String] {
+                assetGIdList.append(descr.globalIdentifier)
+                writeBatch.set(value: Array(Set(assetGIdList)), for: key)
+            } else {
+                let assetGIdList = [descr.globalIdentifier]
+                writeBatch.set(value: assetGIdList, for: key)
+            }
+        }
+        
+        try writeBatch.write()
+    }
+}
+
+// - MARK: Index and Queue Cleanup
+
+internal extension SHAssetDownloadController {
+    
+    /// Asset identifiers and user identifiers passed to this methods are coming from the server.
+    /// Everything that is in the local DB referencing users or assets not in these set is considered stale and should be removed.
+    /// - Parameters:
+    ///   - allSharedAssetIds: the full list of asset identifiers that are shared with this user
+    ///   - allUserIds: all user ids that this user is connected to
+    func cleanEntriesNotIn(allSharedAssetIds: [GlobalIdentifier], allUserIds: [String]) throws {
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        var condition = KBGenericCondition(value: false)
+        
+        /// Remove dangling users
+        for userId in allUserIds {
+            condition = condition.or(KBGenericCondition(.equal, value: "auth-\(userId)"))
+        }
+        let _ = try userStore.removeValues(forKeysMatching: condition)
+        
+        /// Remove dangling assets (if unauthorized user stops sharing)
+        let writeBatch = userStore.writeBatch()
+        var removedAssetGIds = [GlobalIdentifier]()
+        for (key, value) in try userStore.dictionaryRepresentation(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-")) {
+            if let value = value as? [String] {
+                let intersection = value.subtract(allSharedAssetIds)
+                if intersection.isEmpty == false {
+                    removedAssetGIds.append(contentsOf: intersection)
+                    let newValue = value.filter({ allSharedAssetIds.contains($0) })
+                    writeBatch.set(value: newValue, for: key)
+                }
+            } else {
+                writeBatch.set(value: nil, for: key)
+            }
+        }
+        try writeBatch.write()
+        
+        /// Remove queue item indentifiers in the download queues
+        try self.dequeueEntries(for: removedAssetGIds)
+    }
+    
+    func cleanEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
+        try self.dequeueEntries(for: assetIdentifiers)
+        
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let key = "auth-" + self.user.identifier
+        if var assetGIdList = try userStore.value(for: key) as? [String] {
+            assetGIdList.removeAll(where: { assetIdentifiers.contains($0) })
+            try userStore.set(value: assetGIdList, for: key)
+        }
+    }
+    
+    private func dequeueEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
+        let queueTypes: [BackgroundOperationQueue.OperationType] = [.download, .unauthorizedDownload]
+        for queueType in queueTypes {
+            guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
+                log.error("Unable to connect to local queue or database \(queueType.identifier)")
+                throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
+            }
+            
+            let _ = try self.dequeue(from: queue, descriptorsForItemsWithIdentifiers: assetIdentifiers)
+        }
     }
 }
 

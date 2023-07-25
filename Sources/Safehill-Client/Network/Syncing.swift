@@ -198,6 +198,16 @@ extension SHServerProxy {
         
         DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: remoteUserIds)
         
+        let downloads = SHAssetDownloadController(user: self.localServer.requestor)
+        do {
+            try downloads.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds, allUserIds: remoteUserIds)
+        } catch {
+            log.error("failed to clean up download queues and index on deleted assets")
+        }
+        let userBlacklist = downloads.blacklistedUsers
+        let uIdsToRemoveFromBlacklist = userBlacklist.filter { remoteUserIds.contains($0) == false }
+        downloads.removeUsersFromBlacklist(with: uIdsToRemoveFromBlacklist)
+        
         ///
         /// Handle the following cases:
         /// 1. The asset has been encrypted but not yet downloaded (so the server doesn't know about that asset yet)
@@ -254,9 +264,19 @@ extension SHServerProxy {
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
+                    ///
+                    /// Remove items in download queues and indices that no longer exist
+                    ///
+                    do {
+                        let downloads = SHAssetDownloadController(user: self.localServer.requestor)
+                        try downloads.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
+                    } catch {
+                        log.error("failed to clean up download queues and index on deleted assets")
+                    }
+                    
                     //
                     // TODO: THIS IS A BIG ONE!!!
-                    // TODO: The deletion from the queues defined in the framework is taken care of by the `AssetUploadController` which is a client of the framework. Consider moving `AssetUploadController` and the sister controllers to the framework
+                    // TODO: The deletion of these assets from all the other queues is currently taken care of by the delegate. The framework should be responsible for it instead.
                     //
                     delegate?.assetsWereDeleted(diff.assetsRemovedOnServer)
                 }
