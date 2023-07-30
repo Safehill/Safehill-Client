@@ -14,6 +14,10 @@ public enum SHKGQuery {
         if sharesCount > 0 {
             return true
         }
+        let sharedWithCount = try userEntity.linkingEntities(withPredicate: SHKGPredicates.sharedWith.rawValue).count
+        if sharedWithCount > 0 {
+            return true
+        }
         return false
     }
 }
