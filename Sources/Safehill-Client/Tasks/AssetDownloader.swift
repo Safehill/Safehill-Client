@@ -446,6 +446,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         if authorizedDownloadDescriptors.count > 0 {
+            let senderUserIds = authorizedDownloadDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+            for userId in senderUserIds {
+                downloadController.authorizeDownloads(from: userId) { _ in }
+            }
+            
             ///
             /// For downloads that don't need authorization:
             /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called

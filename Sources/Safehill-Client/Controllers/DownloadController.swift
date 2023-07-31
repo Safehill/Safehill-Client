@@ -49,6 +49,11 @@ public struct SHAssetDownloadController {
         
         do {
             let assetGIdList = try self.unauthorizedDownloads(for: userId)
+            guard assetGIdList.count > 0 else {
+                completionHandler(.success(()))
+                return
+            }
+            
             let descriptors = try self.dequeue(from: unauthorizedQueue,
                                                descriptorsForItemsWithIdentifiers: assetGIdList)
             
@@ -115,6 +120,7 @@ public struct SHAssetDownloadController {
         }
         
         self.delegate?.handleAssetDescriptorResults(for: descriptors, users: usersManifest)
+        SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
         
         do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)

@@ -102,6 +102,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         let descriptors = Array(descriptorsByGlobalIdentifier.values)
         if descriptors.count > 0 {
             self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
+            SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
         }
         
         let end = CFAbsoluteTimeGetCurrent()

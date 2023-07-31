@@ -249,8 +249,9 @@ extension SHServerProxy {
         }
     }
     
-    /// Fill the `.hiResolution` version of the requested assets in the local server (cache)
+    /// Fill the specified version of the requested assets in the local server (cache)
     /// - Parameter globalIdentifiers: the assets' global identifiers
+    /// - Parameter quality: the quality of the asset to cache
     private func cacheAssets(with globalIdentifiers: [String],
                              quality: SHAssetQuality) {
         log.trace("[CACHING] Attempting to cache \(quality.rawValue) for assets \(globalIdentifiers)")
