@@ -229,6 +229,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         guard error == nil else {
             throw error!
         }
+        
+        try SHKGQuery.ingestShare(of: globalIdentifier,
+                                  from: self.user.identifier,
+                                  to: request.sharedWith.map({ $0.identifier }))
     }
     
     private func process(_ item: KBQueueItem) throws {

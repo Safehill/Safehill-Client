@@ -102,7 +102,11 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         let descriptors = Array(descriptorsByGlobalIdentifier.values)
         if descriptors.count > 0 {
             self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
-            SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+            do {
+                try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+            } catch {
+                log.error("[KG] failed to ingest some descriptor into the graph")
+            }
         }
         
         let end = CFAbsoluteTimeGetCurrent()

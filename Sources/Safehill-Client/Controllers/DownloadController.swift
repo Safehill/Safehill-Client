@@ -120,7 +120,11 @@ public struct SHAssetDownloadController {
         }
         
         self.delegate?.handleAssetDescriptorResults(for: descriptors, users: usersManifest)
-        SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+        do {
+            try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+        } catch {
+            log.error("[KG] failed to ingest some descriptor into the graph")
+        }
         
         do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
