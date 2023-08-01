@@ -244,13 +244,23 @@ extension SHServerProxy {
                                        quality: stateChangeDiff.quality,
                                        as: stateChangeDiff.newUploadState) { result in
                 if case .failure(let error) = result {
-                    log.error("some assets were marked as uploaded on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
             }
         }
         
         let userIdsToRemove = userIdsInDescriptors.subtract(remoteUserIds)
         ServerUserCache.shared.evict(usersWithIdentifiers: userIdsToRemove)
+        
+        do {
+            let graph = try SHDBManager.sharedInstance.graph()
+            for userId in userIdsToRemove {
+                try graph.removeEntity(userId)
+            }
+        } catch {
+            try? SHDBManager.sharedInstance.graph().removeAll()
+            fatalError("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created")
+        }
         
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
@@ -281,7 +291,9 @@ extension SHServerProxy {
                     
                     //
                     // TODO: THIS IS A BIG ONE!!!
-                    // TODO: The deletion of these assets from all the other queues is currently taken care of by the delegate. The framework should be responsible for it instead.
+                    // TODO: The deletion of these assets from all the other queues is currently taken care of by the delegate.
+                    // TODO: The framework should be responsible for it instead.
+                    // TODO: Deletion of entities in the graph should be taken care of here, too. Currently it can't because the client is currently querying the graph before deleting to understand which conversation threads need to be removed
                     //
                     delegate?.assetsWereDeleted(diff.assetsRemovedOnServer)
                 }
