@@ -41,6 +41,8 @@ public struct SHAssetDownloadController {
     ///   - completionHandler: the callback method
     public func authorizeDownloads(from userId: String,
                                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.removeUsersFromBlacklist(with: [userId])
+        
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))

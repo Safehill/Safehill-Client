@@ -196,6 +196,11 @@ extension SHServerProxy {
         delegate?.usersAreConnectedAndVerified(remoteUsers)
         let remoteUserIds = remoteUsers.map({ $0.identifier })
         
+        ///
+        /// If a user that was in the blacklist no longer exists on the server
+        /// that user can be safely removed from the blacklist,
+        /// as well as all downloads from that user currently awaiting authorization
+        ///
         DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: remoteUserIds)
         
         let downloads = SHAssetDownloadController(user: self.localServer.requestor)
