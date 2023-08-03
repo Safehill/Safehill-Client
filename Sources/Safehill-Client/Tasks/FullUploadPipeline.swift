@@ -5,6 +5,10 @@ import os
 
 open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
+    public enum ParallelizationOption {
+        case aggressive, conservative
+    }
+    
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG")
     }
@@ -13,11 +17,15 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     public var delegates: [SHOutboundAssetOperationDelegate]
     var imageManager: PHCachingImageManager
     
+    let parallelization: ParallelizationOption
+    
     public init(user: SHLocalUser,
                 delegates: [SHOutboundAssetOperationDelegate],
+                parallelization: ParallelizationOption = .conservative,
                 imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.delegates = delegates
+        self.parallelization = parallelization
         self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
@@ -86,38 +94,82 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     }
     
     private func runFetchCycle() throws {
+        var maxFetches: Int = 0 // no limit (parallelization == .aggressive)
+        
+        if parallelization == .conservative {
+            let maxEncryptions = 7
+            let ongoingEncryptions = try BackgroundOperationQueue.of(type: .encryption).keys().count
+            maxFetches = maxEncryptions - ongoingEncryptions
+            guard maxFetches > 0 else {
+                return
+            }
+        }
+        
         let fetchOperation = SHLocalFetchOperation(
             delegates: delegates,
-            limitPerRun: 5,
+            limitPerRun: maxFetches,
             imageManager: imageManager
         )
         try fetchOperation.runOnce()
     }
     
     private func runEncryptionCycle() throws {
+        var maxEncryptions: Int = 0 // no limit (parallelization == .aggressive)
+        
+        if parallelization == .conservative {
+            let maxUploads = 5
+            let ongoingUploads = try BackgroundOperationQueue.of(type: .upload).keys().count
+            maxEncryptions = maxUploads - ongoingUploads
+            guard maxEncryptions > 0 else {
+                return
+            }
+        }
+        
         let encryptOperation = SHEncryptionOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: 5,
+            limitPerRun: maxEncryptions,
             imageManager: imageManager
         )
         try encryptOperation.runOnce()
     }
     
     private func runUploadCycle() throws {
+        var limit: Int = 0 // no limit (parallelization == .aggressive)
+        
+        if parallelization == .conservative {
+            let maxUploads = 5
+            let ongoingUploads = try BackgroundOperationQueue.of(type: .upload).keys().count
+            limit = maxUploads - ongoingUploads
+            guard limit > 0 else {
+                return
+            }
+        }
+        
         let uploadOperation = SHUploadOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: 2
+            limitPerRun: limit
         )
         try uploadOperation.runOnce()
     }
     
     private func runShareCycle() throws {
+        var limit: Int = 0 // no limit (parallelization == .aggressive)
+        
+        if parallelization == .conservative {
+            let maxShares = 10
+            let ongoingShares = try BackgroundOperationQueue.of(type: .share).keys().count
+            limit = maxShares - ongoingShares
+            guard limit > 0 else {
+                return
+            }
+        }
+        
         let shareOperation = SHEncryptAndShareOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: 3,
+            limitPerRun: limit,
             imageManager: imageManager
         )
         try shareOperation.runOnce()
