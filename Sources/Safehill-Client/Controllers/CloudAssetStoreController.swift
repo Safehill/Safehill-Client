@@ -7,6 +7,7 @@ public enum SHAssetStoreError: Error, LocalizedError {
     case notImplemented
     case noEntries
     case failedToCreateRemoteAsset
+    case invalidRequest(String)
     
     public var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ public enum SHAssetStoreError: Error, LocalizedError {
             return "Could not find an entry for the requested asset(s)"
         case .failedToCreateRemoteAsset:
             return "Failed to create remote asset"
+        case .invalidRequest(let reason):
+            return "Invalid request: \(reason)"
         }
     }
 }
@@ -67,7 +70,10 @@ extension SHAssetStoreController {
         let group = DispatchGroup()
         
         group.enter()
-        self.serverProxy.createRemoteAssets([asset], groupId: groupId, filterVersions: filterVersions) { result in
+        self.serverProxy.remoteServer.create(assets: [asset],
+                                             groupId: groupId,
+                                             filterVersions: filterVersions)
+        { result in
             switch result {
             case .success(let serverAssets):
                 if serverAssets.count == 1 {

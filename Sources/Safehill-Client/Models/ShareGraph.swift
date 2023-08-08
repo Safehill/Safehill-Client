@@ -26,11 +26,11 @@ public enum SHKGQuery {
         
         for descriptor in descriptors {
             do {
-                var allReceivers = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
-                allReceivers.append(receiverUserId)
+                var allReceivers = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                allReceivers.insert(receiverUserId)
                 try self.ingestShare(of: descriptor.globalIdentifier,
                                      from: descriptor.sharingInfo.sharedByUserIdentifier,
-                                     to: Array(Set(allReceivers)))
+                                     to: Array(allReceivers))
             } catch {
                 errors.append(error)
             }

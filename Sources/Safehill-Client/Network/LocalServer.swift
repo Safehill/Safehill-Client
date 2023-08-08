@@ -566,15 +566,35 @@ struct LocalServer : SHServerAPI {
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        // TODO: Filter versions from `assets`
+        
+        var descriptorsByGlobalId = [GlobalIdentifier: any SHAssetDescriptor]()
+        for encryptedAsset in assets {
+            let phantomAssetDescriptor = SHGenericAssetDescriptor(
+                globalIdentifier: encryptedAsset.globalIdentifier,
+                localIdentifier: encryptedAsset.localIdentifier,
+                creationDate: encryptedAsset.creationDate,
+                uploadState: .notStarted,
+                sharingInfo: SHGenericDescriptorSharingInfo(
+                    sharedByUserIdentifier: self.requestor.identifier,
+                    sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
+                    groupInfoById: [:]
+                )
+            )
+            guard descriptorsByGlobalId[encryptedAsset.globalIdentifier] == nil else {
+                completionHandler(.failure(SHAssetStoreError.invalidRequest("duplicate asset global identifiers to create")))
+                return
+            }
+            descriptorsByGlobalId[encryptedAsset.globalIdentifier] = phantomAssetDescriptor
+        }
+        
         self.create(assets: assets,
-                    groupId: groupId,
-                    senderUserIdentifier: requestor.identifier,
+                    descriptorsByGlobalIdentifier: descriptorsByGlobalId,
                     completionHandler: completionHandler)
     }
     
     func create(assets: [any SHEncryptedAsset],
-                groupId: String,
-                senderUserIdentifier: String,
+                descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         let assetStore: KBKVStore
         do {
@@ -587,6 +607,21 @@ struct LocalServer : SHServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         for asset in assets {
+            guard let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier] else {
+                completionHandler(.failure(SHAssetStoreError.invalidRequest("No descriptor provided for asset to create with global identifier \(asset.globalIdentifier)")))
+                return
+            }
+            
+            guard let thisUserGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.requestor.identifier] else {
+                completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId specified in descriptor for asset to create for this user: userId=\(self.requestor.identifier)")))
+                return
+            }
+            
+            guard let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier] else {
+                completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId specified in descriptor for asset to create for sender user: userId=\(descriptor.sharingInfo.sharedByUserIdentifier)")))
+                return
+            }
+            
             for encryptedVersion in asset.encryptedVersions.values {
                 
                 if encryptedVersion.quality == .hiResolution,
@@ -600,16 +635,19 @@ struct LocalServer : SHServerAPI {
                     writeBatch.set(value: nil, for: "data::" + "\(SHAssetQuality.midResolution.rawValue)::" + asset.globalIdentifier)
                     writeBatch.set(value: nil, for: [
                         "sender",
-                        senderUserIdentifier,
+                        descriptor.sharingInfo.sharedByUserIdentifier,
                         SHAssetQuality.midResolution.rawValue,
                         asset.globalIdentifier
                        ].joined(separator: "::"))
-                    writeBatch.set(value: nil, for: [
-                        "receiver",
-                        requestor.identifier,
-                        SHAssetQuality.midResolution.rawValue,
-                        asset.globalIdentifier
-                       ].joined(separator: "::"))
+                    
+                    for (recipientUserId, _) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                        writeBatch.set(value: nil, for: [
+                            "receiver",
+                            recipientUserId,
+                            SHAssetQuality.midResolution.rawValue,
+                            asset.globalIdentifier
+                           ].joined(separator: "::"))
+                    }
                 }
                 
                 let versionMetadata: [String: Any?] = [
@@ -632,7 +670,7 @@ struct LocalServer : SHServerAPI {
                 writeBatch.set(value: true,
                                for: [
                                 "sender",
-                                senderUserIdentifier,
+                                descriptor.sharingInfo.sharedByUserIdentifier,
                                 encryptedVersion.quality.rawValue,
                                 asset.globalIdentifier
                                ].joined(separator: "::")
@@ -641,17 +679,31 @@ struct LocalServer : SHServerAPI {
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
                     "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
                     "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
-                    "groupId": groupId,
+                    "groupId": senderUploadGroupId,
                     "groupCreationDate": Date().iso8601withFractionalSeconds
                 ]
-                writeBatch.set(value: sharedVersionDetails,
-                               for: [
-                                "receiver",
-                                requestor.identifier,
-                                encryptedVersion.quality.rawValue,
-                                asset.globalIdentifier
-                               ].joined(separator: "::")
+                writeBatch.set(
+                    value: sharedVersionDetails,
+                    for: [
+                        "receiver",
+                        descriptor.sharingInfo.sharedByUserIdentifier,
+                        encryptedVersion.quality.rawValue,
+                        asset.globalIdentifier
+                    ].joined(separator: "::")
                 )
+                for (recipientUserId, recipientGroupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if recipientUserId == descriptor.sharingInfo.sharedByUserIdentifier {
+                        continue
+                    }
+                    writeBatch.set(
+                        value: ["groupId": recipientGroupId],
+                        for: [
+                            "receiver",
+                            recipientUserId,
+                            encryptedVersion.quality.rawValue,
+                            asset.globalIdentifier
+                        ].joined(separator: "::"))
+                }
             }
         }
         
@@ -660,6 +712,8 @@ struct LocalServer : SHServerAPI {
             case .success():
                 var serverAssets = [SHServerAsset]()
                 for asset in assets {
+                    let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier]!
+                    let thisUserGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.requestor.identifier]!
                     var serverAssetVersions = [SHServerAssetVersion]()
                     for encryptedVersion in asset.encryptedVersions.values {
                         serverAssetVersions.append(
@@ -677,7 +731,7 @@ struct LocalServer : SHServerAPI {
                     let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
                                                     localIdentifier: asset.localIdentifier,
                                                     creationDate: asset.creationDate,
-                                                    groupId: groupId,
+                                                    groupId: thisUserGroupId,
                                                     versions: serverAssetVersions)
                     serverAssets.append(serverAsset)
                 }

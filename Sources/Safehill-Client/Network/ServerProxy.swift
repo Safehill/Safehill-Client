@@ -255,7 +255,6 @@ extension SHServerProxy {
     private func cacheAssets(with globalIdentifiers: [String],
                              quality: SHAssetQuality) {
         log.trace("[CACHING] Attempting to cache \(quality.rawValue) for assets \(globalIdentifiers)")
-        let localUserId = self.localServer.requestor.identifier
         
         ///
         /// Get the remote descriptor from the remote server
@@ -287,30 +286,19 @@ extension SHServerProxy {
                         }
                         
                         for (globalIdentifier, encryptedAsset) in encryptedDict {
-                            guard let descriptor = descriptorsByGlobalIdentifier[globalIdentifier] else {
-                                log.error("[CACHING] Could not find descriptor for asset \(globalIdentifier)")
-                                continue
-                            }
-                            
-                            guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[localUserId] else {
-                                log.error("[CACHING] Could not determine group id for asset \(globalIdentifier)")
-                                continue
-                            }
-
                             ///
                             /// Store the asset in the local server (cache)
                             ///
                             self.localServer.create(
                                 assets: [encryptedAsset],
-                                groupId: groupId,
-                                senderUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier
+                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
                             ) {
                                 result in
                                 switch result {
                                 case .success(_):
                                     log.trace("[CACHING] Downloaded and cached \(quality.rawValue) for asset \(globalIdentifier)")
-                                case .failure(_):
-                                    log.error("[CACHING] Unable to save asset \(globalIdentifier) to local server")
+                                case .failure(let error):
+                                    log.error("[CACHING] Unable to save asset \(globalIdentifier) to local server: \(error.localizedDescription)")
                                 }
                             }
                         }
@@ -586,25 +574,9 @@ extension SHServerProxy {
             log.warning("Some assets requested could not be found in the server manifest, shared with you. Skipping those")
         }
         assetIdentifiersToFetch = Array(descriptorsByAssetGlobalId.keys)
-        
-        ///
-        /// Organize assetId by the groupId id used to share with this user (remember, non-shared-backups result in an asset shared with self)
-        ///
-        var assetIdsByGroupId = [String: [String]]()
-        var groupIdToSenderId = [String: String]()
-        for (assetId, descriptor) in descriptorsByAssetGlobalId {
-            let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.localServer.requestor.identifier]!
-            if assetIdsByGroupId[groupId] == nil {
-                assetIdsByGroupId[groupId] = [assetId]
-            } else {
-                assetIdsByGroupId[groupId]!.append(assetId)
-            }
-            
-            ///
-            /// Assume each group has only one sender
-            ///
-            let senderId = descriptor.sharingInfo.sharedByUserIdentifier
-            groupIdToSenderId[groupId] = senderId
+        guard assetIdentifiersToFetch.count > 0 else {
+            completionHandler(.success(localDictionary))
+            return
         }
         
         ///
@@ -639,29 +611,16 @@ extension SHServerProxy {
         }
         
         ///
-        /// Update the local cache with retrieved assets from server, using the proper group identifier
+        /// Create a copy of the assets just fetched from the server in the local server (cache)
         ///
-        
-        for (groupId, assetIds) in assetIdsByGroupId {
-            let encryptedAssets = remoteDictionary.compactMap { (key: String, value: any SHEncryptedAsset) in
-                if assetIds.contains(key) { return value }
-                else { return nil }
-            }
-            
-            guard encryptedAssets.count > 0 else {
-                log.info("No assets found on server for identifiers \(assetIdentifiers)")
-                continue
-            }
-            
-            guard let senderId = groupIdToSenderId[groupId] else {
-                log.error("could not save downloaded server asset to the local cache because sender could not be retrieved. This operation will be attempted again, but for now the cache is out of sync.")
+        for (assetId, descriptor) in descriptorsByAssetGlobalId {
+            guard let encryptedAsset = remoteDictionary[assetId] else {
                 continue
             }
             
             group.enter()
-            self.createLocalAssets(encryptedAssets,
-                                   groupId: groupId,
-                                   senderUserIdentifier: senderId)
+            self.localServer.create(assets: [encryptedAsset],
+                                   descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId)
             { localResult in
                 if case .failure(let err) = localResult {
                     log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
@@ -670,36 +629,12 @@ extension SHServerProxy {
             }
         }
         
-        guard group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * assetIdsByGroupId.count)) == .success else {
+        guard group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * descriptorsByAssetGlobalId.count)) == .success else {
             completionHandler(.failure(SHHTTPError.TransportError.timedOut))
             return
         }
         
         completionHandler(.success(localDictionary.merging(remoteDictionary, uniquingKeysWith: { _, server in server })))
-    }
-    
-    func createLocalAssets(_ assets: [any SHEncryptedAsset],
-                           groupId: String,
-                           senderUserIdentifier: String,
-                           completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ()) {
-        log.info("Creating local assets \(assets.map { $0.globalIdentifier })")
-        
-        self.localServer.create(assets: assets,
-                                groupId: groupId,
-                                senderUserIdentifier: senderUserIdentifier,
-                                completionHandler: completionHandler)
-    }
-    
-    func createRemoteAssets(_ assets: [any SHEncryptedAsset],
-                            groupId: String,
-                            filterVersions: [SHAssetQuality]? = nil,
-                            completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ()) {
-        log.info("Creating server assets \(assets.map { $0.globalIdentifier })")
-        
-        self.remoteServer.create(assets: assets,
-                                 groupId: groupId,
-                                 filterVersions: filterVersions,
-                                 completionHandler: completionHandler)
     }
     
     func upload(serverAsset: SHServerAsset,

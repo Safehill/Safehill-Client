@@ -258,7 +258,7 @@ extension SHServerProxy {
                 try graph.removeEntity(userId)
             }
         } catch {
-            try? SHDBManager.sharedInstance.graph().removeAll()
+            let _ = try? SHDBManager.sharedInstance.graph().removeAll()
             fatalError("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created")
         }
         

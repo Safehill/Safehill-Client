@@ -505,9 +505,11 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
             
             group.enter()
-            serverProxy.createLocalAssets([encryptedAsset],
-                                          groupId: encryptionRequest.groupId,
-                                          senderUserIdentifier: self.user.identifier) { result in
+            serverProxy.localServer.create(
+                assets: [encryptedAsset],
+                groupId: encryptionRequest.groupId,
+                filterVersions: nil
+            ) { result in
                 if case .failure(let err) = result {
                     error = err
                 }
