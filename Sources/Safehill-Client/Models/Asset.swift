@@ -431,7 +431,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 throw SHBackgroundOperationError.unexpectedData(dict)
             }
             
-            guard let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: assetDataByGlobalIdentifierAndQuality[assetIdentifier]![quality]) else {
+            guard let data = assetDataByGlobalIdentifierAndQuality[assetIdentifier]?[quality],
+                  let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: data) else {
                 log.critical("could not deserialize asset version information from dictionary=\(dict)")
                 throw SHBackgroundOperationError.unexpectedData(dict)
             }
