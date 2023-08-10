@@ -52,6 +52,9 @@ public enum SHKGQuery {
             let kgAsset = graph.entity(withIdentifier: assetIdentifier)
             try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
             for userId in receiverUserIds {
+                if userId == senderUserId {
+                    continue
+                }
                 let kgOtherUser = graph.entity(withIdentifier: userId)
                 try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
             }

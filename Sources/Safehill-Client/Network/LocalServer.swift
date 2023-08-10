@@ -612,11 +612,6 @@ struct LocalServer : SHServerAPI {
                 return
             }
             
-            guard let thisUserGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.requestor.identifier] else {
-                completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId specified in descriptor for asset to create for this user: userId=\(self.requestor.identifier)")))
-                return
-            }
-            
             guard let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier] else {
                 completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId specified in descriptor for asset to create for sender user: userId=\(descriptor.sharingInfo.sharedByUserIdentifier)")))
                 return
@@ -713,7 +708,7 @@ struct LocalServer : SHServerAPI {
                 var serverAssets = [SHServerAsset]()
                 for asset in assets {
                     let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier]!
-                    let thisUserGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.requestor.identifier]!
+                    let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier]!
                     var serverAssetVersions = [SHServerAssetVersion]()
                     for encryptedVersion in asset.encryptedVersions.values {
                         serverAssetVersions.append(
@@ -731,7 +726,7 @@ struct LocalServer : SHServerAPI {
                     let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
                                                     localIdentifier: asset.localIdentifier,
                                                     creationDate: asset.creationDate,
-                                                    groupId: thisUserGroupId,
+                                                    groupId: senderUploadGroupId,
                                                     versions: serverAssetVersions)
                     serverAssets.append(serverAsset)
                 }
