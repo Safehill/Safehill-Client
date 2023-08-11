@@ -5,7 +5,7 @@ import os
 
 extension SHServerProxy {
     
-    /// Removes any evidence of the users removed from the local storage:
+    /// Removes any evidence of the users from the local storage:
     /// - Replaces the items in the `ShareHistoryQueue` with the same items by omitting the users removed.
     /// - Removes the sharing information from the `assetsStore`
     ///
@@ -13,7 +13,7 @@ extension SHServerProxy {
     /// - Parameter userIdsToRemoveFromGroup: maps groupId -> list of user ids to remove
     /// - Returns: the list of keys changed and removed in the `SHShareHistoryQueue`
     /// 
-    private func removeUsersFromStores(_ userIdsToRemoveFromGroup: [String: [String]]) -> (changed: [String], removed: [String]) {
+    private func removeUsersFromStores(_ userIdsToRemoveFromGroup: [String: Set<UserIdentifier>]) -> (changed: [String], removed: [String]) {
         
         guard let successfulShareQueue = try? BackgroundOperationQueue.of(type: .successfulShare) else {
             log.error("failed to connect to the successful share queue. users could not be removed from stores")

@@ -117,14 +117,22 @@ public class SHUsersController {
         ServerUserCache.shared.evict(usersWithIdentifiers: userIdentifiers)
         
         group.enter()
-        serverProxy.deleteLocalUsers(withIdentiiers: userIdentifiers) { result in
+        serverProxy.localServer.deleteUsers(withIdentifiers: userIdentifiers) { result in
             if case .failure(let err) = result {
                 error = err
             }
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        group.enter()
+        serverProxy.localServer.unshareAll(with: userIdentifiers) { result in
+            if case .failure(let err) = result {
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds * 2))
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
