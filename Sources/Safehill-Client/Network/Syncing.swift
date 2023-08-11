@@ -249,17 +249,44 @@ extension SHServerProxy {
             }
         }
         
-        let userIdsToRemove = userIdsInDescriptors.subtract(remoteUserIds)
-        ServerUserCache.shared.evict(usersWithIdentifiers: userIdsToRemove)
+        let userIdsToCheckForRemoval = userIdsInDescriptors.subtract(remoteUserIds)
+        var remoteUsersChecked = [SHServerUser]()
         
-        do {
-            let graph = try SHDBManager.sharedInstance.graph()
-            for userId in userIdsToRemove {
-                try graph.removeEntity(userId)
+        group.enter()
+        self.remoteServer.getUsers(withIdentifiers: userIdsToCheckForRemoval) { result in
+            switch result {
+            case .success(let serverUsers):
+                remoteUsersChecked = serverUsers
+            case .failure(let err):
+                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
+                remoteUsersError = err
             }
-        } catch {
-            let _ = try? SHDBManager.sharedInstance.graph().removeAll()
-            fatalError("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created")
+            group.leave()
+        }
+        
+        let dispatchResult2 = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult2 == .success else {
+            completionHandler(.failure(SHBackgroundOperationError.timedOut))
+            return
+        }
+        guard remoteUsersError == nil else {
+            completionHandler(.failure(remoteUsersError!))
+            return
+        }
+        
+        let userIdsToRemove = userIdsToCheckForRemoval.subtract(remoteUsersChecked.map({ $0.identifier }))
+        if userIdsToRemove.count > 0 {
+            ServerUserCache.shared.evict(usersWithIdentifiers: userIdsToRemove)
+            
+            do {
+                let graph = try SHDBManager.sharedInstance.graph()
+                for userId in userIdsToRemove {
+                    try graph.removeEntity(userId)
+                }
+            } catch {
+                let _ = try? SHDBManager.sharedInstance.graph().removeAll()
+                fatalError("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created")
+            }
         }
         
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
