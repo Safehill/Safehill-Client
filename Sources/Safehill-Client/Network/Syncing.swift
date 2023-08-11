@@ -276,7 +276,11 @@ extension SHServerProxy {
         
         let userIdsToRemove = userIdsToCheckForRemoval.subtract(remoteUsersChecked.map({ $0.identifier }))
         if userIdsToRemove.count > 0 {
-            ServerUserCache.shared.evict(usersWithIdentifiers: userIdsToRemove)
+            do {
+                try SHUsersController(localUser: self.localServer.requestor).deleteUsers(withIdentifiers: userIdsToRemove)
+            } catch {
+                log.warning("error removing local users, but this operation will be retried")
+            }
             
             do {
                 let graph = try SHDBManager.sharedInstance.graph()
@@ -285,7 +289,7 @@ extension SHServerProxy {
                 }
             } catch {
                 let _ = try? SHDBManager.sharedInstance.graph().removeAll()
-                fatalError("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created")
+                log.warning("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created, but this operation will be retried")
             }
         }
         

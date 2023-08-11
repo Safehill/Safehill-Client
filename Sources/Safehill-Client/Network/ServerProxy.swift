@@ -54,6 +54,11 @@ extension SHServerProxy {
         }
     }
     
+    public func deleteLocalUsers(withIdentiiers identifiers: [UserIdentifier],
+                                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.localServer.deleteUsers(withIdentifiers: identifiers, completionHandler: completionHandler)
+    }
+    
     public func signInWithApple(email: String,
                                 name: String,
                                 authorizationCode: Data,

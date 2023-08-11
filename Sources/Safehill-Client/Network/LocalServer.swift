@@ -64,10 +64,10 @@ struct LocalServer : SHServerAPI {
     }
     
     internal func createUser(identifier: String,
-                            name: String,
-                            publicKeyData: Data,
-                            publicSignatureData: Data,
-                            completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+                             name: String,
+                             publicKeyData: Data,
+                             publicSignatureData: Data,
+                             completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         let userStore: KBKVStore
         do {
             userStore = try SHDBManager.sharedInstance.userStore()
@@ -149,6 +149,31 @@ struct LocalServer : SHServerAPI {
     
     func createUser(name: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         self.createUser(name: name, ssoIdentifier: nil, completionHandler: completionHandler)
+    }
+    
+    func deleteUsers(withIdentifiers identifiers: [UserIdentifier],
+                     completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var condition = KBGenericCondition(value: false)
+        for userIdentifier in identifiers {
+            condition = condition.or(KBGenericCondition(.equal, value: userIdentifier))
+        }
+        
+        userStore.removeValues(forKeysMatching: condition) { getResult in
+            switch getResult {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {

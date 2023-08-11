@@ -241,7 +241,7 @@ private extension SHAssetDownloadController {
         for descr in descriptors {
             let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
             var newAssetGIdList: [GlobalIdentifier]
-            if var assetGIdList = try userStore.value(for: key) as? [String] {
+            if let assetGIdList = try userStore.value(for: key) as? [String] {
                 newAssetGIdList = updatedKVs[key] ?? assetGIdList
             } else {
                 newAssetGIdList = updatedKVs[key] ?? []

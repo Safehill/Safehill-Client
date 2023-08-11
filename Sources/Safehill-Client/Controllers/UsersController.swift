@@ -109,4 +109,27 @@ public class SHUsersController {
         
         return users
     }
+    
+    internal func deleteUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws {
+        var error: Error? = nil
+        let group = DispatchGroup()
+        
+        ServerUserCache.shared.evict(usersWithIdentifiers: userIdentifiers)
+        
+        group.enter()
+        serverProxy.deleteLocalUsers(withIdentiiers: userIdentifiers) { result in
+            if case .failure(let err) = result {
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+    }
 }
