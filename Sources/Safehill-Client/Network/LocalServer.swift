@@ -872,7 +872,7 @@ struct LocalServer : SHServerAPI {
         
         var condition = KBGenericCondition(value: false)
         for userIdentifier in userIdentifiers {
-            condition = condition.or(KBGenericCondition(.equal, value: [
+            condition = condition.or(KBGenericCondition(.beginsWith, value: [
                 "receiver",
                 userIdentifier,
             ].joined(separator: "::")))
