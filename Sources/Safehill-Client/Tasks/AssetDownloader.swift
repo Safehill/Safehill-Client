@@ -28,7 +28,7 @@ struct DownloadBlacklist {
                 try self.blacklistUserStorage.set(value: newValue,
                                                   for: kSHUsersBlacklistKey)
             } catch {
-                log.warning("Unable to record kSHUserBlacklistKey status in UserDefaults KBKVStore")
+                log.warning("[sync] unable to record kSHUserBlacklistKey status in UserDefaults KBKVStore")
             }
         }
     }
@@ -125,7 +125,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         var errorsByAssetId = [String: Error]()
         
-        log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
+        log.info("[sync] downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
             versions: [quality]
@@ -167,11 +167,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 completionHandler(.success(errorsByAssetId))
             case .failure(let err):
                 DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
-                self.log.critical("Unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
+                self.log.critical("[sync] unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
                 completionHandler(.failure(err))
             }
             let end = CFAbsoluteTimeGetCurrent()
-            self.log.debug("[PERF] \(CFAbsoluteTime(end - start)) for version \(quality.rawValue)")
+            self.log.debug("[sync][PERF] \(CFAbsoluteTime(end - start)) for version \(quality.rawValue)")
         }
     }
     
@@ -329,7 +329,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         do {
             users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
         } catch {
-            self.log.error("Unable to fetch users from server: \(error.localizedDescription)")
+            self.log.error("[sync] unable to fetch users from server: \(error.localizedDescription)")
             completionHandler(.failure(error))
             return
         }
@@ -393,7 +393,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         if descriptorsForAssetsToDownload.count > 0 {
-            log.debug("remote descriptors = \(remoteDescriptors.count). non-blacklisted = \(descriptorsForAssetsToDownload.count)")
+            log.debug("[sync] remote descriptors = \(remoteDescriptors.count). non-blacklisted = \(descriptorsForAssetsToDownload.count)")
         } else {
             completionHandler(.success(()))
             return
@@ -419,7 +419,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
         let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
         
-        self.log.info("found \(descriptorsForAssetsToDownload.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
+        self.log.info("[sync] found \(descriptorsForAssetsToDownload.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
         let downloadController = SHAssetDownloadController(user: self.user, delegate: self.delegate)
         
@@ -437,7 +437,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             downloadController.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
                 switch result {
                 case .failure(let error):
-                    self.log.critical("failed to enqueue unauthorized download for \(remoteDescriptors.count) descriptors. \(error.localizedDescription)")
+                    self.log.warning("[sync] failed to enqueue unauthorized download for \(remoteDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
                 default: break
                 }
             }
@@ -458,7 +458,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     completionHandler(.failure(error))
                 case .success():
                     let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
+                    self.log.debug("[sync][PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
                     completionHandler(.success(()))
                 }
             }
@@ -487,7 +487,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         do {
             var count = 1
             guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
-                self.log.error("Unable to connect to local queue or database")
+                self.log.error("[sync] unable to connect to local queue or database")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
                 return
             }
@@ -495,14 +495,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             while let item = try queue.peek() {
                 let start = CFAbsoluteTimeGetCurrent()
                 
-                log.info("downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
+                log.info("[sync] downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
                 guard let downloadRequest = try? content(ofQueueItem: item) as? SHDownloadRequestQueueItem else {
-                    log.error("unexpected data found in DOWNLOAD queue. Dequeueing")
+                    log.error("[sync] unexpected data found in DOWNLOAD queue. Dequeueing")
                     
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[sync] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
                     self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: nil)
@@ -510,11 +510,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
                 
                 guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
-                    self.log.info("Skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
+                    self.log.info("[sync] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
                     
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[sync] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
                     self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: nil)
@@ -563,24 +563,24 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 guard dispatchResult == .success, shouldContinue == true else {
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[sync] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
                     continue
                 }
                 
                 let end = CFAbsoluteTimeGetCurrent()
-                log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
+                log.debug("[sync][PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
                 
                 do { _ = try queue.dequeue() }
                 catch {
-                    log.warning("asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
+                    log.warning("[sync] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
                 }
                 
                 count += 1
                 
                 guard !self.isCancelled else {
-                    log.info("download task cancelled. Finishing")
+                    log.info("[sync] download task cancelled. Finishing")
                     state = .finished
                     break
                 }
@@ -589,7 +589,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             completionHandler(.success(()))
             
         } catch {
-            log.error("error executing download task: \(error.localizedDescription)")
+            log.error("[sync] error executing download task: \(error.localizedDescription)")
             completionHandler(.failure(error))
         }
     }
@@ -603,7 +603,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         self.downloadDescriptors { result in
             switch result {
             case .failure(let error):
-                self.log.error("failed to download descriptors: \(error.localizedDescription)")
+                self.log.error("[sync] failed to download descriptors: \(error.localizedDescription)")
                 completionHandler(.failure(error))
             case .success():
                 ///
@@ -612,7 +612,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 ///
                 self.downloadAssets { result in
                     if case .failure(let error) = result {
-                        self.log.error("failed to download assets: \(error.localizedDescription)")
+                        self.log.error("[sync] failed to download assets: \(error.localizedDescription)")
                         completionHandler(.failure(error))
                     } else {
                         completionHandler(.success(()))
@@ -654,7 +654,7 @@ extension SHDownloadOperation {
     private func updateHistoryQueues(with descriptorsByLocalIdentifier: [String: any SHAssetDescriptor],
                                     users: [SHServerUser]) {
         guard let queue = try? BackgroundOperationQueue.of(type: .successfulUpload) else {
-            self.log.error("Unable to connect to local queue or database")
+            self.log.error("[sync] unable to connect to local queue or database")
             return
         }
         
@@ -673,7 +673,7 @@ extension SHDownloadOperation {
                 
                 guard let eventOriginator = eventOriginator,
                       eventOriginator.identifier == self.user.identifier else {
-                    log.warning("Can't mark a local asset as backed up if not owned by this user \(self.user.name)")
+                    log.warning("[sync] can't mark a local asset as backed up if not owned by this user \(self.user.name)")
                     break
                 }
                 
@@ -686,7 +686,7 @@ extension SHDownloadOperation {
                 }
                 
                 guard let groupId = groupId else {
-                    log.warning("The asset descriptor sharing information doesn't seem to include the event originator")
+                    log.warning("[sync] the asset descriptor sharing information doesn't seem to include the event originator")
                     break
                 }
                 
