@@ -62,16 +62,24 @@ extension LocalServer {
         return removed.count > 0
     }
     
-    public func runDataMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
+    ///
+    /// Data cleanup to perform at application launch when requested, for data that can be re-generated on sync:
+    ///
+    /// 1. Remove from the download queue
+    /// 2. Remove from the download authorization queue
+    /// 3. Reset the knowledgegraph
+    ///
+    public func runDataCleanup(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
+        } catch {
+            log.warning("failed to remove authorization requests from the local user store")
+            completionHandler(.failure(error))
+            return
+        }
         
-        ///
-        /// STEP 1: Data cleanup at launch
-        ///
-        /// Avoid downloads in progress that are no longer relevant. Next time remote descriptors are pulled the new manifest of downloads is re-generated:
-        /// 1.1. Remove from the download queue
-        /// 1.2. Remove from the download authorization queue
-        ///
         let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload, .download]
         for queueType in queuesToClear {
             do {
@@ -84,26 +92,27 @@ extension LocalServer {
             }
         }
         
-        let userStore: KBKVStore
         do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
-        } catch {
-            log.warning("failed to remove authorization requests from the local user store")
-            completionHandler(.failure(error))
-            return
+            let graph = try SHDBManager.sharedInstance.graph()
+            let _ = try graph.removeAll()
+        }
+        catch {
+            log.warning("Failed to reinitialize the graph")
         }
         
-        /// Remove KnowledgeGraph entries at launch
-//        do {
-//            let _ = try SHDBManager.sharedInstance.graph().removeAll()
-//        } catch {
-//            log.warning("Failed to remove deprecated data from the KnowledgeGraph")
-//        }
+        completionHandler(.success(()))
+    }
+    
+    ///
+    /// Run migration of data from earlier to newer version format
+    ///
+    /// - Parameter completionHandler: the callback method
+    ///
+    public func runDataMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
         ///
-        /// STEP 2: Data migrations (for older versions)
-        /// 2.1. Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
+        /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
         ///
         
         let assetStore: KBKVStore
