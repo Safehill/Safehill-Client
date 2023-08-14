@@ -656,16 +656,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)", attributes: .concurrent)
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
-        let group = DispatchGroup()
-        
         for encryptedAssetVersion in asset.encryptedVersions.values {
             guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
                 continue
             }
             
             log.info("uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
-            
-            group.enter()
             
             let serverAssetVersion = serverAsset.versions.first { sav in
                 sav.versionName == encryptedAssetVersion.quality.rawValue
@@ -680,52 +676,25 @@ struct SHServerHTTPAPI : SHServerAPI {
                 break
             }
             
-            let inBackground = serverAssetVersion.versionName == SHAssetQuality.lowResolution.rawValue ? false : true
-            
-            if inBackground {
-                S3Proxy.saveInBackground(
-                    encryptedAssetVersion.encryptedData,
-                    usingPresignedURL: url,
-                    sessionIdentifier: [
-                        self.requestor.shUser.identifier,
-                        serverAsset.globalIdentifier,
-                        serverAssetVersion.versionName
-                    ].joined(separator: "::")
-                ) {
-                        result in
-                        if case .success(_) = result {
-                            self.markAsset(with: asset.globalIdentifier,
-                                           quality: encryptedAssetVersion.quality,
-                                           as: .completed) { _ in
-                            }
-                        }
-                    }
-                group.leave()
-            } else {
-                S3Proxy.save(
-                    encryptedAssetVersion.encryptedData,
-                    usingPresignedURL: url
-                ) { result in
-                    writeQueue.sync {
-                        results[encryptedAssetVersion.quality] = result
-                    }
-                    
-                    if case .success(_) = result {
-                        self.markAsset(with: asset.globalIdentifier,
-                                       quality: encryptedAssetVersion.quality,
-                                       as: .completed) { _ in
-                            group.leave()
-                        }
-                    } else {
-                        group.leave()
+            S3Proxy.saveInBackground(
+                encryptedAssetVersion.encryptedData,
+                usingPresignedURL: url,
+                sessionIdentifier: [
+                    self.requestor.shUser.identifier,
+                    serverAsset.globalIdentifier,
+                    serverAssetVersion.versionName
+                ].joined(separator: "::")
+            ) {
+                result in
+                if case .success(_) = result {
+                    self.markAsset(with: asset.globalIdentifier,
+                                   quality: encryptedAssetVersion.quality,
+                                   as: .completed) { _ in
                     }
                 }
             }
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHUploadTimeoutInMilliseconds * asset.encryptedVersions.count))
-        guard dispatchResult == .success else {
-            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+            
+            results[encryptedAssetVersion.quality] = .success(())
         }
         
         writeQueue.sync {
