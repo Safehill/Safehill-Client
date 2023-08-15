@@ -145,6 +145,48 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         }
     }
     
+    /// Fetches one asset from the cache, if available, or from the photo library
+    /// - Parameters:
+    ///   - localIdentifier: the PHAsset local identifier to search
+    ///   - completionHandler: the completion handler
+    public func fetchCameraRollAsset(withLocalIdentifier localIdentifier: String,
+                                     completionHandler: @escaping (Swift.Result<PHAsset?, Error>) -> ()) {
+        var retrievedAsset: PHAsset? = nil
+        
+        if let previousResult = self.cameraRollFetchResult {
+            previousResult.enumerateObjects { phAsset, _, stop in
+                if phAsset.localIdentifier == localIdentifier {
+                    retrievedAsset = phAsset
+                    stop.pointee = true
+                }
+            }
+        }
+        
+        guard retrievedAsset == nil else {
+            completionHandler(.success(retrievedAsset))
+            return
+        }
+        
+        let filters: [SHPhotosFilter] = [
+            .limit(1),
+            .withLocalIdentifiers([localIdentifier])
+        ]
+        SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
+            switch result {
+            case .success(let fetchResult):
+                if fetchResult.count == 1 {
+                    fetchResult.enumerateObjects { phAsset, count, stop in
+                        retrievedPHAsset = phAsset
+                        stop.pointee = true
+                    }
+                }
+                completionHandler(.success(retrievedAsset))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        })
+    }
+    
     /// Fetches the latest assets in the Camera Roll using the Photos Framework in the background and returns a `PHFetchResult`.
     /// If an `index` is available, it also stores the`SHApplePhotoAsset`s corresponding to the assets in the fetch result.
     /// The first operation is executed on the`ingestionQueue`, while the latter on the `processingQueue`.
