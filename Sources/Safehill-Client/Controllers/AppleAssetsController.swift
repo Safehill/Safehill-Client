@@ -67,6 +67,8 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     }
     private let ingestionQueue = DispatchQueue(label: "com.gf.knowledgebase.indexer.photos.ingestion", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.gf.knowledgebase.indexer.photos.processing", qos: .background)
+    /// Time-based cache invalidation
+    private var cacheInvalidateTimer: Timer? = nil
     
     public init(withIndex index: KBKVStore? = nil) {
         self.index = index
@@ -151,32 +153,73 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     ///   - completionHandler: the completion handler
     public func fetchCameraRollAssets(withFilters filters: [SHPhotosFilter],
                                       completionHandler: @escaping (Swift.Result<PHFetchResult<PHAsset>?, Error>) -> ()) {
-        self.ingestionQueue.async { [weak self] in
-            guard let self = self else {
-                return completionHandler(.failure(SHBackgroundOperationError.fatalError("self not available after executing block on the serial queue")))
-            }
-            
-            SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
-                switch result {
-                case .success(let fetchResult):
-                    self.cameraRollFetchResult = fetchResult
-                    
-                    if let _ = self.index {
-                        self.updateIndex(with: self.cameraRollFetchResult!) { result in
-                            switch result {
-                            case .success():
-                                completionHandler(.success(self.cameraRollFetchResult!))
-                            case .failure(let error):
-                                completionHandler(.failure(error))
-                            }
-                        }
-                    } else {
-                        completionHandler(.success(self.cameraRollFetchResult!))
-                    }
-                case .failure(let error):
-                    completionHandler(.failure(error))
+        let refreshCache = {
+            (completionHandler: @escaping (Swift.Result<PHFetchResult<PHAsset>?, Error>) -> ()) in
+            self.ingestionQueue.async { [weak self] in
+                guard let self = self else {
+                    return completionHandler(.failure(SHBackgroundOperationError.fatalError("self not available after executing block on the serial queue")))
                 }
-            })
+                
+                SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
+                    switch result {
+                    case .success(let fetchResult):
+                        self.cameraRollFetchResult = fetchResult
+                        
+                        if let _ = self.index {
+                            self.updateIndex(with: self.cameraRollFetchResult!) { result in
+                                switch result {
+                                case .success():
+                                    completionHandler(.success(self.cameraRollFetchResult!))
+                                case .failure(let error):
+                                    completionHandler(.failure(error))
+                                }
+                            }
+                        } else {
+                            completionHandler(.success(self.cameraRollFetchResult!))
+                        }
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                })
+            }
+        }
+        
+        ///
+        /// If a previous result is available return that immediately, and fetch it again.
+        /// At the same time set the timer for the cache to invalidate after 10 seconds if one is not already set.
+        /// This will ensure that:
+        /// - a cache for the fetch result is preserved for 10 seconds
+        /// - any request to fetch the library within 10 seconds from the last refreshed will be served by the cache
+        
+        if let previousResult = self.cameraRollFetchResult {
+            completionHandler(.success(previousResult))
+            refreshCache { _ in }
+            
+            DispatchQueue.main.async { [weak self] in
+                guard let sself = self else {
+                    return
+                }
+                /// Cache purging after 10 seconds
+                guard sself.cacheInvalidateTimer?.isValid ?? false == false else {
+                    return
+                }
+                sself.cacheInvalidateTimer?.invalidate()
+                sself.cacheInvalidateTimer = Timer.scheduledTimer(
+                    withTimeInterval: 10.0,
+                    repeats: false,
+                    block: { [weak self] (timer) in
+                        guard timer.isValid else {
+                            return
+                        }
+                        guard let sself = self else {
+                            return
+                        }
+                        sself.cameraRollFetchResult = nil
+                    }
+                )
+            }
+        } else {
+            refreshCache(completionHandler)
         }
     }
     
@@ -200,10 +243,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
                         // Asset was modified since cached -> remove from the persistent cache
                         cachedAssetIdsToInvalidate.append(asset.localIdentifier)
                     }
-                } else {
-                    let kvsAssetValue = SHApplePhotoAsset(for: asset, usingCachingImageManager: self.imageManager)
-                    writeBatch.set(value: kvsAssetValue, for: asset.localIdentifier)
                 }
+                let kvsAssetValue = SHApplePhotoAsset(for: asset, usingCachingImageManager: self.imageManager)
+                writeBatch.set(value: kvsAssetValue, for: asset.localIdentifier)
             }
             
             do {
