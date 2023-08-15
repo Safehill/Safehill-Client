@@ -176,7 +176,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
             case .success(let fetchResult):
                 if fetchResult.count == 1 {
                     fetchResult.enumerateObjects { phAsset, count, stop in
-                        retrievedPHAsset = phAsset
+                        retrievedAsset = phAsset
                         stop.pointee = true
                     }
                 }
