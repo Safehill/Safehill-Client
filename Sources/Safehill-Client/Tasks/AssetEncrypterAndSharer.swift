@@ -120,7 +120,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
         }
         
-        
         let successfulShare = SHShareHistoryItem(
             localAssetId: localIdentifier,
             globalAssetId: globalIdentifier,
@@ -329,10 +328,16 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
     }
     
-    public override func runOnce() throws {
-        while let item = try BackgroundOperationQueue.of(type: .share).peek() {
-            guard processingState(for: item.identifier) != .sharing else {
+    public override func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
+        let queue = try BackgroundOperationQueue.of(type: .share)
+        
+        while let item = try queue.peek() {
+            guard maxItems == nil || count < maxItems! else {
                 break
+            }
+            guard processingState(for: item.identifier) != .sharing else {
+                continue
             }
             
             log.info("sharing item \(item.identifier) created at \(item.createdAt)")
@@ -347,6 +352,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
             
             setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

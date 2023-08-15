@@ -325,10 +325,14 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
     }
     
-    public func runOnce() throws {
+    public func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
         
         while let item = try fetchQueue.peek() {
+            guard maxItems == nil || count < maxItems! else {
+                break
+            }
             guard processingState(for: item.identifier) != .fetching else {
                 continue
             }
@@ -344,6 +348,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             
             setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

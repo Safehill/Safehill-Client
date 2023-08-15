@@ -361,11 +361,16 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         }
     }
     
-    public func runOnce() throws {
+    public func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
         let queue = try BackgroundOperationQueue.of(type: .upload)
+        
         while let item = try queue.peek() {
-            guard processingState(for: item.identifier) != .uploading else {
+            guard maxItems == nil || count < maxItems! else {
                 break
+            }
+            guard processingState(for: item.identifier) != .uploading else {
+                continue
             }
             
             log.info("uploading item \(item.identifier) created at \(item.createdAt)")
@@ -380,6 +385,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             }
             
             setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

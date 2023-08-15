@@ -549,11 +549,15 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
     }
     
-    public func runOnce() throws {
+    public func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
         let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
         while let item = try encryptionQueue.peek() {
-            guard processingState(for: item.identifier) != .encrypting else {
+            guard maxItems == nil || count < maxItems! else {
                 break
+            }
+            guard processingState(for: item.identifier) != .encrypting else {
+                continue
             }
             
             log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
@@ -568,6 +572,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             }
             
             setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

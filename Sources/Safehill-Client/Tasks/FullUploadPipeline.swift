@@ -94,33 +94,33 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     }
     
     private func runFetchCycle() throws {
-        var maxFetches: Int = 0 // no limit (parallelization == .aggressive)
+        var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
-            let maxEncryptions = 7
-            let ongoingEncryptions = try BackgroundOperationQueue.of(type: .encryption).keys().count
-            maxFetches = maxEncryptions - ongoingEncryptions
-            guard maxFetches > 0 else {
+            let maxFetches = 7
+            let ongoingFetches = items(inState: .fetching)?.count ?? 0
+            limit = maxFetches - ongoingFetches
+            guard limit! > 0 else {
                 return
             }
         }
         
         let fetchOperation = SHLocalFetchOperation(
             delegates: delegates,
-            limitPerRun: maxFetches,
+            limitPerRun: 0,
             imageManager: imageManager
         )
-        try fetchOperation.runOnce()
+        try fetchOperation.runOnce(maxItems: limit)
     }
     
     private func runEncryptionCycle() throws {
-        var maxEncryptions: Int = 0 // no limit (parallelization == .aggressive)
+        var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
-            let maxUploads = 5
-            let ongoingUploads = try BackgroundOperationQueue.of(type: .upload).keys().count
-            maxEncryptions = maxUploads - ongoingUploads
-            guard maxEncryptions > 0 else {
+            let maxEncryptions = 5
+            let ongoingEncryptions = items(inState: .encrypting)?.count ?? 0
+            limit = maxEncryptions - ongoingEncryptions
+            guard limit! > 0 else {
                 return
             }
         }
@@ -128,20 +128,20 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let encryptOperation = SHEncryptionOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: maxEncryptions,
+            limitPerRun: 0,
             imageManager: imageManager
         )
-        try encryptOperation.runOnce()
+        try encryptOperation.runOnce(maxItems: limit)
     }
     
     private func runUploadCycle() throws {
-        var limit: Int = 0 // no limit (parallelization == .aggressive)
+        var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
             let maxUploads = 5
-            let ongoingUploads = try BackgroundOperationQueue.of(type: .upload).keys().count
+            let ongoingUploads = items(inState: .uploading)?.count ?? 0
             limit = maxUploads - ongoingUploads
-            guard limit > 0 else {
+            guard limit! > 0 else {
                 return
             }
         }
@@ -149,19 +149,19 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let uploadOperation = SHUploadOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: limit
+            limitPerRun: 0
         )
-        try uploadOperation.runOnce()
+        try uploadOperation.runOnce(maxItems: limit)
     }
     
     private func runShareCycle() throws {
-        var limit: Int = 0 // no limit (parallelization == .aggressive)
+        var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
             let maxShares = 10
-            let ongoingShares = try BackgroundOperationQueue.of(type: .share).keys().count
+            let ongoingShares = items(inState: .sharing)?.count ?? 0
             limit = maxShares - ongoingShares
-            guard limit > 0 else {
+            guard limit! > 0 else {
                 return
             }
         }
@@ -169,10 +169,10 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let shareOperation = SHEncryptAndShareOperation(
             user: user,
             delegates: delegates,
-            limitPerRun: limit,
+            limitPerRun: 0,
             imageManager: imageManager
         )
-        try shareOperation.runOnce()
+        try shareOperation.runOnce(maxItems: limit)
     }
     
     public override func main() {
