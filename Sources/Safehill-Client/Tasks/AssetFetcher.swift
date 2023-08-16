@@ -13,20 +13,25 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     public let limit: Int
     public var delegates: [SHOutboundAssetOperationDelegate]
     var imageManager: PHCachingImageManager
+    let photoIndexer: SHPhotosIndexer
     
     public init(delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int,
-                imageManager: PHCachingImageManager? = nil) {
+                imageManager: PHCachingImageManager? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.limit = limit
         self.delegates = delegates
         self.imageManager = imageManager ?? PHCachingImageManager()
+        self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
+        self.photoIndexer.fetchCameraRollAssets(withFilters: []) { _ in }
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHLocalFetchOperation(
             delegates: self.delegates,
             limitPerRun: self.limit,
-            imageManager: self.imageManager
+            imageManager: self.imageManager,
+            photoIndexer: self.photoIndexer
         )
     }
     
@@ -53,61 +58,59 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let localIdentifier = request.localIdentifier
         let versions = request.versions
         
-        let photoIndexer = SHPhotosIndexer()
-        let assetIdFilter = SHPhotosFilter.withLocalIdentifiers([localIdentifier])
         var photoAsset: SHApplePhotoAsset? = nil
         var error: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
-        photoIndexer.fetchCameraRollAssets(withFilters: [assetIdFilter]) {
-            result in
-            if case .failure(let err) = result {
+        photoIndexer.fetchCameraRollAsset(withLocalIdentifier: localIdentifier) { result in
+            switch result {
+            case .failure(let err):
                 error = err
                 group.leave()
                 return
-            }
-            
-            guard let phAsset = photoIndexer.indexedAssets.first else {
-                error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
+            case .success(let maybePHAsset):
+                guard let phAsset = maybePHAsset else {
+                    error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
+                    group.leave()
+                    return
+                }
+                
+                ///
+                /// Fetch the higest-needed resolution asset based on the versions,
+                /// using the same imageManager used to display the asset (so that it's likely that it was already cached by Photos).
+                /// Doing this here avoids fetching large assets from the Apple Photos library in the SHEncryptOperation,
+                /// as cachedImage on the SHApplePhotoAsset will be set here, and will be resized to smaller images
+                /// when generating the SHAssetQuality versions.
+                ///
+                
+                let highestSize: CGSize
+                if versions.contains(.hiResolution) {
+                    highestSize = kSHSizeForQuality(quality: .hiResolution)
+                } else if versions.contains(.midResolution) {
+                    highestSize = kSHSizeForQuality(quality: .midResolution)
+                } else {
+                    highestSize = kSHSizeForQuality(quality: .lowResolution)
+                }
+                 
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.deliveryMode = .highQualityFormat
+                self.imageManager.startCachingImages(for: [phAsset],
+                                                     targetSize: highestSize,
+                                                     contentMode: .default,
+                                                     options: options)
+                
+                self.log.info("asking imageManager \(self.imageManager) to cache image size \(highestSize.debugDescription) for asset \(phAsset.localIdentifier)")
+                
+                photoAsset = SHApplePhotoAsset(
+                    for: phAsset,
+                    cachedImage: nil,
+                    usingCachingImageManager: self.imageManager
+                )
+                
                 group.leave()
-                return
             }
-            
-            ///
-            /// Fetch the higest-needed resolution asset based on the versions,
-            /// using the same imageManager used to display the asset (so that it's likely that it was already cached by Photos).
-            /// Doing this here avoids fetching large assets from the Apple Photos library in the SHEncryptOperation,
-            /// as cachedImage on the SHApplePhotoAsset will be set here, and will be resized to smaller images
-            /// when generating the SHAssetQuality versions.
-            ///
-            
-            let highestSize: CGSize
-            if versions.contains(.hiResolution) {
-                highestSize = kSHSizeForQuality(quality: .hiResolution)
-            } else if versions.contains(.midResolution) {
-                highestSize = kSHSizeForQuality(quality: .midResolution)
-            } else {
-                highestSize = kSHSizeForQuality(quality: .lowResolution)
-            }
-             
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            self.imageManager.startCachingImages(for: [phAsset],
-                                                 targetSize: highestSize,
-                                                 contentMode: .default,
-                                                 options: options)
-            
-            self.log.info("asking imageManager \(self.imageManager) to cache image size \(highestSize.debugDescription) for asset \(phAsset.localIdentifier)")
-            
-            photoAsset = SHApplePhotoAsset(
-                for: phAsset,
-                cachedImage: nil,
-                usingCachingImageManager: self.imageManager
-            )
-            
-            group.leave()
         }
         
         let dispatchResult = group.wait(timeout: .now() + .seconds(30))

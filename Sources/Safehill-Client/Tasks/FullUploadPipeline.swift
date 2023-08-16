@@ -16,24 +16,28 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     public let user: SHLocalUser
     public var delegates: [SHOutboundAssetOperationDelegate]
     var imageManager: PHCachingImageManager
+    var photoIndexer: SHPhotosIndexer?
     
     let parallelization: ParallelizationOption
     
     public init(user: SHLocalUser,
                 delegates: [SHOutboundAssetOperationDelegate],
                 parallelization: ParallelizationOption = .conservative,
-                imageManager: PHCachingImageManager? = nil) {
+                imageManager: PHCachingImageManager? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.user = user
         self.delegates = delegates
         self.parallelization = parallelization
         self.imageManager = imageManager ?? PHCachingImageManager()
+        self.photoIndexer = photoIndexer
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHFullUploadPipelineOperation(
             user: self.user,
             delegates: self.delegates,
-            imageManager: self.imageManager
+            imageManager: self.imageManager,
+            photoIndexer: self.photoIndexer
         )
     }
     
@@ -108,7 +112,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let fetchOperation = SHLocalFetchOperation(
             delegates: delegates,
             limitPerRun: 0,
-            imageManager: imageManager
+            imageManager: imageManager,
+            photoIndexer: photoIndexer
         )
         try fetchOperation.runOnce(maxItems: limit)
     }
