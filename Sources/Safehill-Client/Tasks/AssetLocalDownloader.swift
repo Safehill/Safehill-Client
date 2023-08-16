@@ -11,18 +11,28 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
     override public init(user: SHLocalUser,
                          delegate: SHAssetDownloaderDelegate,
                          outboundDelegates: [SHOutboundAssetOperationDelegate],
-                         limitPerRun limit: Int? = nil) {
+                         limitPerRun limit: Int? = nil,
+                         photoIndexer: SHPhotosIndexer? = nil) {
         self.assetGlobalIdentifiersInCache = []
-        super.init(user: user, delegate: delegate, outboundDelegates: outboundDelegates, limitPerRun: limit)
+        super.init(user: user,
+                   delegate: delegate,
+                   outboundDelegates: outboundDelegates,
+                   limitPerRun: limit,
+                   photoIndexer: photoIndexer)
     }
     
     public init(user: SHLocalUser,
                 assetGlobalIdentifiersInCache: [GlobalIdentifier],
                 delegate: SHAssetDownloaderDelegate,
                 outboundDelegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil) {
+                limitPerRun limit: Int? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.assetGlobalIdentifiersInCache = assetGlobalIdentifiersInCache
-        super.init(user: user, delegate: delegate, outboundDelegates: outboundDelegates, limitPerRun: limit)
+        super.init(user: user,
+                   delegate: delegate,
+                   outboundDelegates: outboundDelegates,
+                   limitPerRun: limit,
+                   photoIndexer: photoIndexer)
     }
     
     private func fetchLocalDescriptors(completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void) {

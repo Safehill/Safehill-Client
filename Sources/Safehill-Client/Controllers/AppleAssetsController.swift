@@ -227,41 +227,42 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         }
         
         ///
-        /// If a previous result is available return that immediately, and fetch it again.
-        /// At the same time set the timer for the cache to invalidate after 10 seconds if one is not already set.
-        /// This will ensure that:
-        /// - a cache for the fetch result is preserved for 10 seconds
-        /// - any request to fetch the library within 10 seconds from the last refreshed will be served by the cache
+        /// Cache full library results and retrieve from the cache when the full library is requested.
+        /// Invalidate the cache after 30 seconds of setting it.
+        ///
         
-        if let previousResult = self.cameraRollFetchResult {
+        if let previousResult = self.cameraRollFetchResult,
+           filters.count == 0
+        {
             completionHandler(.success(previousResult))
-            refreshCache { _ in }
-            
-            DispatchQueue.main.async { [weak self] in
-                guard let sself = self else {
-                    return
-                }
-                /// Cache purging after 10 seconds
-                guard sself.cacheInvalidateTimer?.isValid ?? false == false else {
-                    return
-                }
-                sself.cacheInvalidateTimer?.invalidate()
-                sself.cacheInvalidateTimer = Timer.scheduledTimer(
-                    withTimeInterval: 10.0,
-                    repeats: false,
-                    block: { [weak self] (timer) in
-                        guard timer.isValid else {
-                            return
-                        }
+        } else {
+            refreshCache { result in
+                if case .success(_) = result {
+                    DispatchQueue.main.async { [weak self] in
                         guard let sself = self else {
                             return
                         }
-                        sself.cameraRollFetchResult = nil
+                        /// If a timer is already running, keep the current one
+                        guard sself.cacheInvalidateTimer?.isValid ?? false == false else {
+                            return
+                        }
+                        sself.cacheInvalidateTimer?.invalidate()
+                        sself.cacheInvalidateTimer = Timer.scheduledTimer(
+                            withTimeInterval: 30.0,
+                            repeats: false,
+                            block: { [weak self] (timer) in
+                                guard timer.isValid else {
+                                    return
+                                }
+                                self?.ingestionQueue.async { [weak self] in
+                                    self?.cameraRollFetchResult = nil
+                                }
+                            }
+                        )
                     }
-                )
+                }
+                completionHandler(result)
             }
-        } else {
-            refreshCache(completionHandler)
         }
     }
     

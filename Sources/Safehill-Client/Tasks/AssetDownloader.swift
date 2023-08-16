@@ -95,15 +95,18 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     let user: SHLocalUser
     let delegate: SHAssetDownloaderDelegate
     let outboundDelegates: [SHOutboundAssetOperationDelegate]
+    let photoIndexer: SHPhotosIndexer
     
     public init(user: SHLocalUser,
                 delegate: SHAssetDownloaderDelegate,
                 outboundDelegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil) {
+                limitPerRun limit: Int? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.user = user
         self.limit = limit
         self.delegate = delegate
         self.outboundDelegates = outboundDelegates
+        self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
     }
     
     var serverProxy: SHServerProxy {
@@ -111,10 +114,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
-        SHDownloadOperation(user: self.user,
-                            delegate: self.delegate,
-                            outboundDelegates: self.outboundDelegates,
-                            limitPerRun: self.limit)
+        SHDownloadOperation(
+            user: self.user,
+            delegate: self.delegate,
+            outboundDelegates: self.outboundDelegates,
+            limitPerRun: self.limit,
+            photoIndexer: self.photoIndexer
+        )
     }
     
     private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: String,
@@ -233,7 +239,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         group.enter()
-        let photoIndexer = SHPhotosIndexer()
         photoIndexer.fetchCameraRollAssets(withFilters: []) { result in
             switch result {
             case .success(let fullFetchResult):
