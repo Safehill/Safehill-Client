@@ -32,17 +32,6 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     
     private var cameraRollFetchResult: PHFetchResult<PHAsset>? = nil
     
-    public var indexedAssets: [PHAsset] {
-        var indexedAssets = [PHAsset]()
-        guard let cameraRollFetchResult = cameraRollFetchResult else {
-            return indexedAssets
-        }
-        cameraRollFetchResult.enumerateObjects { phAsset, _, _ in
-            indexedAssets.append(phAsset)
-        }
-        return indexedAssets
-    }
-    
     public var authorizationStatus: PHAuthorizationStatus {
         get {
             do {
@@ -101,7 +90,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         )
     }
     
-    public static func fetchResult(using filters: [SHPhotosFilter],
+    private static func fetchResult(using filters: [SHPhotosFilter],
                                    completionHandler: @escaping (Swift.Result<PHFetchResult<PHAsset>, Error>) -> ()) {
         // Get all the camera roll photos and videos
         let albumFetchResult = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: nil)

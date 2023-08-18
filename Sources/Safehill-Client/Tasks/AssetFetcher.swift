@@ -59,6 +59,11 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let versions = request.versions
         
         var photoAsset: SHApplePhotoAsset? = nil
+        
+        if let value = try? photoIndexer.index?.value(for: localIdentifier) as? SHApplePhotoAsset {
+            return value
+        }
+        
         var error: Error? = nil
         let group = DispatchGroup()
         
