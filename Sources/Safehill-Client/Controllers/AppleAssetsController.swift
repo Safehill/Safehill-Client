@@ -56,8 +56,6 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     }
     private let ingestionQueue = DispatchQueue(label: "com.gf.knowledgebase.indexer.photos.ingestion", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.gf.knowledgebase.indexer.photos.processing", qos: .background)
-    /// Time-based cache invalidation
-    private var cacheInvalidateTimer: Timer? = nil
     
     public init(withIndex index: KBKVStore? = nil) {
         self.index = index
@@ -225,33 +223,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         {
             completionHandler(.success(previousResult))
         } else {
-            refreshCache { result in
-                if case .success(_) = result {
-                    DispatchQueue.main.async { [weak self] in
-                        guard let sself = self else {
-                            return
-                        }
-                        /// If a timer is already running, keep the current one
-                        guard sself.cacheInvalidateTimer?.isValid ?? false == false else {
-                            return
-                        }
-                        sself.cacheInvalidateTimer?.invalidate()
-                        sself.cacheInvalidateTimer = Timer.scheduledTimer(
-                            withTimeInterval: 30.0,
-                            repeats: false,
-                            block: { [weak self] (timer) in
-                                guard timer.isValid else {
-                                    return
-                                }
-                                self?.ingestionQueue.async { [weak self] in
-                                    self?.cameraRollFetchResult = nil
-                                }
-                            }
-                        )
-                    }
-                }
-                completionHandler(result)
-            }
+            refreshCache(completionHandler)
         }
     }
     
