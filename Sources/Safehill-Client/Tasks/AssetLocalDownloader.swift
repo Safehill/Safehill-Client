@@ -121,7 +121,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
                     self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
                 } catch {
-                    log.error("[KG] failed to ingest some descriptor into the graph")
+                    self.log.error("[KG] failed to ingest some descriptor into the graph")
                 }
             }
         }
