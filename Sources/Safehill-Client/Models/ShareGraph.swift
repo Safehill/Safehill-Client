@@ -24,6 +24,7 @@ public enum SHKGQuery {
     internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: String) throws {
         var errors = [Error]()
         
+        // TODO: We need support for writebatch (transaction) in KGGraph. DB writes in a for loop is never a good idea
         for descriptor in descriptors {
             do {
                 var allReceivers = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
