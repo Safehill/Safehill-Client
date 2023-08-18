@@ -175,25 +175,27 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     return
                 }
                 
-                for (assetId, encryptedAsset) in encryptedAssets {
-                    guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
-                        fatalError("malformed descriptorsByGlobalIdentifier")
-                    }
-                    guard let groupId = self.findGroupIdForSelfUser(for: descriptor) else {
-                        continue
-                    }
-                    
-                    do {
-                        let decryptedAsset = try localAssetsStore.decryptedAsset(
-                            encryptedAsset: encryptedAsset,
-                            quality: .lowResolution,
-                            descriptor: descriptor
-                        )
+                DispatchQueue.global(qos: .background).async {
+                    for (assetId, encryptedAsset) in encryptedAssets {
+                        guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
+                            fatalError("malformed descriptorsByGlobalIdentifier")
+                        }
+                        guard let groupId = self.findGroupIdForSelfUser(for: descriptor) else {
+                            continue
+                        }
                         
-                        self.delegate.handleLowResAsset(decryptedAsset)
-                        self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
-                    } catch {
-                        self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+                        do {
+                            let decryptedAsset = try localAssetsStore.decryptedAsset(
+                                encryptedAsset: encryptedAsset,
+                                quality: .lowResolution,
+                                descriptor: descriptor
+                            )
+                            
+                            self.delegate.handleLowResAsset(decryptedAsset)
+                            self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                        } catch {
+                            self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+                        }
                     }
                 }
                 
