@@ -16,7 +16,7 @@ public enum SHPhotosFilter {
     case withLocalIdentifiers([String]), after(Date), before(Date), afterOrOn(Date), beforeOrOn(Date), limit(Int)
 }
 
-public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
+public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLibraryAvailabilityObserver {
     
     // TODO: Maybe hashing can be handled better by overriding Hashable/Equatable? That would also make it unnecessarily complex though :(
     public var identifier: String {
@@ -255,10 +255,20 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
             return
         }
         
+        let changeDetails = changeInstance.changeDetails(for: cameraRoll)
+        guard changeDetails = changeDetails else {
+            return
+        }
+        
         self.processingQueue.async {
-            let changeDetails = changeInstance.changeDetails(for: cameraRoll)
-            let totalCount = (changeDetails?.insertedObjects.count ?? 0) + (changeDetails?.removedObjects.count ?? 0) + (changeDetails?.changedObjects.count ?? 0)
-            if let changeDetails = changeDetails, totalCount > 0 {
+            if changeDetails?.hasIncrementalChanges {
+                let totalCount = (changeDetails?.insertedObjects.count ?? 0) + (changeDetails?.removedObjects.count ?? 0) + (changeDetails?.changedObjects.count ?? 0)
+                
+                guard totalCount > 0 else {
+                    log.warning("Notified of changes but no change detected")
+                    return
+                }
+                
                 self.lastFetchResult = changeDetails.fetchResultAfterChanges
                 let writeBatch = self.index?.writeBatch()
                 
@@ -286,10 +296,13 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
                     }
                 }
             } else {
-                log.warning("No changes in camera roll. Assuming authorization changed")
-                let _ = self.delegates.map { $0.value.authorizationChanged() }
+                self.fetchCameraRollAssets(withFilters: []) { _ in }
             }
         }
+    }
+    
+    public func photoLibraryDidBecomeUnavailable(_ photoLibrary: PHPhotoLibrary) {
+        self.delegates.forEach { $0.value.authorizationChanged() }
     }
 }
 
