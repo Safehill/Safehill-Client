@@ -253,12 +253,13 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
         guard let cameraRoll = self.lastFetchResult else {
-            log.warning("No assets were ever fetched. Ignoring change notification")
+            log.warning("No assets were ever fetched. Ignoring the change notification")
             return
         }
         
         let changeDetails = changeInstance.changeDetails(for: cameraRoll)
         guard let changeDetails = changeDetails else {
+            log.warning("Notified about change but no change object. Ignoring the notification")
             return
         }
         
@@ -279,18 +280,22 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                 let writeBatch = self.index?.writeBatch()
                 
                 // Inserted
-                for asset in changeDetails.insertedObjects {
-                    writeBatch?.set(value: SHApplePhotoAsset(for: asset), for: asset.localIdentifier)
-                }
-                for delegate in self.delegates.values {
-                    delegate.didAddToCameraRoll(assets: changeDetails.insertedObjects)
+                if changeDetails.insertedObjects.count > 0 {
+                    for asset in changeDetails.insertedObjects {
+                        writeBatch?.set(value: SHApplePhotoAsset(for: asset), for: asset.localIdentifier)
+                    }
+                    for delegate in self.delegates.values {
+                        delegate.didAddToCameraRoll(assets: changeDetails.insertedObjects)
+                    }
                 }
                 // Removed
-                for asset in changeDetails.removedObjects {
-                    writeBatch?.set(value: nil, for: asset.localIdentifier)
-                }
-                for delegate in self.delegates.values {
-                    delegate.didRemoveFromCameraRoll(assets: changeDetails.removedObjects)
+                if changeDetails.removedObjects.count > 0 {
+                    for asset in changeDetails.removedObjects {
+                        writeBatch?.set(value: nil, for: asset.localIdentifier)
+                    }
+                    for delegate in self.delegates.values {
+                        delegate.didRemoveFromCameraRoll(assets: changeDetails.removedObjects)
+                    }
                 }
                 
                 if let index = self.index {
