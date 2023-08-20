@@ -10,6 +10,7 @@ public protocol SHPhotoAssetChangeDelegate {
     func authorizationChanged()
     func didAddToCameraRoll(assets: [PHAsset])
     func didRemoveFromCameraRoll(assets: [PHAsset])
+    func needsToFetchWholeLibrary()
 }
 
 public enum SHPhotosFilter {
@@ -50,7 +51,8 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                 log.warning("Unable to record kSHPhotosAuthorizationStatusKey status in UserDefaults KBKVStore")
             }
             if [.authorized, .limited].contains(newValue) {
-                PHPhotoLibrary.shared().register(self)
+                PHPhotoLibrary.shared().register(self as PHPhotoLibraryChangeObserver)
+                PHPhotoLibrary.shared().register(self as PHPhotoLibraryAvailabilityObserver)
             }
         }
     }
@@ -256,13 +258,17 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
         }
         
         let changeDetails = changeInstance.changeDetails(for: cameraRoll)
-        guard changeDetails = changeDetails else {
+        guard let changeDetails = changeDetails else {
             return
         }
         
         self.processingQueue.async {
-            if changeDetails?.hasIncrementalChanges {
-                let totalCount = (changeDetails?.insertedObjects.count ?? 0) + (changeDetails?.removedObjects.count ?? 0) + (changeDetails?.changedObjects.count ?? 0)
+            if changeDetails.hasIncrementalChanges {
+                let totalCount = (
+                    changeDetails.insertedObjects.count
+                    + changeDetails.removedObjects.count
+                    + changeDetails.changedObjects.count
+                )
                 
                 guard totalCount > 0 else {
                     log.warning("Notified of changes but no change detected")
@@ -296,7 +302,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     }
                 }
             } else {
-                self.fetchCameraRollAssets(withFilters: []) { _ in }
+                self.fetchCameraRollAssets(withFilters: []) { _ in
+                    self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
+                }
             }
         }
     }
