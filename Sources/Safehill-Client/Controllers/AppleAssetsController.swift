@@ -30,7 +30,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     public let index: KBKVStore?
     public let imageManager: PHCachingImageManager
     
-    private var cameraRollFetchResult: PHFetchResult<PHAsset>? = nil
+    private var lastFetchResult: PHFetchResult<PHAsset>? = nil
     
     public var authorizationStatus: PHAuthorizationStatus {
         get {
@@ -140,7 +140,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
                                      completionHandler: @escaping (Swift.Result<PHAsset?, Error>) -> ()) {
         var retrievedAsset: PHAsset? = nil
         
-        if let previousResult = self.cameraRollFetchResult {
+        if let previousResult = self.lastFetchResult {
             previousResult.enumerateObjects { phAsset, _, stop in
                 if phAsset.localIdentifier == localIdentifier {
                     retrievedAsset = phAsset
@@ -182,48 +182,32 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     ///   - completionHandler: the completion handler
     public func fetchCameraRollAssets(withFilters filters: [SHPhotosFilter],
                                       completionHandler: @escaping (Swift.Result<PHFetchResult<PHAsset>?, Error>) -> ()) {
-        let refreshCache = {
-            (completionHandler: @escaping (Swift.Result<PHFetchResult<PHAsset>?, Error>) -> ()) in
-            self.ingestionQueue.async { [weak self] in
-                guard let self = self else {
-                    return completionHandler(.failure(SHBackgroundOperationError.fatalError("self not available after executing block on the serial queue")))
-                }
-                
-                SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
-                    switch result {
-                    case .success(let fetchResult):
-                        self.cameraRollFetchResult = fetchResult
-                        
-                        if let _ = self.index {
-                            self.updateIndex(with: self.cameraRollFetchResult!) { result in
-                                switch result {
-                                case .success():
-                                    completionHandler(.success(self.cameraRollFetchResult!))
-                                case .failure(let error):
-                                    completionHandler(.failure(error))
-                                }
-                            }
-                        } else {
-                            completionHandler(.success(self.cameraRollFetchResult!))
-                        }
-                    case .failure(let error):
-                        completionHandler(.failure(error))
-                    }
-                })
+        self.ingestionQueue.async { [weak self] in
+            guard let self = self else {
+                return completionHandler(.failure(SHBackgroundOperationError.fatalError("self not available after executing block on the serial queue")))
             }
-        }
-        
-        ///
-        /// Cache full library results and retrieve from the cache when the full library is requested.
-        /// Invalidate the cache after 30 seconds of setting it.
-        ///
-        
-        if let previousResult = self.cameraRollFetchResult,
-           filters.count == 0
-        {
-            completionHandler(.success(previousResult))
-        } else {
-            refreshCache(completionHandler)
+            
+            SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
+                switch result {
+                case .success(let fetchResult):
+                    self.lastFetchResult = fetchResult
+                    
+                    if let _ = self.index {
+                        self.updateIndex(with: fetchResult) { result in
+                            switch result {
+                            case .success():
+                                completionHandler(.success(fetchResult))
+                            case .failure(let error):
+                                completionHandler(.failure(error))
+                            }
+                        }
+                    } else {
+                        completionHandler(.success(fetchResult))
+                    }
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            })
         }
     }
     
@@ -266,7 +250,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     // MARK: PHPhotoLibraryChangeObserver protocol
     
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        guard let cameraRoll = self.cameraRollFetchResult else {
+        guard let cameraRoll = self.lastFetchResult else {
             log.warning("No assets were ever fetched. Ignoring change notification")
             return
         }
@@ -275,7 +259,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
             let changeDetails = changeInstance.changeDetails(for: cameraRoll)
             let totalCount = (changeDetails?.insertedObjects.count ?? 0) + (changeDetails?.removedObjects.count ?? 0) + (changeDetails?.changedObjects.count ?? 0)
             if let changeDetails = changeDetails, totalCount > 0 {
-                self.cameraRollFetchResult = changeDetails.fetchResultAfterChanges
+                self.lastFetchResult = changeDetails.fetchResultAfterChanges
                 let writeBatch = self.index?.writeBatch()
                 
                 // Inserted
