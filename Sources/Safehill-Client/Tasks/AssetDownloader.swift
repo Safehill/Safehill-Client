@@ -740,7 +740,7 @@ public class SHAssetsDownloadQueueProcessor : SHBackgroundOperationProcessor<SHD
     
     public static var shared = SHAssetsDownloadQueueProcessor(
         delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 5
+        dispatchIntervalInSeconds: 7
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {
