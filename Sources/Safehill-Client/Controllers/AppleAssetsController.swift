@@ -31,7 +31,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     public let index: KBKVStore?
     public let imageManager: PHCachingImageManager
     
-    private var lastFetchResult: PHFetchResult<PHAsset>? = nil
+    public var lastFetchResult: PHFetchResult<PHAsset>? = nil
     
     public var authorizationStatus: PHAuthorizationStatus {
         get {
