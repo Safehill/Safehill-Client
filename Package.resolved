@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/Safehill/Safehill-Crypto.git",
         "state": {
           "branch": null,
-          "revision": "8e28301440bf2d4d59e9c346def90c6784433872",
-          "version": "1.1.6"
+          "revision": "8bfe6a5f37040c1f0bf334288f3086092b82904c",
+          "version": "1.1.9"
         }
       },
       {
@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/apple/swift-crypto.git",
         "state": {
           "branch": null,
-          "revision": "33a20e650c33f6d72d822d558333f2085effa3dc",
-          "version": "2.5.0"
+          "revision": "60f13f60c4d093691934dc6cfdf5f508ada1f894",
+          "version": "2.6.0"
         }
       },
       {

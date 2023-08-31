@@ -335,23 +335,6 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func signInWithApple(email: String,
-                         name: String,
-                         authorizationCode: Data,
-                         identityToken: Data,
-                         completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        let parameters = [
-            "identifier": requestor.identifier,
-            "email": email,
-            "name": name,
-            "publicKey": requestor.publicKeyData.base64EncodedString(),
-            "publicSignature": requestor.publicSignatureData.base64EncodedString(),
-            "authorizationCode": authorizationCode.base64EncodedString(),
-            "identityToken": authorizationCode.base64EncodedString(),
-        ] as [String : Any]
-        self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
-    }
-    
     func signIn(name: String, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         let parameters = [
             "name": name,
@@ -366,10 +349,13 @@ struct SHServerHTTPAPI : SHServerAPI {
                 // This will fail if the server sends invalid key/signature values
                 // Since this is not supposed to happen unless the server is corrupted
                 // don't retry
-                guard let serverCrypto = try? SHRemoteCryptoUser(publicKeyData: Data(base64Encoded: authChallenge.publicKey)!,
-                                                                publicSignatureData: Data(base64Encoded: authChallenge.publicSignature)!)
+                guard let serverCrypto = try? SHRemoteCryptoUser(
+                    publicKeyData: Data(base64Encoded: authChallenge.publicKey)!,
+                    publicSignatureData: Data(base64Encoded: authChallenge.publicSignature)!
+                ),
+                      let authSalt = Data(base64Encoded: authChallenge.protocolSalt)
                 else {
-                    return completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("publicKey=\(authChallenge.publicKey) publicSignature=\(authChallenge.publicSignature)")))
+                    return completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("publicKey=\(authChallenge.publicKey) publicSignature=\(authChallenge.publicSignature) salt=\(authChallenge.protocolSalt)")))
                 }
                 
                 let encryptedChallenge = SHShareablePayload(
@@ -381,7 +367,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                 do {
                     let decryptedChallenge = try SHCypher.decrypt(
                         encryptedChallenge,
-                        using: self.requestor.shUser.privateKeyData,
+                        encryptionKeyData: self.requestor.shUser.privateKeyData,
+                        protocolSalt: authSalt,
                         from: serverCrypto.publicSignatureData
                     )
                     let signatureForData = try self.requestor.shUser.signature(for: decryptedChallenge)

@@ -234,23 +234,6 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(()))
     }
     
-    func signInWithApple(email: String,
-                         name: String,
-                         authorizationCode: Data,
-                         identityToken: Data,
-                         completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        let ssoIdentifier = identityToken.base64EncodedString()
-        self.createUser(name: name, ssoIdentifier: ssoIdentifier) { result in
-            switch result {
-            case .success(let user):
-                let authResponse = SHAuthResponse(user: user as! SHRemoteUser, bearerToken: "")
-                completionHandler(.success(authResponse))
-            case .failure(let err):
-                completionHandler(.failure(err))
-            }
-        }
-    }
-    
     public func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }

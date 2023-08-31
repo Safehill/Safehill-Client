@@ -4,6 +4,9 @@ import XCTest
 import CryptoKit
 import KnowledgeBase
 
+
+let kTestStaticProtocolSalt = Data(base64Encoded: "0PT/RKOwUpk8dxYU/pJ3Vx/zespMkey8yMMgFp4ov2E=")!
+
 final class Safehill_ClientBaseUnitTests: XCTestCase {
     
     func testSubtract() throws {
@@ -100,7 +103,10 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         
         /// A encrypts image for A
         let encryptedImage = try SHEncryptedData(clearData: imageData)
-        let encryptedImageSecret = try SHUserContext(user: aLocalUser).shareable(data: encryptedImage.privateSecret.rawRepresentation, with: aRemoteUser)
+        let encryptedImageSecret = try SHUserContext(user: aLocalUser)
+            .shareable(data: encryptedImage.privateSecret.rawRepresentation,
+                       protocolSalt: kTestStaticProtocolSalt,
+                       with: aRemoteUser)
         
         let encryptedVersion = SHGenericEncryptedAssetVersion(
             quality: .lowResolution,
@@ -126,14 +132,16 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         
         let decryptedSecretData = try SHCypher.decrypt(
             sharedSecret,
-            using: aPrivateKey,
-            from: aPrivateSignature.publicKey
+            encryptionKey: aPrivateKey,
+            protocolSalt: kTestStaticProtocolSalt,
+            signedBy: aPrivateSignature.publicKey
         )
         XCTAssertEqual(decryptedSecretData, encryptedImage.privateSecret.rawRepresentation)
         
         let decryptedImage = try SHUserContext(user: aLocalUser).decrypt(
             version.encryptedData,
             usingEncryptedSecret: sharedSecret,
+            protocolSalt: kTestStaticProtocolSalt,
             receivedFrom: aRemoteUser
         )
         
@@ -158,7 +166,10 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         /// A encrypts image for B
         let encryptedImage = try SHEncryptedData(clearData: imageData)
         
-        let encryptedImageSecret = try SHUserContext(user: aLocaluser).shareable(data: encryptedImage.privateSecret.rawRepresentation, with: bRemoteUser)
+        let encryptedImageSecret = try SHUserContext(user: aLocaluser)
+            .shareable(data: encryptedImage.privateSecret.rawRepresentation,
+                       protocolSalt: kTestStaticProtocolSalt,
+                       with: bRemoteUser)
         
         let encryptedVersion = SHGenericEncryptedAssetVersion(
             quality: .lowResolution,
@@ -187,7 +198,8 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         )
         let decryptedSecretData = try SHCypher.decrypt(
             encryptedSecret,
-            using: bPrivateKeyData,
+            encryptionKeyData: bPrivateKeyData,
+            protocolSalt: kTestStaticProtocolSalt,
             from: aPublicSignatureData
         )
         
@@ -196,6 +208,7 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         let decryptedData = try SHUserContext(user: bLocalUser).decrypt(
             encryptedVersion.encryptedData,
             usingEncryptedSecret: encryptedSecret,
+            protocolSalt: kTestStaticProtocolSalt,
             receivedFrom: aRemoteUser
         )
         
@@ -205,7 +218,10 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         /// User A should fail decryption should fail with `authenticationError`
         
         let secondEncryptedImage = try SHEncryptedData(clearData: imageData)
-        let secondEncryptedImageSecret = try SHUserContext(user: bLocalUser).shareable(data: encryptedImage.privateSecret.rawRepresentation, with: bRemoteUser)
+        let secondEncryptedImageSecret = try SHUserContext(user: bLocalUser)
+            .shareable(data: encryptedImage.privateSecret.rawRepresentation,
+                       protocolSalt: kTestStaticProtocolSalt,
+                       with: bRemoteUser)
         
         let secondEncryptedVersion = SHGenericEncryptedAssetVersion(
             quality: .lowResolution,
@@ -225,6 +241,7 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
             let _ = try SHUserContext(user: aLocaluser).decrypt(
                 secondEncryptedVersion.encryptedData,
                 usingEncryptedSecret: secondSharedSecret,
+                protocolSalt: kTestStaticProtocolSalt,
                 receivedFrom: bRemoteUser
             )
             XCTFail()
@@ -261,9 +278,13 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
                     switch signInResult {
                     case .success(let authResponse):
                         do {
+                            guard let authSalt = Data(base64Encoded: authResponse.encryptionProtocolSalt) else {
+                                throw SHHTTPError.ServerError.unexpectedResponse(authResponse.encryptionProtocolSalt)
+                            }
                             try self.user.authenticate(
                                 authResponse.user,
                                 bearerToken: authResponse.bearerToken,
+                                encryptionProtocolSalt: authSalt,
                                 ssoIdentifier: nil)
                         } catch {}
                     case .failure(let err):
@@ -398,7 +419,10 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
 //        let encryptedContent = try SHEncryptedData(clearData: data)
         
         /// encrypt the secret using this user's public key so that it can be stored securely on the server
-        let encryptedSecret = try SHUserContext(user: sender).shareable(data: encryptedContent.privateSecret.rawRepresentation, with: receiver)
+        let encryptedSecret = try SHUserContext(user: sender)
+            .shareable(data: encryptedContent.privateSecret.rawRepresentation,
+                       protocolSalt: kTestStaticProtocolSalt,
+                       with: receiver)
         
         let encryptedVersion = SHGenericEncryptedAssetVersion(
             quality: .lowResolution,
@@ -423,11 +447,11 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             cyphertext: version.encryptedSecret,
             signature: version.publicSignatureData
         )
-        let decryptedData = try SHUserContext(user: receiver).decrypt(
-            version.encryptedData,
-            usingEncryptedSecret: sharedSecret,
-            receivedFrom: sender
-        )
+        let decryptedData = try SHUserContext(user: receiver)
+            .decrypt(version.encryptedData,
+                     usingEncryptedSecret: sharedSecret,
+                     protocolSalt: kTestStaticProtocolSalt,
+                     receivedFrom: sender)
         return SHGenericDecryptedAsset(
             globalIdentifier: encryptedAsset.globalIdentifier,
             localIdentifier: encryptedAsset.localIdentifier,

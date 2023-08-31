@@ -54,41 +54,6 @@ extension SHServerProxy {
         }
     }
     
-    public func signInWithApple(email: String,
-                                name: String,
-                                authorizationCode: Data,
-                                identityToken: Data,
-                                completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
-        self.remoteServer.signInWithApple(email: email,
-                                          name: name,
-                                          authorizationCode: authorizationCode,
-                                          identityToken: identityToken) { result in
-            switch result {
-            case .success(let authResponse):
-                self.localServer.getUsers(withIdentifiers: [self.localServer.requestor.identifier]) { result in
-                    switch result {
-                    case .success(let users):
-                        guard users.count == 0 || users.count == 1 else {
-                            completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("Multiple users returned for identifier \(self.localServer.requestor.identifier)")))
-                            return
-                        }
-                        
-                        if users.count == 0 {
-                            self.localServer.signInWithApple(email: email, name: name, authorizationCode: authorizationCode, identityToken: identityToken, completionHandler: completionHandler)
-                        } else {
-                            completionHandler(.success(authResponse))
-                        }
-                    case .failure(let err):
-                        completionHandler(.failure(err))
-                    }
-                }
-                
-            case .failure(let err):
-                completionHandler(.failure(err))
-            }
-        }
-    }
-    
     public func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         self.remoteServer.signIn(name: name, completionHandler: completionHandler)
     }

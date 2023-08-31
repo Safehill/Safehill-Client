@@ -43,6 +43,12 @@ public struct SHRemoteUser : SHServerUser, Codable {
 /// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name).
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHServerUser {
+    
+    enum SHLocalUserError: Error, LocalizedError {
+        case invalidKeychainEntry
+        case missingProtocolSalt
+    }
+    
     public var identifier: String {
         self.shUser.identifier
     }
@@ -60,9 +66,11 @@ public struct SHLocalUser: SHServerUser {
     
     private var _ssoIdentifier: String?
     private var _authToken: String?
+    private var _encryptionProtocolSalt: Data?
     
     public var ssoIdentifier: String? { get { _ssoIdentifier } }
     public var authToken: String? { get { _authToken } }
+    public var encryptionProtocolSalt: Data? { get { _encryptionProtocolSalt } }
     
     private let keychainPrefix: String
     
@@ -82,6 +90,9 @@ public struct SHLocalUser: SHServerUser {
     }
     public var authTokenKeychainLabel: String {
         "\(authKeychainLabel).token"
+    }
+    public var saltKeychainLabel: String {
+        "\(authKeychainLabel).salt"
     }
     
     static func == (lhs: SHLocalUser, rhs: SHLocalUser) -> Bool {
@@ -114,6 +125,7 @@ public struct SHLocalUser: SHServerUser {
         do {
             self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
         } catch {
+            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
             self._ssoIdentifier = nil
         }
         
@@ -121,6 +133,20 @@ public struct SHLocalUser: SHServerUser {
         do {
             self._authToken = try SHKeychain.retrieveValue(from: authTokenKeychainLabel)
         } catch {
+            self._authToken = nil
+        }
+        
+        // Protocol SALT used for encryption
+        do {
+            if let base64Salt = try SHKeychain.retrieveValue(from: authTokenKeychainLabel) {
+                if let salt = Data(base64Encoded: base64Salt) {
+                    self._encryptionProtocolSalt = salt
+                } else {
+                    throw SHLocalUserError.invalidKeychainEntry
+                }
+            }
+        } catch {
+            self._encryptionProtocolSalt = nil
             self._authToken = nil
         }
     }
@@ -137,46 +163,67 @@ public struct SHLocalUser: SHServerUser {
         }
     }
     
-    public mutating func authenticate(_ user: SHServerUser, bearerToken: String, ssoIdentifier: String?) throws {
+    public mutating func authenticate(
+        _ user: SHServerUser,
+        bearerToken: String,
+        encryptionProtocolSalt: Data,
+        ssoIdentifier: String?
+    ) throws {
         self.updateUserDetails(given: user)
         self._ssoIdentifier = ssoIdentifier
         self._authToken = bearerToken
+        self._encryptionProtocolSalt = encryptionProtocolSalt
         
         do {
             if let ssoIdentifier = ssoIdentifier {
                 try SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
             }
             try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
+            try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         } catch {
             // Re-try after deleting items in the keychain
             try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
             try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+            try? SHKeychain.deleteValue(account: saltKeychainLabel)
             
             if let ssoIdentifier = ssoIdentifier {
                 try SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
             }
             try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
+            try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         }
     }
     
     public mutating func deauthenticate() {
         self._ssoIdentifier = nil
         self._authToken = nil
+        self._encryptionProtocolSalt = nil
         
         guard (try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)) != nil,
-              (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil
+              (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil,
+              (try? SHKeychain.deleteValue(account: saltKeychainLabel)) != nil
         else {
-            log.fault("auth and identity token could not be removed from the keychain")
+            log.fault("auth, identity token and salt could not be removed from the keychain")
             return
         }
     }
     
-    public func shareable(data: Data, with user: SHCryptoUser) throws -> SHShareablePayload {
-        try SHUserContext(user: self.shUser).shareable(data: data, with: user)
+    public func createShareablePayload(from data: Data, toShareWith user: SHCryptoUser) throws -> SHShareablePayload {
+        guard let salt = self.encryptionProtocolSalt else {
+            throw SHLocalUserError.missingProtocolSalt
+        }
+        return try SHUserContext(user: self.shUser)
+            .shareable(data: data, protocolSalt: salt, with: user)
     }
     
-    public func decrypted(data: Data, encryptedSecret: SHShareablePayload, receivedFrom user: SHCryptoUser) throws -> Data {
-        try SHUserContext(user: self.shUser).decrypt(data, usingEncryptedSecret: encryptedSecret, receivedFrom: user)
+    public func decrypt(data: Data,
+                        encryptedSecret: SHShareablePayload,
+                        receivedFrom user: SHCryptoUser) throws -> Data {
+        guard let salt = self.encryptionProtocolSalt else {
+            throw SHLocalUserError.missingProtocolSalt
+        }
+        return try SHUserContext(user: self.shUser)
+            .decrypt(data, usingEncryptedSecret: encryptedSecret, protocolSalt: salt, receivedFrom: user)
     }
     
     public mutating func regenerateKeys() throws {

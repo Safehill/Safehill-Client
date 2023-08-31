@@ -31,9 +31,9 @@ extension SHApplePhotoAsset {
             /// Encrypt the secret using the recipient's public key
             /// so that it can be stored securely on the server
             ///
-            let encryptedAssetSecret = try sender.shareable(
-                data: privateSecret,
-                with: recipient
+            let encryptedAssetSecret = try sender.createShareablePayload(
+                from: privateSecret,
+                toShareWith: recipient
             )
             
             for quality in versions {
@@ -84,6 +84,10 @@ extension SHApplePhotoAsset {
             log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
             throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
         }
+        guard let salt = user.encryptionProtocolSalt else {
+            log.error("No protocol salt set from server")
+            throw SHBackgroundOperationError.fatalError("No protocol salt set from server")
+        }
         
         let encryptedSecret = SHShareablePayload(
             ephemeralPublicKeyData: version.publicKeyData,
@@ -92,7 +96,8 @@ extension SHApplePhotoAsset {
         )
         return try SHCypher.decrypt(
             encryptedSecret,
-            using: user.shUser.privateKeyData,
+            encryptionKeyData: user.shUser.privateKeyData,
+            protocolSalt: salt,
             from: user.publicSignatureData
         )
     }
@@ -230,9 +235,9 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             /// Encrypt the secret using the recipient's public key
             /// so that it can be stored securely on the server
             ///
-            let encryptedAssetSecret = try self.user.shareable(
-                data: privateSecret.rawRepresentation,
-                with: recipient
+            let encryptedAssetSecret = try self.user.createShareablePayload(
+                from: privateSecret.rawRepresentation,
+                toShareWith: recipient
             )
             
             for quality in payloads.keys {
