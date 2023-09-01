@@ -114,14 +114,14 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             ///
             /// Assume graph is up to date, but also try to ingest again in the background and call the delegate method again
             /// 
-            self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
-            
-            DispatchQueue.global(qos: .background).async {
-                do {
-                    try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
-                    self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
-                } catch {
-                    self.log.error("[KG] failed to ingest some descriptor into the graph")
+            self.delegate.handleAssetDescriptorResults(for: descriptors, users: users) {   
+                DispatchQueue.global(qos: .background).async {
+                    do {
+                        try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+                        self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
+                    } catch {
+                        self.log.error("[KG] failed to ingest some descriptor into the graph")
+                    }
                 }
             }
         }

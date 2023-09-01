@@ -18,7 +18,9 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)
     /// - Parameter for: the descriptors
-    func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser])
+    /// - Parameter users: the `SHServerUser` objects for user ids mentioned in the descriptors
+    /// - Parameter completionHandler: called when handling is complete
+    func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser], completionHandler: (@escaping () -> Void)? = nil)
     /// Notifies there are no assets to download at this time
     func noAssetsToDownload() -> Void
     /// Notifies there are assets to download from unknown users
