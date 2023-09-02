@@ -123,13 +123,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         )
     }
     
-    private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: String,
+    private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
                                   quality: SHAssetQuality,
                                   request: SHDownloadRequestQueueItem,
-                                  completionHandler: @escaping (Result<[String: Error], Error>) -> Void) {
+                                  completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void) {
         let start = CFAbsoluteTimeGetCurrent()
-        
-        var errorsByAssetId = [String: Error]()
         
         log.info("[sync] downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
@@ -139,42 +137,23 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         { result in
             switch result {
             case .success(let assetsDict):
-                if assetsDict.count > 0 {
-                    for (assetId, asset) in assetsDict {
-                        do {
-                            let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
-                                encryptedAsset: asset,
-                                quality: quality,
-                                descriptor: request.assetDescriptor
-                            )
-                            
-                            DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: assetId)
-                            
-                            switch quality {
-                            case .lowResolution:
-                                self.delegate.handleLowResAsset(decryptedAsset)
-                                self.delegate.completed(decryptedAsset.globalIdentifier, groupId: request.groupId)
-                            case .midResolution, .hiResolution:
-                                self.delegate.handleHiResAsset(decryptedAsset)
-                            }
-                        }
-                        catch {
-                            errorsByAssetId[assetId] = error
-                            
-                            // Record the failure for the asset
-                            if error is SHCypher.DecryptionError {
-                                DownloadBlacklist.shared.blacklist(globalIdentifier: assetId)
-                            } else {
-                                DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: assetId)
-                            }
-                            
-                            self.delegate.failed(assetId, groupId: request.groupId)
-                        }
-                    }
+                guard assetsDict.count > 0,
+                      let encryptedAsset = assetsDict[globalIdentifier] else {
+                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                    return
                 }
-                completionHandler(.success(errorsByAssetId))
+                do {
+                    let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
+                        encryptedAsset: encryptedAsset,
+                        quality: quality,
+                        descriptor: request.assetDescriptor
+                    )
+                    completionHandler(.success(decryptedAsset))
+                }
+                catch {
+                    completionHandler(.failure(error))
+                }
             case .failure(let err):
-                DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
                 self.log.critical("[sync] unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
                 completionHandler(.failure(err))
             }
@@ -545,25 +524,49 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                       quality: .lowResolution,
                                       request: downloadRequest) { result in
                     switch result {
+                    case .success(let decryptedAsset):
+                        DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
                         
-                    case .success(let errorsByAssetId):
-                        if errorsByAssetId.count > 0 {
-                            self.fail(groupId: downloadRequest.groupId, errorsByAssetIdentifier: errorsByAssetId)
-                        }
-                        
+                        self.delegate.handleLowResAsset(decryptedAsset)
+                        self.delegate.completed(decryptedAsset.globalIdentifier, groupId: downloadRequest.groupId)
                     case .failure(let error):
                         shouldContinue = false
                         self.fail(groupId: downloadRequest.groupId, errorsByAssetIdentifier: [globalIdentifier: error])
+                        
+                        // Record the failure for the asset
+                        if error is SHCypher.DecryptionError {
+                            DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
+                        } else {
+                            DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
+                        }
+                        
+                        self.delegate.failed(globalIdentifier, groupId: downloadRequest.groupId)
                     }
                     group.leave()
                 }
                 
                 // MARK: Get mid resolution asset (asynchronously)
-                
+                ///
+                /// `.midResolution` might not be available because:
+                /// - either it didn't yet finish uploading on the other end
+                /// - the `.midResolution` is superseeded by the `.hiResolution`, in case one was already available when the share started
+                /// The latter can happen if a user uploads an asset to the lockbox first (hence `.lowResolution` and `.midResolution` are
+                /// uploaded, and then that upload is shared with other users.
+                ///
+                /// Be forgiving when a `.midResolution` can't be found, as the client will try to fetch it later on as needed.
+                ///
+
                 DispatchQueue.global().async {
                     self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,
                                           quality: .midResolution,
-                                          request: downloadRequest) { _ in }
+                                          request: downloadRequest) { result in
+                        switch result {
+                        case .success(let decryptedAsset):
+                            self.delegate.handleHiResAsset(decryptedAsset)
+                        case .failure(let error):
+                            self.log.warning("[sync] unable to fetch .midResolution asset for \(globalIdentifier): \(error.localizedDescription)")
+                        }
+                    }
                 }
                 
                 let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds))
