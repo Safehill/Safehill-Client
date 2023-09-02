@@ -118,7 +118,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 DispatchQueue.global(qos: .background).async {
                     do {
                         try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
-                        self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
+                        self.delegate.handleAssetDescriptorResults(for: descriptors, users: users, completionHandler: nil)
                     } catch {
                         self.log.error("[KG] failed to ingest some descriptor into the graph")
                     }
@@ -202,6 +202,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                             self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
                         } catch {
                             self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+                            self.delegate.failed(encryptedAsset.globalIdentifier, groupId: groupId)
                         }
                     }
                 }

@@ -167,6 +167,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             } else {
                                 DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: assetId)
                             }
+                            
+                            self.delegate.failed(assetId, groupId: request.groupId)
                         }
                     }
                 }
