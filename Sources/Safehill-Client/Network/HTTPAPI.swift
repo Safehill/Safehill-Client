@@ -335,7 +335,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func signIn(name: String, clientBuild: Int? = nil, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         var parameters: [String: Any] = [
             "name": name,
             "identifier": self.requestor.identifier
