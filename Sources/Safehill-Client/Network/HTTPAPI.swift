@@ -335,11 +335,14 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func signIn(name: String, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        let parameters = [
+    func signIn(name: String, clientBuild: Int? = nil, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+        var parameters: [String: Any] = [
             "name": name,
             "identifier": self.requestor.identifier
         ]
+        if let clientBuild = clientBuild {
+            parameters["clientBuild"] = clientBuild
+        }
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
             (result: Result<SHAuthChallenge, Error>) in
             switch result {

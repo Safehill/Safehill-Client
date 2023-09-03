@@ -36,7 +36,7 @@ public protocol SHServerAPI {
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
+    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
