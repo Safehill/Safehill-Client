@@ -545,30 +545,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     group.leave()
                 }
                 
-                // MARK: Get mid resolution asset (asynchronously)
-                ///
-                /// `.midResolution` might not be available because:
-                /// - either it didn't yet finish uploading on the other end
-                /// - the `.midResolution` is superseeded by the `.hiResolution`, in case one was already available when the share started
-                /// The latter can happen if a user uploads an asset to the lockbox first (hence `.lowResolution` and `.midResolution` are
-                /// uploaded, and then that upload is shared with other users.
-                ///
-                /// Be forgiving when a `.midResolution` can't be found, as the client will try to fetch it later on as needed.
-                ///
-
-                DispatchQueue.global().async {
-                    self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,
-                                          quality: .midResolution,
-                                          request: downloadRequest) { result in
-                        switch result {
-                        case .success(let decryptedAsset):
-                            self.delegate.handleHiResAsset(decryptedAsset)
-                        case .failure(let error):
-                            self.log.warning("[sync] unable to fetch .midResolution asset for \(globalIdentifier): \(error.localizedDescription)")
-                        }
-                    }
-                }
-                
                 let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds))
                 guard dispatchResult == .success, shouldContinue == true else {
                     do { _ = try queue.dequeue() }
