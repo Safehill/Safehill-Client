@@ -182,6 +182,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     return
                 }
                 
+                let start = CFAbsoluteTimeGetCurrent()
+                
                 DispatchQueue.global(qos: .background).async {
                     for (assetId, encryptedAsset) in encryptedAssets {
                         guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
@@ -205,9 +207,11 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                             self.delegate.failed(encryptedAsset.globalIdentifier, groupId: groupId)
                         }
                     }
+                    
+                    let end = CFAbsoluteTimeGetCurrent()
+                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(encryptedAssets.count) assets in the local asset store")
+                    completionHandler(.success(()))
                 }
-                
-                completionHandler(.success(()))
             }
         }
     }
