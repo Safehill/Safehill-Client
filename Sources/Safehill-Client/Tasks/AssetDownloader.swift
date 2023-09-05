@@ -508,11 +508,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
                 
                 let globalIdentifier = downloadRequest.assetDescriptor.globalIdentifier
+                let descriptor = downloadRequest.assetDescriptor
                 
                 // MARK: Start
                 
-                self.delegate.didStart(globalIdentifier: globalIdentifier,
-                                       groupId: downloadRequest.groupId)
+                for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                    self.delegate.didStart(globalIdentifier: globalIdentifier,
+                                           groupId: groupId)
+                }
                 
                 let group = DispatchGroup()
                 var shouldContinue = true
@@ -528,10 +531,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
                         
                         self.delegate.handleLowResAsset(decryptedAsset)
-                        self.delegate.completed(decryptedAsset.globalIdentifier, groupId: downloadRequest.groupId)
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                        }
                     case .failure(let error):
                         shouldContinue = false
-                        self.fail(groupId: downloadRequest.groupId, errorsByAssetIdentifier: [globalIdentifier: error])
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.fail(groupId: groupId, errorsByAssetIdentifier: [globalIdentifier: error])
+                        }
                         
                         // Record the failure for the asset
                         if error is SHCypher.DecryptionError {
@@ -540,7 +547,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
                         }
                         
-                        self.delegate.failed(globalIdentifier, groupId: downloadRequest.groupId)
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegate.failed(globalIdentifier, groupId: groupId)
+                        }
                     }
                     group.leave()
                 }
