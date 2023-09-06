@@ -184,34 +184,38 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 
                 let start = CFAbsoluteTimeGetCurrent()
                 
-                DispatchQueue.global(qos: .background).async {
-                    for (assetId, encryptedAsset) in encryptedAssets {
-                        guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
-                            fatalError("malformed descriptorsByGlobalIdentifier")
-                        }
-                        guard let groupId = self.findGroupIdForSelfUser(for: descriptor) else {
-                            continue
-                        }
+                for (assetId, encryptedAsset) in encryptedAssets {
+                    guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
+                        fatalError("malformed descriptorsByGlobalIdentifier")
+                    }
+                    
+                    for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                        self.delegate.didStart(globalIdentifier: assetId,
+                                               groupId: groupId)
+                    }
+                    
+                    do {
+                        let decryptedAsset = try localAssetsStore.decryptedAsset(
+                            encryptedAsset: encryptedAsset,
+                            quality: .lowResolution,
+                            descriptor: descriptor
+                        )
                         
-                        do {
-                            let decryptedAsset = try localAssetsStore.decryptedAsset(
-                                encryptedAsset: encryptedAsset,
-                                quality: .lowResolution,
-                                descriptor: descriptor
-                            )
-                            
-                            self.delegate.handleLowResAsset(decryptedAsset)
+                        self.delegate.handleLowResAsset(decryptedAsset)
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
                             self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
-                        } catch {
-                            self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+                        }
+                    } catch {
+                        self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
                             self.delegate.failed(encryptedAsset.globalIdentifier, groupId: groupId)
                         }
                     }
-                    
-                    let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(encryptedAssets.count) assets in the local asset store")
-                    completionHandler(.success(()))
                 }
+                
+                let end = CFAbsoluteTimeGetCurrent()
+                self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(encryptedAssets.count) assets in the local asset store")
+                completionHandler(.success(()))
             }
         }
     }
