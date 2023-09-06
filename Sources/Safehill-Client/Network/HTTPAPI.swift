@@ -358,6 +358,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 ),
                       let authSalt = Data(base64Encoded: authChallenge.protocolSalt)
                 else {
+                    log.error("failed to decode challenge parameters")
                     return completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("publicKey=\(authChallenge.publicKey) publicSignature=\(authChallenge.publicSignature) salt=\(authChallenge.protocolSalt)")))
                 }
                 
@@ -383,12 +384,20 @@ struct SHServerHTTPAPI : SHServerAPI {
                         "digest": digest512.base64EncodedString(),
                         "signedDigest": signatureForDigest.derRepresentation.base64EncodedString()
                     ]
-                    self.post("signin/challenge/verify", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+                    self.post("signin/challenge/verify", parameters: parameters, requiresAuthentication: false) {
+                        (result: Result<SHAuthResponse, Error>) in
+                        if case .failure(let error) = result {
+                            log.error("failed to get verify auth challenge \(error.localizedDescription)")
+                        }
+                        completionHandler(result)
+                    }
                 }
                 catch {
+                    log.error("failed solve the auth challenge \(error.localizedDescription)")
                     completionHandler(.failure(error))
                 }
             case .failure(let err):
+                log.error("failed to get a new auth challenge from the server \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }
