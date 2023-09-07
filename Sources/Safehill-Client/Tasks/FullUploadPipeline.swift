@@ -41,6 +41,52 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         )
     }
     
+    public func run(forAssetLocalIdentifiers localIdentifiers: [String],
+                    groupId: String,
+                    sharedWith: [SHServerUser]) throws {
+        let versions = SHAbstractShareableGroupableQueueItem.recommendedVersions(forSharingWith: sharedWith)
+        let queueItemIdentifiers = localIdentifiers.map({
+            SHUploadPipeline.queueItemIdentifier(groupId: groupId,
+                                                 assetLocalIdentifier: $0,
+                                                 versions: versions,
+                                                 users: sharedWith)
+        })
+        
+        
+        let fetchOperation = SHLocalFetchOperation(
+            delegates: delegates,
+            limitPerRun: 0,
+            imageManager: imageManager,
+            photoIndexer: photoIndexer
+        )
+        try fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
+        
+        let encryptOperation = SHEncryptionOperation(
+            user: user,
+            delegates: delegates,
+            limitPerRun: 0,
+            imageManager: imageManager
+        )
+        try encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
+        
+        let uploadOperation = SHUploadOperation(
+            user: user,
+            delegates: delegates,
+            limitPerRun: 0
+        )
+        try uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
+        
+        try fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
+        
+        let shareOperation = SHEncryptAndShareOperation(
+            user: user,
+            delegates: delegates,
+            limitPerRun: 0,
+            imageManager: imageManager
+        )
+        try shareOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
+    }
+    
     public func runOnce() {
         state = .executing
         

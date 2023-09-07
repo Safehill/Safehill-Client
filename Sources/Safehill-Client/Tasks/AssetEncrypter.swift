@@ -554,6 +554,52 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
     }
     
+    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
+        let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        encryptionQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        for item in queueItems {
+            guard processingState(for: item.identifier) != .encrypting else {
+                continue
+            }
+            
+            log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.encrypting, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] encryption task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+        }
+    }
+    
     public func runOnce(maxItems: Int? = nil) throws {
         var count = 0
         let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)

@@ -129,8 +129,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return photoAsset!
     }
     
-    public func markAsFailed(fetchRequest request: SHLocalFetchRequestQueueItem) throws
-    {
+    public func markAsFailed(
+        fetchRequest request: SHLocalFetchRequestQueueItem,
+        queueItem: KBQueueItem
+    ) throws {
         let localIdentifier = request.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
@@ -142,7 +144,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
         let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
         
-        do { _ = try fetchQueue.dequeue() }
+        do { _ = try fetchQueue.dequeue(item: queueItem) }
         catch {
             log.error("asset \(localIdentifier) failed to encrypt but dequeuing from FETCH queue failed, so this operation will be attempted again.")
             throw error
@@ -185,7 +187,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     public func markAsSuccessful(
         photoAsset: SHApplePhotoAsset,
-        fetchRequest request: SHLocalFetchRequestQueueItem
+        fetchRequest request: SHLocalFetchRequestQueueItem,
+        queueItem: KBQueueItem
     ) throws
     {
         let localIdentifier = photoAsset.phAsset.localIdentifier
@@ -259,7 +262,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
         
-        do { _ = try fetchQueue.dequeue() }
+        do { _ = try fetchQueue.dequeue(item: queueItem) }
         catch {
             log.warning("asset \(localIdentifier) was fetched but dequeuing failed, so this operation will be attempted again.")
             throw error
@@ -313,7 +316,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         guard let photoAsset = try? self.retrieveAsset(fetchRequest: fetchRequest) else {
             log.error("failed to fetch data for item \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
             do {
-                try self.markAsFailed(fetchRequest: fetchRequest)
+                try self.markAsFailed(fetchRequest: fetchRequest,
+                                      queueItem: item)
             } catch {
                 log.critical("failed to mark FETCH as failed. This will likely cause infinite loops")
                 // TODO: Handle
@@ -325,11 +329,58 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         do {
             try self.markAsSuccessful(
                 photoAsset: photoAsset,
-                fetchRequest: fetchRequest
+                fetchRequest: fetchRequest,
+                queueItem: item
             )
         } catch {
             log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
             // TODO: Handle
+        }
+    }
+    
+    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
+        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        fetchQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        for item in queueItems {
+            guard processingState(for: item.identifier) != .fetching else {
+                continue
+            }
+            
+            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.fetching, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] fetch task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
         }
     }
     
