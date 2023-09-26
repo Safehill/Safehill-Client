@@ -335,28 +335,14 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func signInWithApple(email: String,
-                         name: String,
-                         authorizationCode: Data,
-                         identityToken: Data,
-                         completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        let parameters = [
-            "identifier": requestor.identifier,
-            "email": email,
-            "name": name,
-            "publicKey": requestor.publicKeyData.base64EncodedString(),
-            "publicSignature": requestor.publicSignatureData.base64EncodedString(),
-            "authorizationCode": authorizationCode.base64EncodedString(),
-            "identityToken": authorizationCode.base64EncodedString(),
-        ] as [String : Any]
-        self.post("signin/apple", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
-    }
-    
-    func signIn(name: String, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        let parameters = [
+    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+        var parameters: [String: Any] = [
             "name": name,
             "identifier": self.requestor.identifier
         ]
+        if let clientBuild = clientBuild {
+            parameters["clientBuild"] = clientBuild
+        }
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
             (result: Result<SHAuthChallenge, Error>) in
             switch result {
@@ -366,10 +352,14 @@ struct SHServerHTTPAPI : SHServerAPI {
                 // This will fail if the server sends invalid key/signature values
                 // Since this is not supposed to happen unless the server is corrupted
                 // don't retry
-                guard let serverCrypto = try? SHRemoteCryptoUser(publicKeyData: Data(base64Encoded: authChallenge.publicKey)!,
-                                                                publicSignatureData: Data(base64Encoded: authChallenge.publicSignature)!)
+                guard let serverCrypto = try? SHRemoteCryptoUser(
+                    publicKeyData: Data(base64Encoded: authChallenge.publicKey)!,
+                    publicSignatureData: Data(base64Encoded: authChallenge.publicSignature)!
+                ),
+                      let authSalt = Data(base64Encoded: authChallenge.protocolSalt)
                 else {
-                    return completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("publicKey=\(authChallenge.publicKey) publicSignature=\(authChallenge.publicSignature)")))
+                    log.error("[auth] failed to decode challenge parameters")
+                    return completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("publicKey=\(authChallenge.publicKey) publicSignature=\(authChallenge.publicSignature) salt=\(authChallenge.protocolSalt)")))
                 }
                 
                 let encryptedChallenge = SHShareablePayload(
@@ -381,7 +371,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                 do {
                     let decryptedChallenge = try SHCypher.decrypt(
                         encryptedChallenge,
-                        using: self.requestor.shUser.privateKeyData,
+                        encryptionKeyData: self.requestor.shUser.privateKeyData,
+                        protocolSalt: authSalt,
                         from: serverCrypto.publicSignatureData
                     )
                     let signatureForData = try self.requestor.shUser.signature(for: decryptedChallenge)
@@ -393,12 +384,20 @@ struct SHServerHTTPAPI : SHServerAPI {
                         "digest": digest512.base64EncodedString(),
                         "signedDigest": signatureForDigest.derRepresentation.base64EncodedString()
                     ]
-                    self.post("signin/challenge/verify", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+                    self.post("signin/challenge/verify", parameters: parameters, requiresAuthentication: false) {
+                        (result: Result<SHAuthResponse, Error>) in
+                        if case .failure(let error) = result {
+                            log.error("[auth] failed to get verify auth challenge \(error.localizedDescription)")
+                        }
+                        completionHandler(result)
+                    }
                 }
                 catch {
+                    log.error("[auth] failed solve the auth challenge \(error.localizedDescription)")
                     completionHandler(.failure(error))
                 }
             case .failure(let err):
+                log.error("[auth] failed to get a new auth challenge from the server \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }
@@ -449,29 +448,17 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+        let parameters = forAssetGlobalIdentifiers != nil
+        ? ["globalIdentifiers": forAssetGlobalIdentifiers]
+        : nil
+        self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
                 completionHandler(.success(descriptors))
             case .failure(let error):
                 completionHandler(.failure(error))
-            }
-        }
-    }
-
-    // TODO: Replace this with server filtering
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
-                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
-            switch result {
-            case .success(let descriptors):
-                let filteredDescriptors = descriptors.filter { descriptor in
-                    forAssetGlobalIdentifiers.contains(descriptor.globalIdentifier)
-                }
-                return completionHandler(.success(filteredDescriptors))
-            case .failure(let error):
-                return completionHandler(.failure(error))
             }
         }
     }
@@ -537,8 +524,16 @@ struct SHServerHTTPAPI : SHServerAPI {
                 filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.count == 1, let asset = assets.first else {
-            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API only supports creating one asset per request")))
             return
+        }
+        
+        var assetCreationDate: Date
+        if asset.creationDate == nil {
+            log.warning("No asset creation date. Assuming 1/1/1970")
+            assetCreationDate = Date.init(timeIntervalSince1970: 0)
+        } else {
+            assetCreationDate = asset.creationDate!
         }
         
         var assetVersions = [[String: Any]]()
@@ -556,7 +551,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         let createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
-            "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
+            "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions,
             "forceUpdateVersions": true
@@ -656,16 +651,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)", attributes: .concurrent)
         var results = [SHAssetQuality: Swift.Result<Void, Error>]()
         
-        let group = DispatchGroup()
-        
         for encryptedAssetVersion in asset.encryptedVersions.values {
             guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
                 continue
             }
             
             log.info("uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
-            
-            group.enter()
             
             let serverAssetVersion = serverAsset.versions.first { sav in
                 sav.versionName == encryptedAssetVersion.quality.rawValue
@@ -680,52 +671,25 @@ struct SHServerHTTPAPI : SHServerAPI {
                 break
             }
             
-            let inBackground = serverAssetVersion.versionName == SHAssetQuality.lowResolution.rawValue ? false : true
-            
-            if inBackground {
-                S3Proxy.saveInBackground(
-                    encryptedAssetVersion.encryptedData,
-                    usingPresignedURL: url,
-                    sessionIdentifier: [
-                        self.requestor.shUser.identifier,
-                        serverAsset.globalIdentifier,
-                        serverAssetVersion.versionName
-                    ].joined(separator: "::")
-                ) {
-                        result in
-                        if case .success(_) = result {
-                            self.markAsset(with: asset.globalIdentifier,
-                                           quality: encryptedAssetVersion.quality,
-                                           as: .completed) { _ in
-                            }
-                        }
-                    }
-                group.leave()
-            } else {
-                S3Proxy.save(
-                    encryptedAssetVersion.encryptedData,
-                    usingPresignedURL: url
-                ) { result in
-                    writeQueue.sync {
-                        results[encryptedAssetVersion.quality] = result
-                    }
-                    
-                    if case .success(_) = result {
-                        self.markAsset(with: asset.globalIdentifier,
-                                       quality: encryptedAssetVersion.quality,
-                                       as: .completed) { _ in
-                            group.leave()
-                        }
-                    } else {
-                        group.leave()
+            S3Proxy.saveInBackground(
+                encryptedAssetVersion.encryptedData,
+                usingPresignedURL: url,
+                sessionIdentifier: [
+                    self.requestor.shUser.identifier,
+                    serverAsset.globalIdentifier,
+                    serverAssetVersion.versionName
+                ].joined(separator: "::")
+            ) {
+                result in
+                if case .success(_) = result {
+                    self.markAsset(with: asset.globalIdentifier,
+                                   quality: encryptedAssetVersion.quality,
+                                   as: .completed) { _ in
                     }
                 }
             }
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHUploadTimeoutInMilliseconds * asset.encryptedVersions.count))
-        guard dispatchResult == .success else {
-            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+            
+            results[encryptedAssetVersion.quality] = .success(())
         }
         
         writeQueue.sync {

@@ -31,9 +31,9 @@ extension SHApplePhotoAsset {
             /// Encrypt the secret using the recipient's public key
             /// so that it can be stored securely on the server
             ///
-            let encryptedAssetSecret = try sender.shareable(
-                data: privateSecret,
-                with: recipient
+            let encryptedAssetSecret = try sender.createShareablePayload(
+                from: privateSecret,
+                toShareWith: recipient
             )
             
             for quality in versions {
@@ -84,6 +84,10 @@ extension SHApplePhotoAsset {
             log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
             throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
         }
+        guard let salt = user.encryptionProtocolSalt else {
+            log.error("No protocol salt set from server")
+            throw SHBackgroundOperationError.fatalError("No protocol salt set from server")
+        }
         
         let encryptedSecret = SHShareablePayload(
             ephemeralPublicKeyData: version.publicKeyData,
@@ -92,7 +96,8 @@ extension SHApplePhotoAsset {
         )
         return try SHCypher.decrypt(
             encryptedSecret,
-            using: user.shUser.privateKeyData,
+            encryptionKeyData: user.shUser.privateKeyData,
+            protocolSalt: salt,
             from: user.publicSignatureData
         )
     }
@@ -230,9 +235,9 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             /// Encrypt the secret using the recipient's public key
             /// so that it can be stored securely on the server
             ///
-            let encryptedAssetSecret = try self.user.shareable(
-                data: privateSecret.rawRepresentation,
-                with: recipient
+            let encryptedAssetSecret = try self.user.createShareablePayload(
+                from: privateSecret.rawRepresentation,
+                toShareWith: recipient
             )
             
             for quality in payloads.keys {
@@ -549,11 +554,35 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
     }
     
-    public func runOnce() throws {
+    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
         let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-        while let item = try encryptionQueue.peek() {
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        encryptionQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        for item in queueItems {
             guard processingState(for: item.identifier) != .encrypting else {
-                break
+                continue
             }
             
             log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
@@ -568,6 +597,34 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             }
             
             setProcessingState(nil, for: item.identifier)
+        }
+    }
+    
+    public func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
+        let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        while let item = try encryptionQueue.peek() {
+            guard maxItems == nil || count < maxItems! else {
+                break
+            }
+            guard processingState(for: item.identifier) != .encrypting else {
+                continue
+            }
+            
+            log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.encrypting, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] encryption task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

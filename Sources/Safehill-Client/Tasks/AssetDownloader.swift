@@ -95,15 +95,18 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     let user: SHLocalUser
     let delegate: SHAssetDownloaderDelegate
     let outboundDelegates: [SHOutboundAssetOperationDelegate]
+    let photoIndexer: SHPhotosIndexer
     
     public init(user: SHLocalUser,
                 delegate: SHAssetDownloaderDelegate,
                 outboundDelegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil) {
+                limitPerRun limit: Int? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.user = user
         self.limit = limit
         self.delegate = delegate
         self.outboundDelegates = outboundDelegates
+        self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
     }
     
     var serverProxy: SHServerProxy {
@@ -111,19 +114,20 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
-        SHDownloadOperation(user: self.user,
-                            delegate: self.delegate,
-                            outboundDelegates: self.outboundDelegates,
-                            limitPerRun: self.limit)
+        SHDownloadOperation(
+            user: self.user,
+            delegate: self.delegate,
+            outboundDelegates: self.outboundDelegates,
+            limitPerRun: self.limit,
+            photoIndexer: self.photoIndexer
+        )
     }
     
-    private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: String,
+    private func fetchRemoteAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
                                   quality: SHAssetQuality,
                                   request: SHDownloadRequestQueueItem,
-                                  completionHandler: @escaping (Result<[String: Error], Error>) -> Void) {
+                                  completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void) {
         let start = CFAbsoluteTimeGetCurrent()
-        
-        var errorsByAssetId = [String: Error]()
         
         log.info("[sync] downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
@@ -133,40 +137,23 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         { result in
             switch result {
             case .success(let assetsDict):
-                if assetsDict.count > 0 {
-                    for (assetId, asset) in assetsDict {
-                        do {
-                            let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
-                                encryptedAsset: asset,
-                                quality: quality,
-                                descriptor: request.assetDescriptor
-                            )
-                            
-                            DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: assetId)
-                            
-                            switch quality {
-                            case .lowResolution:
-                                self.delegate.handleLowResAsset(decryptedAsset)
-                                self.delegate.completed(decryptedAsset.globalIdentifier, groupId: request.groupId)
-                            case .midResolution, .hiResolution:
-                                self.delegate.handleHiResAsset(decryptedAsset)
-                            }
-                        }
-                        catch {
-                            errorsByAssetId[assetId] = error
-                            
-                            // Record the failure for the asset
-                            if error is SHCypher.DecryptionError {
-                                DownloadBlacklist.shared.blacklist(globalIdentifier: assetId)
-                            } else {
-                                DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: assetId)
-                            }
-                        }
-                    }
+                guard assetsDict.count > 0,
+                      let encryptedAsset = assetsDict[globalIdentifier] else {
+                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                    return
                 }
-                completionHandler(.success(errorsByAssetId))
+                do {
+                    let decryptedAsset = try SHLocalAssetStoreController(user: self.user).decryptedAsset(
+                        encryptedAsset: encryptedAsset,
+                        quality: quality,
+                        descriptor: request.assetDescriptor
+                    )
+                    completionHandler(.success(decryptedAsset))
+                }
+                catch {
+                    completionHandler(.failure(error))
+                }
             case .failure(let err):
-                DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
                 self.log.critical("[sync] unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
                 completionHandler(.failure(err))
             }
@@ -233,7 +220,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         group.enter()
-        let photoIndexer = SHPhotosIndexer()
         photoIndexer.fetchCameraRollAssets(withFilters: []) { result in
             switch result {
             case .success(let fullFetchResult):
@@ -522,11 +508,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
                 
                 let globalIdentifier = downloadRequest.assetDescriptor.globalIdentifier
+                let descriptor = downloadRequest.assetDescriptor
                 
                 // MARK: Start
                 
-                self.delegate.didStart(globalIdentifier: globalIdentifier,
-                                       groupId: downloadRequest.groupId)
+                for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                    self.delegate.didStart(globalIdentifier: globalIdentifier,
+                                           groupId: groupId)
+                }
                 
                 let group = DispatchGroup()
                 var shouldContinue = true
@@ -538,25 +527,31 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                       quality: .lowResolution,
                                       request: downloadRequest) { result in
                     switch result {
+                    case .success(let decryptedAsset):
+                        DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
                         
-                    case .success(let errorsByAssetId):
-                        if errorsByAssetId.count > 0 {
-                            self.fail(groupId: downloadRequest.groupId, errorsByAssetIdentifier: errorsByAssetId)
+                        self.delegate.handleLowResAsset(decryptedAsset)
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
                         }
-                        
                     case .failure(let error):
                         shouldContinue = false
-                        self.fail(groupId: downloadRequest.groupId, errorsByAssetIdentifier: [globalIdentifier: error])
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.fail(groupId: groupId, errorsByAssetIdentifier: [globalIdentifier: error])
+                        }
+                        
+                        // Record the failure for the asset
+                        if error is SHCypher.DecryptionError {
+                            DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
+                        } else {
+                            DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
+                        }
+                        
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegate.failed(globalIdentifier, groupId: groupId)
+                        }
                     }
                     group.leave()
-                }
-                
-                // MARK: Get mid resolution asset (asynchronously)
-                
-                DispatchQueue.global().async {
-                    self.fetchRemoteAsset(withGlobalIdentifier: globalIdentifier,
-                                          quality: .midResolution,
-                                          request: downloadRequest) { _ in }
                 }
                 
                 let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds))
@@ -735,7 +730,7 @@ public class SHAssetsDownloadQueueProcessor : SHBackgroundOperationProcessor<SHD
     
     public static var shared = SHAssetsDownloadQueueProcessor(
         delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 5
+        dispatchIntervalInSeconds: 7
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {

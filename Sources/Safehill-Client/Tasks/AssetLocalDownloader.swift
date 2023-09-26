@@ -11,18 +11,28 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
     override public init(user: SHLocalUser,
                          delegate: SHAssetDownloaderDelegate,
                          outboundDelegates: [SHOutboundAssetOperationDelegate],
-                         limitPerRun limit: Int? = nil) {
+                         limitPerRun limit: Int? = nil,
+                         photoIndexer: SHPhotosIndexer? = nil) {
         self.assetGlobalIdentifiersInCache = []
-        super.init(user: user, delegate: delegate, outboundDelegates: outboundDelegates, limitPerRun: limit)
+        super.init(user: user,
+                   delegate: delegate,
+                   outboundDelegates: outboundDelegates,
+                   limitPerRun: limit,
+                   photoIndexer: photoIndexer)
     }
     
     public init(user: SHLocalUser,
                 assetGlobalIdentifiersInCache: [GlobalIdentifier],
                 delegate: SHAssetDownloaderDelegate,
                 outboundDelegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil) {
+                limitPerRun limit: Int? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.assetGlobalIdentifiersInCache = assetGlobalIdentifiersInCache
-        super.init(user: user, delegate: delegate, outboundDelegates: outboundDelegates, limitPerRun: limit)
+        super.init(user: user,
+                   delegate: delegate,
+                   outboundDelegates: outboundDelegates,
+                   limitPerRun: limit,
+                   photoIndexer: photoIndexer)
     }
     
     private func fetchLocalDescriptors(completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void) {
@@ -101,11 +111,18 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         
         let descriptors = Array(descriptorsByGlobalIdentifier.values)
         if descriptors.count > 0 {
-            self.delegate.handleAssetDescriptorResults(for: descriptors, users: users)
-            do {
-                try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
-            } catch {
-                log.error("[KG] failed to ingest some descriptor into the graph")
+            ///
+            /// Assume graph is up to date, but also try to ingest again in the background and call the delegate method again
+            /// 
+            self.delegate.handleAssetDescriptorResults(for: descriptors, users: users) {   
+                DispatchQueue.global(qos: .background).async {
+                    do {
+                        try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+                        self.delegate.handleAssetDescriptorResults(for: descriptors, users: users, completionHandler: nil)
+                    } catch {
+                        self.log.error("[KG] failed to ingest some descriptor into the graph")
+                    }
+                }
             }
         }
         
@@ -165,12 +182,16 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     return
                 }
                 
+                let start = CFAbsoluteTimeGetCurrent()
+                
                 for (assetId, encryptedAsset) in encryptedAssets {
                     guard let descriptor = descriptorsByGlobalIdentifier[assetId] else {
                         fatalError("malformed descriptorsByGlobalIdentifier")
                     }
-                    guard let groupId = self.findGroupIdForSelfUser(for: descriptor) else {
-                        continue
+                    
+                    for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                        self.delegate.didStart(globalIdentifier: assetId,
+                                               groupId: groupId)
                     }
                     
                     do {
@@ -181,12 +202,19 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         )
                         
                         self.delegate.handleLowResAsset(decryptedAsset)
-                        self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                        }
                     } catch {
                         self.log.error("unable to decrypt local asset \(assetId): \(error.localizedDescription)")
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegate.failed(encryptedAsset.globalIdentifier, groupId: groupId)
+                        }
                     }
                 }
                 
+                let end = CFAbsoluteTimeGetCurrent()
+                self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(encryptedAssets.count) assets in the local asset store")
                 completionHandler(.success(()))
             }
         }

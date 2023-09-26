@@ -63,6 +63,14 @@ private var ItemIdentifiersInProcessByState: [ProcessingState: Set<String>] = [
     .sharing: Set<String>(),
 ]
 
+func items(inState state: ProcessingState) -> Set<String>? {
+    var set: Set<String>? = nil
+    ProcessingStateUpdateQueue.sync(flags: .barrier) {
+        set = ItemIdentifiersInProcessByState[state]
+    }
+    return set
+}
+
 func processingState(for assetIdentifier: String) -> ProcessingState? {
     var state: ProcessingState? = nil
     ProcessingStateUpdateQueue.sync(flags: .barrier) {
@@ -75,6 +83,7 @@ func processingState(for assetIdentifier: String) -> ProcessingState? {
     }
     return state
 }
+
 func setProcessingState(_ state: ProcessingState?, for assetIdentifier: String) {
     ProcessingStateUpdateQueue.sync(flags: .barrier) {
         for everyState in ItemIdentifiersInProcessByState.keys {

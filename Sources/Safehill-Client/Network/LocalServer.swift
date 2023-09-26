@@ -234,24 +234,7 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(()))
     }
     
-    func signInWithApple(email: String,
-                         name: String,
-                         authorizationCode: Data,
-                         identityToken: Data,
-                         completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        let ssoIdentifier = identityToken.base64EncodedString()
-        self.createUser(name: name, ssoIdentifier: ssoIdentifier) { result in
-            switch result {
-            case .success(let user):
-                let authResponse = SHAuthResponse(user: user as! SHRemoteUser, bearerToken: "")
-                completionHandler(.success(authResponse))
-            case .failure(let err):
-                completionHandler(.failure(err))
-            }
-        }
-    }
-    
-    public func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    public func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -304,7 +287,8 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success([]))
     }
     
-    func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
         let assetStore: KBKVStore
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
@@ -319,6 +303,14 @@ struct LocalServer : SHServerAPI {
         
         for quality in SHAssetQuality.all {
             condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
+        }
+        
+        if let filterGids = forAssetGlobalIdentifiers {
+            var gidCondition = KBGenericCondition(value: false)
+            for gid in filterGids {
+                gidCondition = gidCondition.or(KBGenericCondition(.contains, value: "::\(gid)::"))
+            }
+            condition = condition.and(gidCondition)
         }
         
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
@@ -503,12 +495,6 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(err))
             }
         }
-    }
-    
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier],
-                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        // TODO: Implement
-        completionHandler(.failure(SHAssetStoreError.notImplemented))
     }
     
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],

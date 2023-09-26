@@ -18,7 +18,9 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)
     /// - Parameter for: the descriptors
-    func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser])
+    /// - Parameter users: the `SHServerUser` objects for user ids mentioned in the descriptors
+    /// - Parameter completionHandler: called when handling is complete
+    func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser], completionHandler: (() -> Void)?)
     /// Notifies there are no assets to download at this time
     func noAssetsToDownload() -> Void
     /// Notifies there are assets to download from unknown users
@@ -51,6 +53,11 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter assetIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
     func completed(_ assetIdentifier: String, groupId: String)
+    /// The download of this asset failed
+    /// - Parameters:
+    /// - Parameter assetIdentifier: the global identifier for the asset
+    /// - Parameter groupId: the group id of the request it belongs to
+    func failed(_ assetIdentifier: String, groupId: String)
     
     /// One cycle of downloads has finished
     /// - Parameter _:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched

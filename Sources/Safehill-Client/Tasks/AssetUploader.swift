@@ -361,11 +361,35 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         }
     }
     
-    public func runOnce() throws {
-        let queue = try BackgroundOperationQueue.of(type: .upload)
-        while let item = try queue.peek() {
+    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
+        let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        uploadQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        for item in queueItems {
             guard processingState(for: item.identifier) != .uploading else {
-                break
+                continue
             }
             
             log.info("uploading item \(item.identifier) created at \(item.createdAt)")
@@ -380,6 +404,35 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             }
             
             setProcessingState(nil, for: item.identifier)
+        }
+    }
+    
+    public func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
+        let queue = try BackgroundOperationQueue.of(type: .upload)
+        
+        while let item = try queue.peek() {
+            guard maxItems == nil || count < maxItems! else {
+                break
+            }
+            guard processingState(for: item.identifier) != .uploading else {
+                continue
+            }
+            
+            log.info("uploading item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.uploading, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] upload task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

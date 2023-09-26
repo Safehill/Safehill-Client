@@ -44,12 +44,14 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     ) throws
     {
         try self.markAsFailed(encryptionRequest: request,
-                              globalIdentifier: globalIdentifier)
+                              globalIdentifier: globalIdentifier,
+                              queueItem: item)
     }
     
     public func markAsFailed(
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String
+        globalIdentifier: String,
+        queueItem: KBQueueItem
     ) throws {
         let localIdentifier = request.localIdentifier
         let versions = request.versions
@@ -57,7 +59,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         
-        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue() }
+        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
             log.error("asset \(localIdentifier) failed to share but dequeueing from SHARE queue failed. Sharing will be attempted again")
             throw error
@@ -115,11 +117,10 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
         
-        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue() }
+        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
         catch {
             log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
         }
-        
         
         let successfulShare = SHShareHistoryItem(
             localAssetId: localIdentifier,
@@ -312,7 +313,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             do {
                 try self.markAsFailed(
                     encryptionRequest: shareRequest,
-                    globalIdentifier: globalIdentifier
+                    globalIdentifier: globalIdentifier,
+                    queueItem: item
                 )
             } catch {
                 log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
@@ -329,10 +331,35 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         )
     }
     
-    public override func runOnce() throws {
-        while let item = try BackgroundOperationQueue.of(type: .share).peek() {
+    public override func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
+        let shareQueue = try BackgroundOperationQueue.of(type: .share)
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        shareQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        for item in queueItems {
             guard processingState(for: item.identifier) != .sharing else {
-                break
+                continue
             }
             
             log.info("sharing item \(item.identifier) created at \(item.createdAt)")
@@ -347,6 +374,35 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
             
             setProcessingState(nil, for: item.identifier)
+        }
+    }
+    
+    public override func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
+        let queue = try BackgroundOperationQueue.of(type: .share)
+        
+        while let item = try queue.peek() {
+            guard maxItems == nil || count < maxItems! else {
+                break
+            }
+            guard processingState(for: item.identifier) != .sharing else {
+                continue
+            }
+            
+            log.info("sharing item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.sharing, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] share task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

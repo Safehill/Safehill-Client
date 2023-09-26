@@ -516,7 +516,7 @@ extension SHLocalUser {
             cyphertext: version.encryptedSecret,
             signature: version.publicSignatureData
         )
-        let decryptedData = try self.decrypted(
+        let decryptedData = try self.decrypt(
             data: version.encryptedData,
             encryptedSecret: sharedSecret,
             receivedFrom: user

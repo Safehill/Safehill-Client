@@ -13,20 +13,25 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     public let limit: Int
     public var delegates: [SHOutboundAssetOperationDelegate]
     var imageManager: PHCachingImageManager
+    let photoIndexer: SHPhotosIndexer
     
     public init(delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int,
-                imageManager: PHCachingImageManager? = nil) {
+                imageManager: PHCachingImageManager? = nil,
+                photoIndexer: SHPhotosIndexer? = nil) {
         self.limit = limit
         self.delegates = delegates
         self.imageManager = imageManager ?? PHCachingImageManager()
+        self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
+        self.photoIndexer.fetchCameraRollAssets(withFilters: []) { _ in }
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHLocalFetchOperation(
             delegates: self.delegates,
             limitPerRun: self.limit,
-            imageManager: self.imageManager
+            imageManager: self.imageManager,
+            photoIndexer: self.photoIndexer
         )
     }
     
@@ -53,61 +58,64 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let localIdentifier = request.localIdentifier
         let versions = request.versions
         
-        let photoIndexer = SHPhotosIndexer()
-        let assetIdFilter = SHPhotosFilter.withLocalIdentifiers([localIdentifier])
         var photoAsset: SHApplePhotoAsset? = nil
+        
+        if let value = try? photoIndexer.index?.value(for: localIdentifier) as? SHApplePhotoAsset {
+            return value
+        }
+        
         var error: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
-        photoIndexer.fetchCameraRollAssets(withFilters: [assetIdFilter]) {
-            result in
-            if case .failure(let err) = result {
+        photoIndexer.fetchCameraRollAsset(withLocalIdentifier: localIdentifier) { result in
+            switch result {
+            case .failure(let err):
                 error = err
                 group.leave()
                 return
-            }
-            
-            guard let phAsset = photoIndexer.indexedAssets.first else {
-                error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
+            case .success(let maybePHAsset):
+                guard let phAsset = maybePHAsset else {
+                    error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
+                    group.leave()
+                    return
+                }
+                
+                ///
+                /// Fetch the higest-needed resolution asset based on the versions,
+                /// using the same imageManager used to display the asset (so that it's likely that it was already cached by Photos).
+                /// Doing this here avoids fetching large assets from the Apple Photos library in the SHEncryptOperation,
+                /// as cachedImage on the SHApplePhotoAsset will be set here, and will be resized to smaller images
+                /// when generating the SHAssetQuality versions.
+                ///
+                
+                let highestSize: CGSize
+                if versions.contains(.hiResolution) {
+                    highestSize = kSHSizeForQuality(quality: .hiResolution)
+                } else if versions.contains(.midResolution) {
+                    highestSize = kSHSizeForQuality(quality: .midResolution)
+                } else {
+                    highestSize = kSHSizeForQuality(quality: .lowResolution)
+                }
+                 
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.deliveryMode = .highQualityFormat
+                self.imageManager.startCachingImages(for: [phAsset],
+                                                     targetSize: highestSize,
+                                                     contentMode: .default,
+                                                     options: options)
+                
+                self.log.info("asking imageManager \(self.imageManager) to cache image size \(highestSize.debugDescription) for asset \(phAsset.localIdentifier)")
+                
+                photoAsset = SHApplePhotoAsset(
+                    for: phAsset,
+                    cachedImage: nil,
+                    usingCachingImageManager: self.imageManager
+                )
+                
                 group.leave()
-                return
             }
-            
-            ///
-            /// Fetch the higest-needed resolution asset based on the versions,
-            /// using the same imageManager used to display the asset (so that it's likely that it was already cached by Photos).
-            /// Doing this here avoids fetching large assets from the Apple Photos library in the SHEncryptOperation,
-            /// as cachedImage on the SHApplePhotoAsset will be set here, and will be resized to smaller images
-            /// when generating the SHAssetQuality versions.
-            ///
-            
-            let highestSize: CGSize
-            if versions.contains(.hiResolution) {
-                highestSize = kSHSizeForQuality(quality: .hiResolution)
-            } else if versions.contains(.midResolution) {
-                highestSize = kSHSizeForQuality(quality: .midResolution)
-            } else {
-                highestSize = kSHSizeForQuality(quality: .lowResolution)
-            }
-             
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            self.imageManager.startCachingImages(for: [phAsset],
-                                                 targetSize: highestSize,
-                                                 contentMode: .default,
-                                                 options: options)
-            
-            self.log.info("asking imageManager \(self.imageManager) to cache image size \(highestSize.debugDescription) for asset \(phAsset.localIdentifier)")
-            
-            photoAsset = SHApplePhotoAsset(
-                for: phAsset,
-                cachedImage: nil,
-                usingCachingImageManager: self.imageManager
-            )
-            
-            group.leave()
         }
         
         let dispatchResult = group.wait(timeout: .now() + .seconds(30))
@@ -121,8 +129,10 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return photoAsset!
     }
     
-    public func markAsFailed(fetchRequest request: SHLocalFetchRequestQueueItem) throws
-    {
+    public func markAsFailed(
+        fetchRequest request: SHLocalFetchRequestQueueItem,
+        queueItem: KBQueueItem
+    ) throws {
         let localIdentifier = request.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
@@ -134,7 +144,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
         let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
         
-        do { _ = try fetchQueue.dequeue() }
+        do { _ = try fetchQueue.dequeue(item: queueItem) }
         catch {
             log.error("asset \(localIdentifier) failed to encrypt but dequeuing from FETCH queue failed, so this operation will be attempted again.")
             throw error
@@ -177,7 +187,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     public func markAsSuccessful(
         photoAsset: SHApplePhotoAsset,
-        fetchRequest request: SHLocalFetchRequestQueueItem
+        fetchRequest request: SHLocalFetchRequestQueueItem,
+        queueItem: KBQueueItem
     ) throws
     {
         let localIdentifier = photoAsset.phAsset.localIdentifier
@@ -251,7 +262,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
         
-        do { _ = try fetchQueue.dequeue() }
+        do { _ = try fetchQueue.dequeue(item: queueItem) }
         catch {
             log.warning("asset \(localIdentifier) was fetched but dequeuing failed, so this operation will be attempted again.")
             throw error
@@ -305,7 +316,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         guard let photoAsset = try? self.retrieveAsset(fetchRequest: fetchRequest) else {
             log.error("failed to fetch data for item \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
             do {
-                try self.markAsFailed(fetchRequest: fetchRequest)
+                try self.markAsFailed(fetchRequest: fetchRequest,
+                                      queueItem: item)
             } catch {
                 log.critical("failed to mark FETCH as failed. This will likely cause infinite loops")
                 // TODO: Handle
@@ -317,7 +329,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         do {
             try self.markAsSuccessful(
                 photoAsset: photoAsset,
-                fetchRequest: fetchRequest
+                fetchRequest: fetchRequest,
+                queueItem: item
             )
         } catch {
             log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
@@ -325,10 +338,60 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
     }
     
-    public func runOnce() throws {
+    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
+        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        fetchQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        for item in queueItems {
+            guard processingState(for: item.identifier) != .fetching else {
+                continue
+            }
+            
+            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
+            
+            setProcessingState(.fetching, for: item.identifier)
+            
+            do {
+                try self.process(item)
+                log.info("[√] fetch task completed for item \(item.identifier)")
+            } catch {
+                log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+        }
+    }
+    
+    public func runOnce(maxItems: Int? = nil) throws {
+        var count = 0
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
         
         while let item = try fetchQueue.peek() {
+            guard maxItems == nil || count < maxItems! else {
+                break
+            }
             guard processingState(for: item.identifier) != .fetching else {
                 continue
             }
@@ -344,6 +407,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             
             setProcessingState(nil, for: item.identifier)
+            
+            count += 1
         }
     }
     

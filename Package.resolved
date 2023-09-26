@@ -6,17 +6,17 @@
         "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase.git",
         "state": {
           "branch": null,
-          "revision": "03af915465efaf8ee1c10d92183500c71b1c86c8",
-          "version": "0.9.5"
+          "revision": "6fdc46ea5ed343d7990212748916806f79c4670f",
+          "version": "0.9.8"
         }
       },
       {
         "package": "Safehill-Crypto",
-        "repositoryURL": "https://github.com/Safehill/Safehill-Crypto.git",
+        "repositoryURL": "https://github.com/Safehill/Safehill-Crypto",
         "state": {
           "branch": null,
-          "revision": "8e28301440bf2d4d59e9c346def90c6784433872",
-          "version": "1.1.6"
+          "revision": "435ae92110defa6088719de80a4739d120d6ab40",
+          "version": "1.1.12"
         }
       },
       {
@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/apple/swift-crypto.git",
         "state": {
           "branch": null,
-          "revision": "33a20e650c33f6d72d822d558333f2085effa3dc",
-          "version": "2.5.0"
+          "revision": "60f13f60c4d093691934dc6cfdf5f508ada1f894",
+          "version": "2.6.0"
         }
       },
       {

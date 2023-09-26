@@ -35,20 +35,8 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
     
-    /// Using AppleID credentials either signs in an existing user or creates a new user with such credentials, their public key and public signature
-    /// - Parameters:
-    ///   - name  the user name
-    ///   - authorizationCode  the data containing the auth code  to validate
-    ///   - identityToken  the data containing the identity token to validate
-    ///   - completionHandler: the callback method
-    func signInWithApple(email: String,
-                         name: String,
-                         authorizationCode: Data,
-                         identityToken: Data,
-                         completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
-    
     /// Logs the current user, aka the requestor
-    func signIn(name: String, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
+    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
@@ -64,9 +52,7 @@ public protocol SHServerAPI {
     
     // MARK: Assets Fetch
     
-    func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
-    
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]?,
                              completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
     
     /// Retrieve assets data and metadata
@@ -80,10 +66,11 @@ public protocol SHServerAPI {
     
     // MARK: Assets Write
     
-    /// Create encrypted asset and versions (low res and hi res)
+    /// Create encrypted assets and their versions on the server, and retrieves the presigned URL for the client to upload.
     /// - Parameters:
     ///   - assets: the encrypted data for each asset
     ///   - groupId: the group identifier used for the first upload
+    ///   - filterVersions: because the input `SHEncryptedAsset`, optionally specify which versions to pick up from the `assets` object
     ///   - completionHandler: the callback method
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,

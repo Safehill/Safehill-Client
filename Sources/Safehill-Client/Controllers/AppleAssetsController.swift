@@ -10,13 +10,14 @@ public protocol SHPhotoAssetChangeDelegate {
     func authorizationChanged()
     func didAddToCameraRoll(assets: [PHAsset])
     func didRemoveFromCameraRoll(assets: [PHAsset])
+    func needsToFetchWholeLibrary()
 }
 
 public enum SHPhotosFilter {
     case withLocalIdentifiers([String]), after(Date), before(Date), afterOrOn(Date), beforeOrOn(Date), limit(Int)
 }
 
-public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
+public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLibraryAvailabilityObserver {
     
     // TODO: Maybe hashing can be handled better by overriding Hashable/Equatable? That would also make it unnecessarily complex though :(
     public var identifier: String {
@@ -30,18 +31,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     public let index: KBKVStore?
     public let imageManager: PHCachingImageManager
     
-    private var cameraRollFetchResult: PHFetchResult<PHAsset>? = nil
-    
-    public var indexedAssets: [PHAsset] {
-        var indexedAssets = [PHAsset]()
-        guard let cameraRollFetchResult = cameraRollFetchResult else {
-            return indexedAssets
-        }
-        cameraRollFetchResult.enumerateObjects { phAsset, _, _ in
-            indexedAssets.append(phAsset)
-        }
-        return indexedAssets
-    }
+    public var lastFetchResult: PHFetchResult<PHAsset>? = nil
     
     public var authorizationStatus: PHAuthorizationStatus {
         get {
@@ -61,7 +51,8 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
                 log.warning("Unable to record kSHPhotosAuthorizationStatusKey status in UserDefaults KBKVStore")
             }
             if [.authorized, .limited].contains(newValue) {
-                PHPhotoLibrary.shared().register(self)
+                PHPhotoLibrary.shared().register(self as PHPhotoLibraryChangeObserver)
+                PHPhotoLibrary.shared().register(self as PHPhotoLibraryAvailabilityObserver)
             }
         }
     }
@@ -99,7 +90,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         )
     }
     
-    public static func fetchResult(using filters: [SHPhotosFilter],
+    private static func fetchResult(using filters: [SHPhotosFilter],
                                    completionHandler: @escaping (Swift.Result<PHFetchResult<PHAsset>, Error>) -> ()) {
         // Get all the camera roll photos and videos
         let albumFetchResult = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: nil)
@@ -143,6 +134,48 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
         }
     }
     
+    /// Fetches one asset from the cache, if available, or from the photo library
+    /// - Parameters:
+    ///   - localIdentifier: the PHAsset local identifier to search
+    ///   - completionHandler: the completion handler
+    public func fetchCameraRollAsset(withLocalIdentifier localIdentifier: String,
+                                     completionHandler: @escaping (Swift.Result<PHAsset?, Error>) -> ()) {
+        var retrievedAsset: PHAsset? = nil
+        
+        if let previousResult = self.lastFetchResult {
+            previousResult.enumerateObjects { phAsset, _, stop in
+                if phAsset.localIdentifier == localIdentifier {
+                    retrievedAsset = phAsset
+                    stop.pointee = true
+                }
+            }
+        }
+        
+        guard retrievedAsset == nil else {
+            completionHandler(.success(retrievedAsset))
+            return
+        }
+        
+        let filters: [SHPhotosFilter] = [
+            .limit(1),
+            .withLocalIdentifiers([localIdentifier])
+        ]
+        SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
+            switch result {
+            case .success(let fetchResult):
+                if fetchResult.count == 1 {
+                    fetchResult.enumerateObjects { phAsset, count, stop in
+                        retrievedAsset = phAsset
+                        stop.pointee = true
+                    }
+                }
+                completionHandler(.success(retrievedAsset))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        })
+    }
+    
     /// Fetches the latest assets in the Camera Roll using the Photos Framework in the background and returns a `PHFetchResult`.
     /// If an `index` is available, it also stores the`SHApplePhotoAsset`s corresponding to the assets in the fetch result.
     /// The first operation is executed on the`ingestionQueue`, while the latter on the `processingQueue`.
@@ -159,19 +192,19 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
             SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
                 switch result {
                 case .success(let fetchResult):
-                    self.cameraRollFetchResult = fetchResult
+                    self.lastFetchResult = fetchResult
                     
                     if let _ = self.index {
-                        self.updateIndex(with: self.cameraRollFetchResult!) { result in
+                        self.updateIndex(with: fetchResult) { result in
                             switch result {
                             case .success():
-                                completionHandler(.success(self.cameraRollFetchResult!))
+                                completionHandler(.success(fetchResult))
                             case .failure(let error):
                                 completionHandler(.failure(error))
                             }
                         }
                     } else {
-                        completionHandler(.success(self.cameraRollFetchResult!))
+                        completionHandler(.success(fetchResult))
                     }
                 case .failure(let error):
                     completionHandler(.failure(error))
@@ -200,10 +233,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
                         // Asset was modified since cached -> remove from the persistent cache
                         cachedAssetIdsToInvalidate.append(asset.localIdentifier)
                     }
-                } else {
-                    let kvsAssetValue = SHApplePhotoAsset(for: asset, usingCachingImageManager: self.imageManager)
-                    writeBatch.set(value: kvsAssetValue, for: asset.localIdentifier)
                 }
+                let kvsAssetValue = SHApplePhotoAsset(for: asset, usingCachingImageManager: self.imageManager)
+                writeBatch.set(value: kvsAssetValue, for: asset.localIdentifier)
             }
             
             do {
@@ -220,31 +252,50 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
     // MARK: PHPhotoLibraryChangeObserver protocol
     
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        guard let cameraRoll = self.cameraRollFetchResult else {
-            log.warning("No assets were ever fetched. Ignoring change notification")
+        guard let cameraRoll = self.lastFetchResult else {
+            log.warning("No assets were ever fetched. Ignoring the change notification")
+            return
+        }
+        
+        let changeDetails = changeInstance.changeDetails(for: cameraRoll)
+        guard let changeDetails = changeDetails else {
+            log.warning("Notified about change but no change object. Ignoring the notification")
             return
         }
         
         self.processingQueue.async {
-            let changeDetails = changeInstance.changeDetails(for: cameraRoll)
-            let totalCount = (changeDetails?.insertedObjects.count ?? 0) + (changeDetails?.removedObjects.count ?? 0) + (changeDetails?.changedObjects.count ?? 0)
-            if let changeDetails = changeDetails, totalCount > 0 {
-                self.cameraRollFetchResult = changeDetails.fetchResultAfterChanges
+            if changeDetails.hasIncrementalChanges {
+                let totalCount = (
+                    changeDetails.insertedObjects.count
+                    + changeDetails.removedObjects.count
+                    + changeDetails.changedObjects.count
+                )
+                
+                guard totalCount > 0 else {
+                    log.warning("Notified of changes but no change detected")
+                    return
+                }
+                
+                self.lastFetchResult = changeDetails.fetchResultAfterChanges
                 let writeBatch = self.index?.writeBatch()
                 
                 // Inserted
-                for asset in changeDetails.insertedObjects {
-                    writeBatch?.set(value: SHApplePhotoAsset(for: asset), for: asset.localIdentifier)
-                }
-                for delegate in self.delegates.values {
-                    delegate.didAddToCameraRoll(assets: changeDetails.insertedObjects)
+                if changeDetails.insertedObjects.count > 0 {
+                    for asset in changeDetails.insertedObjects {
+                        writeBatch?.set(value: SHApplePhotoAsset(for: asset), for: asset.localIdentifier)
+                    }
+                    for delegate in self.delegates.values {
+                        delegate.didAddToCameraRoll(assets: changeDetails.insertedObjects)
+                    }
                 }
                 // Removed
-                for asset in changeDetails.removedObjects {
-                    writeBatch?.set(value: nil, for: asset.localIdentifier)
-                }
-                for delegate in self.delegates.values {
-                    delegate.didRemoveFromCameraRoll(assets: changeDetails.removedObjects)
+                if changeDetails.removedObjects.count > 0 {
+                    for asset in changeDetails.removedObjects {
+                        writeBatch?.set(value: nil, for: asset.localIdentifier)
+                    }
+                    for delegate in self.delegates.values {
+                        delegate.didRemoveFromCameraRoll(assets: changeDetails.removedObjects)
+                    }
                 }
                 
                 if let index = self.index {
@@ -256,10 +307,15 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver {
                     }
                 }
             } else {
-                log.warning("No changes in camera roll. Assuming authorization changed")
-                let _ = self.delegates.map { $0.value.authorizationChanged() }
+                self.fetchCameraRollAssets(withFilters: []) { _ in
+                    self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
+                }
             }
         }
+    }
+    
+    public func photoLibraryDidBecomeUnavailable(_ photoLibrary: PHPhotoLibrary) {
+        self.delegates.forEach { $0.value.authorizationChanged() }
     }
 }
 
