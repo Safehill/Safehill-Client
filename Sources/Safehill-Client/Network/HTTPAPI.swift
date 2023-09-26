@@ -448,31 +448,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
-            switch result {
-            case .success(let descriptors):
-                completionHandler(.success(descriptors))
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
-    }
-
-    // TODO: Replace this with server filtering
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
                              completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        self.post("assets/descriptors/retrieve", parameters: nil) { (result: Result<[SHGenericAssetDescriptor], Error>) in
-            switch result {
-            case .success(let descriptors):
-                let filteredDescriptors = descriptors.filter { descriptor in
-                    forAssetGlobalIdentifiers.contains(descriptor.globalIdentifier)
-                }
-                return completionHandler(.success(filteredDescriptors))
-            case .failure(let error):
-                return completionHandler(.failure(error))
-            }
-        }
+        let parameters = forAssetGlobalIdentifiers != nil
+        ? ["globalIdentifiers": forAssetGlobalIdentifiers]
+        : nil
+        self.post("assets/descriptors/retrieve", parameters: parameters, completionHandler: completionHandler)
     }
     
     /// Fetches the assets metadata from the server, then fetches their data from S3

@@ -52,9 +52,7 @@ public protocol SHServerAPI {
     
     // MARK: Assets Fetch
     
-    func getAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
-    
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [String],
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]?,
                              completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
     
     /// Retrieve assets data and metadata
