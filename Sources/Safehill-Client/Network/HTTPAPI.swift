@@ -453,7 +453,14 @@ struct SHServerHTTPAPI : SHServerAPI {
         let parameters = forAssetGlobalIdentifiers != nil
         ? ["globalIdentifiers": forAssetGlobalIdentifiers]
         : nil
-        self.post("assets/descriptors/retrieve", parameters: parameters, completionHandler: completionHandler)
+        self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+            switch result {
+            case .success(let descriptors):
+                completionHandler(.success(descriptors))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     /// Fetches the assets metadata from the server, then fetches their data from S3
