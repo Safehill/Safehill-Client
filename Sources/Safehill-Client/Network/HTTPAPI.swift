@@ -536,8 +536,16 @@ struct SHServerHTTPAPI : SHServerAPI {
                 filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.count == 1, let asset = assets.first else {
-            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API currently only supports creating one asset per request")))
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API only supports creating one asset per request")))
             return
+        }
+        
+        var assetCreationDate: Date
+        if asset.creationDate == nil {
+            log.warning("No asset creation date. Assuming 1/1/1970")
+            assetCreationDate = Date.init(timeIntervalSince1970: 0)
+        } else {
+            assetCreationDate = asset.creationDate!
         }
         
         var assetVersions = [[String: Any]]()
@@ -555,7 +563,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         let createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
-            "creationDate": asset.creationDate?.iso8601withFractionalSeconds,
+            "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions,
             "forceUpdateVersions": true

@@ -68,10 +68,11 @@ public protocol SHServerAPI {
     
     // MARK: Assets Write
     
-    /// Create encrypted asset and versions (low res and hi res)
+    /// Create encrypted assets and their versions on the server, and retrieves the presigned URL for the client to upload.
     /// - Parameters:
     ///   - assets: the encrypted data for each asset
     ///   - groupId: the group identifier used for the first upload
+    ///   - filterVersions: because the input `SHEncryptedAsset`, optionally specify which versions to pick up from the `assets` object
     ///   - completionHandler: the callback method
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
