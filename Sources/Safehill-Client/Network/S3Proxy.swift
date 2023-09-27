@@ -33,11 +33,12 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             return
         }
         
-        let directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let fileURL = directoryURL.appendingPathComponent("inprogressuploads").appendingPathComponent(identifier)
-        let filePath = fileURL.path
-        
-        try? FileManager.default.removeItem(atPath: filePath)
+        /// Remove previously created file for upload once upload is done
+        if let tempFolderURL = S3Proxy.tempFolderURL {
+            let fileURL = tempFolderURL.appendingPathComponent(identifier)
+            let filePath = fileURL.path
+            try? FileManager.default.removeItem(atPath: filePath)
+        }
         
         handlerQueue.removeValue(forKey: identifier)
         
@@ -100,6 +101,18 @@ extension SHSessionDelegate: URLSessionDownloadDelegate {
 
 struct S3Proxy {
     let presignedURL: String
+    
+    static var tempFolderURL: URL? {
+        guard let folder = URL(string: NSTemporaryDirectory())?.appendingPathComponent("uploads") else {
+            return nil
+        }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            return folder
+        } catch {
+            return nil
+        }
+    }
 
     // - MARK: Uploading
     
@@ -107,6 +120,11 @@ struct S3Proxy {
                                          urlRequest: URLRequest,
                                          sessionIdentifier: String,
                                          completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        guard let tempFolderURL = tempFolderURL else {
+            completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to create directory")))
+            return
+        }
+        
         let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
         configuration.allowsCellularAccess = true // defaults to true
         configuration.waitsForConnectivity = true // default to false
@@ -122,8 +140,7 @@ struct S3Proxy {
                                            delegate: sessionDelegate,
                                            delegateQueue: OperationQueue.main)
         
-        let directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let fileURL = directoryURL.appendingPathComponent("inprogressuploads").appendingPathComponent(sessionIdentifier)
+        let fileURL = tempFolderURL.appendingPathComponent(sessionIdentifier)
         let filePath = fileURL.path
         
         try? FileManager.default.removeItem(atPath: filePath)
