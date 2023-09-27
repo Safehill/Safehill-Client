@@ -33,6 +33,12 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             return
         }
         
+        let directoryURL = FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask).first!
+        let fileURL = directoryURL.appendingPathComponent("inprogressuploads").appendingPathComponent(identifier)
+        let filePath = fileURL.path
+        
+        try? FileManager.default.removeItem(atPath: filePath)
+        
         handlerQueue.removeValue(forKey: identifier)
         
         for handler in handlers {
@@ -116,10 +122,11 @@ struct S3Proxy {
                                            delegate: sessionDelegate,
                                            delegateQueue: OperationQueue.main)
         
-        let uuid = UUID().uuidString
-        let directoryURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let fileURL = directoryURL.appendingPathComponent(uuid)
+        let directoryURL = FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask).first!
+        let fileURL = directoryURL.appendingPathComponent("inprogressuploads").appendingPathComponent(sessionIdentifier)
         let filePath = fileURL.path
+        
+        try? FileManager.default.removeItem(atPath: filePath)
         FileManager.default.createFile(atPath: filePath, contents: data, attributes: nil)
         
         let task = backgroundSession.uploadTask(with: urlRequest, fromFile: fileURL)
@@ -127,7 +134,7 @@ struct S3Proxy {
     }
     
     private static func urlRequest(
-        _ data: Data,
+        _ data: Data?,
         usingPresignedURL presignedURL: URL,
         headers: [String: String]? = nil
     ) -> URLRequest {
@@ -147,7 +154,11 @@ struct S3Proxy {
         sessionIdentifier: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        let request = urlRequest(data, usingPresignedURL: presignedURL)
+        /// 
+        /// When in the background the request data is served from file
+        /// See `backgroundUpload(data:urlRequest:sessionIdentifier:completionHandler:)`
+        ///
+        let request = urlRequest(nil, usingPresignedURL: presignedURL)
         
         log.info("storing asset to S3 using request \(request.httpMethod!) \(request.url!) with headers \(String(describing: request.allHTTPHeaderFields))")
         
