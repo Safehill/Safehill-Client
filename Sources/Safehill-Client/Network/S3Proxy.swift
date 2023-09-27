@@ -33,7 +33,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             return
         }
         
-        let directoryURL = FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask).first!
+        let directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let fileURL = directoryURL.appendingPathComponent("inprogressuploads").appendingPathComponent(identifier)
         let filePath = fileURL.path
         
@@ -122,15 +122,17 @@ struct S3Proxy {
                                            delegate: sessionDelegate,
                                            delegateQueue: OperationQueue.main)
         
-        let directoryURL = FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask).first!
+        let directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let fileURL = directoryURL.appendingPathComponent("inprogressuploads").appendingPathComponent(sessionIdentifier)
         let filePath = fileURL.path
         
         try? FileManager.default.removeItem(atPath: filePath)
-        FileManager.default.createFile(atPath: filePath, contents: data, attributes: nil)
-        
-        let task = backgroundSession.uploadTask(with: urlRequest, fromFile: fileURL)
-        task.resume()
+        if FileManager.default.createFile(atPath: filePath, contents: data, attributes: nil) {
+            let task = backgroundSession.uploadTask(with: urlRequest, fromFile: fileURL)
+            task.resume()
+        } else {
+            completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to create file")))
+        }
     }
     
     private static func urlRequest(
