@@ -31,7 +31,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     public let index: KBKVStore?
     public let imageManager: PHCachingImageManager
     
-    public var lastFetchResult: PHFetchResult<PHAsset>? = nil
+    public var lastFullFetchResult: PHFetchResult<PHAsset>? = nil
     
     public var authorizationStatus: PHAuthorizationStatus {
         get {
@@ -142,7 +142,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                                      completionHandler: @escaping (Swift.Result<PHAsset?, Error>) -> ()) {
         var retrievedAsset: PHAsset? = nil
         
-        if let previousResult = self.lastFetchResult {
+        if let previousResult = self.lastFullFetchResult {
             previousResult.enumerateObjects { phAsset, _, stop in
                 if phAsset.localIdentifier == localIdentifier {
                     retrievedAsset = phAsset
@@ -192,7 +192,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
             SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
                 switch result {
                 case .success(let fetchResult):
-                    self.lastFetchResult = fetchResult
+                    if filters.count == 0 {
+                        self.lastFullFetchResult = fetchResult
+                    }
                     
                     if let _ = self.index {
                         self.updateIndex(with: fetchResult) { result in
@@ -252,7 +254,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     // MARK: PHPhotoLibraryChangeObserver protocol
     
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        guard let cameraRoll = self.lastFetchResult else {
+        guard let cameraRoll = self.lastFullFetchResult else {
             log.warning("No assets were ever fetched. Ignoring the change notification")
             return
         }
@@ -276,7 +278,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     return
                 }
                 
-                self.lastFetchResult = changeDetails.fetchResultAfterChanges
+                self.lastFullFetchResult = changeDetails.fetchResultAfterChanges
                 let writeBatch = self.index?.writeBatch()
                 
                 // Inserted
