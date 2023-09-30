@@ -259,16 +259,10 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
             return
         }
         
-        let _fullLibraryRefetch = {
-            self.fetchCameraRollAssets(withFilters: []) { _ in
-                self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
-            }
-        }
-        
         guard lastFetch.count > 0 else {
-            /// If the previous fetch returned 0 results, and we get a notification, it's likely the authorization status changed
-            /// Re-fetch the whole library
-            _fullLibraryRefetch()
+            /// If the previous fetch returned 0 results, and we get a notification, it's likely that the authorization status changed.
+            /// In fact, this happens on first launch when the user allow photos access for the first time.
+            self.delegates.forEach { $0.value.authorizationChanged() }
             return
         }
         
@@ -326,9 +320,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     }
                 }
             } else {
-                self.fetchCameraRollAssets(withFilters: []) { _ in
-                    self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
-                }
+                self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
             }
         }
     }
