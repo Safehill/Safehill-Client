@@ -254,13 +254,30 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     // MARK: PHPhotoLibraryChangeObserver protocol
     
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        guard let cameraRoll = self.lastFullFetchResult else {
+        guard let lastFetch = self.lastFullFetchResult else {
             log.warning("No assets were ever fetched. Ignoring the change notification")
             return
         }
         
-        let changeDetails = changeInstance.changeDetails(for: cameraRoll)
+        let _fullLibraryRefetch = {
+            self.fetchCameraRollAssets(withFilters: []) { _ in
+                self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
+            }
+        }
+        
+        guard lastFetch.count > 0 else {
+            /// If the previous fetch returned 0 results, and we get a notification, it's likely the authorization status changed
+            /// Re-fetch the whole library
+            _fullLibraryRefetch()
+            return
+        }
+        
+        let changeDetails = changeInstance.changeDetails(for: lastFetch)
         guard let changeDetails = changeDetails else {
+            /// If the previous fetch is not empty, and we get a notification with no details about the change
+            /// then we ignore it.
+            /// It seems like this is happening when a photo is deleted in the app.
+            /// Ignoring it guarantees that we don't re-fetch the library on deletion.
             log.warning("Notified about change but no change object. Ignoring the notification")
             return
         }
