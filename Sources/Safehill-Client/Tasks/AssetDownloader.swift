@@ -3,6 +3,11 @@ import Safehill_Crypto
 import KnowledgeBase
 import os
 
+protocol SHDownloadOperationProtocol {}
+public enum SHDownloadOperationSource {
+    case localServer, remoteServer
+}
+
 struct DownloadBlacklist {
     
     let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
@@ -87,7 +92,7 @@ struct DownloadBlacklist {
 }
 
 
-public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol, SHDownloadOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     

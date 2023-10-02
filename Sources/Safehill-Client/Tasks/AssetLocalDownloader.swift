@@ -115,7 +115,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             ///
             /// Assume graph is up to date, but also try to ingest again in the background and call the delegate method again
             /// 
-            self.delegate.handleAssetDescriptorResults(for: descriptors, users: users) {   
+            self.delegate.handleAssetDescriptorResults(for: descriptors,
+                                                       from: .localServer,
+                                                       users: users) {
 //                DispatchQueue.global(qos: .background).async {
 //                    do {
 //                        try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)

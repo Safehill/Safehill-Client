@@ -20,7 +20,10 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter for: the descriptors
     /// - Parameter users: the `SHServerUser` objects for user ids mentioned in the descriptors
     /// - Parameter completionHandler: called when handling is complete
-    func handleAssetDescriptorResults(for: [any SHAssetDescriptor], users: [SHServerUser], completionHandler: (() -> Void)?)
+    func handleAssetDescriptorResults(for: [any SHAssetDescriptor],
+                                      from source: SHDownloadOperationSource,
+                                      users: [SHServerUser],
+                                      completionHandler: (() -> Void)?)
     /// Notifies there are no assets to download at this time
     func noAssetsToDownload() -> Void
     /// Notifies there are assets to download from unknown users
