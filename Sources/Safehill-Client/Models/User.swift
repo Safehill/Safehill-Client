@@ -138,7 +138,7 @@ public struct SHLocalUser: SHServerUser {
         
         // Protocol SALT used for encryption
         do {
-            if let base64Salt = try SHKeychain.retrieveValue(from: authTokenKeychainLabel) {
+            if let base64Salt = try SHKeychain.retrieveValue(from: saltKeychainLabel) {
                 if let salt = Data(base64Encoded: base64Salt) {
                     self._encryptionProtocolSalt = salt
                 } else {

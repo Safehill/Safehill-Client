@@ -31,7 +31,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     public let index: KBKVStore?
     public let imageManager: PHCachingImageManager
     
-    public var lastFetchResult: PHFetchResult<PHAsset>? = nil
+    public var lastFullFetchResult: PHFetchResult<PHAsset>? = nil
     
     public var authorizationStatus: PHAuthorizationStatus {
         get {
@@ -142,7 +142,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                                      completionHandler: @escaping (Swift.Result<PHAsset?, Error>) -> ()) {
         var retrievedAsset: PHAsset? = nil
         
-        if let previousResult = self.lastFetchResult {
+        if let previousResult = self.lastFullFetchResult {
             previousResult.enumerateObjects { phAsset, _, stop in
                 if phAsset.localIdentifier == localIdentifier {
                     retrievedAsset = phAsset
@@ -192,7 +192,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
             SHPhotosIndexer.fetchResult(using: filters, completionHandler: { result in
                 switch result {
                 case .success(let fetchResult):
-                    self.lastFetchResult = fetchResult
+                    if filters.count == 0 {
+                        self.lastFullFetchResult = fetchResult
+                    }
                     
                     if let _ = self.index {
                         self.updateIndex(with: fetchResult) { result in
@@ -252,13 +254,24 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     // MARK: PHPhotoLibraryChangeObserver protocol
     
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
-        guard let cameraRoll = self.lastFetchResult else {
+        guard let lastFetch = self.lastFullFetchResult else {
             log.warning("No assets were ever fetched. Ignoring the change notification")
             return
         }
         
-        let changeDetails = changeInstance.changeDetails(for: cameraRoll)
+        guard lastFetch.count > 0 else {
+            /// If the previous fetch returned 0 results, and we get a notification, it's likely that the authorization status changed.
+            /// In fact, this happens on first launch when the user allow photos access for the first time.
+            self.delegates.forEach { $0.value.authorizationChanged() }
+            return
+        }
+        
+        let changeDetails = changeInstance.changeDetails(for: lastFetch)
         guard let changeDetails = changeDetails else {
+            /// If the previous fetch is not empty, and we get a notification with no details about the change
+            /// then we ignore it.
+            /// It seems like this is happening when a photo is deleted in the app.
+            /// Ignoring it guarantees that we don't re-fetch the library on deletion.
             log.warning("Notified about change but no change object. Ignoring the notification")
             return
         }
@@ -276,7 +289,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     return
                 }
                 
-                self.lastFetchResult = changeDetails.fetchResultAfterChanges
+                self.lastFullFetchResult = changeDetails.fetchResultAfterChanges
                 let writeBatch = self.index?.writeBatch()
                 
                 // Inserted
@@ -307,9 +320,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     }
                 }
             } else {
-                self.fetchCameraRollAssets(withFilters: []) { _ in
-                    self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
-                }
+                self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
             }
         }
     }

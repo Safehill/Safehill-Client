@@ -54,6 +54,11 @@ extension SHServerProxy {
         }
     }
     
+    public func updateLocalUser(with serverUser: SHServerUser,
+                           completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        self.localServer.updateUser(email: nil, name: serverUser.name, completionHandler: completionHandler)
+    }
+    
     public func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
         self.remoteServer.signIn(name: name, clientBuild: clientBuild, completionHandler: completionHandler)
     }
