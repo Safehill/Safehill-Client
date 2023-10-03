@@ -6,36 +6,9 @@ import os
 
 public class SHLocalDownloadOperation: SHDownloadOperation {
     
-    let assetGlobalIdentifiersInCache: [GlobalIdentifier]
-    
-    override public init(user: SHLocalUser,
-                         delegate: SHAssetDownloaderDelegate,
-                         outboundDelegates: [SHOutboundAssetOperationDelegate],
-                         limitPerRun limit: Int? = nil,
-                         photoIndexer: SHPhotosIndexer? = nil) {
-        self.assetGlobalIdentifiersInCache = []
-        super.init(user: user,
-                   delegate: delegate,
-                   outboundDelegates: outboundDelegates,
-                   limitPerRun: limit,
-                   photoIndexer: photoIndexer)
-    }
-    
-    public init(user: SHLocalUser,
-                assetGlobalIdentifiersInCache: [GlobalIdentifier],
-                delegate: SHAssetDownloaderDelegate,
-                outboundDelegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int? = nil,
-                photoIndexer: SHPhotosIndexer? = nil) {
-        self.assetGlobalIdentifiersInCache = assetGlobalIdentifiersInCache
-        super.init(user: user,
-                   delegate: delegate,
-                   outboundDelegates: outboundDelegates,
-                   limitPerRun: limit,
-                   photoIndexer: photoIndexer)
-    }
-    
-    private func fetchLocalDescriptors(completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void) {
+    private func fetchLocalDescriptors(
+        completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void
+    ) {
         ///
         /// Fetching assets from the ServerProxy is a 2-step process
         /// 1. Get the descriptors (no data) to determine which assets to pull. This calls the delegate with (Assets.downloading)
@@ -53,41 +26,26 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             return
         }
         
-        let existingGlobalIdentifiers = self.assetGlobalIdentifiersInCache
-        let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
-        
         let start = CFAbsoluteTimeGetCurrent()
+        
+        let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
         
         var descriptorsByLocalIdentifier = [String: any SHAssetDescriptor]()
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-        
-        var globalIdentifiersToFetchFromLocalServer = [String]()
         
         for descriptor in fetchResult.localDescriptors {
             if let localIdentifier = descriptor.localIdentifier,
                existingLocalIdentifiers.contains(localIdentifier) {
                 descriptorsByLocalIdentifier[localIdentifier] = descriptor
-            } else {
-                guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
-                    continue
-                }
-                
-                globalIdentifiersToFetchFromLocalServer.append(descriptor.globalIdentifier)
             }
+            descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
         }
         
         if descriptorsByLocalIdentifier.count > 0 {
             self.delegate.markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: descriptorsByLocalIdentifier)
         }
         
-        if globalIdentifiersToFetchFromLocalServer.count == 0 {
-            completionHandler(.success([:]))
-            return
-        }
-        
-        descriptorsByGlobalIdentifier = fetchResult.localDescriptors.filter {
-            globalIdentifiersToFetchFromLocalServer.contains($0.globalIdentifier)
-        }.reduce([:]) { partialResult, descriptor in
+        descriptorsByGlobalIdentifier = fetchResult.localDescriptors.reduce([:]) { partialResult, descriptor in
             var result = partialResult
             result[descriptor.globalIdentifier] = descriptor
             return result
@@ -117,16 +75,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             /// 
             self.delegate.handleAssetDescriptorResults(for: descriptors,
                                                        from: .localServer,
-                                                       users: users) {
-//                DispatchQueue.global(qos: .background).async {
-//                    do {
-//                        try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
-//                        self.delegate.handleAssetDescriptorResults(for: descriptors, users: users, completionHandler: nil)
-//                    } catch {
-//                        self.log.error("[KG] failed to ingest some descriptor into the graph")
-//                    }
-//                }
-            }
+                                                       users: users) {}
         }
         
         let end = CFAbsoluteTimeGetCurrent()
@@ -167,7 +116,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             case .success(let descriptorsByGlobalIdentifier):
                 ///
                 /// Get all asset descriptors associated with this user from the server.
-                /// Descriptors serve as a manifest to determine what to download
+                /// Descriptors serve as a manifest to determine what to decrypt
                 ///
                 guard descriptorsByGlobalIdentifier.count > 0 else {
                     completionHandler(.success(()))
