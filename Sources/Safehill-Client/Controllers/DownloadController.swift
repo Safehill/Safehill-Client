@@ -126,9 +126,9 @@ public struct SHAssetDownloadController {
         } catch {
             log.error("[KG] failed to ingest some descriptor into the graph")
         }
-        self.delegate?.handleAssetDescriptorResults(for: descriptors, 
-                                                    from: .remoteServer,
+        self.delegate?.handleAssetDescriptorResults(for: descriptors,
                                                     users: usersManifest,
+                                                    source: .remoteServer,
                                                     completionHandler: nil)
         
         do {

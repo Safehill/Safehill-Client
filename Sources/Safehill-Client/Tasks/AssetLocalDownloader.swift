@@ -74,8 +74,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             /// Assume graph is up to date, but also try to ingest again in the background and call the delegate method again
             /// 
             self.delegate.handleAssetDescriptorResults(for: descriptors,
-                                                       from: .localServer,
-                                                       users: users) {}
+                                                       users: users,
+                                                       source: .localServer) {}
         }
         
         let end = CFAbsoluteTimeGetCurrent()
