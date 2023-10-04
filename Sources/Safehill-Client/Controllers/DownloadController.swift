@@ -63,7 +63,7 @@ public struct SHAssetDownloadController {
             let key = "auth-" + userId
             let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
             
-            self.startDownloadOf(descriptors: descriptors, completionHandler: completionHandler)
+            self.startAuthorizedDownload(of: descriptors, completionHandler: completionHandler)
         } catch {
             completionHandler(.failure(error))
         }
@@ -96,29 +96,12 @@ public struct SHAssetDownloadController {
     ///   - descriptors: the list of asset descriptors for the assets that can be downloaded
     ///   - users: the cache of user objects, if one was already retrieved by the caller method
     ///   - completionHandler: the callback method
-    func startDownloadOf(descriptors: [any SHAssetDescriptor],
-                         from users: [SHServerUser]? = nil,
-                         completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    func startDownload(of descriptors: [any SHAssetDescriptor],
+                       completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
             return
-        }
-        
-        var usersManifest = [SHServerUser]()
-        if users == nil {
-            var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-            userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-            
-            do {
-                usersManifest = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
-            } catch {
-                log.error("Unable to fetch users mentioned in asset descriptors: \(error.localizedDescription)")
-                completionHandler(.failure(error))
-                return
-            }
-        } else {
-            usersManifest = users!
         }
         
         do {
@@ -126,16 +109,35 @@ public struct SHAssetDownloadController {
         } catch {
             log.error("[KG] failed to ingest some descriptor into the graph")
         }
-        self.delegate?.handleAssetDescriptorResults(for: descriptors,
-                                                    users: usersManifest,
-                                                    source: .remoteServer,
-                                                    completionHandler: nil)
         
         do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
+        }
+    }
+    
+    func startAuthorizedDownload(of descriptors: [any SHAssetDescriptor],
+                                 completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        var usersManifest = [SHServerUser]()
+        var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+        
+        do {
+            usersManifest = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+        } catch {
+            log.error("Unable to fetch users mentioned in asset descriptors: \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        self.startDownload(of: descriptors) { result in
+            if case .success() = result {
+                self.delegate?.handleAssetDescriptorResults(for: descriptors,
+                                                            users: usersManifest,
+                                                            completionHandler: nil)
+            }
         }
     }
 }

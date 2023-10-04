@@ -1,4 +1,5 @@
 import Foundation
+import Photos
 
 public protocol SHAssetDescriptorsChangeDelegate {
     func assetWasRemoved(globalIdentifier: String)
@@ -22,16 +23,11 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter completionHandler: called when handling is complete
     func handleAssetDescriptorResults(for: [any SHAssetDescriptor],
                                       users: [SHServerUser],
-                                      source: SHDownloadOperationSource,
                                       completionHandler: (() -> Void)?)
     /// Notifies there are no assets to download at this time
     func noAssetsToDownload() -> Void
     /// Notifies there are assets to download from unknown users
     func handleDownloadAuthorization(ofDescriptors: [any SHAssetDescriptor], users: [SHServerUser]) -> Void
-    
-    /// Notifies about a local asset being backed up on the cloud
-    /// - Parameter descriptorsByLocalIdentifier: the list of local asset identifier to server asset descriptor
-    func markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: [String: any SHAssetDescriptor])
     
     /// The download of a set of assets started
     /// - Parameter downloadRequest: the request
@@ -45,6 +41,11 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     ///   - assetIdentifier: the global identifier of the asset
     ///   - groupId: the group id of the request it belongs to
     func unrecoverableDownloadFailure(for assetIdentifier: String, groupId: String)
+    /// Notifies about an asset in the local library that is linked to one on the server (backed up)
+    /// - Parameters:
+    ///   - globalIdentifier: the global identifier of the asset
+    ///   - phAsset: the local asset
+    func handleAssetInLocalLibraryAndServer(globalIdentifier: GlobalIdentifier, phAsset: PHAsset)
     /// The low res was downloaded successfullly for some assets
     /// - Parameter _: the decrypted low res asset
     func handleLowResAsset(_: any SHDecryptedAsset)

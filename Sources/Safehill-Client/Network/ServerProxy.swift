@@ -583,28 +583,14 @@ extension SHServerProxy {
         ///
         /// Create a copy of the assets just fetched from the server in the local server (cache)
         ///
-        for (assetId, descriptor) in descriptorsByAssetGlobalId {
-            guard let encryptedAsset = remoteDictionary[assetId] else {
-                continue
+        let encryptedAssetsToCreate = remoteDictionary.filter({ assetGid, _ in descriptorsByAssetGlobalId[assetGid] != nil }).values
+        self.localServer.create(assets: Array(encryptedAssetsToCreate),
+                                descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId) { result in
+            if case .failure(let err) = result {
+                log.warning("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
             }
-            
-            group.enter()
-            self.localServer.create(assets: [encryptedAsset],
-                                   descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId)
-            { localResult in
-                if case .failure(let err) = localResult {
-                    log.error("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
-                }
-                group.leave()
-            }
+            completionHandler(.success(localDictionary.merging(remoteDictionary, uniquingKeysWith: { _, server in server })))
         }
-        
-        guard group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * descriptorsByAssetGlobalId.count)) == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        completionHandler(.success(localDictionary.merging(remoteDictionary, uniquingKeysWith: { _, server in server })))
     }
     
     func upload(serverAsset: SHServerAsset,

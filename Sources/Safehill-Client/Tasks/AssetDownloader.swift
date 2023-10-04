@@ -2,11 +2,9 @@ import Foundation
 import Safehill_Crypto
 import KnowledgeBase
 import os
+import Photos
 
 protocol SHDownloadOperationProtocol {}
-public enum SHDownloadOperationSource {
-    case localServer, remoteServer
-}
 
 struct DownloadBlacklist {
     
@@ -33,7 +31,7 @@ struct DownloadBlacklist {
                 try self.blacklistUserStorage.set(value: newValue,
                                                   for: kSHUsersBlacklistKey)
             } catch {
-                log.warning("[sync] unable to record kSHUserBlacklistKey status in UserDefaults KBKVStore")
+                log.warning("unable to record kSHUserBlacklistKey status in UserDefaults KBKVStore")
             }
         }
     }
@@ -134,7 +132,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                   completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void) {
         let start = CFAbsoluteTimeGetCurrent()
         
-        log.info("[sync] downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
+        log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
         serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
             versions: [quality]
@@ -159,11 +157,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     completionHandler(.failure(error))
                 }
             case .failure(let err):
-                self.log.critical("[sync] unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
+                self.log.critical("unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
                 completionHandler(.failure(err))
             }
             let end = CFAbsoluteTimeGetCurrent()
-            self.log.debug("[sync][PERF] \(CFAbsoluteTime(end - start)) for version \(quality.rawValue)")
+            self.log.debug("[PERF] \(CFAbsoluteTime(end - start)) for version \(quality.rawValue)")
         }
     }
     
@@ -186,53 +184,46 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return downloadRequest
     }
     
-    internal func fetchDescriptors(skipRemote: Bool = false) throws -> (
-        appleLibraryIdentifiers: [String],
-        localDescriptors: [any SHAssetDescriptor],
-        remoteDescriptors: [any SHAssetDescriptor]
-    ) {
+    internal func fetchApplePhotosLibraryAssets(for localIdentifiers: [String]) throws -> PHFetchResult<PHAsset>? {
         let group = DispatchGroup()
-        
-        var appleLibraryIdentifiers = [String]()
-        var localDescriptors = [any SHAssetDescriptor]()
-        var remoteDescriptors = [any SHAssetDescriptor]()
+        var fetchResult: PHFetchResult<PHAsset>? = nil
         var appleLibraryFetchError: Error? = nil
-        var localError: Error? = nil
-        var remoteError: Error? = nil
-        
-        if skipRemote == false {
-            group.enter()
-            serverProxy.getRemoteAssetDescriptors { result in
-                switch result {
-                case .success(let descriptors):
-                    remoteDescriptors = descriptors
-                case .failure(let err):
-                    remoteError = err
-                }
-                group.leave()
-            }
-        }
         
         group.enter()
-        serverProxy.getLocalAssetDescriptors { result in
+        self.photoIndexer.fetchCameraRollAssets(withFilters: [.withLocalIdentifiers(localIdentifiers)]) { result in
             switch result {
-            case .success(let descriptors):
-                localDescriptors = descriptors
+            case .success(let fullFetchResult):
+                fetchResult = fullFetchResult
             case .failure(let err):
-                localError = err
+                appleLibraryFetchError = err
             }
             group.leave()
         }
         
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard appleLibraryFetchError == nil else {
+            throw appleLibraryFetchError!
+        }
+        
+        return fetchResult
+    }
+    
+    internal func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
+        let group = DispatchGroup()
+        
+        var descriptors = [any SHAssetDescriptor]()
+        var error: Error? = nil
+        
         group.enter()
-        photoIndexer.fetchCameraRollAssets(withFilters: []) { result in
+        serverProxy.getRemoteAssetDescriptors { result in
             switch result {
-            case .success(let fullFetchResult):
-                fullFetchResult?.enumerateObjects { phAsset, count, stop in
-                    appleLibraryIdentifiers.append(phAsset.localIdentifier)
-                }
+            case .success(let descs):
+                descriptors = descs
             case .failure(let err):
-                appleLibraryFetchError = err
+                error = err
             }
             group.leave()
         }
@@ -242,161 +233,138 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             throw SHBackgroundOperationError.timedOut
         }
         
-        guard localError == nil else {
-            throw localError!
-        }
-        guard remoteError == nil else {
-            throw remoteError!
-        }
-        guard appleLibraryFetchError == nil else {
-            throw appleLibraryFetchError!
+        guard error == nil else {
+            throw error!
         }
         
-        return (
-            appleLibraryIdentifiers: appleLibraryIdentifiers,
-            localDescriptors: localDescriptors,
-            remoteDescriptors: remoteDescriptors
-        )
+        return descriptors
     }
     
-    private func downloadDescriptors(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
-        ///
-        /// Fetching assets from the ServerProxy is a 2-step process
-        /// 1. Get the remote descriptors (no data) to determine which assets to pull based on the local descriptor (and the local Apple Photos library, to avoid duplicates; for these we'll mark Photos library assets  as "uploaded").
-        /// 2. Get the low res assets data for the assets not already downloaded (based on the descriptors),
-        ///
-        
-        let fetchResult: (
-            appleLibraryIdentifiers: [String],
-            localDescriptors: [any SHAssetDescriptor],
-            remoteDescriptors: [any SHAssetDescriptor]
-        )
-        do { fetchResult = try self.fetchDescriptors() }
-        catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        let remoteDescriptors = fetchResult.remoteDescriptors
-        let existingGlobalIdentifiers = fetchResult.localDescriptors.map { $0.globalIdentifier }
-        let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
-        
+    ///
+    /// Fetch descriptors from server.
+    /// Filters blacklisted assets and users.
+    /// Call the delegate with the full manifest (regardless of the limit on the task config).
+    /// Limit the result based on the task config.
+    /// Return the descriptors for the assets to download keyed by global identifier.
+    ///
+    /// - Parameter completionHandler: the callback
+    internal func processDescriptors(
+        completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void
+    ) {
         let start = CFAbsoluteTimeGetCurrent()
         
-        ///
-        /// Filter out what NOT to download from the CDN:
-        /// - assets that have already been downloaded (are in `delegate.globalIdentifiersInCache`)
-        /// - assets that have a corresponding local asset (are in `delegate.localIdentifiersInCache`)
-        ///
-                
-        var globalIdentifiersToDownload = [String]()
-        var globalIdentifiersNotReadyForDownload = [String]()
-        var descriptorsByLocalIdentifier = [String: any SHAssetDescriptor]()
-        for descriptor in remoteDescriptors {
-            if let localIdentifier = descriptor.localIdentifier,
-               existingLocalIdentifiers.contains(localIdentifier) {
-                descriptorsByLocalIdentifier[localIdentifier] = descriptor
-            } else {
-                guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
-                    continue
-                }
-                
-                if descriptor.uploadState == .completed {
-                    globalIdentifiersToDownload.append(descriptor.globalIdentifier)
-                } else {
-                    globalIdentifiersNotReadyForDownload.append(descriptor.globalIdentifier)
-                }
-            }
-        }
-                
-        ///
-        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
-        ///
-        
-        var users = [SHServerUser]()
-        var userIdentifiers = Set(remoteDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(remoteDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-        
+        var descriptors = [any SHAssetDescriptor]()
         do {
-            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            descriptors = try self.fetchDescriptorsFromServer()
         } catch {
-            self.log.error("[sync] unable to fetch users from server: \(error.localizedDescription)")
             completionHandler(.failure(error))
             return
-        }
-                
-        ///
-        /// Download scenarios:
-        ///
-        /// 1. Assets on server and in the Photos library (local identifiers match) don't need to be downloaded.
-        ///     -> The delegate responsible to mark local assets "backed up" will be called
-        ///     -> If shared by "this" user, `UploadHistoryQueue` items will be created when they don't already exist.
-        ///
-        /// 2. Assets on the server not in the Photos library (local identifiers don't match), need to be downloaded.
-        ///     -> The delegate methods are responsible for adding the assets to the in-memory cache.
-        ///     -> The `SHServerProxy` is responsible to cache these in the `LocalServer`
-        ///
-        
-        if descriptorsByLocalIdentifier.count > 0 {
-            ///
-            /// Let the delegate know these local assets can be safely marked as "backed up"
-            ///
-            self.delegate.markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: descriptorsByLocalIdentifier)
-            
-            ///
-            /// Update UploadHistoryQueue and ShareHistoryQueue
-            ///
-            let descriptorsByLocalIdentifierSharedByThisUser = descriptorsByLocalIdentifier.compactMapValues({ descriptor in
-                if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-                    return descriptor
-                }
-                return nil
-            })
-            if descriptorsByLocalIdentifierSharedByThisUser.count > 0 {
-                self.updateHistoryQueues(with: descriptorsByLocalIdentifierSharedByThisUser,
-                                         users: users)
-            }
-        } else {
-            self.delegate.noAssetsToDownload()
-        }
-                
-        if globalIdentifiersToDownload.count == 0 {
-            completionHandler(.success(()))
-            return
-        }
-        
-        // MARK: Enqueue the items to download
-        
-        ///
-        /// Do not download more than `limit` if a limit was set on the operation
-        ///
-        if let limit = self.limit {
-            globalIdentifiersToDownload = Array(globalIdentifiersToDownload[...min(limit, globalIdentifiersToDownload.count-1)])
         }
         
         ///
         /// Filter out the ones that were blacklisted
         ///
-        let descriptorsForAssetsToDownload = remoteDescriptors.filter {
-            globalIdentifiersToDownload.contains($0.globalIdentifier)
-            && DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
+        descriptors = descriptors.filter {
+            DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
             && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
         }
         
-        if descriptorsForAssetsToDownload.count > 0 {
-            log.debug("[sync] remote descriptors = \(remoteDescriptors.count). non-blacklisted = \(descriptorsForAssetsToDownload.count)")
-        } else {
-            completionHandler(.success(()))
+        guard descriptors.count > 0 else {
+            self.delegate.noAssetsToDownload()
+            completionHandler(.success([:]))
             return
         }
         
         ///
-        /// Figure out which ones need authorization.
-        /// A download needs explicit authorization from the user if the sender has never shared an asset with this user before.
-        /// Once the link is established, all other downloads won't need authorization.
+        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
         ///
+        var users = [SHServerUser]()
+        var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
-        var mutableDescriptors = descriptorsForAssetsToDownload
+        do {
+            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+        } catch {
+            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        ///
+        /// Call the delegate with the full manifest of whitelisted assets
+        ///
+        self.delegate.handleAssetDescriptorResults(for: descriptors,
+                                                   users: users,
+                                                   completionHandler: nil)
+        
+        let end = CFAbsoluteTimeGetCurrent()
+        self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
+        
+        var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
+        for descriptor in descriptors {
+            descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
+            ///
+            /// Limit based on the task configuration
+            ///
+            if let limit = self.limit, descriptorsByGlobalIdentifier.count > limit {
+                break
+            }
+        }
+        completionHandler(.success(descriptorsByGlobalIdentifier))
+    }
+    
+    ///
+    /// Get the apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier
+    /// If they exist, then do not decrypt them but just serve the local asset.
+    /// If they don't, decrypt and serve the decrypted asset.
+    ///
+    internal func mergeDescriptorsWithLocalAssets(
+        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        completionHandler: @escaping (Swift.Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
+    ) {
+        let localIdentifiersInDescriptors = descriptorsByGlobalIdentifier.values.compactMap({ $0.localIdentifier })
+        var phAssetsByLocalIdentifier = [String: PHAsset]()
+        
+        do {
+            let fetchResult = try self.fetchApplePhotosLibraryAssets(for: localIdentifiersInDescriptors)
+            fetchResult?.enumerateObjects { phAsset, _, _ in
+                phAssetsByLocalIdentifier[phAsset.localIdentifier] = phAsset
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var filteredDescriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
+        for descriptor in descriptorsByGlobalIdentifier.values {
+            if let localId = descriptor.localIdentifier,
+               phAssetsByLocalIdentifier.keys.contains(localId) {
+                for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                    self.delegate.didStart(globalIdentifier: descriptor.globalIdentifier, groupId: groupId)
+                    self.delegate.handleAssetInLocalLibraryAndServer(globalIdentifier: descriptor.globalIdentifier,
+                                                                     phAsset: phAssetsByLocalIdentifier[localId]!)
+                    self.delegate.completed(descriptor.globalIdentifier, groupId: groupId)
+                }
+            } else {
+                filteredDescriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
+            }
+        }
+        
+        completionHandler(.success(filteredDescriptorsByGlobalIdentifier))
+    }
+    
+    ///
+    /// Either start download for the assets that are authorized, or request authorization for the ones that need authorization.
+    /// A download needs explicit authorization from the user if the sender has never shared an asset with this user before.
+    /// Once the link is established, all other downloads won't need authorization.
+    ///
+    /// - Parameter descriptorsByGlobalIdentifier: the descriptors keyed by their global identifier
+    /// - Parameter completionHandler: the callback method
+    private func downloadOrRequestAuthorization(
+        forAssetsIn descriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+    ) {
+        var mutableDescriptors = descriptors
         let partitionIndex = mutableDescriptors.partition { descr in
             if descr.sharingInfo.sharedByUserIdentifier == self.user.identifier {
                 return true
@@ -410,7 +378,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
         let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
         
-        self.log.info("[sync] found \(descriptorsForAssetsToDownload.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
+        self.log.info("found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
         let downloadController = SHAssetDownloadController(user: self.user, delegate: self.delegate)
         
@@ -428,9 +396,21 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             downloadController.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
                 switch result {
                 case .failure(let error):
-                    self.log.warning("[sync] failed to enqueue unauthorized download for \(remoteDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
+                    self.log.warning("failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
                 default: break
                 }
+            }
+            
+            var users = [SHServerUser]()
+            var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+            
+            do {
+                users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            } catch {
+                self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
+                completionHandler(.failure(error))
+                return
             }
 
             self.delegate.handleDownloadAuthorization(ofDescriptors: unauthorizedDownloadDescriptors, users: users)
@@ -443,20 +423,182 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - descriptors are added to the unauthorized download queue
             /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
             ///
-            downloadController.startDownloadOf(descriptors: authorizedDownloadDescriptors, from: users) { result in
-                switch result {
-                case .failure(let error):
-                    completionHandler(.failure(error))
-                case .success():
-                    let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[sync][PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptorsForAssetsToDownload.count) descriptors and enqueue download requests")
-                    completionHandler(.success(()))
-                }
-            }
+            downloadController.startDownload(of: authorizedDownloadDescriptors,
+                                             completionHandler: completionHandler)
         } else {
             completionHandler(.success(()))
         }
     }
+    
+    internal func processAssetsInDescriptors(
+        descriptorsByGlobalIdentifier: [String: any SHAssetDescriptor],
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+    ) {
+        ///
+        /// Get all asset descriptors associated with this user from the server.
+        /// Descriptors serve as a manifest to determine what to decrypt
+        ///
+        guard descriptorsByGlobalIdentifier.count > 0 else {
+            self.delegate.noAssetsToDownload()
+            completionHandler(.success(()))
+            return
+        }
+        
+        self.mergeDescriptorsWithLocalAssets(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { result in
+            switch result {
+            case .success(var filteredDescriptorsByGlobalIdentifier):
+                
+                ///
+                /// Filter out the ones that haven't completed uploading
+                ///
+                filteredDescriptorsByGlobalIdentifier = filteredDescriptorsByGlobalIdentifier.values.filter({ $0.uploadState == .completed })
+                
+                let start = CFAbsoluteTimeGetCurrent()
+                
+                ///
+                /// Download or request authorization for the remainder of the assets that have completed uploading
+                ///
+                self.downloadOrRequestAuthorization(
+                    forAssetsIn: Array()
+                ) { result in
+                    let end = CFAbsoluteTimeGetCurrent()
+                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(filteredDescriptorsByGlobalIdentifier.count) assets in the local asset store")
+                    completionHandler(result)
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+//    ///
+//    /// Fetch descriptors from REMOTE server and corresponding users.
+//    /// Call the delegate with the descriptors and user information.
+//    /// Return the descriptors fetch for download.
+//    ///
+//    /// - Parameter completionHandler: the callback method
+//    private func processDescriptors(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
+//        var remoteDescriptors = [any SHAssetDescriptor]()
+//        do { remoteDescriptors = try self.fetchDescriptorsFromServer() }
+//        catch {
+//            completionHandler(.failure(error))
+//            return
+//        }
+//        
+//        let existingGlobalIdentifiers = fetchResult.localDescriptors.map { $0.globalIdentifier }
+//        let existingLocalIdentifiers = fetchResult.appleLibraryIdentifiers
+//        
+//        let start = CFAbsoluteTimeGetCurrent()
+//        
+//        ///
+//        /// Filter out what NOT to download from the CDN:
+//        /// - assets that have already been downloaded (are in `delegate.globalIdentifiersInCache`)
+//        /// - assets that have a corresponding local asset (are in `delegate.localIdentifiersInCache`)
+//        ///
+//        
+//        var globalIdentifiersToDownload = [String]()
+//        var globalIdentifiersNotReadyForDownload = [String]()
+//        var descriptorsByLocalIdentifier = [String: any SHAssetDescriptor]()
+//        for descriptor in remoteDescriptors {
+//            if let localIdentifier = descriptor.localIdentifier,
+//               existingLocalIdentifiers.contains(localIdentifier) {
+//                descriptorsByLocalIdentifier[localIdentifier] = descriptor
+//            } else {
+//                guard existingGlobalIdentifiers.contains(descriptor.globalIdentifier) == false else {
+//                    continue
+//                }
+//                
+//                if descriptor.uploadState == .completed {
+//                    globalIdentifiersToDownload.append(descriptor.globalIdentifier)
+//                } else {
+//                    globalIdentifiersNotReadyForDownload.append(descriptor.globalIdentifier)
+//                }
+//            }
+//        }
+//                
+//        ///
+//        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
+//        ///
+//        
+//        var users = [SHServerUser]()
+//        var userIdentifiers = Set(remoteDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+//        userIdentifiers.formUnion(Set(remoteDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+//        
+//        do {
+//            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+//        } catch {
+//            self.log.error("[sync] unable to fetch users from server: \(error.localizedDescription)")
+//            completionHandler(.failure(error))
+//            return
+//        }
+//                
+//        ///
+//        /// Download scenarios:
+//        ///
+//        /// 1. Assets on server and in the Photos library (local identifiers match) don't need to be downloaded.
+//        ///     -> The delegate responsible to mark local assets "backed up" will be called
+//        ///     -> If shared by "this" user, `UploadHistoryQueue` items will be created when they don't already exist.
+//        ///
+//        /// 2. Assets on the server not in the Photos library (local identifiers don't match), need to be downloaded.
+//        ///     -> The delegate methods are responsible for adding the assets to the in-memory cache.
+//        ///     -> The `SHServerProxy` is responsible to cache these in the `LocalServer`
+//        ///
+//        
+//        if descriptorsByLocalIdentifier.count > 0 {
+//            ///
+//            /// Let the delegate know these local assets can be safely marked as "backed up"
+//            ///
+//            self.delegate.markLocalAssetsAsUploaded(descriptorsByLocalIdentifier: descriptorsByLocalIdentifier)
+//            
+//            ///
+//            /// Update UploadHistoryQueue and ShareHistoryQueue
+//            ///
+//            let descriptorsByLocalIdentifierSharedByThisUser = descriptorsByLocalIdentifier.compactMapValues({ descriptor in
+//                if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
+//                    return descriptor
+//                }
+//                return nil
+//            })
+//            if descriptorsByLocalIdentifierSharedByThisUser.count > 0 {
+//                self.updateHistoryQueues(with: descriptorsByLocalIdentifierSharedByThisUser,
+//                                         users: users)
+//            }
+//        } else {
+//            self.delegate.noAssetsToDownload()
+//        }
+//                
+//        if globalIdentifiersToDownload.count == 0 {
+//            completionHandler(.success(()))
+//            return
+//        }
+//        
+//        // MARK: Enqueue the items to download
+//        
+//        ///
+//        /// Do not download more than `limit` if a limit was set on the operation
+//        ///
+//        if let limit = self.limit {
+//            globalIdentifiersToDownload = Array(globalIdentifiersToDownload[...min(limit, globalIdentifiersToDownload.count-1)])
+//        }
+//        
+//        ///
+//        /// Filter out the ones that were blacklisted
+//        ///
+//        let descriptorsForAssetsToDownload = remoteDescriptors.filter {
+//            globalIdentifiersToDownload.contains($0.globalIdentifier)
+//            && DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
+//            && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
+//        }
+//        
+//        if descriptorsForAssetsToDownload.count > 0 {
+//            log.debug("[sync] remote descriptors = \(remoteDescriptors.count). non-blacklisted = \(descriptorsForAssetsToDownload.count)")
+//        } else {
+//            completionHandler(.success(()))
+//            return
+//        }
+//        
+//
+//    }
     
     private func fail(groupId: String,
                       errorsByAssetIdentifier: [String: Error]) {
@@ -478,7 +620,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         do {
             var count = 1
             guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
-                self.log.error("[sync] unable to connect to local queue or database")
+                self.log.error("[downloadAssets] unable to connect to local queue or database")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
                 return
             }
@@ -486,14 +628,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             while let item = try queue.peek() {
                 let start = CFAbsoluteTimeGetCurrent()
                 
-                log.info("[sync] downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
+                log.info("[downloadAssets] downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
                 
                 guard let downloadRequest = try? content(ofQueueItem: item) as? SHDownloadRequestQueueItem else {
-                    log.error("[sync] unexpected data found in DOWNLOAD queue. Dequeueing")
+                    log.error("[downloadAssets] unexpected data found in DOWNLOAD queue. Dequeueing")
                     
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("[sync] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
                     self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: nil)
@@ -501,11 +643,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
                 
                 guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
-                    self.log.info("[sync] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
+                    self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
                     
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("[sync] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
                     self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: nil)
@@ -563,24 +705,24 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 guard dispatchResult == .success, shouldContinue == true else {
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("[sync] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
                     continue
                 }
                 
                 let end = CFAbsoluteTimeGetCurrent()
-                log.debug("[sync][PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
+                log.debug("[downloadAssets][PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
                 
                 do { _ = try queue.dequeue() }
                 catch {
-                    log.warning("[sync] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
+                    log.warning("[downloadAssets] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
                 }
                 
                 count += 1
                 
                 guard !self.isCancelled else {
-                    log.info("[sync] download task cancelled. Finishing")
+                    log.info("[downloadAssets] download task cancelled. Finishing")
                     state = .finished
                     break
                 }
@@ -589,7 +731,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             completionHandler(.success(()))
             
         } catch {
-            log.error("[sync] error executing download task: \(error.localizedDescription)")
+            log.error("[downloadAssets] error executing download task: \(error.localizedDescription)")
             completionHandler(.failure(error))
         }
     }
@@ -600,22 +742,32 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
-        self.downloadDescriptors { result in
-            switch result {
+        self.processDescriptors { descResult in
+            switch descResult {
             case .failure(let error):
-                self.log.error("[sync] failed to download descriptors: \(error.localizedDescription)")
+                self.log.error("failed to download descriptors: \(error.localizedDescription)")
                 completionHandler(.failure(error))
-            case .success():
-                ///
-                /// Get all asset descriptors associated with this user from the server.
-                /// Descriptors serve as a manifest to determine what to download
-                ///
-                self.downloadAssets { result in
-                    if case .failure(let error) = result {
-                        self.log.error("[sync] failed to download assets: \(error.localizedDescription)")
+            case .success(let descriptorsByGlobalIdentifier):
+                self.processAssetsInDescriptors(
+                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+                ) { descAssetResult in
+                    switch descAssetResult {
+                    case .failure(let error):
+                        self.log.error("failed to process assets in descriptors: \(error.localizedDescription)")
                         completionHandler(.failure(error))
-                    } else {
-                        completionHandler(.success(()))
+                    case .success():
+                        ///
+                        /// Get all asset descriptors associated with this user from the server.
+                        /// Descriptors serve as a manifest to determine what to download
+                        ///
+                        self.downloadAssets { result in
+                            if case .failure(let error) = result {
+                                self.log.error("failed to download assets: \(error.localizedDescription)")
+                                completionHandler(.failure(error))
+                            } else {
+                                completionHandler(.success(()))
+                            }
+                        }
                     }
                 }
             }
@@ -639,95 +791,95 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
 
 // MARK: History Queue updates based on Server Descriptors
 
-extension SHDownloadOperation {
-    
-    ///
-    /// Based on a set of asset descriptors fetch from server, update the local history queues (`UploadHistoryQueue` and `ShareHistoryQueue`).
-    /// For instance, an asset marked as backed up on server might result as not backed up on client.
-    /// This method will ensure that the upload event on server will result in an entry in the UploadHistoryQueue,
-    /// and the share event will result in an entry in the ShareHistoryQueue.
-    ///
-    /// - Parameters:
-    ///   - descriptorsByLocalIdentifier: the list of server asset descriptors keyed by localIdentifier
-    ///   - users: the manifest of user details fetched from server
-    ///
-    private func updateHistoryQueues(with descriptorsByLocalIdentifier: [String: any SHAssetDescriptor],
-                                    users: [SHServerUser]) {
-        guard let queue = try? BackgroundOperationQueue.of(type: .successfulUpload) else {
-            self.log.error("[sync] unable to connect to local queue or database")
-            return
-        }
-        
-        for (localIdentifier, descriptor) in descriptorsByLocalIdentifier {
-            let condition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
-            if let keys = try? queue.keys(matching: condition),
-               keys.count > 0 {
-                ///
-                /// Nothing to do, the asset is already marked as uploaded in the queue
-                ///
-            } else {
-                ///
-                /// Determine group, event originator and shared with from `descriptor.sharingInfo.sharedByUserIdentifier`
-                ///
-                let eventOriginator = users.first(where: { $0.identifier == descriptor.sharingInfo.sharedByUserIdentifier })
-                
-                guard let eventOriginator = eventOriginator,
-                      eventOriginator.identifier == self.user.identifier else {
-                    log.warning("[sync] can't mark a local asset as backed up if not owned by this user \(self.user.name)")
-                    break
-                }
-                
-                var groupId: String? = nil
-                for (userId, gid) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    if userId == eventOriginator.identifier {
-                        groupId = gid
-                        break
-                    }
-                }
-                
-                guard let groupId = groupId else {
-                    log.warning("[sync] the asset descriptor sharing information doesn't seem to include the event originator")
-                    break
-                }
-                
-                let sharedWith = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup
-                    .keys
-                    .map { userIdentifier in users.first(where: { user in user.identifier == userIdentifier } )! }
-                
-                // TODO: This is a best effort to recover state from Server, but it will still result in incorrect event dates, because of the lack of an API in KnowledgeBase.framework to enqueue an item with a specific timestamp
-                /// The timestamp should be retrieved from `descriptor.sharingInfo.groupInfoById[groupId]`
-                
-//                let item = SHUploadHistoryItem(
-//                    localIdentifier: localIdentifier,
-//                    groupId: groupId,
-//                    eventOriginator: eventOriginator,
-//                    sharedWith: sharedWith
-//                )
-//
-//                try? item.enqueue(in: UploadHistoryQueue, with: localIdentifier)
-//                for delegate in self.outboundDelegates {
-//                    if let delegate = delegate as? SHAssetUploaderDelegate {
-//                        delegate.didCompleteUpload(
-//                            itemWithLocalIdentifier: localIdentifier,
-//                            globalIdentifier: descriptor.globalIdentifier,
-//                            groupId: groupId
-//                        )
-//                    }
-//                    if sharedWith.filter({ $0.identifier != self.user.identifier}).count > 0 {
-//                        if let delegate = delegate as? SHAssetSharerDelegate {
-//                            delegate.didCompleteSharing(
-//                                itemWithLocalIdentifier: localIdentifier,
-//                                globalIdentifier: descriptor.globalIdentifier,
-//                                groupId: groupId,
-//                                with: sharedWith
-//                            )
-//                        }
+//extension SHDownloadOperation {
+//    
+//    ///
+//    /// Based on a set of asset descriptors fetch from server, update the local history queues (`UploadHistoryQueue` and `ShareHistoryQueue`).
+//    /// For instance, an asset marked as backed up on server might result as not backed up on client.
+//    /// This method will ensure that the upload event on server will result in an entry in the UploadHistoryQueue,
+//    /// and the share event will result in an entry in the ShareHistoryQueue.
+//    ///
+//    /// - Parameters:
+//    ///   - descriptorsByLocalIdentifier: the list of server asset descriptors keyed by localIdentifier
+//    ///   - users: the manifest of user details fetched from server
+//    ///
+//    private func updateHistoryQueues(with descriptorsByLocalIdentifier: [String: any SHAssetDescriptor],
+//                                    users: [SHServerUser]) {
+//        guard let queue = try? BackgroundOperationQueue.of(type: .successfulUpload) else {
+//            self.log.error("[sync] unable to connect to local queue or database")
+//            return
+//        }
+//        
+//        for (localIdentifier, descriptor) in descriptorsByLocalIdentifier {
+//            let condition = KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier))
+//            if let keys = try? queue.keys(matching: condition),
+//               keys.count > 0 {
+//                ///
+//                /// Nothing to do, the asset is already marked as uploaded in the queue
+//                ///
+//            } else {
+//                ///
+//                /// Determine group, event originator and shared with from `descriptor.sharingInfo.sharedByUserIdentifier`
+//                ///
+//                let eventOriginator = users.first(where: { $0.identifier == descriptor.sharingInfo.sharedByUserIdentifier })
+//                
+//                guard let eventOriginator = eventOriginator,
+//                      eventOriginator.identifier == self.user.identifier else {
+//                    log.warning("[sync] can't mark a local asset as backed up if not owned by this user \(self.user.name)")
+//                    break
+//                }
+//                
+//                var groupId: String? = nil
+//                for (userId, gid) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+//                    if userId == eventOriginator.identifier {
+//                        groupId = gid
+//                        break
 //                    }
 //                }
-            }
-        }
-    }
-}
+//                
+//                guard let groupId = groupId else {
+//                    log.warning("[sync] the asset descriptor sharing information doesn't seem to include the event originator")
+//                    break
+//                }
+//                
+//                let sharedWith = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup
+//                    .keys
+//                    .map { userIdentifier in users.first(where: { user in user.identifier == userIdentifier } )! }
+//                
+//                // TODO: This is a best effort to recover state from Server, but it will still result in incorrect event dates, because of the lack of an API in KnowledgeBase.framework to enqueue an item with a specific timestamp
+//                /// The timestamp should be retrieved from `descriptor.sharingInfo.groupInfoById[groupId]`
+//                
+////                let item = SHUploadHistoryItem(
+////                    localIdentifier: localIdentifier,
+////                    groupId: groupId,
+////                    eventOriginator: eventOriginator,
+////                    sharedWith: sharedWith
+////                )
+////
+////                try? item.enqueue(in: UploadHistoryQueue, with: localIdentifier)
+////                for delegate in self.outboundDelegates {
+////                    if let delegate = delegate as? SHAssetUploaderDelegate {
+////                        delegate.didCompleteUpload(
+////                            itemWithLocalIdentifier: localIdentifier,
+////                            globalIdentifier: descriptor.globalIdentifier,
+////                            groupId: groupId
+////                        )
+////                    }
+////                    if sharedWith.filter({ $0.identifier != self.user.identifier}).count > 0 {
+////                        if let delegate = delegate as? SHAssetSharerDelegate {
+////                            delegate.didCompleteSharing(
+////                                itemWithLocalIdentifier: localIdentifier,
+////                                globalIdentifier: descriptor.globalIdentifier,
+////                                groupId: groupId,
+////                                with: sharedWith
+////                            )
+////                        }
+////                    }
+////                }
+//            }
+//        }
+//    }
+//}
 
 // MARK: - Download Operation Processor
 
