@@ -446,12 +446,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         self.mergeDescriptorsWithLocalAssets(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { result in
             switch result {
-            case .success(var filteredDescriptorsByGlobalIdentifier):
+            case .success(let filteredDescriptorsByGlobalIdentifier):
                 
                 ///
                 /// Filter out the ones that haven't completed uploading
                 ///
-                filteredDescriptorsByGlobalIdentifier = filteredDescriptorsByGlobalIdentifier.values.filter({ $0.uploadState == .completed })
+                let filteredDescriptors = filteredDescriptorsByGlobalIdentifier.values.filter({ $0.uploadState == .completed })
                 
                 let start = CFAbsoluteTimeGetCurrent()
                 
@@ -459,7 +459,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 /// Download or request authorization for the remainder of the assets that have completed uploading
                 ///
                 self.downloadOrRequestAuthorization(
-                    forAssetsIn: Array()
+                    forAssetsIn: Array(filteredDescriptors)
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
                     self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(filteredDescriptorsByGlobalIdentifier.count) assets in the local asset store")
