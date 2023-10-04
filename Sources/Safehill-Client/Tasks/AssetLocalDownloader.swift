@@ -130,12 +130,14 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("failed to fetch local descriptors: \(error.localizedDescription)")
+                self.delegate.downloadOperationFinished(.failure(error))
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
-                self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    completionHandler: completionHandler
-                )
+                self.processAssetsInDescriptors(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) {
+                    secondResult in
+                    self.delegate.downloadOperationFinished(secondResult)
+                    completionHandler(secondResult)
+                }
             }
         }
     }
