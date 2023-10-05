@@ -42,7 +42,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameters:
     ///   - assetIdentifier: the global identifier of the asset
     ///   - groupId: the group id of the request it belongs to
-    func didFailDownloadUnrecoverably(for assetIdentifier: String, groupId: String)
+    func didFailDownloadUnrecoverably(globalIdentifier: GlobalIdentifier, groupId: String)
     /// Notifies about an asset in the local library that is linked to one on the server (backed up)
     /// - Parameters:
     ///   - globalIdentifier: the global identifier of the asset
@@ -58,7 +58,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// The download for this asset completed
     /// - Parameter assetIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
-    func didCompleteDownload(_ assetIdentifier: String, groupId: String)
+    func didCompleteDownload(globalIdentifier: GlobalIdentifier, groupId: String)
     
     /// One cycle of downloads has finished
     /// - Parameter _:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched

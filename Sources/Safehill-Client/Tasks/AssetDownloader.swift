@@ -344,10 +344,18 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             if let localId = descriptor.localIdentifier,
                phAssetsByLocalIdentifier.keys.contains(localId) {
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didStartDownload(globalIdentifier: descriptor.globalIdentifier, groupId: groupId)
-                    self.delegate.handleAssetInLocalLibraryAndServer(globalIdentifier: descriptor.globalIdentifier,
-                                                                     phAsset: phAssetsByLocalIdentifier[localId]!)
-                    self.delegate.didCompleteDownload(descriptor.globalIdentifier, groupId: groupId)
+                    self.delegate.didStartDownload(
+                        globalIdentifier: descriptor.globalIdentifier,
+                        groupId: groupId
+                    )
+                    self.delegate.handleAssetInLocalLibraryAndServer(
+                        globalIdentifier: descriptor.globalIdentifier,
+                        phAsset: phAssetsByLocalIdentifier[localId]!
+                    )
+                    self.delegate.didCompleteDownload(
+                        globalIdentifier: descriptor.globalIdentifier,
+                        groupId: groupId
+                    )
                 }
             } else {
                 filteredDescriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
@@ -665,7 +673,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         
                         self.delegate.handleLowResAsset(decryptedAsset)
                         for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                            self.delegate.didCompleteDownload(decryptedAsset.globalIdentifier, groupId: groupId)
+                            self.delegate.didCompleteDownload(
+                                globalIdentifier: decryptedAsset.globalIdentifier,
+                                groupId: groupId
+                            )
                         }
                     case .failure(let error):
                         shouldContinue = false
@@ -680,7 +691,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         for groupId in descriptor.sharingInfo.groupInfoById.keys {
                             self.delegate.didFailDownload(globalIdentifier: globalIdentifier, groupId: groupId, error: error)
                             if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
-                                self.delegate.didFailDownloadUnrecoverably(for: globalIdentifier, groupId: groupId)
+                                self.delegate.didFailDownloadUnrecoverably(
+                                    globalIdentifier: globalIdentifier,
+                                    groupId: groupId
+                                )
                             }
                         }
                     }

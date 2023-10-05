@@ -71,7 +71,10 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 
                 self.delegate.handleLowResAsset(decryptedAsset)
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didCompleteDownload(decryptedAsset.globalIdentifier, groupId: groupId)
+                    self.delegate.didCompleteDownload(
+                        globalIdentifier: decryptedAsset.globalIdentifier,
+                        groupId: groupId
+                    )
                 }
             } catch {
                 self.log.error("unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
