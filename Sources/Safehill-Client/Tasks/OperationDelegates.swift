@@ -31,16 +31,18 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     
     /// The download of a set of assets started
     /// - Parameter downloadRequest: the request
-    func didStart(globalIdentifier: String, groupId: String)
+    func didStartDownload(globalIdentifier: String, groupId: String)
     /// An attempt to download some assets failed
     /// - Parameters:
-    ///   - errorsByAssetIdentifier: the list of asset global identifiers and associated error. When the item in the queue can't be read (hence the list of global identifiers is not available, this parameter is `nil`)
-    func didFailDownloadAttempt(errorsByAssetIdentifier: [String: Error]?)
+    ///   - globalIdentifier: the global identifier for the asset
+    ///   - groupId: the group id of the request it belongs to
+    ///   - error: the error
+    func didFailDownload(globalIdentifier: GlobalIdentifier, groupId: String, error: Error)
     /// Notifies about an unrecoverable error (usually an asset that couldn't be downloaded after many attempts)
     /// - Parameters:
     ///   - assetIdentifier: the global identifier of the asset
     ///   - groupId: the group id of the request it belongs to
-    func unrecoverableDownloadFailure(for assetIdentifier: String, groupId: String)
+    func didFailDownloadUnrecoverably(for assetIdentifier: String, groupId: String)
     /// Notifies about an asset in the local library that is linked to one on the server (backed up)
     /// - Parameters:
     ///   - globalIdentifier: the global identifier of the asset
@@ -56,16 +58,20 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// The download for this asset completed
     /// - Parameter assetIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
-    func completed(_ assetIdentifier: String, groupId: String)
-    /// The download of this asset failed
-    /// - Parameters:
-    /// - Parameter assetIdentifier: the global identifier for the asset
-    /// - Parameter groupId: the group id of the request it belongs to
-    func failed(_ assetIdentifier: String, groupId: String)
+    func didCompleteDownload(_ assetIdentifier: String, groupId: String)
     
     /// One cycle of downloads has finished
     /// - Parameter _:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched
-    func downloadOperationFinished(_: Swift.Result<Void, Error>)
+    func didFinishDownloadOperation(_: Swift.Result<Void, Error>)
+    
+    
+    /// Let the delegate know that a queue item (successful upload or sharing) needs to be retrieved or re-created in the queue.
+    /// The item - in fact - might not exist in the queue if:
+    /// - the user logged out and the queues were cleaned
+    /// - the user is on another device
+    ///
+    /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
+    func shouldRestoreQueueItems(withIdentifiers: [String])
 }
 
 public protocol SHOutboundAssetOperationDelegate {}

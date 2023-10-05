@@ -313,11 +313,15 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         completionHandler(.success(descriptorsByGlobalIdentifier))
     }
     
+    
     ///
     /// Get the apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier
     /// If they exist, then do not decrypt them but just serve the local asset.
-    /// If they don't, decrypt and serve the decrypted asset.
+    /// If they don't, return them in the callback method so they can be decrypted.
     ///
+    /// - Parameters:
+    ///   - descriptorsByGlobalIdentifier: all the descriptors by local identifier
+    ///   - completionHandler: the callback method
     internal func mergeDescriptorsWithLocalAssets(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         completionHandler: @escaping (Swift.Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
@@ -340,10 +344,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             if let localId = descriptor.localIdentifier,
                phAssetsByLocalIdentifier.keys.contains(localId) {
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didStart(globalIdentifier: descriptor.globalIdentifier, groupId: groupId)
+                    self.delegate.didStartDownload(globalIdentifier: descriptor.globalIdentifier, groupId: groupId)
                     self.delegate.handleAssetInLocalLibraryAndServer(globalIdentifier: descriptor.globalIdentifier,
                                                                      phAsset: phAssetsByLocalIdentifier[localId]!)
-                    self.delegate.completed(descriptor.globalIdentifier, groupId: groupId)
+                    self.delegate.didCompleteDownload(descriptor.globalIdentifier, groupId: groupId)
                 }
             } else {
                 filteredDescriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
@@ -600,22 +604,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
 //
 //    }
     
-    private func fail(groupId: String,
-                      errorsByAssetIdentifier: [String: Error]) {
-        guard errorsByAssetIdentifier.count > 0 else {
-            return
-        }
-        
-        self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: errorsByAssetIdentifier)
-        
-        for (assetId, _) in errorsByAssetIdentifier {
-            // Call the delegate if the failure has occurred enough times
-            if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: assetId) {
-                self.delegate.unrecoverableDownloadFailure(for: assetId, groupId: groupId)
-            }
-        }
-    }
-    
     private func downloadAssets(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
         do {
             var count = 1
@@ -638,7 +626,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
-                    self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: nil)
                     continue
                 }
                 
@@ -650,7 +637,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
                     
-                    self.delegate.didFailDownloadAttempt(errorsByAssetIdentifier: nil)
                     continue
                 }
                 
@@ -660,7 +646,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 // MARK: Start
                 
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didStart(globalIdentifier: globalIdentifier,
+                    self.delegate.didStartDownload(globalIdentifier: globalIdentifier,
                                            groupId: groupId)
                 }
                 
@@ -679,13 +665,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         
                         self.delegate.handleLowResAsset(decryptedAsset)
                         for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                            self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                            self.delegate.didCompleteDownload(decryptedAsset.globalIdentifier, groupId: groupId)
                         }
                     case .failure(let error):
                         shouldContinue = false
-                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                            self.fail(groupId: groupId, errorsByAssetIdentifier: [globalIdentifier: error])
-                        }
                         
                         // Record the failure for the asset
                         if error is SHCypher.DecryptionError {
@@ -695,7 +678,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         }
                         
                         for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                            self.delegate.failed(globalIdentifier, groupId: groupId)
+                            self.delegate.didFailDownload(globalIdentifier: globalIdentifier, groupId: groupId, error: error)
+                            if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
+                                self.delegate.didFailDownloadUnrecoverably(for: globalIdentifier, groupId: groupId)
+                            }
                         }
                     }
                     group.leave()
@@ -783,7 +769,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         state = .executing
         
         self.runOnce { result in
-            self.delegate.downloadOperationFinished(result)
+            self.delegate.didFinishDownloadOperation(result)
             self.state = .finished
         }
     }

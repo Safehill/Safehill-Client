@@ -52,12 +52,14 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         
         for (globalAssetId, encryptedAsset) in encryptedAssets {
             guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
-                fatalError("malformed descriptorsByGlobalIdentifier")
+                log.critical("malformed descriptorsByGlobalIdentifier")
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptorsByGlobalIdentifier")))
+                return
             }
             
             for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                self.delegate.didStart(globalIdentifier: globalAssetId,
-                                       groupId: groupId)
+                self.delegate.didStartDownload(globalIdentifier: globalAssetId,
+                                               groupId: groupId)
             }
             
             do {
@@ -69,17 +71,93 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 
                 self.delegate.handleLowResAsset(decryptedAsset)
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.completed(decryptedAsset.globalIdentifier, groupId: groupId)
+                    self.delegate.didCompleteDownload(decryptedAsset.globalIdentifier, groupId: groupId)
                 }
             } catch {
                 self.log.error("unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.failed(encryptedAsset.globalIdentifier, groupId: groupId)
+                    self.delegate.didFailDownload(globalIdentifier: encryptedAsset.globalIdentifier, groupId: groupId, error: error)
                 }
             }
         }
         
         completionHandler(.success(()))
+    }
+    
+    func restoreQueueItems(
+        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+    ) {
+        ///
+        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
+        ///
+        var usersById = [String: SHServerUser]()
+        var userIdentifiers = Set(descriptorsByGlobalIdentifier.values.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(descriptorsByGlobalIdentifier.values.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+        
+        do {
+            usersById = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers)).reduce([:], { partialResult, user in
+                var result = partialResult
+                result[user.identifier] = user
+                return result
+            })
+        } catch {
+            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        for (_, descriptor) in descriptorsByGlobalIdentifier {
+            if descriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
+                var userIdsByGroup = [String: [String]]()
+                for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if userIdsByGroup[groupId] == nil {
+                        userIdsByGroup[groupId] = [userId]
+                    } else {
+                        userIdsByGroup[groupId]?.append(userId)
+                    }
+                }
+                
+                for (groupId, userIds) in userIdsByGroup {
+                    let isSharing = (userIds.count > 0)
+                    
+                    guard let localIdentifier = descriptor.localIdentifier else {
+                        continue
+                    }
+                    
+                    var queueItemIdentifiers = [String]()
+                    
+                    if isSharing {
+                        queueItemIdentifiers.append(
+                            SHUploadPipeline.queueItemIdentifier(
+                                groupId: groupId,
+                                assetLocalIdentifier: localIdentifier,
+                                versions: [.lowResolution, .midResolution],
+                                users: userIds.map({ usersById[$0]! })
+                            )
+                        )
+                        queueItemIdentifiers.append(
+                            SHUploadPipeline.queueItemIdentifier(
+                                groupId: groupId,
+                                assetLocalIdentifier: localIdentifier,
+                                versions: [.hiResolution],
+                                users: userIds.map({ usersById[$0]! })
+                            )
+                        )
+                    } else {
+                        queueItemIdentifiers.append(
+                            SHUploadPipeline.queueItemIdentifier(
+                                groupId: groupId,
+                                assetLocalIdentifier: localIdentifier,
+                                versions: [.lowResolution, .hiResolution],
+                                users: userIds.map({ usersById[$0]! })
+                            )
+                        )
+                    }
+                    self.delegate.shouldRestoreQueueItems(withIdentifiers: queueItemIdentifiers)
+                }
+            }
+        }
     }
     
     internal override func processAssetsInDescriptors(
@@ -94,6 +172,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             completionHandler(.success(()))
             return
         }
+        
+        self.restoreQueueItems(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { _ in }
         
         self.mergeDescriptorsWithLocalAssets(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { result in
             switch result {
@@ -130,12 +210,12 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("failed to fetch local descriptors: \(error.localizedDescription)")
-                self.delegate.downloadOperationFinished(.failure(error))
+                self.delegate.didFinishDownloadOperation(.failure(error))
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
                 self.processAssetsInDescriptors(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) {
                     secondResult in
-                    self.delegate.downloadOperationFinished(secondResult)
+                    self.delegate.didFinishDownloadOperation(secondResult)
                     completionHandler(secondResult)
                 }
             }
