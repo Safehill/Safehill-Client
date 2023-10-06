@@ -112,25 +112,50 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         
         for (_, descriptor) in descriptorsByGlobalIdentifier {
             if descriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
-                var userIdsByGroup = [String: [String]]()
-                for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    if userIdsByGroup[groupId] == nil {
-                        userIdsByGroup[groupId] = [userId]
-                    } else {
-                        userIdsByGroup[groupId]?.append(userId)
-                    }
+                // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
+                guard let localIdentifier = descriptor.localIdentifier else {
+                    continue
                 }
                 
-                for (groupId, userIds) in userIdsByGroup {
-                    let isSharing = (userIds.count > 0)
+                if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
+                   let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
+                   recipientUserId == user.identifier {
+                    ///
+                    /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
+                    /// Restore the upload from the queue
+                    ///
+                    let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
                     
-                    guard let localIdentifier = descriptor.localIdentifier else {
-                        continue
+                    let queueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
+                        groupId: groupId,
+                        assetLocalIdentifier: localIdentifier,
+                        versions: [.lowResolution, .hiResolution],
+                        users: [user]
+                    )
+                    
+                    self.delegate.shouldRestoreUploadQueueItems(withIdentifiers: [queueItemIdentifier])
+                } else {
+                    var userIdsByGroup = [String: [String]]()
+                    for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                        if userIdsByGroup[groupId] == nil {
+                            userIdsByGroup[groupId] = [userId]
+                        } else {
+                            userIdsByGroup[groupId]?.append(userId)
+                        }
                     }
                     
-                    var queueItemIdentifiers = [String]()
-                    
-                    if isSharing {
+                    for (groupId, var userIds) in userIdsByGroup {
+                        let uploadQueueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.lowResolution, .hiResolution],
+                            users: [user]
+                        )
+                        self.delegate.shouldRestoreUploadQueueItems(withIdentifiers: [uploadQueueItemIdentifier])
+                        
+                        var queueItemIdentifiers = [String]()
+                        
+                        userIds.removeAll(where: { $0 == user.identifier })
                         queueItemIdentifiers.append(
                             SHUploadPipeline.queueItemIdentifier(
                                 groupId: groupId,
@@ -147,17 +172,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 users: userIds.map({ usersById[$0]! })
                             )
                         )
-                    } else {
-                        queueItemIdentifiers.append(
-                            SHUploadPipeline.queueItemIdentifier(
-                                groupId: groupId,
-                                assetLocalIdentifier: localIdentifier,
-                                versions: [.lowResolution, .hiResolution],
-                                users: userIds.map({ usersById[$0]! })
-                            )
-                        )
+                        self.delegate.shouldRestoreShareQueueItems(withIdentifiers: queueItemIdentifiers)
                     }
-                    self.delegate.shouldRestoreQueueItems(withIdentifiers: queueItemIdentifiers)
                 }
             }
         }

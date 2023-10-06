@@ -64,14 +64,21 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter _:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched
     func didFinishDownloadOperation(_: Swift.Result<Void, Error>)
     
-    
-    /// Let the delegate know that a queue item (successful upload or sharing) needs to be retrieved or re-created in the queue.
+    /// Let the delegate know that a queue item representing a successful UPLOAD needs to be retrieved or re-created in the queue.
     /// The item - in fact - might not exist in the queue if:
     /// - the user logged out and the queues were cleaned
     /// - the user is on another device
     ///
     /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
-    func shouldRestoreQueueItems(withIdentifiers: [String])
+    func shouldRestoreUploadQueueItems(withIdentifiers: [String])
+    
+    /// Let the delegate know that a queue item representing a successful SHARE needs to be retrieved or re-created in the queue.
+    /// The item - in fact - might not exist in the queue if:
+    /// - the user logged out and the queues were cleaned
+    /// - the user is on another device
+    ///
+    /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
+    func shouldRestoreShareQueueItems(withIdentifiers: [String])
 }
 
 public protocol SHOutboundAssetOperationDelegate {}
