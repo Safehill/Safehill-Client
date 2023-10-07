@@ -17,9 +17,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         fatalError("Not supported")
     }
     
-    init(user: SHLocalUser,
-         delegate: SHAssetDownloaderDelegate,
-         restorationDelegate: SHAssetLocalDownloaderDelegate) {
+    public init(user: SHLocalUser,
+                delegate: SHAssetDownloaderDelegate,
+                restorationDelegate: SHAssetLocalDownloaderDelegate) {
         self.restorationDelegate = restorationDelegate
         super.init(user: user, delegate: delegate, outboundDelegates: [])
     }
