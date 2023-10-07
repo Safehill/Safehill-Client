@@ -120,12 +120,12 @@ public struct SHAssetDownloadController {
     
     func startAuthorizedDownload(of descriptors: [any SHAssetDescriptor],
                                  completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        var usersManifest = [SHServerUser]()
+        var users = [SHServerUser]()
         var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
         userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
-            usersManifest = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
         } catch {
             log.error("Unable to fetch users mentioned in asset descriptors: \(error.localizedDescription)")
             completionHandler(.failure(error))
@@ -134,9 +134,9 @@ public struct SHAssetDownloadController {
         
         self.startDownload(of: descriptors) { result in
             if case .success() = result {
-                self.delegate?.handleAssetDescriptorResults(for: descriptors,
-                                                            users: usersManifest,
-                                                            completionHandler: nil)
+                self.delegate?.didReceiveAssetDescriptors(descriptors,
+                                                          referencing: users,
+                                                          completionHandler: nil)
             }
         }
     }

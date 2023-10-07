@@ -6,6 +6,24 @@ import os
 
 public class SHLocalDownloadOperation: SHDownloadOperation {
     
+    let restorationDelegate: SHAssetLocalDownloaderDelegate
+    
+    @available(*, unavailable)
+    public override init(user: SHLocalUser,
+                         delegate: SHAssetDownloaderDelegate,
+                         outboundDelegates: [SHOutboundAssetOperationDelegate],
+                         limitPerRun limit: Int? = nil,
+                         photoIndexer: SHPhotosIndexer? = nil) {
+        fatalError("Not supported")
+    }
+    
+    init(user: SHLocalUser,
+         delegate: SHAssetDownloaderDelegate,
+         restorationDelegate: SHAssetLocalDownloaderDelegate) {
+        self.restorationDelegate = restorationDelegate
+        super.init(user: user, delegate: delegate, outboundDelegates: [])
+    }
+    
     internal override func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
         let group = DispatchGroup()
         
@@ -57,10 +75,10 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 return
             }
             
-            for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                self.delegate.didStartDownload(globalIdentifier: globalAssetId,
-                                               groupId: groupId)
-            }
+//            for groupId in descriptor.sharingInfo.groupInfoById.keys {
+//                self.delegate.didStartDownload(globalIdentifier: globalAssetId,
+//                                               groupId: groupId)
+//            }
             
             do {
                 let decryptedAsset = try localAssetsStore.decryptedAsset(
@@ -69,17 +87,17 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     descriptor: descriptor
                 )
                 
-                self.delegate.handleLowResAsset(decryptedAsset)
-                for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didCompleteDownload(
-                        globalIdentifier: decryptedAsset.globalIdentifier,
-                        groupId: groupId
-                    )
-                }
+                self.delegate.didFetchLowResolutionAsset(decryptedAsset)
+//                for groupId in descriptor.sharingInfo.groupInfoById.keys {
+//                    self.delegate.didCompleteDownload(
+//                        globalIdentifier: decryptedAsset.globalIdentifier,
+//                        groupId: groupId
+//                    )
+//                }
             } catch {
                 self.log.error("unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didFailDownload(globalIdentifier: encryptedAsset.globalIdentifier, groupId: groupId, error: error)
+                    self.delegate.didFailDownloadOfAsset(withGlobalIdentifier: encryptedAsset.globalIdentifier, in: groupId, with: error)
                 }
             }
         }
@@ -133,7 +151,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         users: [user]
                     )
                     
-                    self.delegate.shouldRestoreUploadQueueItems(withIdentifiers: [queueItemIdentifier])
+                    self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: [queueItemIdentifier])
                 } else {
                     var userIdsByGroup = [String: [String]]()
                     for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
@@ -151,7 +169,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                             versions: [.lowResolution, .hiResolution],
                             users: [user]
                         )
-                        self.delegate.shouldRestoreUploadQueueItems(withIdentifiers: [uploadQueueItemIdentifier])
+                        self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: [uploadQueueItemIdentifier])
                         
                         var queueItemIdentifiers = [String]()
                         
@@ -172,7 +190,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 users: userIds.map({ usersById[$0]! })
                             )
                         )
-                        self.delegate.shouldRestoreShareQueueItems(withIdentifiers: queueItemIdentifiers)
+                        self.restorationDelegate.restoreShareQueueItems(withIdentifiers: queueItemIdentifiers)
                     }
                 }
             }
@@ -229,12 +247,12 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("failed to fetch local descriptors: \(error.localizedDescription)")
-                self.delegate.didFinishDownloadOperation(.failure(error))
+                self.delegate.didCompleteDownloadCycle(with: .failure(error))
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
                 self.processAssetsInDescriptors(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) {
                     secondResult in
-                    self.delegate.didFinishDownloadOperation(secondResult)
+                    self.delegate.didCompleteDownloadCycle(with: secondResult)
                     completionHandler(secondResult)
                 }
             }
