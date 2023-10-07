@@ -203,7 +203,8 @@ extension SHServerProxy {
         ///
         DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: remoteUserIds)
         
-        let downloads = SHAssetDownloadController(user: self.localServer.requestor)
+        let downloads = SHAssetDownloadController(user: self.localServer.requestor,
+                                                  delegates: [])
         do {
             try downloads.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds, allUserIds: remoteUserIds)
         } catch {
@@ -314,7 +315,8 @@ extension SHServerProxy {
                     /// Remove items in download queues and indices that no longer exist
                     ///
                     do {
-                        let downloads = SHAssetDownloadController(user: self.localServer.requestor)
+                        let downloads = SHAssetDownloadController(user: self.localServer.requestor,
+                                                                  delegates: [])
                         try downloads.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
                     } catch {
                         log.error("failed to clean up download queues and index on deleted assets")

@@ -10,18 +10,17 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
     
     @available(*, unavailable)
     public override init(user: SHLocalUser,
-                         delegate: SHAssetDownloaderDelegate,
-                         outboundDelegates: [SHOutboundAssetOperationDelegate],
+                         delegates: [SHAssetDownloaderDelegate],
                          limitPerRun limit: Int? = nil,
                          photoIndexer: SHPhotosIndexer? = nil) {
         fatalError("Not supported")
     }
     
     public init(user: SHLocalUser,
-                delegate: SHAssetDownloaderDelegate,
+                delegates: [SHAssetDownloaderDelegate],
                 restorationDelegate: SHAssetLocalDownloaderDelegate) {
         self.restorationDelegate = restorationDelegate
-        super.init(user: user, delegate: delegate, outboundDelegates: [])
+        super.init(user: user, delegates: delegates)
     }
     
     internal override func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
@@ -82,11 +81,19 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     descriptor: descriptor
                 )
                 
-                self.delegate.didFetchLowResolutionAsset(decryptedAsset)
+                self.delegates.forEach({
+                    $0.didFetchLowResolutionAsset(decryptedAsset)
+                })
             } catch {
                 self.log.error("unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegate.didFailDownloadOfAsset(withGlobalIdentifier: encryptedAsset.globalIdentifier, in: groupId, with: error)
+                    self.delegates.forEach({
+                        $0.didFailDownloadOfAsset(
+                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                            in: groupId,
+                            with: error
+                        )
+                    })
                 }
             }
         }
@@ -279,12 +286,16 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("failed to fetch local descriptors: \(error.localizedDescription)")
-                self.delegate.didCompleteDownloadCycle(with: .failure(error))
+                self.delegates.forEach({
+                    $0.didCompleteDownloadCycle(with: .failure(error))
+                })
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
                 self.processAssetsInDescriptors(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) {
                     secondResult in
-                    self.delegate.didCompleteDownloadCycle(with: secondResult)
+                    self.delegates.forEach({
+                        $0.didCompleteDownloadCycle(with: secondResult)
+                    })
                     completionHandler(secondResult)
                 }
             }

@@ -4,11 +4,11 @@ import KnowledgeBase
 
 public struct SHAssetDownloadController {
     let user: SHLocalUser
-    let delegate: SHAssetDownloaderDelegate?
+    let delegates: [SHAssetDownloaderDelegate]
     
-    public init(user: SHLocalUser, delegate: SHAssetDownloaderDelegate? = nil) {
+    public init(user: SHLocalUser, delegates: [SHAssetDownloaderDelegate]) {
         self.user = user
-        self.delegate = delegate
+        self.delegates = delegates
     }
     
     /// Invoked during local cleanup (when the local user is removed or a new login happens, for instance)
@@ -134,9 +134,11 @@ public struct SHAssetDownloadController {
         
         self.startDownload(of: descriptors) { result in
             if case .success() = result {
-                self.delegate?.didReceiveAssetDescriptors(descriptors,
-                                                          referencing: users,
-                                                          completionHandler: nil)
+                self.delegates.forEach({
+                    $0.didReceiveAssetDescriptors(descriptors,
+                                                  referencing: users,
+                                                  completionHandler: nil)
+                })
             }
         }
     }
