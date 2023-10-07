@@ -76,7 +76,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter globalIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
     func didCompleteDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
-                                    groupId: String)
+                                    in groupId: String)
     
     /// One cycle of downloads has finished
     /// - Parameter result:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched
@@ -91,15 +91,19 @@ public protocol SHAssetLocalDownloaderDelegate {
     /// - the user is on another device
     ///
     /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
-    func restoreUploadQueueItems(withIdentifiers: [String])
+    /// - Parameter groupId: the group identifier common across all these queue items
+    func restoreUploadQueueItems(withIdentifiers: [String],
+                                 in groupId: String)
     
     /// Let the delegate know that a queue item representing a successful SHARE needs to be retrieved or re-created in the queue.
     /// The item - in fact - might not exist in the queue if:
     /// - the user logged out and the queues were cleaned
     /// - the user is on another device
-    ///
+    /// 
     /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
-    func restoreShareQueueItems(withIdentifiers: [String])
+    /// - Parameter groupId: the group identifier common across all these queue items
+    func restoreShareQueueItems(withIdentifiers: [String],
+                                in groupId: String)
 }
 
 public protocol SHOutboundAssetOperationDelegate {}

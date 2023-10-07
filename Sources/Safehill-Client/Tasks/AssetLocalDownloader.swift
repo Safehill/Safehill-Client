@@ -75,11 +75,6 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 return
             }
             
-//            for groupId in descriptor.sharingInfo.groupInfoById.keys {
-//                self.delegate.didStartDownload(globalIdentifier: globalAssetId,
-//                                               groupId: groupId)
-//            }
-            
             do {
                 let decryptedAsset = try localAssetsStore.decryptedAsset(
                     encryptedAsset: encryptedAsset,
@@ -88,12 +83,6 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 )
                 
                 self.delegate.didFetchLowResolutionAsset(decryptedAsset)
-//                for groupId in descriptor.sharingInfo.groupInfoById.keys {
-//                    self.delegate.didCompleteDownload(
-//                        globalIdentifier: decryptedAsset.globalIdentifier,
-//                        groupId: groupId
-//                    )
-//                }
             } catch {
                 self.log.error("unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
@@ -105,6 +94,13 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         completionHandler(.success(()))
     }
     
+    /// For all the descriptors whose originator user is `self.user`, notify the restoration delegate
+    /// about all groups that need to be restored along with the queue item identifiers for each `groupId`.
+    /// Uploads and shares will be reported separately, according to the contract in the delegate.
+    ///
+    /// - Parameters:
+    ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
+    ///   - completionHandler: the callback method
     func restoreQueueItems(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
@@ -127,6 +123,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             completionHandler(.failure(error))
             return
         }
+        
+        var uploadQueueItemsIdsByGroupId = [String: [String]]()
+        var shareQueueItemsIdsByGroupId = [String: [String]]()
         
         for (_, descriptor) in descriptorsByGlobalIdentifier {
             if descriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
@@ -151,7 +150,11 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         users: [user]
                     )
                     
-                    self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: [queueItemIdentifier])
+                    if uploadQueueItemsIdsByGroupId[groupId] == nil {
+                        uploadQueueItemsIdsByGroupId[groupId] = [queueItemIdentifier]
+                    } else {
+                        uploadQueueItemsIdsByGroupId[groupId]!.append(queueItemIdentifier)
+                    }
                 } else {
                     var userIdsByGroup = [String: [String]]()
                     for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
@@ -169,7 +172,12 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                             versions: [.lowResolution, .hiResolution],
                             users: [user]
                         )
-                        self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: [uploadQueueItemIdentifier])
+                        
+                        if uploadQueueItemsIdsByGroupId[groupId] == nil {
+                            uploadQueueItemsIdsByGroupId[groupId] = [uploadQueueItemIdentifier]
+                        } else {
+                            uploadQueueItemsIdsByGroupId[groupId]!.append(uploadQueueItemIdentifier)
+                        }
                         
                         var queueItemIdentifiers = [String]()
                         
@@ -190,10 +198,23 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 users: userIds.map({ usersById[$0]! })
                             )
                         )
-                        self.restorationDelegate.restoreShareQueueItems(withIdentifiers: queueItemIdentifiers)
+                        
+                        if shareQueueItemsIdsByGroupId[groupId] == nil {
+                            shareQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
+                        } else {
+                            shareQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
+                        }
                     }
                 }
             }
+        }
+        
+        for (groupId, queueItemIdentifiers) in uploadQueueItemsIdsByGroupId {
+            self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
+        }
+        
+        for (groupId, queueItemIdentifiers) in shareQueueItemsIdsByGroupId {
+            self.restorationDelegate.restoreShareQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
         }
     }
     
@@ -212,19 +233,21 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         
         self.restoreQueueItems(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { _ in }
         
-        self.mergeDescriptorsWithLocalAssets(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { result in
+        self.mergeDescriptorsWithApplePhotosAssets(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+        ) { result in
             switch result {
-            case .success(let filteredDescriptorsByGlobalIdentifier):
+            case .success(let nonLocalPhotoLibraryDescriptorsByGlobalIdentifier):
                 let start = CFAbsoluteTimeGetCurrent()
                 
                 ///
                 /// Get the encrypted assets for the ones not found in the apple photos library to start decryption.
                 ///
                 self.decryptFromLocalStore(
-                    descriptorsByGlobalIdentifier: filteredDescriptorsByGlobalIdentifier
+                    descriptorsByGlobalIdentifier: nonLocalPhotoLibraryDescriptorsByGlobalIdentifier
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(filteredDescriptorsByGlobalIdentifier.count) assets in the local asset store")
+                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(nonLocalPhotoLibraryDescriptorsByGlobalIdentifier.count) assets in the local asset store")
                     completionHandler(result)
                 }
             case .failure(let error):

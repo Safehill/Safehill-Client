@@ -243,6 +243,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///
     /// Fetch descriptors from server.
     /// Filters blacklisted assets and users.
+    /// Filter out non-completed uploads.
     /// Call the delegate with the full manifest (regardless of the limit on the task config).
     /// Limit the result based on the task config.
     /// Return the descriptors for the assets to download keyed by global identifier.
@@ -301,6 +302,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
         for descriptor in descriptors {
+            ///
+            /// Filter-out non-completed uploads
+            ///
+            guard descriptor.uploadState == .completed else {
+                continue
+            }
             descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
             ///
             /// Limit based on the task configuration
@@ -321,7 +328,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     /// - Parameters:
     ///   - descriptorsByGlobalIdentifier: all the descriptors by local identifier
     ///   - completionHandler: the callback method
-    internal func mergeDescriptorsWithLocalAssets(
+    internal func mergeDescriptorsWithApplePhotosAssets(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         completionHandler: @escaping (Swift.Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
@@ -454,25 +461,21 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        self.mergeDescriptorsWithLocalAssets(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { result in
+        self.mergeDescriptorsWithApplePhotosAssets(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+        ) { result in
             switch result {
-            case .success(let filteredDescriptorsByGlobalIdentifier):
-                
-                ///
-                /// Filter out the ones that haven't completed uploading
-                ///
-                let filteredDescriptors = filteredDescriptorsByGlobalIdentifier.values.filter({ $0.uploadState == .completed })
-                
+            case .success(let nonLocalPhotoLibraryDescriptorsByGlobalIdentifier):
                 let start = CFAbsoluteTimeGetCurrent()
                 
                 ///
                 /// Download or request authorization for the remainder of the assets that have completed uploading
                 ///
                 self.downloadOrRequestAuthorization(
-                    forAssetsIn: Array(filteredDescriptors)
+                    forAssetsIn: Array(nonLocalPhotoLibraryDescriptorsByGlobalIdentifier.values)
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(filteredDescriptorsByGlobalIdentifier.count) assets in the local asset store")
+                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(nonLocalPhotoLibraryDescriptorsByGlobalIdentifier.count) assets in the local asset store")
                     completionHandler(result)
                 }
             case .failure(let error):
@@ -672,7 +675,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         for groupId in descriptor.sharingInfo.groupInfoById.keys {
                             self.delegate.didCompleteDownloadOfAsset(
                                 withGlobalIdentifier: decryptedAsset.globalIdentifier,
-                                groupId: groupId
+                                in: groupId
                             )
                         }
                     case .failure(let error):
