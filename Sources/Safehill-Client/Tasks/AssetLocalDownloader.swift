@@ -126,6 +126,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         
         var uploadQueueItemsIdsByGroupId = [String: [String]]()
         var shareQueueItemsIdsByGroupId = [String: [String]]()
+        var userIdsInvolvedInRestoration = Set<String>()
         
         for (_, descriptor) in descriptorsByGlobalIdentifier {
             if descriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
@@ -199,6 +200,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                             )
                         )
                         
+                        userIds.forEach({ userIdsInvolvedInRestoration.insert($0) })
+                        
                         if shareQueueItemsIdsByGroupId[groupId] == nil {
                             shareQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
                         } else {
@@ -216,6 +219,12 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         for (groupId, queueItemIdentifiers) in shareQueueItemsIdsByGroupId {
             self.restorationDelegate.restoreShareQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
         }
+        
+        self.restorationDelegate.didCompleteRestoration(
+            userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
+        )
+        
+        completionHandler(.success(()))
     }
     
     internal override func processAssetsInDescriptors(

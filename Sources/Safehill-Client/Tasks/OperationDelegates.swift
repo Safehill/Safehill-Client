@@ -104,6 +104,13 @@ public protocol SHAssetLocalDownloaderDelegate {
     /// - Parameter groupId: the group identifier common across all these queue items
     func restoreShareQueueItems(withIdentifiers: [String],
                                 in groupId: String)
+    
+    /// Notify the delegate that the restoration was completed.
+    /// This can be used as a signal to update all the threads, so the list of user identifiers
+    /// involved in the restoration of the upload/share requests is provided.
+    /// 
+    /// - Parameter userIdsInvolvedInRestoration: All the user identifiers involved in the restoration of the assets
+    func didCompleteRestoration(userIdsInvolvedInRestoration: [String])
 }
 
 public protocol SHOutboundAssetOperationDelegate {}
