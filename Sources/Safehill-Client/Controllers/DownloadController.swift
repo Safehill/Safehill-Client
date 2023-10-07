@@ -2,13 +2,16 @@ import Foundation
 import KnowledgeBase
 
 
+public struct SHAssetDownloadAuthorizationResponse {
+    let descriptors: [any SHAssetDescriptor]
+    let users: [any SHServerUser]
+}
+
 public struct SHAssetDownloadController {
     let user: SHLocalUser
-    let delegates: [SHAssetDownloaderDelegate]
     
-    public init(user: SHLocalUser, delegates: [SHAssetDownloaderDelegate]) {
+    public init(user: SHLocalUser) {
         self.user = user
-        self.delegates = delegates
     }
     
     /// Invoked during local cleanup (when the local user is removed or a new login happens, for instance)
@@ -40,7 +43,7 @@ public struct SHAssetDownloadController {
     ///   - userId: the user identifier
     ///   - completionHandler: the callback method
     public func authorizeDownloads(from userId: String,
-                                   completionHandler: @escaping (Result<Void, Error>) -> Void) {
+                                   completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void) {
         self.removeUsersFromBlacklist(with: [userId])
         
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
@@ -52,7 +55,11 @@ public struct SHAssetDownloadController {
         do {
             let assetGIdList = try self.unauthorizedDownloads(for: userId)
             guard assetGIdList.count > 0 else {
-                completionHandler(.success(()))
+                let response = SHAssetDownloadAuthorizationResponse(
+                    descriptors: [],
+                    users: []
+                )
+                completionHandler(.success(response))
                 return
             }
             
@@ -63,7 +70,18 @@ public struct SHAssetDownloadController {
             let key = "auth-" + userId
             let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
             
-            self.startAuthorizedDownload(of: descriptors, completionHandler: completionHandler)
+            self.startAuthorizedDownload(of: descriptors) { result in
+                switch result {
+                case .success(let users):
+                    let response = SHAssetDownloadAuthorizationResponse(
+                        descriptors: descriptors,
+                        users: users
+                    )
+                    completionHandler(.success(response))
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            }
         } catch {
             completionHandler(.failure(error))
         }
@@ -119,7 +137,7 @@ public struct SHAssetDownloadController {
     }
     
     func startAuthorizedDownload(of descriptors: [any SHAssetDescriptor],
-                                 completionHandler: @escaping (Result<Void, Error>) -> Void) {
+                                 completionHandler: @escaping (Result<[SHServerUser], Error>) -> Void) {
         var users = [SHServerUser]()
         var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
         userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
@@ -133,12 +151,11 @@ public struct SHAssetDownloadController {
         }
         
         self.startDownload(of: descriptors) { result in
-            if case .success() = result {
-                self.delegates.forEach({
-                    $0.didReceiveAssetDescriptors(descriptors,
-                                                  referencing: users,
-                                                  completionHandler: nil)
-                })
+            switch result {
+            case .success():
+                completionHandler(.success(users))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
             }
         }
     }

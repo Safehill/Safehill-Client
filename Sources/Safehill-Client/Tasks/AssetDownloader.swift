@@ -388,8 +388,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         self.log.info("found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
-        let downloadController = SHAssetDownloadController(user: self.user, 
-                                                           delegates: self.delegates)
+        let downloadController = SHAssetDownloadController(user: self.user)
         
         if unauthorizedDownloadDescriptors.count > 0 {
             ///

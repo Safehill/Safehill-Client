@@ -203,16 +203,15 @@ extension SHServerProxy {
         ///
         DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: remoteUserIds)
         
-        let downloads = SHAssetDownloadController(user: self.localServer.requestor,
-                                                  delegates: [])
+        let downloadController = SHAssetDownloadController(user: self.localServer.requestor)
         do {
-            try downloads.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds, allUserIds: remoteUserIds)
+            try downloadController.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds, allUserIds: remoteUserIds)
         } catch {
             log.error("failed to clean up download queues and index on deleted assets")
         }
-        let userBlacklist = downloads.blacklistedUsers
+        let userBlacklist = downloadController.blacklistedUsers
         let uIdsToRemoveFromBlacklist = userBlacklist.filter { remoteUserIds.contains($0) == false }
-        downloads.removeUsersFromBlacklist(with: uIdsToRemoveFromBlacklist)
+        downloadController.removeUsersFromBlacklist(with: uIdsToRemoveFromBlacklist)
         
         ///
         /// Handle the following cases:
@@ -315,9 +314,8 @@ extension SHServerProxy {
                     /// Remove items in download queues and indices that no longer exist
                     ///
                     do {
-                        let downloads = SHAssetDownloadController(user: self.localServer.requestor,
-                                                                  delegates: [])
-                        try downloads.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
+                        let downloadController = SHAssetDownloadController(user: self.localServer.requestor)
+                        try downloadController.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
                     } catch {
                         log.error("failed to clean up download queues and index on deleted assets")
                     }
