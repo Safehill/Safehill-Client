@@ -3,8 +3,8 @@ import KnowledgeBase
 
 
 public struct SHAssetDownloadAuthorizationResponse {
-    let descriptors: [any SHAssetDescriptor]
-    let users: [any SHServerUser]
+    public let descriptors: [any SHAssetDescriptor]
+    public let users: [any SHServerUser]
 }
 
 public struct SHAssetDownloadController {
