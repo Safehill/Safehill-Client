@@ -174,22 +174,54 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                     }
                     
                     for (groupId, var userIds) in userIdsByGroup {
-                        let uploadQueueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            users: [user]
-                        )
-                        
-                        if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                            uploadQueueItemsIdsByGroupId[groupId] = [uploadQueueItemIdentifier]
-                        } else {
-                            uploadQueueItemsIdsByGroupId[groupId]!.append(uploadQueueItemIdentifier)
-                        }
-                        
                         var queueItemIdentifiers = [String]()
                         
+                        /// 
+                        /// There are 2 possible cases:
+                        /// 1. The asset was first uploaded, then shared with other users
+                        ///     -> the .low and .hi resolutions were uploaded right away, no .mid
+                        /// 2. The asset was shared with other users before uploading
+                        ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
+                        ///
+                        /// Because of this, ask to restore all 3 combinations
+                        ///
+                        queueItemIdentifiers.append(
+                            SHUploadPipeline.queueItemIdentifier(
+                                groupId: groupId,
+                                assetLocalIdentifier: localIdentifier,
+                                versions: [.lowResolution, .hiResolution],
+                                users: [user]
+                            )
+                        )
+                        queueItemIdentifiers.append(
+                            SHUploadPipeline.queueItemIdentifier(
+                                groupId: groupId,
+                                assetLocalIdentifier: localIdentifier,
+                                versions: [.lowResolution, .midResolution],
+                                users: [user]
+                            )
+                        )
+                        queueItemIdentifiers.append(
+                            SHUploadPipeline.queueItemIdentifier(
+                                groupId: groupId,
+                                assetLocalIdentifier: localIdentifier,
+                                versions: [.hiResolution],
+                                users: [user]
+                            )
+                        )
+                        if uploadQueueItemsIdsByGroupId[groupId] == nil {
+                            uploadQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
+                        } else {
+                            uploadQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
+                        }
+                        
+                        ///
+                        /// When sharing with other users, `.midResolution` is uploaded first with `.lowResolution`
+                        /// and `.hiResolution` comes later.
+                        ///
+                        queueItemIdentifiers = [String]()
                         userIds.removeAll(where: { $0 == user.identifier })
+                        
                         queueItemIdentifiers.append(
                             SHUploadPipeline.queueItemIdentifier(
                                 groupId: groupId,
