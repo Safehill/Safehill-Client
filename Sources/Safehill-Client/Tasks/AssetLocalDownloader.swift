@@ -169,6 +169,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         if userIdsByGroup[groupId] == nil {
                             userIdsByGroup[groupId] = [userId]
                         } else {
+                            guard userId != user.identifier else {
+                                continue
+                            }
                             userIdsByGroup[groupId]?.append(userId)
                         }
                     }
