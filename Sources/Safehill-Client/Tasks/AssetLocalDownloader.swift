@@ -198,7 +198,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 groupId: groupId,
                                 assetLocalIdentifier: localIdentifier,
                                 versions: [.lowResolution, .midResolution],
-                                users: userIds
+                                users: userIds.map({ usersById[$0]! })
                             )
                         )
                         queueItemIdentifiers.append(
@@ -206,7 +206,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 groupId: groupId,
                                 assetLocalIdentifier: localIdentifier,
                                 versions: [.hiResolution],
-                                users: userIds
+                                users: userIds.map({ usersById[$0]! })
                             )
                         )
                         if uploadQueueItemsIdsByGroupId[groupId] == nil {
