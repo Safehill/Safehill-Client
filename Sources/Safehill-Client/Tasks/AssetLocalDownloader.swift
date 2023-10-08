@@ -173,13 +173,13 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         }
                     }
                     
-                    for (groupId, var userIds) in userIdsByGroup {
+                    for (groupId, userIds) in userIdsByGroup {
                         var queueItemIdentifiers = [String]()
                         
                         /// 
                         /// There are 2 possible cases:
                         /// 1. The asset was first uploaded, then shared with other users
-                        ///     -> the .low and .hi resolutions were uploaded right away, no .mid
+                        ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
                         /// 2. The asset was shared with other users before uploading
                         ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
                         ///
@@ -198,7 +198,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 groupId: groupId,
                                 assetLocalIdentifier: localIdentifier,
                                 versions: [.lowResolution, .midResolution],
-                                users: [user]
+                                users: userIds
                             )
                         )
                         queueItemIdentifiers.append(
@@ -206,7 +206,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 groupId: groupId,
                                 assetLocalIdentifier: localIdentifier,
                                 versions: [.hiResolution],
-                                users: [user]
+                                users: userIds
                             )
                         )
                         if uploadQueueItemsIdsByGroupId[groupId] == nil {
@@ -220,7 +220,6 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         /// and `.hiResolution` comes later.
                         ///
                         queueItemIdentifiers = [String]()
-                        userIds.removeAll(where: { $0 == user.identifier })
                         
                         queueItemIdentifiers.append(
                             SHUploadPipeline.queueItemIdentifier(
