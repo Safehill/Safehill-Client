@@ -117,7 +117,7 @@ extension SHServerProxy {
         return (changed: Array(queueItemsChanged), removed: Array(queueItemsRemoved))
     }
     
-    private func syncDescriptors(delegate: SHAssetSyncingDelegate?,
+    private func syncDescriptors(delegates: [SHAssetSyncingDelegate],
                                  completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
         var remoteUsers = [SHServerUser]()
@@ -192,8 +192,12 @@ extension SHServerProxy {
         let allSharedAssetGIds = remoteDescriptors
             .filter({ $0.sharingInfo.sharedByUserIdentifier != self.localServer.requestor.identifier })
             .map({ $0.globalIdentifier })
-        delegate?.assetIdsAreSharedWithUser(Array(Set(allSharedAssetGIds)))
-        delegate?.usersAreConnectedAndVerified(remoteUsers)
+        delegates.forEach({
+            $0.assetIdsAreSharedWithUser(Array(Set(allSharedAssetGIds)))
+        })
+        delegates.forEach({
+            $0.usersAreConnectedAndVerified(remoteUsers)
+        })
         let remoteUserIds = remoteUsers.map({ $0.identifier })
         
         ///
@@ -295,18 +299,22 @@ extension SHServerProxy {
         
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
-            delegate?.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
+            delegates.forEach({
+                $0.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
+            })
         }
         if queueDiff.removed.count > 0 {
-            delegate?.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
+            delegates.forEach({
+                $0.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
+            })
         }
         
         completionHandler(.success(diff))
     }
     
-    public func sync(delegate: SHAssetSyncingDelegate?) {
+    public func sync(delegates: [SHAssetSyncingDelegate]) {
         let semaphore = DispatchSemaphore(value: 0)
-        self.syncDescriptors(delegate: delegate) { result in
+        self.syncDescriptors(delegates: delegates) { result in
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
@@ -326,7 +334,9 @@ extension SHServerProxy {
                     // TODO: The framework should be responsible for it instead.
                     // TODO: Deletion of entities in the graph should be taken care of here, too. Currently it can't because the client is currently querying the graph before deleting to understand which conversation threads need to be removed
                     //
-                    delegate?.assetsWereDeleted(diff.assetsRemovedOnServer)
+                    delegates.forEach({
+                        $0.assetsWereDeleted(diff.assetsRemovedOnServer)
+                    })
                 }
                 if diff.stateDifferentOnServer.count > 0 {
                     // TODO: Do we need to mark things as failed/pending depending on state?
@@ -349,19 +359,19 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     let user: SHLocalUser
     
-    let delegate: SHAssetSyncingDelegate?
+    let delegates: [SHAssetSyncingDelegate]
     
     private var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     
-    public init(user: SHLocalUser, delegate: SHAssetSyncingDelegate?) {
+    public init(user: SHLocalUser, delegates: [SHAssetSyncingDelegate]) {
         self.user = user
-        self.delegate = delegate
+        self.delegates = delegates
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
-        SHSyncOperation(user: self.user, delegate: self.delegate)
+        SHSyncOperation(user: self.user, delegates: self.delegates)
     }
     
     public override func main() {
@@ -372,7 +382,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         state = .executing
         
-        self.serverProxy.sync(delegate: delegate)
+        self.serverProxy.sync(delegates: delegates)
         
         self.state = .finished
     }
