@@ -388,7 +388,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         self.log.info("found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
-        let downloadController = SHAssetDownloadController(user: self.user)
+        let downloadsManager = SHAssetsDownloadManager(user: self.user)
         
         if unauthorizedDownloadDescriptors.count > 0 {
             ///
@@ -401,7 +401,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - the downloads will move from the unauthorized to the authorized queue
             /// - the delegate method `handleAssetDescriptorResults(for:user:)` is called
             ///
-            downloadController.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
+            downloadsManager.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
                 switch result {
                 case .failure(let error):
                     self.log.warning("failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
@@ -436,8 +436,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - descriptors are added to the unauthorized download queue
             /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
             ///
-            downloadController.startDownload(of: authorizedDownloadDescriptors,
-                                             completionHandler: completionHandler)
+            downloadsManager.startDownload(of: authorizedDownloadDescriptors,
+                                           completionHandler: completionHandler)
         } else {
             completionHandler(.success(()))
         }

@@ -7,7 +7,7 @@ public struct SHAssetDownloadAuthorizationResponse {
     public let users: [any SHServerUser]
 }
 
-public struct SHAssetDownloadController {
+public struct SHAssetsDownloadManager {
     let user: SHLocalUser
     
     public init(user: SHLocalUser) {
@@ -163,7 +163,7 @@ public struct SHAssetDownloadController {
 
 // - MARK: Helpers for enqueueing and dequeueing
 
-private extension SHAssetDownloadController {
+private extension SHAssetsDownloadManager {
     
     private func enqueue(descriptors: [any SHAssetDescriptor], in queue: KBQueueStore) throws {
         var errors = [Error]()
@@ -255,7 +255,7 @@ private extension SHAssetDownloadController {
 
 // - MARK: Index additions
 
-private extension SHAssetDownloadController {
+private extension SHAssetsDownloadManager {
     
     private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
         let userStore = try SHDBManager.sharedInstance.userStore()
@@ -281,7 +281,7 @@ private extension SHAssetDownloadController {
 
 // - MARK: Index and Queue Cleanup
 
-internal extension SHAssetDownloadController {
+internal extension SHAssetsDownloadManager {
     
     /// Asset identifiers and user identifiers passed to this methods are coming from the server.
     /// Everything that is in the local DB referencing users or assets not in these set is considered stale and should be removed.
@@ -354,7 +354,7 @@ internal extension SHAssetDownloadController {
 
 // - MARK: User black/white listing
 
-public extension SHAssetDownloadController {
+public extension SHAssetsDownloadManager {
     var blacklistedUsers: [String] {
         DownloadBlacklist.shared.blacklistedUsers
     }
