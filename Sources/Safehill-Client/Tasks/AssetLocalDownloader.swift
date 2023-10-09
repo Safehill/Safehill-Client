@@ -288,7 +288,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             for groupId in descriptor.sharingInfo.groupInfoById.keys {
                 self.delegates.forEach({
                     $0.didCompleteDownloadOfAsset(
-                        withGlobalIdentifier: decryptedAsset.globalIdentifier,
+                        withGlobalIdentifier: globalIdentifier,
                         in: groupId
                     )
                 })
