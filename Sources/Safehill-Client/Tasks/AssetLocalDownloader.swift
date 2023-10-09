@@ -253,6 +253,9 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             }
         }
         
+        self.log.debug("upload queue items by group \(uploadQueueItemsIdsByGroupId)")
+        self.log.debug("share queue items by group \(shareQueueItemsIdsByGroupId)")
+        
         for (groupId, queueItemIdentifiers) in uploadQueueItemsIdsByGroupId {
             self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
         }
