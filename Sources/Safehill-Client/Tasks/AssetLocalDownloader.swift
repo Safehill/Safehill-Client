@@ -67,6 +67,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             return
         }
         
+        let descriptors = Array(descriptorsByGlobalIdentifier.values)
+        
         ///
         /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
         ///
@@ -86,7 +88,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         /// Call the delegate with the full manifest of whitelisted assets
         ///
         self.delegates.forEach({
-            $0.didReceiveAssetDescriptors(Array(descriptorsByGlobalIdentifier.values),
+            $0.didReceiveAssetDescriptors(descriptors,
                                           referencing: users,
                                           completionHandler: nil)
         })
@@ -100,7 +102,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             
             for groupId in descriptor.sharingInfo.groupInfoById.keys {
                 self.delegates.forEach({
-                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier, in: groupId)
+                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId, in: groupId)
                 })
             }
             
