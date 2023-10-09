@@ -150,131 +150,120 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         var userIdsInvolvedInRestoration = Set<String>()
         
         for (_, descriptor) in descriptorsByGlobalIdentifier {
-            for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                self.delegates.forEach({
-                    $0.didStartDownloadOfAsset(
-                        withGlobalIdentifier: descriptor.globalIdentifier,
-                        in: groupId
-                    )
-                    $0.didCompleteDownloadOfAsset(
-                        withGlobalIdentifier: descriptor.globalIdentifier,
-                        in: groupId
-                    )
-                })
+            guard descriptor.sharingInfo.sharedByUserIdentifier == user.identifier else {
+                continue
             }
             
-            if descriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
-                // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
-                guard let localIdentifier = descriptor.localIdentifier else {
-                    continue
+            // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
+            guard let localIdentifier = descriptor.localIdentifier else {
+                continue
+            }
+            
+            if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
+               let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
+               recipientUserId == user.identifier {
+                ///
+                /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
+                /// Restore the upload from the queue
+                ///
+                let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
+                
+                let queueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
+                    groupId: groupId,
+                    assetLocalIdentifier: localIdentifier,
+                    versions: [.lowResolution, .hiResolution],
+                    users: []
+                )
+                
+                if uploadQueueItemsIdsByGroupId[groupId] == nil {
+                    uploadQueueItemsIdsByGroupId[groupId] = [queueItemIdentifier]
+                } else {
+                    uploadQueueItemsIdsByGroupId[groupId]!.append(queueItemIdentifier)
+                }
+            } else {
+                var userIdsByGroup = [String: [String]]()
+                for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    guard userId != user.identifier else {
+                        continue
+                    }
+                    if userIdsByGroup[groupId] == nil {
+                        userIdsByGroup[groupId] = [userId]
+                    } else {
+                        userIdsByGroup[groupId]!.append(userId)
+                    }
                 }
                 
-                if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
-                   let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
-                   recipientUserId == user.identifier {
-                    ///
-                    /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
-                    /// Restore the upload from the queue
-                    ///
-                    let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
+                for (groupId, userIds) in userIdsByGroup {
+                    var queueItemIdentifiers = [String]()
                     
-                    let queueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
-                        groupId: groupId,
-                        assetLocalIdentifier: localIdentifier,
-                        versions: [.lowResolution, .hiResolution],
-                        users: []
+                    ///
+                    /// There are 2 possible cases:
+                    /// 1. The asset was first uploaded, then shared with other users
+                    ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
+                    /// 2. The asset was shared with other users before uploading
+                    ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
+                    ///
+                    /// Because of this, ask to restore all 3 combinations
+                    ///
+                    queueItemIdentifiers.append(
+                        SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.lowResolution, .hiResolution],
+                            users: []
+                        )
+                    )
+                    queueItemIdentifiers.append(
+                        SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.lowResolution, .midResolution],
+                            users: userIds.map({ usersById[$0]! })
+                        )
+                    )
+                    queueItemIdentifiers.append(
+                        SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.hiResolution],
+                            users: userIds.map({ usersById[$0]! })
+                        )
+                    )
+                    if uploadQueueItemsIdsByGroupId[groupId] == nil {
+                        uploadQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
+                    } else {
+                        uploadQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
+                    }
+                    
+                    ///
+                    /// When sharing with other users, `.midResolution` is uploaded first with `.lowResolution`
+                    /// and `.hiResolution` comes later.
+                    ///
+                    queueItemIdentifiers = [String]()
+                    
+                    queueItemIdentifiers.append(
+                        SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.lowResolution, .midResolution],
+                            users: userIds.map({ usersById[$0]! })
+                        )
+                    )
+                    queueItemIdentifiers.append(
+                        SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.hiResolution],
+                            users: userIds.map({ usersById[$0]! })
+                        )
                     )
                     
-                    if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                        uploadQueueItemsIdsByGroupId[groupId] = [queueItemIdentifier]
-                    } else {
-                        uploadQueueItemsIdsByGroupId[groupId]!.append(queueItemIdentifier)
-                    }
-                } else {
-                    var userIdsByGroup = [String: [String]]()
-                    for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                        guard userId != user.identifier else {
-                            continue
-                        }
-                        if userIdsByGroup[groupId] == nil {
-                            userIdsByGroup[groupId] = [userId]
-                        } else {
-                            userIdsByGroup[groupId]!.append(userId)
-                        }
-                    }
+                    userIds.forEach({ userIdsInvolvedInRestoration.insert($0) })
                     
-                    for (groupId, userIds) in userIdsByGroup {
-                        var queueItemIdentifiers = [String]()
-                        
-                        /// 
-                        /// There are 2 possible cases:
-                        /// 1. The asset was first uploaded, then shared with other users
-                        ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
-                        /// 2. The asset was shared with other users before uploading
-                        ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
-                        ///
-                        /// Because of this, ask to restore all 3 combinations
-                        ///
-                        queueItemIdentifiers.append(
-                            SHUploadPipeline.queueItemIdentifier(
-                                groupId: groupId,
-                                assetLocalIdentifier: localIdentifier,
-                                versions: [.lowResolution, .hiResolution],
-                                users: []
-                            )
-                        )
-                        queueItemIdentifiers.append(
-                            SHUploadPipeline.queueItemIdentifier(
-                                groupId: groupId,
-                                assetLocalIdentifier: localIdentifier,
-                                versions: [.lowResolution, .midResolution],
-                                users: userIds.map({ usersById[$0]! })
-                            )
-                        )
-                        queueItemIdentifiers.append(
-                            SHUploadPipeline.queueItemIdentifier(
-                                groupId: groupId,
-                                assetLocalIdentifier: localIdentifier,
-                                versions: [.hiResolution],
-                                users: userIds.map({ usersById[$0]! })
-                            )
-                        )
-                        if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                            uploadQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
-                        } else {
-                            uploadQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
-                        }
-                        
-                        ///
-                        /// When sharing with other users, `.midResolution` is uploaded first with `.lowResolution`
-                        /// and `.hiResolution` comes later.
-                        ///
-                        queueItemIdentifiers = [String]()
-                        
-                        queueItemIdentifiers.append(
-                            SHUploadPipeline.queueItemIdentifier(
-                                groupId: groupId,
-                                assetLocalIdentifier: localIdentifier,
-                                versions: [.lowResolution, .midResolution],
-                                users: userIds.map({ usersById[$0]! })
-                            )
-                        )
-                        queueItemIdentifiers.append(
-                            SHUploadPipeline.queueItemIdentifier(
-                                groupId: groupId,
-                                assetLocalIdentifier: localIdentifier,
-                                versions: [.hiResolution],
-                                users: userIds.map({ usersById[$0]! })
-                            )
-                        )
-                        
-                        userIds.forEach({ userIdsInvolvedInRestoration.insert($0) })
-                        
-                        if shareQueueItemsIdsByGroupId[groupId] == nil {
-                            shareQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
-                        } else {
-                            shareQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
-                        }
+                    if shareQueueItemsIdsByGroupId[groupId] == nil {
+                        shareQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
+                    } else {
+                        shareQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
                     }
                 }
             }
@@ -311,8 +300,17 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             return
         }
         
+        ///
+        /// Notify the restoration delegates about the assets that need to be restored from the successful queues
+        /// These can only reference assets shared by THIS user. All other descriptors are ignored
+        ///
         self.restoreQueueItems(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { _ in }
         
+        ///
+        /// Handle the assets that are present in the local library differently
+        /// These don't need to be downloaded.
+        /// The delegate needs to be notified that they should be marked as "uploaded on the server"
+        /// 
         self.mergeDescriptorsWithApplePhotosAssets(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
         ) { result in
