@@ -155,7 +155,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                         groupId: groupId,
                         assetLocalIdentifier: localIdentifier,
                         versions: [.lowResolution, .hiResolution],
-                        users: [user]
+                        users: []
                     )
                     
                     if uploadQueueItemsIdsByGroupId[groupId] == nil {
@@ -193,7 +193,7 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                                 groupId: groupId,
                                 assetLocalIdentifier: localIdentifier,
                                 versions: [.lowResolution, .hiResolution],
-                                users: [user]
+                                users: []
                             )
                         )
                         queueItemIdentifiers.append(
