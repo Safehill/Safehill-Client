@@ -166,13 +166,13 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 } else {
                     var userIdsByGroup = [String: [String]]()
                     for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                        guard userId != user.identifier else {
+                            continue
+                        }
                         if userIdsByGroup[groupId] == nil {
                             userIdsByGroup[groupId] = [userId]
                         } else {
-                            guard userId != user.identifier else {
-                                continue
-                            }
-                            userIdsByGroup[groupId]?.append(userId)
+                            userIdsByGroup[groupId]!.append(userId)
                         }
                     }
                     
