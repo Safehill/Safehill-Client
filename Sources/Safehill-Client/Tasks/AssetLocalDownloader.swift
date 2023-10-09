@@ -284,6 +284,17 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             return
         }
         
+        for (globalIdentifier, descriptor) in descriptorsByGlobalIdentifier {
+            for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                self.delegates.forEach({
+                    $0.didCompleteDownloadOfAsset(
+                        withGlobalIdentifier: decryptedAsset.globalIdentifier,
+                        in: groupId
+                    )
+                })
+            }
+        }
+        
         self.restoreQueueItems(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { _ in }
         
         self.mergeDescriptorsWithApplePhotosAssets(
