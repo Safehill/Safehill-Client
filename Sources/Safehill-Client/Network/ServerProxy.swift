@@ -423,7 +423,7 @@ extension SHServerProxy {
     
     ///
     /// Retrieves assets versions with given identifiers.
-    /// Tries to fetch from local server first, then remote server if some are not present. For those, **it updates the local server (cache)**
+    /// Tries to fetch from local server first, then remote server if some are not present. For those not available in the local server, **it updates the local server (cache)**
     ///
     /// - Parameters:
     ///   - assetIdentifiers: the global asset identifiers to retrieve

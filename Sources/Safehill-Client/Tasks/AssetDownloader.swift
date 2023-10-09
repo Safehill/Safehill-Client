@@ -259,11 +259,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         ///
-        /// Filter out the ones that were blacklisted
+        /// Filter out the ones that were blacklisted,
+        /// Also, filter out the ones that haven't been completed
         ///
         descriptors = descriptors.filter {
             DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
             && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
+            $0.uploadState == .completed
         }
         
         guard descriptors.count > 0 else {
@@ -300,12 +302,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
         for descriptor in descriptors {
-            ///
-            /// Filter-out non-completed uploads
-            ///
-            guard descriptor.uploadState == .completed else {
-                continue
-            }
             descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
             ///
             /// Limit based on the task configuration
