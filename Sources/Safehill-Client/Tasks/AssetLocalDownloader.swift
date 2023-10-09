@@ -67,32 +67,6 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
             return
         }
         
-        let descriptors = Array(descriptorsByGlobalIdentifier.values)
-        
-        ///
-        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
-        ///
-        var users = [SHServerUser]()
-        var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-        
-        do {
-            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
-        } catch {
-            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        ///
-        /// Call the delegate with the full manifest of whitelisted assets
-        ///
-        self.delegates.forEach({
-            $0.didReceiveAssetDescriptors(descriptors,
-                                          referencing: users,
-                                          completionHandler: nil)
-        })
-        
         for (globalAssetId, encryptedAsset) in encryptedAssets {
             guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
                 log.critical("malformed descriptorsByGlobalIdentifier")
@@ -176,6 +150,19 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
         var userIdsInvolvedInRestoration = Set<String>()
         
         for (_, descriptor) in descriptorsByGlobalIdentifier {
+            for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                self.delegates.forEach({
+                    $0.didStartDownloadOfAsset(
+                        withGlobalIdentifier: descriptor.globalIdentifier,
+                        in: groupId
+                    )
+                    $0.didCompleteDownloadOfAsset(
+                        withGlobalIdentifier: descriptor.globalIdentifier,
+                        in: groupId
+                    )
+                })
+            }
+            
             if descriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
                 // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
                 guard let localIdentifier = descriptor.localIdentifier else {
@@ -347,50 +334,6 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
                 completionHandler(.failure(error))
             }
         }
-    }
-    
-    ///
-    /// Fetch descriptors from local server.
-    /// Filters blacklisted assets and users.
-    /// Filter out non-completed uploads.
-    /// Return the descriptors for the assets to download keyed by global identifier.
-    ///
-    /// - Parameter completionHandler: the callback
-    internal override func processDescriptors(
-        completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void
-    ) {
-        var descriptors = [any SHAssetDescriptor]()
-        do {
-            descriptors = try self.fetchDescriptorsFromServer()
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        ///
-        /// Filter out the ones that were blacklisted
-        ///
-        descriptors = descriptors.filter {
-            DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
-            && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
-        }
-        
-        guard descriptors.count > 0 else {
-            completionHandler(.success([:]))
-            return
-        }
-        
-        var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-        for descriptor in descriptors {
-            ///
-            /// Filter-out non-completed uploads
-            ///
-            guard descriptor.uploadState == .completed else {
-                continue
-            }
-            descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
-        }
-        completionHandler(.success(descriptorsByGlobalIdentifier))
     }
     
     ///
