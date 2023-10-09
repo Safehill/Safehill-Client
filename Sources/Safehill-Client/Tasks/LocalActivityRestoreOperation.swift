@@ -4,13 +4,12 @@ import KnowledgeBase
 import os
 
 
-public class SHLocalDownloadOperation: SHDownloadOperation {
-    
-    let restorationDelegate: SHAssetLocalDownloaderDelegate
+public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     
     @available(*, unavailable)
     public override init(user: SHLocalUser,
                          delegates: [SHAssetDownloaderDelegate],
+                         restorationDelegate: SHAssetActivityRestorationDelegate,
                          limitPerRun limit: Int? = nil,
                          photoIndexer: SHPhotosIndexer? = nil) {
         fatalError("Not supported")
@@ -18,9 +17,8 @@ public class SHLocalDownloadOperation: SHDownloadOperation {
     
     public init(user: SHLocalUser,
                 delegates: [SHAssetDownloaderDelegate],
-                restorationDelegate: SHAssetLocalDownloaderDelegate) {
-        self.restorationDelegate = restorationDelegate
-        super.init(user: user, delegates: delegates)
+                restorationDelegate: SHAssetActivityRestorationDelegate) {
+        super.init(user: user, delegates: delegates, restorationDelegate: restorationDelegate)
     }
     
     internal override func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
