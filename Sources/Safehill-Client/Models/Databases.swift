@@ -108,7 +108,7 @@ public class SHDBManager {
     
     private var _graph: KBKnowledgeStore? = nil
     
-    public func graph() throws -> KBKnowledgeStore {
+    internal func graph() throws -> KBKnowledgeStore {
         if let g = _graph {
             return g
         } else {

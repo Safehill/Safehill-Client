@@ -349,10 +349,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     ///
-    /// Fetch descriptors from server.
+    /// Fetch descriptors from server (remote or local, depending on whether it's running as part of the
+    /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
     /// Filters out the blacklisted assets and users, as well as the non-completed uploads.
-    /// Call the delegate with the full manifest (regardless of the limit on the task config) for the assets shared by OTHER users.
-    /// Return the descriptors for the assets to download keyed by global identifier, limiting the result based on the task config
+    /// Call the delegate with the full manifest of assets shared by OTHER users, regardless of the limit on the task config) for the assets.
+    /// Return the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
     ///
     /// - Parameter completionHandler: the callback
     internal func processDescriptors(
@@ -372,12 +373,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
-        /// - haven't completed upload
+        /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
         descriptors = descriptors.filter {
             DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
             && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
-            && $0.uploadState == .completed
+            && $0.uploadState == .completed || $0.uploadState == .partial
         }
         
         guard descriptors.count > 0 else {

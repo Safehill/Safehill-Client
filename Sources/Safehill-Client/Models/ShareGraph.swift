@@ -68,4 +68,76 @@ public enum SHKGQuery {
             throw errors.first!
         }
     }
+    
+    public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
+        // TODO: Support writebatch in KnowledgeGraph
+        let graph = try SHDBManager.sharedInstance.graph()
+        try globalIdentifiers.forEach({
+            let assetEntity = graph.entity(withIdentifier: $0)
+            try assetEntity.remove()
+        })
+    }
+    
+    public static func deepClean() throws {
+        let graph = try SHDBManager.sharedInstance.graph()
+        let _ = try graph.removeAll()
+    }
+    
+    public static func assetGlobalIdentifiers(
+        sharedBy userIdentifiers: [String]
+    ) throws -> [GlobalIdentifier: Set<String>] {
+        let graph = try SHDBManager.sharedInstance.graph()
+        var assetsToUsers = [GlobalIdentifier: Set<String>]()
+        var sharedByUsersCondition = KBTripleCondition(value: false)
+        
+        for userId in userIdentifiers {
+            sharedByUsersCondition = sharedByUsersCondition.or(
+                KBTripleCondition(
+                    subject: userId,
+                    predicate: SHKGPredicates.shares.rawValue,
+                    object: nil
+                )
+            )
+        }
+        
+        for triple in try graph.triples(matching: sharedByUsersCondition) {
+            let assetId = triple.object
+            if let _ = assetsToUsers[assetId] {
+                assetsToUsers[assetId]!.insert(triple.subject)
+            } else {
+                assetsToUsers[assetId] = [triple.subject]
+            }
+        }
+        
+        return assetsToUsers
+    }
+    
+    public static func assetGlobalIdentifiers(
+        sharedWith userIdentifiers: [String]
+    ) throws -> [GlobalIdentifier: Set<String>] {
+        let graph = try SHDBManager.sharedInstance.graph()
+        var assetsToUsers = [GlobalIdentifier: Set<String>]()
+        var sharedWithUsersCondition = KBTripleCondition(value: false)
+        
+        for userId in userIdentifiers {
+            sharedWithUsersCondition = sharedWithUsersCondition.or(
+                KBTripleCondition(
+                    subject: nil,
+                    predicate: SHKGPredicates.sharedWith.rawValue,
+                    object: userId
+                )
+            )
+        }
+        
+        for triple in try graph.triples(matching: sharedWithUsersCondition) {
+            let assetId = triple.subject
+            if let _ = assetsToUsers[assetId] {
+                assetsToUsers[assetId]!.insert(triple.object)
+            } else {
+                assetsToUsers[assetId] = [triple.object]
+            }
+        }
+        
+        return assetsToUsers
+    }
 }
