@@ -116,6 +116,10 @@ public struct SHAssetsDownloadManager {
     ///   - completionHandler: the callback method
     func startDownload(of descriptors: [any SHAssetDescriptor],
                        completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        guard descriptors.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
         guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))

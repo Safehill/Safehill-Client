@@ -497,6 +497,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         forAssetsIn descriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
+        guard descriptors.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
         var mutableDescriptors = descriptors
         let partitionIndex = mutableDescriptors.partition { descr in
             if descr.sharingInfo.sharedByUserIdentifier == self.user.identifier {
@@ -647,6 +652,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             var globalIdentifiersOnLocalServer = [GlobalIdentifier]()
             if case .success(let descrs) = result {
                 globalIdentifiersOnLocalServer = descrs.map({ $0.globalIdentifier })
+            }
+            
+            guard descriptorsByGlobalIdentifier.count > globalIdentifiersOnLocalServer.count else {
+                completionHandler(.success(()))
+                return
             }
             
             let group = DispatchGroup()
