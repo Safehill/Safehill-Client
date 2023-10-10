@@ -452,7 +452,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
         
         guard descriptorsByGlobalIdentifier.count > 0 else {
-            completionHandler(.success([])
+            completionHandler(.success([]))
             return
         }
         
