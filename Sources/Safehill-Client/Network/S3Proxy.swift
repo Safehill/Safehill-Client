@@ -1,4 +1,6 @@
 import Foundation
+import Safehill_Crypto
+
 
 public enum S3HTTPMethod: String {
     case GET = "GET"
@@ -110,7 +112,6 @@ struct S3Proxy {
             return folder
         } catch {
             fatalError("failed to create temporary directory for uploads")
-            return nil
         }
     }
 
@@ -140,7 +141,8 @@ struct S3Proxy {
                                            delegate: sessionDelegate,
                                            delegateQueue: OperationQueue.main)
         
-        let fileURL = tempFolderURL.appendingPathComponent(sessionIdentifier)
+        let fileName = SHHash.stringDigest(for: sessionIdentifier.data(using: .utf8)!)
+        let fileURL = tempFolderURL.appendingPathComponent(fileName)
         let filePath = fileURL.path
         
         try? FileManager.default.removeItem(atPath: filePath)
@@ -149,6 +151,7 @@ struct S3Proxy {
             task.resume()
         } else {
             completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to create file")))
+            fatalError("failed to create file to upload")
         }
     }
     
