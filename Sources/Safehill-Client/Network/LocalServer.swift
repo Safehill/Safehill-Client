@@ -308,7 +308,7 @@ struct LocalServer : SHServerAPI {
         if let filterGids = forAssetGlobalIdentifiers {
             var gidCondition = KBGenericCondition(value: false)
             for gid in filterGids {
-                gidCondition = gidCondition.or(KBGenericCondition(.contains, value: "::\(gid)::"))
+                gidCondition = gidCondition.or(KBGenericCondition(.endsWith, value: "::\(gid)"))
             }
             condition = condition.and(gidCondition)
         }
