@@ -103,13 +103,13 @@ struct S3Proxy {
     let presignedURL: String
     
     static var tempFolderURL: URL? {
-        guard let folder = URL(string: NSTemporaryDirectory())?.appendingPathComponent("uploads") else {
-            return nil
-        }
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("uploads")
+        
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             return folder
         } catch {
+            fatalError("failed to create temporary directory for uploads")
             return nil
         }
     }
