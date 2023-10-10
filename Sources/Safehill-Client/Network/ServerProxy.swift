@@ -220,6 +220,51 @@ extension SHServerProxy {
     }
     
     /// Fill the specified version of the requested assets in the local server (cache)
+    /// - Parameter descriptorsKeyedByGlobalIdentifier: the assets' descriptors keyed by their global identifier
+    /// - Parameter quality: the quality of the asset to cache
+    private func cacheAssets(for descriptorsKeyedByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+                             quality: SHAssetQuality) {
+        log.trace("[CACHING] Attempting to cache \(quality.rawValue) for assets \(descriptorsKeyedByGlobalIdentifier)")
+        
+        let globalIdentifiers = Array(descriptorsKeyedByGlobalIdentifier.keys)
+        ///
+        /// Get the asset from the remote server (CDN)
+        ///
+        self.remoteServer.getAssets(
+            withGlobalIdentifiers: globalIdentifiers,
+            versions: [quality]
+        ) { result in
+            switch result {
+            case .success(let encryptedDict):
+                guard encryptedDict.isEmpty == false else {
+                    log.trace("[CACHING] No \(quality.rawValue) for assets \(globalIdentifiers) on remote server")
+                    return
+                }
+                
+                for (globalIdentifier, encryptedAsset) in encryptedDict {
+                    ///
+                    /// Store the asset in the local server (cache)
+                    ///
+                    self.localServer.create(
+                        assets: [encryptedAsset],
+                        descriptorsByGlobalIdentifier: descriptorsKeyedByGlobalIdentifier
+                    ) {
+                        result in
+                        switch result {
+                        case .success(_):
+                            log.trace("[CACHING] Downloaded and cached \(quality.rawValue) for asset \(globalIdentifier)")
+                        case .failure(let error):
+                            log.error("[CACHING] Unable to save asset \(globalIdentifier) to local server: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            case .failure(_):
+                log.error("[CACHING] Unable to get assets \(globalIdentifiers) from remote server")
+            }
+        }
+    }
+    
+    /// Fill the specified version of the requested assets in the local server (cache)
     /// - Parameter globalIdentifiers: the assets' global identifiers
     /// - Parameter quality: the quality of the asset to cache
     private func cacheAssets(with globalIdentifiers: [String],
@@ -241,41 +286,7 @@ extension SHServerProxy {
                     return result
                 }
                 
-                ///
-                /// Get the asset from the remote server (CDN)
-                ///
-                self.remoteServer.getAssets(
-                    withGlobalIdentifiers: globalIdentifiers,
-                    versions: [quality]
-                ) { result in
-                    switch result {
-                    case .success(let encryptedDict):
-                        guard encryptedDict.isEmpty == false else {
-                            log.trace("[CACHING] No \(quality.rawValue) for assets \(globalIdentifiers) on remote server")
-                            return
-                        }
-                        
-                        for (globalIdentifier, encryptedAsset) in encryptedDict {
-                            ///
-                            /// Store the asset in the local server (cache)
-                            ///
-                            self.localServer.create(
-                                assets: [encryptedAsset],
-                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
-                            ) {
-                                result in
-                                switch result {
-                                case .success(_):
-                                    log.trace("[CACHING] Downloaded and cached \(quality.rawValue) for asset \(globalIdentifier)")
-                                case .failure(let error):
-                                    log.error("[CACHING] Unable to save asset \(globalIdentifier) to local server: \(error.localizedDescription)")
-                                }
-                            }
-                        }
-                    case .failure(_):
-                        log.error("[CACHING] Unable to get assets \(globalIdentifiers) from remote server")
-                    }
-                }
+                self.cacheAssets(for: descriptorsByGlobalIdentifier, quality: quality)
             case .failure(_):
                 log.error("[CACHING] Unable to get asset descriptors \(globalIdentifiers) from remote server")
             }

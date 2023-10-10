@@ -51,9 +51,22 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     }
     
     internal func decryptFromLocalStore(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
+        filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
+        guard original.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
+        let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
+        
+        guard descriptorsByGlobalIdentifier.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
         let localAssetsStore = SHLocalAssetStoreController(user: self.user)
         guard let encryptedAssets = try? localAssetsStore.encryptedAssets(
             with: Array(descriptorsByGlobalIdentifier.keys),
@@ -113,223 +126,42 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         completionHandler(.success(()))
     }
     
-    /// For all the descriptors whose originator user is `self.user`, notify the restoration delegate
-    /// about all groups that need to be restored along with the queue item identifiers for each `groupId`.
-    /// Uploads and shares will be reported separately, according to the contract in the delegate.
-    ///
-    /// - Parameters:
-    ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
-    ///   - completionHandler: the callback method
-    func restoreQueueItems(
+    override func processForDownload(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
+        sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
+        sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
         ///
-        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
-        ///
-        var usersById = [String: SHServerUser]()
-        var userIdentifiers = Set(descriptorsByGlobalIdentifier.values.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptorsByGlobalIdentifier.values.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-        
-        do {
-            usersById = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers)).reduce([:], { partialResult, user in
-                var result = partialResult
-                result[user.identifier] = user
-                return result
-            })
-        } catch {
-            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var uploadQueueItemsIdsByGroupId = [String: [String]]()
-        var shareQueueItemsIdsByGroupId = [String: [String]]()
-        var userIdsInvolvedInRestoration = Set<String>()
-        
-        for (_, descriptor) in descriptorsByGlobalIdentifier {
-            guard descriptor.sharingInfo.sharedByUserIdentifier == user.identifier else {
-                continue
-            }
-            
-            // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
-            guard let localIdentifier = descriptor.localIdentifier else {
-                continue
-            }
-            
-            if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
-               let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
-               recipientUserId == user.identifier {
-                ///
-                /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
-                /// Restore the upload from the queue
-                ///
-                let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
-                
-                let queueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
-                    groupId: groupId,
-                    assetLocalIdentifier: localIdentifier,
-                    versions: [.lowResolution, .hiResolution],
-                    users: []
-                )
-                
-                if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                    uploadQueueItemsIdsByGroupId[groupId] = [queueItemIdentifier]
-                } else {
-                    uploadQueueItemsIdsByGroupId[groupId]!.append(queueItemIdentifier)
-                }
-            } else {
-                var userIdsByGroup = [String: [String]]()
-                for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    guard userId != user.identifier else {
-                        continue
-                    }
-                    if userIdsByGroup[groupId] == nil {
-                        userIdsByGroup[groupId] = [userId]
-                    } else {
-                        userIdsByGroup[groupId]!.append(userId)
-                    }
-                }
-                
-                for (groupId, userIds) in userIdsByGroup {
-                    var queueItemIdentifiers = [String]()
-                    
-                    ///
-                    /// There are 2 possible cases:
-                    /// 1. The asset was first uploaded, then shared with other users
-                    ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
-                    /// 2. The asset was shared with other users before uploading
-                    ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
-                    ///
-                    /// Because of this, ask to restore all 3 combinations
-                    ///
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            users: []
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .midResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.hiResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                        uploadQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
-                    } else {
-                        uploadQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
-                    }
-                    
-                    ///
-                    /// When sharing with other users, `.midResolution` is uploaded first with `.lowResolution`
-                    /// and `.hiResolution` comes later.
-                    ///
-                    queueItemIdentifiers = [String]()
-                    
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .midResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.hiResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    
-                    userIds.forEach({ userIdsInvolvedInRestoration.insert($0) })
-                    
-                    if shareQueueItemsIdsByGroupId[groupId] == nil {
-                        shareQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
-                    } else {
-                        shareQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
-                    }
-                }
-            }
-        }
-        
-        self.log.debug("upload queue items by group \(uploadQueueItemsIdsByGroupId)")
-        self.log.debug("share queue items by group \(shareQueueItemsIdsByGroupId)")
-        
-        for (groupId, queueItemIdentifiers) in uploadQueueItemsIdsByGroupId {
-            self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
-        }
-        
-        for (groupId, queueItemIdentifiers) in shareQueueItemsIdsByGroupId {
-            self.restorationDelegate.restoreShareQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
-        }
-        
-        self.restorationDelegate.didCompleteRestoration(
-            userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
-        )
-        
-        completionHandler(.success(()))
-    }
-    
-    internal override func processAssetsInDescriptors(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
-    ) {
-        ///
-        /// Get all asset descriptors associated with this user from the server.
-        /// Descriptors serve as a manifest to determine what to decrypt
-        ///
-        guard descriptorsByGlobalIdentifier.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        ///
+        /// FOR THE ONES SHARED BY THIS USER
         /// Notify the restoration delegates about the assets that need to be restored from the successful queues
         /// These can only reference assets shared by THIS user. All other descriptors are ignored
         ///
-        self.restoreQueueItems(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) { _ in }
+        self.restoreQueueItems(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+            filteringKeys: sharedBySelfGlobalIdentifiers
+        ) { _ in }
         
         ///
-        /// Handle the assets that are present in the local library differently
-        /// These don't need to be downloaded.
-        /// The delegate needs to be notified that they should be marked as "uploaded on the server"
-        /// 
-        self.mergeDescriptorsWithApplePhotosAssets(
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
-        ) { result in
-            switch result {
-            case .success(let nonLocalPhotoLibraryDescriptorsByGlobalIdentifier):
-                let start = CFAbsoluteTimeGetCurrent()
-                
-                ///
-                /// Get the encrypted assets for the ones not found in the apple photos library to start decryption.
-                ///
-                self.decryptFromLocalStore(
-                    descriptorsByGlobalIdentifier: nonLocalPhotoLibraryDescriptorsByGlobalIdentifier
-                ) { result in
-                    let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to decrypt \(nonLocalPhotoLibraryDescriptorsByGlobalIdentifier.count) assets in the local asset store")
-                    completionHandler(result)
-                }
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
+        /// FOR THE ONES SHARED BY OTHER USERS + NOT IN THE APPLE PHOTOS LIBRARY
+        /// Decrypt the remainder from the local store, namely assets:
+        /// - not in the apple photos library (we'll use the apple photos version as long as it exists)
+        /// - not shared by self (until multi-device is implemented, these items are expected to be in the apple photos library)
+        
+        // TODO: IMPLEMENT THIS because activities and assets that no longer exist in (or app has no longer access to from) the Apple photos library are problematic otherwise
+        
+        ///
+        /// Remember: because the full manifest of descriptors (`descriptorsByGlobalIdentifier`)
+        /// is fetched from LocalStore, all assets are guaranteed to be found
+        ///
+        let toDecryptFromLocalStoreGids = Set(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers).union(sharedByOthersGlobalIdentifiers)
+        
+        self.decryptFromLocalStore(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+            filteringKeys: Array(toDecryptFromLocalStoreGids),
+            completionHandler: completionHandler
+        )
     }
     
     ///
