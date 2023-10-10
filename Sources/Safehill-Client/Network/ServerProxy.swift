@@ -247,7 +247,8 @@ extension SHServerProxy {
                     ///
                     self.localServer.create(
                         assets: [encryptedAsset],
-                        descriptorsByGlobalIdentifier: descriptorsKeyedByGlobalIdentifier
+                        descriptorsByGlobalIdentifier: descriptorsKeyedByGlobalIdentifier,
+                        uploadState: .completed
                     ) {
                         result in
                         switch result {
@@ -596,7 +597,8 @@ extension SHServerProxy {
         ///
         let encryptedAssetsToCreate = remoteDictionary.filter({ assetGid, _ in descriptorsByAssetGlobalId[assetGid] != nil }).values
         self.localServer.create(assets: Array(encryptedAssetsToCreate),
-                                descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId) { result in
+                                descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
+                                uploadState: .completed) { result in
             if case .failure(let err) = result {
                 log.warning("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
             }

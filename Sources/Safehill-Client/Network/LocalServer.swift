@@ -601,11 +601,13 @@ struct LocalServer : SHServerAPI {
         
         self.create(assets: assets,
                     descriptorsByGlobalIdentifier: descriptorsByGlobalId,
+                    uploadState: .notStarted,
                     completionHandler: completionHandler)
     }
     
     func create(assets: [any SHEncryptedAsset],
                 descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+                uploadState: SHAssetDescriptorUploadState,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         let assetStore: KBKVStore
         do {
