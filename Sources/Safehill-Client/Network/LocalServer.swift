@@ -666,7 +666,7 @@ struct LocalServer : SHServerAPI {
                     "publicKey": encryptedVersion.publicKeyData,
                     "publicSignature": encryptedVersion.publicSignatureData,
                     "creationDate": asset.creationDate,
-                    "uploadState": SHAssetDescriptorUploadState.notStarted.rawValue
+                    "uploadState": uploadState.rawValue
                 ]
                 let versionData: [String: Any?] = [
                     "assetIdentifier": asset.globalIdentifier,
