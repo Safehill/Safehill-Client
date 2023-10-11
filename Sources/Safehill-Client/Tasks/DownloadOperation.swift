@@ -373,13 +373,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
-        /// - whose users are unknown (the delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of that)
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
         descriptors = descriptors.filter {
             DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
             && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
-            && ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
             && $0.uploadState == .completed || $0.uploadState == .partial
         }
         
@@ -388,11 +386,17 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        let descriptorsSharedByOthers = descriptors.filter { $0.sharingInfo.sharedByUserIdentifier != user.identifier }
+        /// For the Filter out the `didReceiveAssetDescriptors(_:referencing:completionHandler)` delegate, filter the ones:
+        /// - shared by self
+        /// - whose sender is unknown (the delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of that)
+        let descriptorsSharedByOthers = descriptors.filter {
+            $0.sharingInfo.sharedByUserIdentifier != user.identifier
+            && ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
+        }
         
         ///
         /// Fetch from server users information (`SHServerUser` objects)
-        /// for all user identifiers found in all descriptors shared by OTHER users
+        /// for all user identifiers found in all descriptors shared by OTHER known users
         ///
         var users = [SHServerUser]()
         var userIdentifiers = Set(descriptorsSharedByOthers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
@@ -407,7 +411,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         ///
-        /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by others**.
+        /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by other known users**.
         /// The ones shared by THIS user will be restored through the restoration delegate.
         ///
         self.delegates.forEach({
