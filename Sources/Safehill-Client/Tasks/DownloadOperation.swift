@@ -373,11 +373,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
+        /// - whose users are unknown (the delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of that)
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
         descriptors = descriptors.filter {
             DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
             && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
+            && ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
             && $0.uploadState == .completed || $0.uploadState == .partial
         }
         
