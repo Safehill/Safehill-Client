@@ -382,6 +382,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         guard descriptors.count > 0 else {
+            self.delegates.forEach({
+                $0.didReceiveAssetDescriptors([], referencing: [], completionHandler: nil)
+            })
             completionHandler(.success([:]))
             return
         }
