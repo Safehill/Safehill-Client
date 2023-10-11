@@ -261,7 +261,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     /// There are 2 possible cases:
                     /// 1. The asset was first uploaded, then shared with other users
                     ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
-                    /// 2. The asset was shared with other users before uploading
+                    /// 2. The asset was shared with other users and uploaded at the same time
                     ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
                     ///
                     /// Because of this, ask to restore all 3 combinations
@@ -297,11 +297,22 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     }
                     
                     ///
-                    /// When sharing with other users, `.midResolution` is uploaded first with `.lowResolution`
-                    /// and `.hiResolution` comes later.
+                    /// There are 2 possible cases:
+                    /// 1. The asset was first uploaded, then shared with other users
+                    ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
+                    /// 2. The asset was shared with other users and uploaded at the same time
+                    ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
                     ///
                     queueItemIdentifiers = [String]()
                     
+                    queueItemIdentifiers.append(
+                        SHUploadPipeline.queueItemIdentifier(
+                            groupId: groupId,
+                            assetLocalIdentifier: localIdentifier,
+                            versions: [.lowResolution, .hiResolution],
+                            users: userIds.map({ usersById[$0]! })
+                        )
+                    )
                     queueItemIdentifiers.append(
                         SHUploadPipeline.queueItemIdentifier(
                             groupId: groupId,
