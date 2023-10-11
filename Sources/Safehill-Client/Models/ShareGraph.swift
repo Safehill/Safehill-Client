@@ -192,13 +192,15 @@ public enum SHKGQuery {
             )
         }
         
+        let triples = try graph.triples(matching: sharedWithUsersCondition)
+        
         if triples.count == 0 {
             for userId in usersIdsToSearch {
                 UserIdToAssetGidSharedWithCache[userId] = []
             }
         }
         
-        for triple in try graph.triples(matching: sharedWithUsersCondition) {
+        for triple in triples {
             let assetId = triple.subject
             if let _ = assetsToUsers[assetId] {
                 assetsToUsers[assetId]!.insert(triple.object)
