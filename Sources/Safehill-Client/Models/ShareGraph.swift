@@ -72,10 +72,10 @@ public enum SHKGQuery {
                 let kgOtherUser = graph.entity(withIdentifier: userId)
                 try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
                 
-                if let _ = UserIdToAssetGidSharedWithCache[receiverUserIds] {
-                    UserIdToAssetGidSharedWithCache[receiverUserIds]!.append(assetIdentifier)
+                if let _ = UserIdToAssetGidSharedWithCache[userId] {
+                    UserIdToAssetGidSharedWithCache[userId]!.append(assetIdentifier)
                 } else {
-                    UserIdToAssetGidSharedWithCache[receiverUserIds] = [assetIdentifier]
+                    UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
                 }
             }
         } catch {
