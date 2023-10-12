@@ -197,13 +197,11 @@ public struct SHLocalUser: SHServerUser {
     public mutating func deauthenticate() {
         self._ssoIdentifier = nil
         self._authToken = nil
-        self._encryptionProtocolSalt = nil
         
         guard (try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)) != nil,
               (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil,
-              (try? SHKeychain.deleteValue(account: saltKeychainLabel)) != nil
         else {
-            log.fault("auth, identity token and salt could not be removed from the keychain")
+            log.fault("auth and identity token could not be removed from the keychain")
             return
         }
     }
