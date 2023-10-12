@@ -85,6 +85,9 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
 }
 
 public protocol SHAssetActivityRestorationDelegate {
+    /// Notify the delegate that the restoration started.
+    func didStartRestoration()
+    
     /// Let the delegate know that a queue item representing a successful UPLOAD needs to be retrieved or re-created in the queue.
     /// The item - in fact - might not exist in the queue if:
     /// - the user logged out and the queues were cleaned
