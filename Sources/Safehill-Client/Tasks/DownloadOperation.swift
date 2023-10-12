@@ -218,7 +218,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 userIdsInvolvedInRestoration.insert(recipientUserId)
             } else {
-                for (groupId, recipientUserId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                     if shareLocalAssetIdsByGroupId[groupId] == nil {
                         shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
                     } else {
