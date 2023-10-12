@@ -90,9 +90,9 @@ public protocol SHAssetActivityRestorationDelegate {
     /// - the user logged out and the queues were cleaned
     /// - the user is on another device
     ///
-    /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
+    /// - Parameter forLocalIdentifiers: all the possible queue item identifiers to restore
     /// - Parameter groupId: the group identifier common across all these queue items
-    func restoreUploadQueueItems(withIdentifiers: [String],
+    func restoreUploadQueueItems(forLocalIdentifiers: [String],
                                  in groupId: String)
     
     /// Let the delegate know that a queue item representing a successful SHARE needs to be retrieved or re-created in the queue.
@@ -100,9 +100,9 @@ public protocol SHAssetActivityRestorationDelegate {
     /// - the user logged out and the queues were cleaned
     /// - the user is on another device
     /// 
-    /// - Parameter withIdentifiers: all the possible queue item identifiers to restore
+    /// - Parameter forLocalIdentifiers: all the possible queue item identifiers to restore
     /// - Parameter groupId: the group identifier common across all these queue items
-    func restoreShareQueueItems(withIdentifiers: [String],
+    func restoreShareQueueItems(forLocalIdentifiers: [String],
                                 in groupId: String)
     
     /// Notify the delegate that the restoration was completed.

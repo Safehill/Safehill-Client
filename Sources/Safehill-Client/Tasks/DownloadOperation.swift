@@ -187,27 +187,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        ///
-        /// Fetch from server users information (`SHServerUser` objects) for all user identifiers found in all descriptors
-        ///
-        var usersById = [String: SHServerUser]()
-        var userIdentifiers = Set(descriptorsByGlobalIdentifier.values.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptorsByGlobalIdentifier.values.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-        
-        do {
-            usersById = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers)).reduce([:], { partialResult, user in
-                var result = partialResult
-                result[user.identifier] = user
-                return result
-            })
-        } catch {
-            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var uploadQueueItemsIdsByGroupId = [String: [String]]()
-        var shareQueueItemsIdsByGroupId = [String: [String]]()
+        var uploadLocalAssetIdByGroupId = [String: Set<String>]()
+        var shareLocalAssetIdsByGroupId = [String: Set<String>]()
         var userIdsInvolvedInRestoration = Set<String>()
         
         for (_, descriptor) in descriptorsByGlobalIdentifier {
@@ -229,127 +210,35 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 ///
                 let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
                 
-                let queueItemIdentifier = SHUploadPipeline.queueItemIdentifier(
-                    groupId: groupId,
-                    assetLocalIdentifier: localIdentifier,
-                    versions: [.lowResolution, .hiResolution],
-                    users: []
-                )
-                
-                if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                    uploadQueueItemsIdsByGroupId[groupId] = [queueItemIdentifier]
+                if uploadLocalAssetIdByGroupId[groupId] == nil {
+                    uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
                 } else {
-                    uploadQueueItemsIdsByGroupId[groupId]!.append(queueItemIdentifier)
-                }
-            } else {
-                var userIdsByGroup = [String: [String]]()
-                for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    guard userId != user.identifier else {
-                        continue
-                    }
-                    if userIdsByGroup[groupId] == nil {
-                        userIdsByGroup[groupId] = [userId]
-                    } else {
-                        userIdsByGroup[groupId]!.append(userId)
-                    }
+                    uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
                 }
                 
-                for (groupId, userIds) in userIdsByGroup {
-                    var queueItemIdentifiers = [String]()
-                    
-                    ///
-                    /// There are 2 possible cases:
-                    /// 1. The asset was first uploaded, then shared with other users
-                    ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
-                    /// 2. The asset was shared with other users and uploaded at the same time
-                    ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
-                    ///
-                    /// Because of this, ask to restore all 3 combinations
-                    ///
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            users: []
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .midResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.hiResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    if uploadQueueItemsIdsByGroupId[groupId] == nil {
-                        uploadQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
+                userIdsInvolvedInRestoration.insert(recipientUserId)
+            } else {
+                for (groupId, recipientUserId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if shareLocalAssetIdsByGroupId[groupId] == nil {
+                        shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
                     } else {
-                        uploadQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
+                        shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
                     }
                     
-                    ///
-                    /// There are 2 possible cases:
-                    /// 1. The asset was first uploaded, then shared with other users
-                    ///     -> the .low and .hi resolutions were uploaded right away, no .mid. In this case the identifier only reference this user
-                    /// 2. The asset was shared with other users and uploaded at the same time
-                    ///     -> the .low and .mid resolutions were uploaded first, then the .hi resolution
-                    ///
-                    queueItemIdentifiers = [String]()
-                    
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.lowResolution, .midResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    queueItemIdentifiers.append(
-                        SHUploadPipeline.queueItemIdentifier(
-                            groupId: groupId,
-                            assetLocalIdentifier: localIdentifier,
-                            versions: [.hiResolution],
-                            users: userIds.map({ usersById[$0]! })
-                        )
-                    )
-                    
-                    userIds.forEach({ userIdsInvolvedInRestoration.insert($0) })
-                    
-                    if shareQueueItemsIdsByGroupId[groupId] == nil {
-                        shareQueueItemsIdsByGroupId[groupId] = queueItemIdentifiers
-                    } else {
-                        shareQueueItemsIdsByGroupId[groupId]!.append(contentsOf: queueItemIdentifiers)
-                    }
+                    userIdsInvolvedInRestoration.insert(recipientUserId)
                 }
             }
         }
         
-        self.log.debug("upload queue items by group \(uploadQueueItemsIdsByGroupId)")
-        self.log.debug("share queue items by group \(shareQueueItemsIdsByGroupId)")
+        self.log.debug("upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
+        self.log.debug("share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
         
-        for (groupId, queueItemIdentifiers) in uploadQueueItemsIdsByGroupId {
-            self.restorationDelegate.restoreUploadQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
+        for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
+            self.restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
         }
         
-        for (groupId, queueItemIdentifiers) in shareQueueItemsIdsByGroupId {
-            self.restorationDelegate.restoreShareQueueItems(withIdentifiers: queueItemIdentifiers, in: groupId)
+        for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
+            self.restorationDelegate.restoreShareQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
         }
         
         self.restorationDelegate.didCompleteRestoration(
