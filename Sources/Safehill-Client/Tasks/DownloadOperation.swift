@@ -176,6 +176,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
         guard original.count > 0 else {
+            self.restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: [])
             completionHandler(.success(()))
             return
         }
@@ -183,6 +184,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
         
         guard descriptorsByGlobalIdentifier.count > 0 else {
+            self.restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: [])
             completionHandler(.success(()))
             return
         }
