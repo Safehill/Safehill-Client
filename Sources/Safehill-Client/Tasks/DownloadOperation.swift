@@ -219,6 +219,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 userIdsInvolvedInRestoration.insert(recipientUserId)
             } else {
                 for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if uploadLocalAssetIdByGroupId[groupId] == nil {
+                        uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
+                    } else {
+                        uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
+                    }
                     if shareLocalAssetIdsByGroupId[groupId] == nil {
                         shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
                     } else {
@@ -534,7 +539,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
-                    self.log.debug("[localDownload][PERF] it took \(CFAbsoluteTime(end - start)) to process \(descriptorsByGlobalIdentifier.count) asset descriptors")
+                    self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to process \(descriptorsByGlobalIdentifier.count) asset descriptors")
                     completionHandler(result)
                 }
             case .failure(let error):
