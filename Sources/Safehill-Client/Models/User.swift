@@ -199,7 +199,7 @@ public struct SHLocalUser: SHServerUser {
         self._authToken = nil
         
         guard (try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)) != nil,
-              (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil,
+              (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil
         else {
             log.fault("auth and identity token could not be removed from the keychain")
             return
