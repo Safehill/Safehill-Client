@@ -170,7 +170,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: sharedWith,
+            sharedWith: [],
             isBackground: isBackground
         )
         
