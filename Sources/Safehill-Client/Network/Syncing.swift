@@ -95,6 +95,13 @@ extension SHServerProxy {
                     }
                 }
                 
+                for uploadItem in groupIdToUploadItem.values {
+                    try uploadItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulUpload))
+                }
+                for shareItem in groupIdToShareItem.values {
+                    try shareItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulShare))
+                }
+                
                 log.debug("[sync] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
                 log.debug("[sync] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
                 
