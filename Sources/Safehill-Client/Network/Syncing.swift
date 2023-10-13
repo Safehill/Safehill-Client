@@ -9,6 +9,10 @@ extension SHServerProxy {
                                    remoteServerDescriptors: [any SHAssetDescriptor],
                                    usersReferencedInRemoteDescriptors: [any SHServerUser],
                                    restorationDelegate: SHAssetActivityRestorationDelegate) {
+        guard localServerDescriptors.count > 0, remoteServerDescriptors.count > 0 else {
+            return
+        }
+        
         let localServerDescriptors = localServerDescriptors.filter({
             $0.sharingInfo.sharedByUserIdentifier == self.localServer.requestor.identifier
             && $0.localIdentifier != nil
@@ -35,11 +39,6 @@ extension SHServerProxy {
                 var groupIdToShareItem = [String: SHShareHistoryItem]()
                 
                 for (recipientUserId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    guard let user = usersReferencedInRemoteDescriptors.first(where: { $0.identifier == recipientUserId }) else {
-                        log.critical("inconsistency between user ids referenced in descriptors and user objects returned from server")
-                        continue
-                    }
-                    
                     let localIdentifier = remoteDescriptor.localIdentifier!
                     
                     if recipientUserId == self.localServer.requestor.identifier {
@@ -59,6 +58,11 @@ extension SHServerProxy {
                             isBackground: true
                         )
                     } else {
+                        guard let user = usersReferencedInRemoteDescriptors.first(where: { $0.identifier == recipientUserId }) else {
+                            log.critical("inconsistency between user ids referenced in descriptors and user objects returned from server")
+                            continue
+                        }
+                        
                         if shareLocalAssetIdsByGroupId[groupId] == nil {
                             shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
                         } else {
