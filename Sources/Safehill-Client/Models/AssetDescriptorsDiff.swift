@@ -42,7 +42,7 @@ struct AssetDescriptorsDiff {
                               serverUserIds: [String],
                               localUserIds: [String],
                               for user: SHLocalUser) -> AssetDescriptorsDiff {
-        var onlyLocal = localDescriptors
+        var onlyLocalAssets = localDescriptors
             .map({
                 d in SHRemoteAssetIdentifier(globalIdentifier: d.globalIdentifier,
                                              localIdentifier: d.localIdentifier)
@@ -54,11 +54,11 @@ struct AssetDescriptorsDiff {
                 })
             )
         
-        if onlyLocal.count > 0 {
+        if onlyLocalAssets.count > 0 {
             for localDescriptor in localDescriptors {
                 let assetRef = SHRemoteAssetIdentifier(globalIdentifier: localDescriptor.globalIdentifier,
                                                        localIdentifier: localDescriptor.localIdentifier)
-                if let index = onlyLocal.firstIndex(of: assetRef) {
+                if let index = onlyLocalAssets.firstIndex(of: assetRef) {
                     switch localDescriptor.uploadState {
                     case .notStarted, .partial:
                         ///
@@ -71,7 +71,7 @@ struct AssetDescriptorsDiff {
                         /// Do not mark them as removed
                         ///
                         if localDescriptor.sharingInfo.sharedByUserIdentifier == user.identifier {
-                            onlyLocal.remove(at: index)
+                            onlyLocalAssets.remove(at: index)
                         }
                     case .failed:
                         ///
@@ -79,7 +79,7 @@ struct AssetDescriptorsDiff {
                         /// They will actually be intentionally deleted from server when that happens,
                         /// but marked as failed locally
                         ///
-                        onlyLocal.remove(at: index)
+                        onlyLocalAssets.remove(at: index)
                     default:
                         break
                     }
@@ -105,7 +105,7 @@ struct AssetDescriptorsDiff {
         /// - Upload state changes?
 
         return AssetDescriptorsDiff(
-            assetsRemovedOnServer: onlyLocal,
+            assetsRemovedOnServer: onlyLocalAssets,
             stateDifferentOnServer: [],
             userIdsToRemoveFromGroup: userIdsToRemoveFromGroup
         )

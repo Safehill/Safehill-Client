@@ -124,6 +124,9 @@ extension SHServerProxy {
         var localError: Error? = nil, remoteError: Error? = nil
         var remoteUsersError: Error? = nil
         
+        ///
+        /// Get all the local descriptors
+        ///
         let group = DispatchGroup()
         group.enter()
         self.getLocalAssetDescriptors { localResult in
@@ -137,6 +140,9 @@ extension SHServerProxy {
             group.leave()
         }
         
+        ///
+        /// Get all the remote descriptors
+        ///
         group.enter()
         self.getRemoteAssetDescriptors { remoteResult in
             switch remoteResult {
@@ -159,16 +165,30 @@ extension SHServerProxy {
             return
         }
         
-        var userIdsInDescriptorsSet = Set<String>()
+        ///
+        /// Get all users referenced in either local or remote descriptors (excluding THIS user)
+        ///
+        var userIdsInLocalDescriptorsSet = Set<String>()
         for localDescriptor in localDescriptors {
-            userIdsInDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
-            localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInDescriptorsSet.insert($0) })
+            userIdsInLocalDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
+            localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInLocalDescriptorsSet.insert($0) })
         }
-        userIdsInDescriptorsSet.remove(self.remoteServer.requestor.identifier)
-        let userIdsInDescriptors = Array(userIdsInDescriptorsSet)
+        userIdsInLocalDescriptorsSet.remove(self.remoteServer.requestor.identifier)
+        let userIdsInLocalDescriptors = Array(userIdsInLocalDescriptorsSet)
         
+        var userIdsInRemoteDescriptorsSet = Set<String>()
+        for remoteDescriptor in remoteDescriptors {
+            userIdsInRemoteDescriptorsSet.insert(remoteDescriptor.sharingInfo.sharedByUserIdentifier)
+            remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInRemoteDescriptorsSet.insert($0) })
+        }
+        userIdsInRemoteDescriptorsSet.remove(self.remoteServer.requestor.identifier)
+        let userIdsInRemoteDescriptors = Array(userIdsInRemoteDescriptorsSet)
+        
+        ///
+        /// Get the `SHServerUser` for each of the users mentioned in the remote descriptors
+        ///
         group.enter()
-        self.remoteServer.getUsers(withIdentifiers: nil) { result in
+        self.remoteServer.getUsers(withIdentifiers: userIdsInRemoteDescriptors) { result in
             switch result {
             case .success(let serverUsers):
                 remoteUsers = serverUsers
@@ -189,34 +209,67 @@ extension SHServerProxy {
             return
         }
         
+        ///
+        /// Remove all users that don't exist on the server from the local server and the graph
+        ///
+        let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
+        if uIdsToRemoveFromLocal.count > 0 {
+            do {
+                try SHUsersController(localUser: self.localServer.requestor).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
+            } catch {
+                log.warning("error removing local users, but this operation will be retried")
+            }
+            
+            do {
+                let graph = try SHDBManager.sharedInstance.graph()
+                for userId in uIdsToRemoveFromLocal {
+                    try graph.removeEntity(userId)
+                }
+            } catch {
+                let _ = try? SHDBManager.sharedInstance.graph().removeAll()
+                log.warning("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created, but this operation will be retried")
+            }
+        }
+        
+        ///
+        /// Let the delegate know about the new list of verified users
+        ///
+        delegates.forEach({
+            $0.usersAreConnectedAndVerified(remoteUsers)
+        })
+        
+        ///
+        /// Get all the asset identifiers mentioned in the remote descriptors
+        ///
         let allSharedAssetGIds = remoteDescriptors
             .filter({ $0.sharingInfo.sharedByUserIdentifier != self.localServer.requestor.identifier })
             .map({ $0.globalIdentifier })
         delegates.forEach({
             $0.assetIdsAreSharedWithUser(Array(Set(allSharedAssetGIds)))
         })
-        delegates.forEach({
-            $0.usersAreConnectedAndVerified(remoteUsers)
-        })
-        let remoteUserIds = remoteUsers.map({ $0.identifier })
         
+        ///
+        /// Remove all users that don't exist on the server from any blacklist
         ///
         /// If a user that was in the blacklist no longer exists on the server
         /// that user can be safely removed from the blacklist,
         /// as well as all downloads from that user currently awaiting authorization
         ///
-        DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: remoteUserIds)
+        DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: userIdsInRemoteDescriptors)
         
         let downloadsManager = SHAssetsDownloadManager(user: self.localServer.requestor)
         do {
-            try downloadsManager.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds, allUserIds: remoteUserIds)
+            try downloadsManager.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds,
+                                                   allUserIds: userIdsInRemoteDescriptors)
         } catch {
             log.error("failed to clean up download queues and index on deleted assets")
         }
         let userBlacklist = downloadsManager.blacklistedUsers
-        let uIdsToRemoveFromBlacklist = userBlacklist.filter { remoteUserIds.contains($0) == false }
+        let uIdsToRemoveFromBlacklist = userBlacklist.subtract(userIdsInRemoteDescriptors)
         downloadsManager.removeUsersFromBlacklist(with: uIdsToRemoveFromBlacklist)
         
+        ///
+        /// Generate a diff of assets and users (latter organized by group)
         ///
         /// Handle the following cases:
         /// 1. The asset has been encrypted but not yet downloaded (so the server doesn't know about that asset yet)
@@ -230,10 +283,13 @@ extension SHServerProxy {
         ///
         let diff = AssetDescriptorsDiff.generateUsing(server: remoteDescriptors,
                                                       local: localDescriptors,
-                                                      serverUserIds: remoteUserIds,
-                                                      localUserIds: userIdsInDescriptors,
+                                                      serverUserIds: userIdsInRemoteDescriptors,
+                                                      localUserIds: userIdsInLocalDescriptors,
                                                       for: self.localServer.requestor)
         
+        ///
+        /// Remove users that should be removed from local server
+        ///
         if diff.assetsRemovedOnServer.count > 0 {
             let globalIdentifiers = diff.assetsRemovedOnServer.compactMap { $0.globalIdentifier }
             self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
@@ -243,6 +299,9 @@ extension SHServerProxy {
             }
         }
         
+        ///
+        /// Change the upload state of the assets that are not in sync with server states
+        ///
         for stateChangeDiff in diff.stateDifferentOnServer {
             self.localServer.markAsset(with: stateChangeDiff.globalIdentifier,
                                        quality: stateChangeDiff.quality,
@@ -250,50 +309,6 @@ extension SHServerProxy {
                 if case .failure(let error) = result {
                     log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
-            }
-        }
-        
-        let userIdsToCheckForRemoval = userIdsInDescriptors.subtract(remoteUserIds)
-        var remoteUsersChecked = [SHServerUser]()
-        
-        group.enter()
-        self.remoteServer.getUsers(withIdentifiers: userIdsToCheckForRemoval) { result in
-            switch result {
-            case .success(let serverUsers):
-                remoteUsersChecked = serverUsers
-            case .failure(let err):
-                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
-                remoteUsersError = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult2 = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult2 == .success else {
-            completionHandler(.failure(SHBackgroundOperationError.timedOut))
-            return
-        }
-        guard remoteUsersError == nil else {
-            completionHandler(.failure(remoteUsersError!))
-            return
-        }
-        
-        let userIdsToRemove = userIdsToCheckForRemoval.subtract(remoteUsersChecked.map({ $0.identifier }))
-        if userIdsToRemove.count > 0 {
-            do {
-                try SHUsersController(localUser: self.localServer.requestor).deleteUsers(withIdentifiers: userIdsToRemove)
-            } catch {
-                log.warning("error removing local users, but this operation will be retried")
-            }
-            
-            do {
-                let graph = try SHDBManager.sharedInstance.graph()
-                for userId in userIdsToRemove {
-                    try graph.removeEntity(userId)
-                }
-            } catch {
-                let _ = try? SHDBManager.sharedInstance.graph().removeAll()
-                log.warning("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created, but this operation will be retried")
             }
         }
         
