@@ -96,10 +96,14 @@ extension SHServerProxy {
                 }
                 
                 for uploadItem in groupIdToUploadItem.values {
-                    try uploadItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulUpload))
+                    if (try? uploadItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulUpload))) == nil {
+                        log.warning("[sync] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
+                    }
                 }
                 for shareItem in groupIdToShareItem.values {
-                    try shareItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulShare))
+                    if (try? shareItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulShare))) == nil {
+                        log.warning("[sync] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
+                    }
                 }
                 
                 log.debug("[sync] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
