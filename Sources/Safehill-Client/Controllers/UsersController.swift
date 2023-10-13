@@ -33,8 +33,8 @@ internal struct ServerUserCache {
             
             evictors[user.identifier]?.invalidate()
             
-            // Cache retention policy: TTL = 5 minutes
-            evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 5, repeats: false, block: { [self] (timer) in
+            // Cache retention policy: TTL = 2 minutes
+            evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [self] (timer) in
                 cache.removeObject(forKey: NSString(string: user.identifier))
             })
         }
