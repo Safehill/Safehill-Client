@@ -43,7 +43,41 @@ extension SHServerProxy {
     
 }
 
-extension SHServerProxy {
+// MARK: - Sync Operation
+
+public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+    
+    public let log = Logger(subsystem: "com.safehill", category: "BG-SYNC")
+    
+    let user: SHLocalUser
+    
+    let delegates: [SHAssetSyncingDelegate]
+    
+    private var serverProxy: SHServerProxy {
+        SHServerProxy(user: self.user)
+    }
+    
+    public init(user: SHLocalUser, delegates: [SHAssetSyncingDelegate]) {
+        self.user = user
+        self.delegates = delegates
+    }
+    
+    public func clone() -> SHBackgroundOperationProtocol {
+        SHSyncOperation(user: self.user, delegates: self.delegates)
+    }
+    
+    public override func main() {
+        guard !self.isCancelled else {
+            state = .finished
+            return
+        }
+        
+        state = .executing
+        
+        self.sync()
+        
+        self.state = .finished
+    }
     
     /// Removes any evidence of the users from the local storage:
     /// - Replaces the items in the `ShareHistoryQueue` with the same items by omitting the users removed.
@@ -52,7 +86,7 @@ extension SHServerProxy {
     /// Returns the queueItemIdentifiers replaced and the ones removed
     /// - Parameter userIdsToRemoveFromGroup: maps groupId -> list of user ids to remove
     /// - Returns: the list of keys changed and removed in the `SHShareHistoryQueue`
-    /// 
+    ///
     private func removeUsersFromStores(_ userIdsToRemoveFromGroup: [String: Set<UserIdentifier>]) -> (changed: [String], removed: [String]) {
         
         guard let successfulShareQueue = try? BackgroundOperationQueue.of(type: .successfulShare) else {
@@ -116,9 +150,9 @@ extension SHServerProxy {
                 /// Remove asset sharing information
                 ///
                 for userId in userIds {
-                    self.localServer.unshare(assetId: share.value.item.globalAssetId, with: userId) { result in
+                    self.serverProxy.localServer.unshare(assetId: share.value.item.globalAssetId, with: userId) { result in
                         if case .failure(let error) = result {
-                            log.error("some assets were unshared on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                            self.log.error("some assets were unshared on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                         }
                     }
                 }
@@ -157,9 +191,7 @@ extension SHServerProxy {
         return (changed: Array(queueItemsChanged), removed: Array(queueItemsRemoved))
     }
     
-    private func syncDescriptors(delegates: [SHAssetSyncingDelegate],
-                                 restorationDelegate: SHAssetActivityRestorationDelegate,
-                                 completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
+    private func syncDescriptors(completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
         var localError: Error? = nil, remoteError: Error? = nil
         var remoteUsers = [SHServerUser]()
@@ -170,12 +202,12 @@ extension SHServerProxy {
         ///
         let group = DispatchGroup()
         group.enter()
-        self.getLocalAssetDescriptors { localResult in
+        self.serverProxy.getLocalAssetDescriptors { localResult in
             switch localResult {
             case .success(let descriptors):
                 localDescriptors = descriptors
             case .failure(let err):
-                log.error("failed to fetch descriptors from LOCAL server when calculating diff: \(err.localizedDescription)")
+                self.log.error("failed to fetch descriptors from LOCAL server when calculating diff: \(err.localizedDescription)")
                 localError = err
             }
             group.leave()
@@ -185,12 +217,12 @@ extension SHServerProxy {
         /// Get all the remote descriptors
         ///
         group.enter()
-        self.getRemoteAssetDescriptors { remoteResult in
+        self.serverProxy.getRemoteAssetDescriptors { remoteResult in
             switch remoteResult {
             case .success(let descriptors):
                 remoteDescriptors = descriptors
             case .failure(let err):
-                log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
+                self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
                 remoteError = err
             }
             group.leave()
@@ -214,7 +246,7 @@ extension SHServerProxy {
             userIdsInLocalDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
             localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInLocalDescriptorsSet.insert($0) })
         }
-        userIdsInLocalDescriptorsSet.remove(self.remoteServer.requestor.identifier)
+        userIdsInLocalDescriptorsSet.remove(self.user.identifier)
         let userIdsInLocalDescriptors = Array(userIdsInLocalDescriptorsSet)
         
         var userIdsInRemoteDescriptorsSet = Set<String>()
@@ -222,19 +254,19 @@ extension SHServerProxy {
             userIdsInRemoteDescriptorsSet.insert(remoteDescriptor.sharingInfo.sharedByUserIdentifier)
             remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInRemoteDescriptorsSet.insert($0) })
         }
-        userIdsInRemoteDescriptorsSet.remove(self.remoteServer.requestor.identifier)
+        userIdsInRemoteDescriptorsSet.remove(self.user.identifier)
         let userIdsInRemoteDescriptors = Array(userIdsInRemoteDescriptorsSet)
         
         ///
         /// Get the `SHServerUser` for each of the users mentioned in the remote descriptors
         ///
         group.enter()
-        self.remoteServer.getUsers(withIdentifiers: userIdsInRemoteDescriptors) { result in
+        self.serverProxy.remoteServer.getUsers(withIdentifiers: userIdsInRemoteDescriptors) { result in
             switch result {
             case .success(let serverUsers):
                 remoteUsers = serverUsers
             case .failure(let err):
-                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
+                self.log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
                 remoteUsersError = err
             }
             group.leave()
@@ -256,7 +288,7 @@ extension SHServerProxy {
         let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
         if uIdsToRemoveFromLocal.count > 0 {
             do {
-                try SHUsersController(localUser: self.localServer.requestor).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
+                try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
             } catch {
                 log.warning("error removing local users, but this operation will be retried")
             }
@@ -275,7 +307,7 @@ extension SHServerProxy {
         ///
         /// Let the delegate know about the new list of verified users
         ///
-        delegates.forEach({
+        self.delegates.forEach({
             $0.usersAreConnectedAndVerified(remoteUsers)
         })
         
@@ -283,9 +315,9 @@ extension SHServerProxy {
         /// Get all the asset identifiers mentioned in the remote descriptors
         ///
         let allSharedAssetGIds = remoteDescriptors
-            .filter({ $0.sharingInfo.sharedByUserIdentifier != self.localServer.requestor.identifier })
+            .filter({ $0.sharingInfo.sharedByUserIdentifier != self.user.identifier })
             .map({ $0.globalIdentifier })
-        delegates.forEach({
+        self.delegates.forEach({
             $0.assetIdsAreSharedWithUser(Array(Set(allSharedAssetGIds)))
         })
         
@@ -298,7 +330,7 @@ extension SHServerProxy {
         ///
         DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: userIdsInRemoteDescriptors)
         
-        let downloadsManager = SHAssetsDownloadManager(user: self.localServer.requestor)
+        let downloadsManager = SHAssetsDownloadManager(user: self.user)
         do {
             try downloadsManager.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds,
                                                    allUserIds: userIdsInRemoteDescriptors)
@@ -326,16 +358,16 @@ extension SHServerProxy {
                                                       local: localDescriptors,
                                                       serverUserIds: userIdsInRemoteDescriptors,
                                                       localUserIds: userIdsInLocalDescriptors,
-                                                      for: self.localServer.requestor)
+                                                      for: self.user)
         
         ///
         /// Remove users that should be removed from local server
         ///
         if diff.assetsRemovedOnServer.count > 0 {
             let globalIdentifiers = diff.assetsRemovedOnServer.compactMap { $0.globalIdentifier }
-            self.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
+            self.serverProxy.localServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
                 if case .failure(let error) = result {
-                    log.error("some assets were deleted on server but couldn't be deleted from local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    self.log.error("some assets were deleted on server but couldn't be deleted from local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
             }
         }
@@ -344,23 +376,23 @@ extension SHServerProxy {
         /// Change the upload state of the assets that are not in sync with server states
         ///
         for stateChangeDiff in diff.stateDifferentOnServer {
-            self.localServer.markAsset(with: stateChangeDiff.globalIdentifier,
-                                       quality: stateChangeDiff.quality,
-                                       as: stateChangeDiff.newUploadState) { result in
+            self.serverProxy.localServer.markAsset(with: stateChangeDiff.globalIdentifier,
+                                                   quality: stateChangeDiff.quality,
+                                                   as: stateChangeDiff.newUploadState) { result in
                 if case .failure(let error) = result {
-                    log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    self.log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
             }
         }
         
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
-            delegates.forEach({
+            self.delegates.forEach({
                 $0.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
             })
         }
         if queueDiff.removed.count > 0 {
-            delegates.forEach({
+            self.delegates.forEach({
                 $0.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
             })
         }
@@ -368,11 +400,9 @@ extension SHServerProxy {
         completionHandler(.success(diff))
     }
     
-    public func sync(delegates: [SHAssetSyncingDelegate],
-                     restorationDelegate: SHAssetActivityRestorationDelegate) {
+    public func sync() {
         let semaphore = DispatchSemaphore(value: 0)
-        self.syncDescriptors(delegates: delegates,
-                             restorationDelegate: restorationDelegate) { result in
+        self.syncDescriptors { result in
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
@@ -380,10 +410,10 @@ extension SHServerProxy {
                     /// Remove items in download queues and indices that no longer exist
                     ///
                     do {
-                        let downloadsManager = SHAssetsDownloadManager(user: self.localServer.requestor)
+                        let downloadsManager = SHAssetsDownloadManager(user: self.user)
                         try downloadsManager.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
                     } catch {
-                        log.error("failed to clean up download queues and index on deleted assets")
+                        self.log.error("failed to clean up download queues and index on deleted assets")
                     }
                     
                     //
@@ -392,7 +422,7 @@ extension SHServerProxy {
                     // TODO: The framework should be responsible for it instead.
                     // TODO: Deletion of entities in the graph should be taken care of here, too. Currently it can't because the client is currently querying the graph before deleting to understand which conversation threads need to be removed
                     //
-                    delegates.forEach({
+                    self.delegates.forEach({
                         $0.assetsWereDeleted(diff.assetsRemovedOnServer)
                     })
                 }
@@ -400,56 +430,12 @@ extension SHServerProxy {
                     // TODO: Do we need to mark things as failed/pending depending on state?
                 }
             case .failure(let err):
-                log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
+                self.log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
             }
             semaphore.signal()
         }
         
         semaphore.wait()
-    }
-}
-
-// MARK: - Sync Operation
-
-public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
-    
-    public let log = Logger(subsystem: "com.safehill", category: "BG-SYNC")
-    
-    let user: SHLocalUser
-    
-    let delegates: [SHAssetSyncingDelegate]
-    let restorationDelegate: SHAssetActivityRestorationDelegate
-    
-    private var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
-    }
-    
-    public init(user: SHLocalUser, 
-                delegates: [SHAssetSyncingDelegate],
-                restorationDelegate: SHAssetActivityRestorationDelegate) {
-        self.user = user
-        self.delegates = delegates
-        self.restorationDelegate = restorationDelegate
-    }
-    
-    public func clone() -> SHBackgroundOperationProtocol {
-        SHSyncOperation(user: self.user, 
-                        delegates: self.delegates,
-                        restorationDelegate: self.restorationDelegate)
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        self.serverProxy.sync(delegates: self.delegates,
-                              restorationDelegate: self.restorationDelegate)
-        
-        self.state = .finished
     }
 }
 
