@@ -5,120 +5,45 @@ import os
 
 extension SHServerProxy {
     
-    private func restoreQueueItems(localServerDescriptors: [any SHAssetDescriptor],
-                                   remoteServerDescriptors: [any SHAssetDescriptor],
-                                   usersReferencedInRemoteDescriptors: [any SHServerUser],
-                                   restorationDelegate: SHAssetActivityRestorationDelegate) {
-        guard localServerDescriptors.count > 0, remoteServerDescriptors.count > 0 else {
-            return
+    public func getUsers(inAssetDescriptors descriptors: [any SHAssetDescriptor]) throws -> [any SHServerUser] {
+        let group = DispatchGroup()
+        var response = [any SHServerUser]()
+        var error: Error? = nil
+        
+        var userIdsSet = Set<String>()
+        for descriptor in descriptors {
+            userIdsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
+            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsSet.insert($0) })
+        }
+        userIdsSet.remove(self.remoteServer.requestor.identifier)
+        let userIds = Array(userIdsSet)
+
+        group.enter()
+        self.remoteServer.getUsers(withIdentifiers: userIds) { result in
+            switch result {
+            case .success(let serverUsers):
+                response = serverUsers
+            case .failure(let err):
+                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
+                error = err
+            }
+            group.leave()
         }
         
-        let localServerDescriptors = localServerDescriptors.filter({
-            $0.sharingInfo.sharedByUserIdentifier == self.localServer.requestor.identifier
-            && $0.localIdentifier != nil
-        })
-        let remoteServerDescriptors = remoteServerDescriptors.filter({
-            $0.sharingInfo.sharedByUserIdentifier == self.localServer.requestor.identifier
-            && $0.localIdentifier != nil
-        })
-        let localServerDescriptorByAssetGid: [GlobalIdentifier: any SHAssetDescriptor] = localServerDescriptors
-            .reduce([:]) { partialResult, descriptor in
-                var result = partialResult
-                result[descriptor.globalIdentifier] = descriptor
-                return result
-            }
-        for remoteDescriptor in remoteServerDescriptors {
-            if let localDescriptor = localServerDescriptorByAssetGid[remoteDescriptor.globalIdentifier] {
-                
-                // TODO: Implement
-                
-            } else {
-                var uploadLocalAssetIdByGroupId = [String: Set<String>]()
-                var shareLocalAssetIdsByGroupId = [String: Set<String>]()
-                var groupIdToUploadItem = [String: SHUploadHistoryItem]()
-                var groupIdToShareItem = [String: SHShareHistoryItem]()
-                
-                for (recipientUserId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    let localIdentifier = remoteDescriptor.localIdentifier!
-                    
-                    if recipientUserId == self.localServer.requestor.identifier {
-                        if uploadLocalAssetIdByGroupId[groupId] == nil {
-                            uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
-                        } else {
-                            uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
-                        }
-                        
-                        groupIdToUploadItem[groupId] = SHUploadHistoryItem(
-                            localAssetId: localIdentifier,
-                            globalAssetId: remoteDescriptor.globalIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            groupId: groupId,
-                            eventOriginator: self.localServer.requestor,
-                            sharedWith: [],
-                            isBackground: true
-                        )
-                    } else {
-                        guard let user = usersReferencedInRemoteDescriptors.first(where: { $0.identifier == recipientUserId }) else {
-                            log.critical("inconsistency between user ids referenced in descriptors and user objects returned from server")
-                            continue
-                        }
-                        
-                        if shareLocalAssetIdsByGroupId[groupId] == nil {
-                            shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
-                        } else {
-                            shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
-                        }
-                        if groupIdToShareItem[groupId] == nil {
-                            groupIdToShareItem[groupId] = SHShareHistoryItem(
-                                localAssetId: localIdentifier,
-                                globalAssetId: remoteDescriptor.globalIdentifier,
-                                versions: [.lowResolution, .hiResolution],
-                                groupId: groupId,
-                                eventOriginator: self.localServer.requestor,
-                                sharedWith: [user],
-                                isBackground: true
-                            )
-                        } else {
-                            var users = [any SHServerUser]()
-                            users.append(contentsOf: groupIdToShareItem[groupId]!.sharedWith)
-                            users.append(user)
-                            groupIdToShareItem[groupId] = SHShareHistoryItem(
-                                localAssetId: localIdentifier,
-                                globalAssetId: remoteDescriptor.globalIdentifier,
-                                versions: [.lowResolution, .hiResolution],
-                                groupId: groupId,
-                                eventOriginator: self.localServer.requestor,
-                                sharedWith: users,
-                                isBackground: false
-                            )
-                        }
-                    }
-                }
-                
-//                for uploadItem in groupIdToUploadItem.values {
-//                    if (try? uploadItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulUpload))) == nil {
-//                        log.warning("[sync] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
-//                    }
-//                }
-//                for shareItem in groupIdToShareItem.values {
-//                    if (try? shareItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulShare))) == nil {
-//                        log.warning("[sync] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
-//                    }
-//                }
-//                
-//                log.debug("[sync] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-//                log.debug("[sync] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
-//                
-//                for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
-//                    restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
-//                }
-//                
-//                for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
-//                    restorationDelegate.restoreShareQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
-//                }
-            }
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
         }
+        guard error == nil else {
+            throw error!
+        }
+        
+        return response
     }
+    
+}
+
+extension SHServerProxy {
     
     /// Removes any evidence of the users from the local storage:
     /// - Replaces the items in the `ShareHistoryQueue` with the same items by omitting the users removed.
@@ -236,8 +161,8 @@ extension SHServerProxy {
                                  restorationDelegate: SHAssetActivityRestorationDelegate,
                                  completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
         var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
-        var remoteUsers = [SHServerUser]()
         var localError: Error? = nil, remoteError: Error? = nil
+        var remoteUsers = [SHServerUser]()
         var remoteUsersError: Error? = nil
         
         ///
@@ -324,14 +249,6 @@ extension SHServerProxy {
             completionHandler(.failure(remoteUsersError!))
             return
         }
-        
-        ///
-        /// Restore the queue items missing on this device
-        ///
-        self.restoreQueueItems(localServerDescriptors: localDescriptors,
-                               remoteServerDescriptors: remoteDescriptors,
-                               usersReferencedInRemoteDescriptors: remoteUsers,
-                               restorationDelegate: restorationDelegate)
         
         ///
         /// Remove all users that don't exist on the server from the local server and the graph
