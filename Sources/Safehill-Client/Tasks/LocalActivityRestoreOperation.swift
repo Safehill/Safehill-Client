@@ -50,6 +50,100 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         return descriptors
     }
     
+    ///
+    /// For all the descriptors whose originator user is `self.user`, notify the restoration delegate
+    /// about all groups that need to be restored along with the queue item identifiers for each `groupId`.
+    /// Uploads and shares will be reported separately, according to the contract in the delegate.
+    ///
+    /// - Parameters:
+    ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
+    ///   - completionHandler: the callback method
+    func restoreQueueItems(
+        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
+        filteringKeys: [GlobalIdentifier],
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+    ) {
+        guard original.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
+        let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
+        
+        guard descriptorsByGlobalIdentifier.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
+        self.restorationDelegate.didStartRestoration()
+        
+        var uploadLocalAssetIdByGroupId = [String: Set<String>]()
+        var shareLocalAssetIdsByGroupId = [String: Set<String>]()
+        var userIdsInvolvedInRestoration = Set<String>()
+        
+        for (_, descriptor) in descriptorsByGlobalIdentifier {
+            guard descriptor.sharingInfo.sharedByUserIdentifier == user.identifier else {
+                continue
+            }
+            
+            // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
+            guard let localIdentifier = descriptor.localIdentifier else {
+                continue
+            }
+            
+            if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
+               let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
+               recipientUserId == user.identifier {
+                ///
+                /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
+                /// Restore the upload from the queue
+                ///
+                let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
+                
+                if uploadLocalAssetIdByGroupId[groupId] == nil {
+                    uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
+                } else {
+                    uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
+                }
+                
+                userIdsInvolvedInRestoration.insert(recipientUserId)
+            } else {
+                for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if uploadLocalAssetIdByGroupId[groupId] == nil {
+                        uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
+                    } else {
+                        uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
+                    }
+                    if shareLocalAssetIdsByGroupId[groupId] == nil {
+                        shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
+                    } else {
+                        shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
+                    }
+                    
+                    userIdsInvolvedInRestoration.insert(recipientUserId)
+                }
+            }
+        }
+        
+        self.log.debug("upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
+        self.log.debug("share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
+        
+        for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
+            self.restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
+        }
+        
+        for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
+            self.restorationDelegate.restoreShareQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
+        }
+        
+        self.restorationDelegate.didCompleteRestoration(
+            userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
+        )
+        
+        completionHandler(.success(()))
+    }
+    
+    
     internal func decryptFromLocalStore(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
@@ -73,14 +167,14 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             versions: [.lowResolution],
             cacheHiResolution: false
         ) else {
-            self.log.error("unable to fetch local assets")
+            self.log.error("[localrestoration] unable to fetch local assets")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
             return
         }
         
         for (globalAssetId, encryptedAsset) in encryptedAssets {
             guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
-                log.critical("malformed descriptorsByGlobalIdentifier")
+                log.critical("[localrestoration] malformed descriptorsByGlobalIdentifier")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptorsByGlobalIdentifier")))
                 return
             }
@@ -110,7 +204,8 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     })
                 }
             } catch {
-                self.log.error("unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
                     self.delegates.forEach({
                         $0.didFailDownloadOfAsset(
@@ -177,7 +272,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         self.processDescriptors { result in
             switch result {
             case .failure(let error):
-                self.log.error("failed to fetch local descriptors: \(error.localizedDescription)")
+                self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
                 self.delegates.forEach({
                     $0.didCompleteDownloadCycle(with: .failure(error))
                 })
