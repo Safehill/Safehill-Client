@@ -548,7 +548,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         groupId: groupId,
                         eventOriginator: myUser,
                         sharedWith: [],
-                        isBackground: true
+                        isBackground: false
                     )
                 } else {
                     guard let user = otherUsersById[recipientUserId] else {
@@ -569,7 +569,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             groupId: groupId,
                             eventOriginator: myUser,
                             sharedWith: [user],
-                            isBackground: true
+                            isBackground: false
                         )
                     } else {
                         var users = [any SHServerUser]()
