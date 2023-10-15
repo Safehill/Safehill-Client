@@ -803,25 +803,23 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 self.fetchAsset(withGlobalIdentifier: globalIdentifier,
                                 quality: .lowResolution,
                                 descriptor: downloadRequest.assetDescriptor) { result in
-//                    switch result {
-//                    case .success(let decryptedAsset):
-//                        DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
-//                        
-//                        self.delegates.forEach({
-//                            $0.didFetchLowResolutionAsset(decryptedAsset)
-//                        })
-//                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
-//                            self.delegates.forEach({
-//                                $0.didCompleteDownloadOfAsset(
-//                                    withGlobalIdentifier: decryptedAsset.globalIdentifier,
-//                                    in: groupId
-//                                )
-//                            })
-//                        }
-//                    case .failure(let error):
+                    switch result {
+                    case .success(let decryptedAsset):
+                        DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
+                        
+                        self.delegates.forEach({
+                            $0.didFetchLowResolutionAsset(decryptedAsset)
+                        })
+                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            self.delegates.forEach({
+                                $0.didCompleteDownloadOfAsset(
+                                    withGlobalIdentifier: decryptedAsset.globalIdentifier,
+                                    in: groupId
+                                )
+                            })
+                        }
+                    case .failure(let error):
                         shouldDequeue = false
-                    
-                    let error = SHAssetStoreError.notImplemented
                         
                         // Record the failure for the asset
                         if error is SHCypher.DecryptionError {
@@ -848,7 +846,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                 })
                             }
                         }
-//                    }
+                    }
                     group.leave()
                 }
                 
