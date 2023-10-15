@@ -525,6 +525,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             && $0.value.localIdentifier != nil
         })
         
+        self.restorationDelegate.didStartRestoration()
+        var userIdsInvolvedInRestoration = Set<String>()
+        
         for remoteDescriptor in remoteServerDescriptorByAssetGid.values {
             var uploadLocalAssetIdByGroupId = [String: Set<String>]()
             var shareLocalAssetIdsByGroupId = [String: Set<String>]()
@@ -574,6 +577,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             isBackground: false
                         )
                         groupIdToShareItem[groupId] = (item, groupCreationDate)
+                        
+                        userIdsInvolvedInRestoration.insert(user.identifier)
                     } else {
                         var users = [any SHServerUser]()
                         users.append(contentsOf: groupIdToShareItem[groupId]!.0.sharedWith)
@@ -588,8 +593,16 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             isBackground: false
                         )
                         groupIdToShareItem[groupId] = (item, groupCreationDate)
+                        
+                        for user in users {
+                            userIdsInvolvedInRestoration.insert(user.identifier)
+                        }
                     }
                 }
+            }
+            
+            guard groupIdToUploadItem.count + groupIdToShareItem.count > 0 else {
+                continue
             }
             
             for (uploadItem, timestamp) in groupIdToUploadItem.values {
@@ -626,6 +639,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 )
             }
         }
+        
+        self.restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration))
     }
     
     func processForDownload(
