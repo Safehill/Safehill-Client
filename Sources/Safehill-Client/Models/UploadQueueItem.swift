@@ -380,6 +380,15 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             throw SHBackgroundOperationError.fatalError("failed to enqueue item with id \(identifier)")
         }
     }
+    
+    public func insert(in queue: KBQueueStore, at timestamp: Date) throws {
+        let data = try? NSKeyedArchiver.archivedData(withRootObject: self, requiringSecureCoding: true)
+        if let data = data {
+            try queue.insert(data, withIdentifier: self.identifier, timestamp: timestamp)
+        } else {
+            throw SHBackgroundOperationError.fatalError("failed to enqueue item with id \(identifier)")
+        }
+    }
 }
 
 public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {

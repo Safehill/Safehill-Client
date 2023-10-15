@@ -528,11 +528,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         for remoteDescriptor in remoteServerDescriptorByAssetGid.values {
             var uploadLocalAssetIdByGroupId = [String: Set<String>]()
             var shareLocalAssetIdsByGroupId = [String: Set<String>]()
-            var groupIdToUploadItem = [String: SHUploadHistoryItem]()
-            var groupIdToShareItem = [String: SHShareHistoryItem]()
+            var groupIdToUploadItem = [String: (SHUploadHistoryItem, Date)]()
+            var groupIdToShareItem = [String: (SHShareHistoryItem, Date)]()
             
             for (recipientUserId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 let localIdentifier = remoteDescriptor.localIdentifier!
+                let groupCreationDate = remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt ?? Date()
                 
                 if recipientUserId == myUser.identifier {
                     if uploadLocalAssetIdByGroupId[groupId] == nil {
@@ -541,7 +542,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
                     }
                     
-                    groupIdToUploadItem[groupId] = SHUploadHistoryItem(
+                    let item = SHUploadHistoryItem(
                         localAssetId: localIdentifier,
                         globalAssetId: remoteDescriptor.globalIdentifier,
                         versions: [.lowResolution, .hiResolution],
@@ -550,6 +551,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         sharedWith: [],
                         isBackground: false
                     )
+                    groupIdToUploadItem[groupId] = (item, groupCreationDate)
                 } else {
                     guard let user = otherUsersById[recipientUserId] else {
                         log.critical("[downloadAssets] inconsistency between user ids referenced in descriptors and user objects returned from server")
@@ -562,7 +564,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
                     }
                     if groupIdToShareItem[groupId] == nil {
-                        groupIdToShareItem[groupId] = SHShareHistoryItem(
+                        let item = SHShareHistoryItem(
                             localAssetId: localIdentifier,
                             globalAssetId: remoteDescriptor.globalIdentifier,
                             versions: [.lowResolution, .hiResolution],
@@ -571,11 +573,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             sharedWith: [user],
                             isBackground: false
                         )
+                        groupIdToShareItem[groupId] = (item, groupCreationDate)
                     } else {
                         var users = [any SHServerUser]()
-                        users.append(contentsOf: groupIdToShareItem[groupId]!.sharedWith)
+                        users.append(contentsOf: groupIdToShareItem[groupId]!.0.sharedWith)
                         users.append(user)
-                        groupIdToShareItem[groupId] = SHShareHistoryItem(
+                        let item = SHShareHistoryItem(
                             localAssetId: localIdentifier,
                             globalAssetId: remoteDescriptor.globalIdentifier,
                             versions: [.lowResolution, .hiResolution],
@@ -584,17 +587,24 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             sharedWith: users,
                             isBackground: false
                         )
+                        groupIdToShareItem[groupId] = (item, groupCreationDate)
                     }
                 }
             }
             
-            for uploadItem in groupIdToUploadItem.values {
-                if (try? uploadItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulUpload))) == nil {
+            for (uploadItem, timestamp) in groupIdToUploadItem.values {
+                if (try? uploadItem.insert(
+                    in: BackgroundOperationQueue.of(type: .successfulUpload),
+                    at: timestamp
+                )) == nil {
                     log.warning("[downloadAssets] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
                 }
             }
-            for shareItem in groupIdToShareItem.values {
-                if (try? shareItem.enqueue(in: BackgroundOperationQueue.of(type: .successfulShare))) == nil {
+            for (shareItem, timestamp) in groupIdToShareItem.values {
+                if (try? shareItem.insert(
+                    in: BackgroundOperationQueue.of(type: .successfulShare),
+                    at: timestamp
+                )) == nil {
                     log.warning("[downloadAssets] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
                 }
             }
