@@ -206,8 +206,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:completionHandler)`
         /// filter out the ones whose sender is unknown.
         /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-        let descriptorsSharedByOthers = descriptors.filter {
-            ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
+        let knownUsersDescriptors = descriptors.filter {
+            $0.sharingInfo.sharedByUserIdentifier == user.identifier
+            || ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
         }
         
         ///
@@ -215,8 +216,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// for all user identifiers found in all descriptors shared by OTHER known users
         ///
         var users = [SHServerUser]()
-        var userIdentifiers = Set(descriptorsSharedByOthers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptorsSharedByOthers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+        var userIdentifiers = Set(knownUsersDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(knownUsersDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
             users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
@@ -231,7 +232,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// The ones shared by THIS user will be restored through the restoration delegate.
         ///
         self.delegates.forEach({
-            $0.didReceiveAssetDescriptors(descriptorsSharedByOthers,
+            $0.didReceiveAssetDescriptors(knownUsersDescriptors,
                                           referencing: users,
                                           completionHandler: nil)
         })
@@ -653,24 +654,23 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             ///
             /// FOR THE ONES SHARED BY THIS USER
             /// Assets that are already in the local server are filtered out at this point.
-            /// So to recap, we have only assets that:
+            /// So we only deal with assets that:
             /// - are shared by THIS user
             /// - are not in the local server
             ///
             /// There's 2 sub-cases:
-            /// 1. assets in the Apple Photos library (shared by this user and in the Photos library, but not in the local server)
+            /// 1. assets are in the Apple Photos library (shared by this user and in the Photos library, but not in the local server)
             ///     - This can happen when:
             ///         - they were shared from a different device (so this device doesn't have a record of that Photo Library photo being uploaded)
             ///         - the user signed out and wiped all the local asset information, including photos that were in the Photo Library
-            /// 2. assets not in the Apple Photos library (shared by this user and NOT in the Photos library and not in the local server)
+            /// 2. assets are not in the Apple Photos library (shared by this user and NOT in the Photos library and not in the local server)
             ///     - This can happen when:
             ///         - they were deleted from the local library
             ///         - they were shared from a different device and they are not on this device's Photo Library
             ///
-            /// (2) is handled by downloading them as regular downloads from other users, but skipping authorization
+            /// (2) is handled by downloading them as regular downloads from other users, with the only difference that authorization is skipped
             ///
-            /// (1) identification `didIdentify(localAsset:correspondingTo:)` happens in `mergeDescriptorsWithApplePhotosAssets(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server and call the restoration delegate.
-            /// The restoration delegate needs to be called again because the queue items might or might not exist at this point depending on wheter the `SyncOperation` had a chance to run, restore the items in the queue and call the restoration delegates. The last call to the restoration delegate for this assets will have both the queue items and the local server assets in the right place.
+            /// For (1), identification `didIdentify(localAsset:correspondingTo:)` happens in `mergeDescriptorsWithApplePhotosAssets(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server, add items to the success queue (upload and share) and call the restoration delegate.
             ///
             
             /// (1)
