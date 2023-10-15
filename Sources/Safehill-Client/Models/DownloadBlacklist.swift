@@ -8,7 +8,7 @@ struct DownloadBlacklist {
     static var shared = DownloadBlacklist()
     
     /// Give up retrying after a download for an asset after this many attempts
-    static let FailedDownloadCountThreshold = 6
+    static let FailedDownloadCountThreshold = 50
     
     private let blacklistUserStorage = KBKVStore.userDefaultsStore()!
     var blacklistedUsers: [String] {
