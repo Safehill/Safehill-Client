@@ -795,7 +795,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
                 
                 let group = DispatchGroup()
-                var shouldContinue = true
+                var shouldDequeue = true
                 
                 // MARK: Get Low Res asset
                 
@@ -819,7 +819,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
 //                            })
 //                        }
 //                    case .failure(let error):
-                        shouldContinue = false
+                        shouldDequeue = false
                     
                     let error = SHAssetStoreError.notImplemented
                         
@@ -839,6 +839,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                 )
                             })
                             if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
+                                shouldDequeue = true
                                 self.delegates.forEach({
                                     $0.didFailRepeatedlyDownloadOfAsset(
                                         withGlobalIdentifier: globalIdentifier,
@@ -852,10 +853,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
                 
                 let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds))
-                guard dispatchResult == .success, shouldContinue == true else {
-                    do { _ = try queue.dequeue() }
-                    catch {
-                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                guard dispatchResult == .success else {
+                    if shouldDequeue {
+                        do { _ = try queue.dequeue() }
+                        catch {
+                            log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again even if it's unintended.")
+                        }
                     }
                     
                     continue
@@ -864,9 +867,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 let end = CFAbsoluteTimeGetCurrent()
                 log.debug("[downloadAssets][PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
                 
-                do { _ = try queue.dequeue() }
-                catch {
-                    log.warning("[downloadAssets] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
+                if shouldDequeue {
+                    do { _ = try queue.dequeue() }
+                    catch {
+                        log.warning("[downloadAssets] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
+                    }
                 }
                 
                 count += 1
