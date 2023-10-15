@@ -203,12 +203,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        /// For the Filter out the `didReceiveAssetDescriptors(_:referencing:completionHandler)` delegate, filter the ones:
-        /// - shared by self
-        /// - whose sender is unknown (the delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of that)
+        /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:completionHandler)`
+        /// filter out the ones whose sender is unknown.
+        /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
         let descriptorsSharedByOthers = descriptors.filter {
-            $0.sharingInfo.sharedByUserIdentifier != user.identifier
-            && ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
+            ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
         }
         
         ///
