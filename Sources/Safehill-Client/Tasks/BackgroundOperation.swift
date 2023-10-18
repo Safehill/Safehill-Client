@@ -117,7 +117,7 @@ open class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         
         if operationQueue.operationCount == 0 {
             self.timerQueue.sync {
-                DispatchQueue.main.sync {
+                DispatchQueue.main.async {
                     // timers need to be scheduled on the main queue
                     self.timer = Timer.scheduledTimer(withTimeInterval: Double(seconds), repeats: false, block: { [weak self] _ in
                         self?.timerQueue.async {
@@ -140,7 +140,7 @@ open class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
             self.timerQueue.sync {
                 let dispatchInterval = max(dispatchIntervalInSeconds, seconds)
                 
-                DispatchQueue.main.sync {
+                DispatchQueue.main.async {
                     self.timer = Timer.scheduledTimer(withTimeInterval: Double(dispatchInterval), repeats: false, block: { [weak self] _ in
                         self?.timerQueue.async {
                             self?.process(operation, after: 0)
