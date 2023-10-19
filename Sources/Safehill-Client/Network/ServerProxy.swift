@@ -112,6 +112,16 @@ extension SHServerProxy {
         self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
+                if let serverUser = users.first {
+                    self.localServer.createUser(identifier: serverUser.identifier,
+                                                name: serverUser.name,
+                                                publicKeyData: serverUser.publicKeyData,
+                                                publicSignatureData: serverUser.publicSignatureData) { result in
+                        if case .failure(let failure) = result {
+                            log.error("failed to this user's server user in local server: \(failure.localizedDescription)")
+                        }
+                    }
+                }
                 completionHandler(.success(users.first))
             case .failure(let err):
                 if err is URLError || err is SHHTTPError.TransportError {
