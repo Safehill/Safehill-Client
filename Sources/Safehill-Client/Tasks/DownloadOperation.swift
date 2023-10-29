@@ -333,8 +333,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         let partitionIndex = mutableDescriptors.partition { descr in
             return globalIdentifiersFromKnownUsers.contains(descr.globalIdentifier)
         }
-        let authorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
-        let unauthorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
+        let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
+        let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
         
         self.log.info("found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
