@@ -698,18 +698,20 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             ///
             
             /// (1)
-            let globalIdentifiersNotOnLocalSharedBySelfOnPhotoLibrary = globalIdentifiersOnRemoteServer.subtract(remoteGlobalIdentifiersAlsoOnLocalServer).subtract(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
+            let globalIdentifiersNotOnLocalSharedBySelfInApplePhotoLibrary = sharedBySelfGlobalIdentifiers
+                .subtract(remoteGlobalIdentifiersAlsoOnLocalServer)
+                .subtract(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
             
             self.recreateLocalAssetsAndQueueItems(
-                for: globalIdentifiersNotOnLocalSharedBySelfOnPhotoLibrary,
+                for: globalIdentifiersNotOnLocalSharedBySelfInApplePhotoLibrary,
                 descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
             )
             
             /// (2)
-            let globalIdentifiersNotOnLocalSharedBySelfNotOnPhotoLibrary = nonApplePhotoLibrarySharedBySelfGlobalIdentifiers.subtract(remoteGlobalIdentifiersAlsoOnLocalServer)
+            let globalIdentifiersNotOnLocalSharedBySelfNotInApplePhotoLibrary = nonApplePhotoLibrarySharedBySelfGlobalIdentifiers.subtract(remoteGlobalIdentifiersAlsoOnLocalServer)
             let downloadsManager = SHAssetsDownloadManager(user: self.user)
             downloadsManager.startDownload(
-                of: globalIdentifiersNotOnLocalSharedBySelfNotOnPhotoLibrary.compactMap({ descriptorsByGlobalIdentifier[$0] })
+                of: globalIdentifiersNotOnLocalSharedBySelfNotInApplePhotoLibrary.compactMap({ descriptorsByGlobalIdentifier[$0] })
             ) { result in
                 if case .failure(let failure) = result {
                     errors.append(failure)
@@ -723,8 +725,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - not shared by self
             /// - not in the Apple Photos Library (we'll use the apple photos version as long as it exists)
             ///
-            let globalIdentifiersNotOnLocalSharedByOthers = Set(sharedByOthersGlobalIdentifiers)
-                .subtracting(remoteGlobalIdentifiersAlsoOnLocalServer)
+            let globalIdentifiersNotOnLocalSharedByOthers = sharedByOthersGlobalIdentifiers
+                .subtract(remoteGlobalIdentifiersAlsoOnLocalServer)
             
             group.enter()
             self.downloadOrRequestAuthorization(
