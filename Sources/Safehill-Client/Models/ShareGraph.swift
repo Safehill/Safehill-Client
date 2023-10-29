@@ -6,8 +6,8 @@ public enum SHKGPredicates: String {
     case sharedWith = "sharedWith"
 }
 
-var UserIdToAssetGidSharedByCache = [String: [GlobalIdentifier]]()
-var UserIdToAssetGidSharedWithCache = [String: [GlobalIdentifier]]()
+var UserIdToAssetGidSharedByCache = [String: Set<GlobalIdentifier>]()
+var UserIdToAssetGidSharedWithCache = [String: Set<GlobalIdentifier>]()
 
 public enum SHKGQuery {
     public static func isKnownUser(withIdentifier userId: String) throws -> Bool {
@@ -61,7 +61,7 @@ public enum SHKGQuery {
             let kgAsset = graph.entity(withIdentifier: assetIdentifier)
             try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
             if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
-                UserIdToAssetGidSharedByCache[senderUserId]!.append(assetIdentifier)
+                UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
             } else {
                 UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
             }
@@ -73,7 +73,7 @@ public enum SHKGQuery {
                 try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
                 
                 if let _ = UserIdToAssetGidSharedWithCache[userId] {
-                    UserIdToAssetGidSharedWithCache[userId]!.append(assetIdentifier)
+                    UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
                 } else {
                     UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
                 }
@@ -90,7 +90,7 @@ public enum SHKGQuery {
     
     public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
         let removeGidsFromCache = {
-            (cache: inout [String: [GlobalIdentifier]]) in
+            (cache: inout [String: Set<GlobalIdentifier>]) in
             let userIds = Array(cache.keys)
             for userId in userIds {
                 if let cachedValue = cache[userId] {
@@ -98,7 +98,7 @@ public enum SHKGQuery {
                     if newAssetsGids.isEmpty {
                         cache.removeValue(forKey: userId)
                     } else {
-                        cache[userId]?.removeAll(where: { globalIdentifiers.contains($0) })
+                        cache[userId]!.subtract(globalIdentifiers)
                     }
                 }
             }
@@ -192,7 +192,7 @@ public enum SHKGQuery {
             }
             
             if let _ = UserIdToAssetGidSharedByCache[triple.subject] {
-                UserIdToAssetGidSharedByCache[triple.subject]!.append(triple.object)
+                UserIdToAssetGidSharedByCache[triple.subject]!.insert(triple.object)
             } else {
                 UserIdToAssetGidSharedByCache[triple.subject] = [triple.object]
             }
@@ -254,7 +254,7 @@ public enum SHKGQuery {
             }
             
             if let _ = UserIdToAssetGidSharedWithCache[triple.object] {
-                UserIdToAssetGidSharedWithCache[triple.object]!.append(triple.subject)
+                UserIdToAssetGidSharedWithCache[triple.object]!.insert(triple.subject)
             } else {
                 UserIdToAssetGidSharedWithCache[triple.object] = [triple.subject]
             }
