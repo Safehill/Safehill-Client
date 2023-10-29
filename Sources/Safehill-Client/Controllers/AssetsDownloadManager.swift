@@ -64,7 +64,7 @@ public struct SHAssetsDownloadManager {
             }
             
             let descriptors = try self.dequeue(from: unauthorizedQueue,
-                                               descriptorsForItemsWithIdentifiers: assetGIdList)
+                                               itemsWithIdentifiers: assetGIdList)
             
             let userStore = try SHDBManager.sharedInstance.userStore()
             let key = "auth-" + userId
@@ -127,13 +127,12 @@ public struct SHAssetsDownloadManager {
         }
         
         do {
-            try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
-        } catch {
-            log.error("[KG] failed to ingest some descriptor into the graph")
-        }
-        
-        do {
             try self.enqueue(descriptors: descriptors, in: authorizedQueue)
+            do {
+                try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+            } catch {
+                log.error("[KG] failed to ingest some descriptor into the graph")
+            }
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
@@ -162,6 +161,11 @@ public struct SHAssetsDownloadManager {
                 completionHandler(.failure(failure))
             }
         }
+    }
+    
+    func stopDownload(ofAssetsWith globalIdentifiers: [GlobalIdentifier]) throws {
+        try SHKGQuery.removeAssets(with: globalIdentifiers)
+        try self.dequeueEntries(for: globalIdentifiers)
     }
 }
 
@@ -199,7 +203,7 @@ private extension SHAssetsDownloadManager {
         }
     }
     
-    private func dequeue(from queue: KBQueueStore, descriptorsForItemsWithIdentifiers identifiers: [String]) throws -> [any SHAssetDescriptor] {
+    private func dequeue(from queue: KBQueueStore, itemsWithIdentifiers identifiers: [GlobalIdentifier]) throws -> [any SHAssetDescriptor] {
         let group = DispatchGroup()
         var dequeuedDescriptors = [any SHAssetDescriptor]()
         var errors = [String: any Error]()
@@ -351,7 +355,7 @@ internal extension SHAssetsDownloadManager {
                 throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
             }
             
-            let _ = try self.dequeue(from: queue, descriptorsForItemsWithIdentifiers: assetIdentifiers)
+            let _ = try self.dequeue(from: queue, itemsWithIdentifiers: assetIdentifiers)
         }
     }
 }
