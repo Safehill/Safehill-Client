@@ -167,11 +167,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
     /// Filters out the blacklisted assets and users, as well as the non-completed uploads.
     /// Call the delegate with the full manifest of assets shared by OTHER users, regardless of the limit on the task config) for the assets.
-    /// Return the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
+    /// Return a tuple with the following values:
+    /// 1. the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
+    /// 2. the globalIdentifiers whose sender is either self or is a known, authorized user. We return this information here so we have to query the graph once.
     ///
     /// - Parameter completionHandler: the callback
     internal func processDescriptors(
-        completionHandler: @escaping (Swift.Result<[String: SHAssetDescriptor], Error>) -> Void
+        completionHandler: @escaping (Swift.Result<([GlobalIdentifier: SHAssetDescriptor], [GlobalIdentifier]), Error>) -> Void
     ) {
         let start = CFAbsoluteTimeGetCurrent()
         
@@ -199,7 +201,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             self.delegates.forEach({
                 $0.didReceiveAssetDescriptors([], referencing: [], completionHandler: nil)
             })
-            completionHandler(.success([:]))
+            completionHandler(.success(([:], [])))
             return
         }
         
@@ -250,7 +252,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 break
             }
         }
-        completionHandler(.success(descriptorsByGlobalIdentifier))
+        completionHandler(.success((descriptorsByGlobalIdentifier, knownUsersDescriptors.map({ $0.globalIdentifier }))))
     }
     
     
@@ -319,6 +321,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     /// - Parameter completionHandler: the callback method
     private func downloadOrRequestAuthorization(
         forAssetsIn descriptors: [any SHAssetDescriptor],
+        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
         guard descriptors.count > 0 else {
@@ -328,17 +331,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         var mutableDescriptors = descriptors
         let partitionIndex = mutableDescriptors.partition { descr in
-            if descr.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-                return true
-            }
-            do {
-                return try SHKGQuery.isKnownUser(withIdentifier: descr.sharingInfo.sharedByUserIdentifier)
-            } catch {
-                return false
-            }
+            return globalIdentifiersFromKnownUsers.contains(descr.globalIdentifier)
         }
-        let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
-        let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
+        let authorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
+        let unauthorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
         
         self.log.info("found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
@@ -399,6 +395,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     internal func processAssetsInDescriptors(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
         ///
@@ -445,7 +442,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                     nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: nonLocalPhotoLibraryGlobalIdentifiers,
                     sharedBySelfGlobalIdentifiers: sharedBySelfGlobalIdentifiers,
-                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers
+                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers,
+                    globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
                     self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to process \(descriptorsByGlobalIdentifier.count) asset descriptors")
@@ -648,6 +646,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
         
@@ -724,11 +723,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// - not shared by self
             /// - not in the Apple Photos Library (we'll use the apple photos version as long as it exists)
             ///
-            let globalIdentifiersNotOnLocalSharedByOthers = Set(sharedByOthersGlobalIdentifiers).subtracting(remoteGlobalIdentifiersAlsoOnLocalServer)
+            let globalIdentifiersNotOnLocalSharedByOthers = Set(sharedByOthersGlobalIdentifiers)
+                .subtracting(remoteGlobalIdentifiersAlsoOnLocalServer)
             
             group.enter()
             self.downloadOrRequestAuthorization(
-                forAssetsIn: globalIdentifiersNotOnLocalSharedByOthers.compactMap({ descriptorsByGlobalIdentifier[$0] })
+                forAssetsIn: globalIdentifiersNotOnLocalSharedByOthers.compactMap({ descriptorsByGlobalIdentifier[$0] }),
+                globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
             ) { result in
                 if case .failure(let failure) = result {
                     errors.append(failure)
@@ -772,17 +773,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     continue
                 }
                 
-                guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
-                    self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
-                    
-                    do { _ = try queue.dequeue() }
-                    catch {
-                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
-                    }
-                    
-                    continue
-                }
-                
                 let globalIdentifier = downloadRequest.assetDescriptor.globalIdentifier
                 let descriptor = downloadRequest.assetDescriptor
                 
@@ -792,6 +782,19 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     self.delegates.forEach({
                         $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier, in: groupId)
                     })
+                }
+                
+                guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
+                    self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
+                    
+                    do {
+                        try SHAssetsDownloadManager(user: self.user)
+                            .stopDownload(ofAssetsWith: [globalIdentifier])
+                    } catch {
+                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                    }
+                    
+                    continue
                 }
                 
                 let group = DispatchGroup()
@@ -900,9 +903,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             case .failure(let error):
                 self.log.error("failed to download descriptors: \(error.localizedDescription)")
                 completionHandler(.failure(error))
-            case .success(let descriptorsByGlobalIdentifier):
+            case .success(let tuple):
+                let descriptorsByGlobalIdentifier = tuple.0
+                let globalIdentifiersFromKnownUsers = tuple.1
                 self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                    globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
                 ) { descAssetResult in
                     switch descAssetResult {
                     case .failure(let error):

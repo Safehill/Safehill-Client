@@ -226,6 +226,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
     ) {
         ///
@@ -250,7 +251,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         /// Remember: because the full manifest of descriptors (`descriptorsByGlobalIdentifier`)
         /// is fetched from LocalStore, all assets are guaranteed to be found
         ///
-        let toDecryptFromLocalStoreGids = Set(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers).union(sharedByOthersGlobalIdentifiers)
+        let toDecryptFromLocalStoreGids = Set(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
+            .union(sharedByOthersGlobalIdentifiers)
+            .intersection(globalIdentifiersFromKnownUsers)
         
         self.decryptFromLocalStore(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
@@ -277,8 +280,13 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     $0.didCompleteDownloadCycle(with: .failure(error))
                 })
                 completionHandler(.failure(error))
-            case .success(let descriptorsByGlobalIdentifier):
-                self.processAssetsInDescriptors(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) {
+            case .success(let tuple):
+                let descriptorsByGlobalIdentifier = tuple.0
+                let globalIdentifiersFromKnownUsers = tuple.1
+                self.processAssetsInDescriptors(
+                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                    globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
+                ) {
                     secondResult in
                     self.delegates.forEach({
                         $0.didCompleteDownloadCycle(with: secondResult)
