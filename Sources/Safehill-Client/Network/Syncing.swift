@@ -287,6 +287,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
         if uIdsToRemoveFromLocal.count > 0 {
+            log.info("removing user ids from graph \(uIdsToRemoveFromLocal)")
             do {
                 try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
             } catch {
@@ -294,10 +295,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             }
             
             do {
-                let graph = try SHDBManager.sharedInstance.graph()
-                for userId in uIdsToRemoveFromLocal {
-                    try graph.removeEntity(userId)
-                }
+                try SHKGQuery.removeUsers(with: uIdsToRemoveFromLocal)
             } catch {
                 let _ = try? SHDBManager.sharedInstance.graph().removeAll()
                 log.warning("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created, but this operation will be retried")

@@ -208,7 +208,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:completionHandler)`
         /// filter out the ones whose sender is unknown.
         /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-        let knownUsersDescriptors = descriptors.filter {
+        let descriptorsFromKnownUsers = descriptors.filter {
             $0.sharingInfo.sharedByUserIdentifier == user.identifier
             || ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
         }
@@ -218,8 +218,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// for all user identifiers found in all descriptors shared by OTHER known users
         ///
         var users = [SHServerUser]()
-        var userIdentifiers = Set(knownUsersDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(knownUsersDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+        var userIdentifiers = Set(descriptorsFromKnownUsers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+        userIdentifiers.formUnion(Set(descriptorsFromKnownUsers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
             users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
@@ -234,7 +234,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// The ones shared by THIS user will be restored through the restoration delegate.
         ///
         self.delegates.forEach({
-            $0.didReceiveAssetDescriptors(knownUsersDescriptors,
+            $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
                                           referencing: users,
                                           completionHandler: nil)
         })
@@ -252,7 +252,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 break
             }
         }
-        completionHandler(.success((descriptorsByGlobalIdentifier, knownUsersDescriptors.map({ $0.globalIdentifier }))))
+        completionHandler(.success((
+            descriptorsByGlobalIdentifier,
+            descriptorsFromKnownUsers.map({ $0.globalIdentifier })
+        )))
     }
     
     

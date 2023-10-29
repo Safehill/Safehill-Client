@@ -89,6 +89,25 @@ public enum SHKGQuery {
     }
     
     public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
+        let removeGidsFromCache = {
+            (cache: inout [String: [GlobalIdentifier]]) in
+            let userIds = Array(cache.keys)
+            for userId in userIds {
+                if let cachedValue = cache[userId] {
+                    let newAssetsGids = Set(globalIdentifiers).intersection(cachedValue)
+                    if newAssetsGids.isEmpty {
+                        cache.removeValue(forKey: userId)
+                    } else {
+                        cache[userId]?.removeAll(where: { globalIdentifiers.contains($0) })
+                    }
+                }
+            }
+        }
+        
+        /// Invalidate caches
+        removeGidsFromCache(&UserIdToAssetGidSharedByCache)
+        removeGidsFromCache(&UserIdToAssetGidSharedWithCache)
+        
         // TODO: Support writebatch in KnowledgeGraph
         let graph = try SHDBManager.sharedInstance.graph()
         try globalIdentifiers.forEach({
@@ -97,7 +116,25 @@ public enum SHKGQuery {
         })
     }
     
+    internal static func removeUsers(with userIdentifiers: [String]) throws {
+        /// Invalidate cache
+        userIdentifiers.forEach({ uid in
+            UserIdToAssetGidSharedByCache.removeValue(forKey: uid)
+            UserIdToAssetGidSharedWithCache.removeValue(forKey: uid)
+        })
+        
+        // TODO: Support writebatch in KnowledgeGraph
+        let graph = try SHDBManager.sharedInstance.graph()
+        for userId in userIdentifiers {
+            try graph.removeEntity(userId)
+        }
+    }
+    
     public static func deepClean() throws {
+        /// Invalidate cache
+        UserIdToAssetGidSharedByCache.removeAll()
+        UserIdToAssetGidSharedWithCache.removeAll()
+        
         let graph = try SHDBManager.sharedInstance.graph()
         let _ = try graph.removeAll()
     }
