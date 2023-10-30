@@ -1,6 +1,22 @@
 import Foundation
 import Yams
 
+public let SafehillServerURLComponents: URLComponents = {
+    var components = URLComponents()
+    
+#if targetEnvironment(simulator)
+    components.scheme = "http"
+    components.host = "127.0.0.1"
+    components.port = 8080
+#else
+    components.scheme = "https"
+    components.host = "app.safehill.io"
+    components.port = 443
+#endif
+    
+    return components
+}()
+
 
 public struct SHServerProxy {
     

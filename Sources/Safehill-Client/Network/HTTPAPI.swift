@@ -56,28 +56,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.requestor = requestor
     }
     
-    var productionURLComponents: URLComponents {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "app.safehill.io"
-        components.port = 443
-        return components
-    }
-    
-    var localURLComponents: URLComponents {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = "127.0.0.1"
-        components.port = 8080
-        return components
-    }
-    
     func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
-#if targetEnvironment(simulator)
-        var components = localURLComponents
-#else
-        var components = productionURLComponents
-#endif
+        var components = SafehillServerURLComponents
+
         components.path = "/\(route)"
         var queryItems = [URLQueryItem]()
         
