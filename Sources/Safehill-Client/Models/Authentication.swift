@@ -3,7 +3,8 @@ import Foundation
 public typealias BearerToken = String
 
 public struct SHAuthResponseMetadata: Codable {
-    public let shouldCleanup: Bool
+    public let isPhoneNumberVerified: Bool
+    public let forceReindex: Bool
 }
 
 public struct SHAuthResponse: Codable {
