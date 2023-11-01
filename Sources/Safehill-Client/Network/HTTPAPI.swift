@@ -298,7 +298,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         if let phoneNumber = phoneNumber {
             parameters["phoneNumber"] = phoneNumber
         }
-        self.post("users/update", parameters: parameters, requiresAuthentication: false) { (result: Result<SHRemoteUser, Error>) in
+        self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {
             case .success(let user):
                 return completionHandler(.success(user))
