@@ -122,36 +122,43 @@ struct LocalServer : SHServerAPI {
             switch getResult {
             case .success(let user):
                 // User already exists. Return it
-                if let user = user as? [String: Any] {
-                    guard user["publicKey"] as? Data == self.requestor.publicKeyData,
-                          user["publicSignature"] as? Data == self.requestor.publicSignatureData else {
-                              completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
-                              return
-                          }
-                    
-                    let value = [
-                        "identifier": key,
-                        "publicKey": self.requestor.publicKeyData,
-                        "publicSignature": self.requestor.publicSignatureData,
-                        "name": name ?? user["name"],
-                        "phoneNumber": phoneNumber ?? user["phoneNumber"],
-                        "email": email ?? user["email"],
-                    ] as [String : Any?]
-                    userStore.set(value: value, for: key) { (postResult: Swift.Result) in
-                        switch postResult {
-                        case .success:
-                            completionHandler(.success(self.requestor))
-                        case .failure(let err):
-                            completionHandler(.failure(err))
-                        }
-                    }
-                    
-                    completionHandler(.success(self.requestor))
+                guard let user = user as? [String: Any] else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse(String(describing: user))))
                     return
+                }
+                
+                guard user["publicKey"] as? Data == self.requestor.publicKeyData,
+                      user["publicSignature"] as? Data == self.requestor.publicSignatureData
+                else {
+                    completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
+                    return
+                }
+                
+                var value = [
+                    "identifier": key,
+                    "publicKey": self.requestor.publicKeyData,
+                    "publicSignature": self.requestor.publicSignatureData
+                ] as [String : Any]
+                if let name = name {
+                    value["name"] = name
+                }
+                if let phoneNumber = phoneNumber {
+                    value["phoneNumber"] = phoneNumber
+                }
+                if let email = email {
+                    value["email"] = email
+                }
+                
+                userStore.set(value: value, for: key) { (postResult: Swift.Result) in
+                    switch postResult {
+                    case .success:
+                        completionHandler(.success(self.requestor))
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
                 }
             case .failure(let err):
                 completionHandler(.failure(err))
-                return
             }
         }
 
