@@ -13,7 +13,20 @@ public protocol SHServerAPI {
     func createUser(name: String,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
-    /// Updates an existing user details or credentials
+    /// Send a code to a user to verify identity, via either phone or SMS
+    /// - Parameters:
+    ///   - countryCode: the recipient's phone country code
+    ///   - phoneNumber: the recipient's phone number
+    ///   - code: the code to send
+    ///   - medium: the medium, either SMS or email
+    ///   - completionHandler: the callback method
+    func sendCodeToUser(countryCode: Int, 
+                        phoneNumber: Int,
+                        code: String,
+                        medium: SendCodeToUserRequestDTO.Medium,
+                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    
+    /// Updates an existing user details or credentials. If the value is nil, it's not updated
     /// - Parameters:
     ///   - name  the new user name
     ///   - phoneNumber  the new user phone number

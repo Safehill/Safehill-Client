@@ -56,6 +56,14 @@ extension SHServerProxy {
         }
     }
     
+    public func sendCodeToUser(countryCode: Int,
+                               phoneNumber: Int,
+                               code: String,
+                               medium: SendCodeToUserRequestDTO.Medium,
+                               completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        self.remoteServer.sendCodeToUser(countryCode: countryCode, phoneNumber: phoneNumber, code: code, medium: medium, completionHandler: completionHandler)
+    }
+    
     public func updateUser(email: String? = nil,
                            phoneNumber: String? = nil,
                            name: String? = nil,

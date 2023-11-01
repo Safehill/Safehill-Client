@@ -92,6 +92,14 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func sendCodeToUser(countryCode: Int,
+                        phoneNumber: Int,
+                        code: String,
+                        medium: SendCodeToUserRequestDTO.Medium,
+                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func updateUser(name: String?,
                     phoneNumber: String? = nil,
                     email: String? = nil,

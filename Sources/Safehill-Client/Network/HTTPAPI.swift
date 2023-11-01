@@ -259,6 +259,27 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func sendCodeToUser(countryCode: Int,
+                        phoneNumber: Int,
+                        code: String,
+                        medium: SendCodeToUserRequestDTO.Medium,
+                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let parameters: [String: Any] = [
+            "countryCode": countryCode,
+            "phoneNumber": phoneNumber,
+            "code": code,
+            "medium": medium.rawValue
+        ]
+        self.post("users/code/send", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     func updateUser(name: String?,
                     phoneNumber: String? = nil,
                     email: String? = nil,
