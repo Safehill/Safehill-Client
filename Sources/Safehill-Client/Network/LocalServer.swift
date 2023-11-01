@@ -92,10 +92,11 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func updateUser(email: String?,
-                    name: String?,
+    func updateUser(name: String?,
+                    phoneNumber: String? = nil,
+                    email: String? = nil,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil else {
+        guard email != nil || name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
@@ -125,6 +126,7 @@ struct LocalServer : SHServerAPI {
                         "publicKey": self.requestor.publicKeyData,
                         "publicSignature": self.requestor.publicSignatureData,
                         "name": name ?? user["name"]!,
+                        "phoneNumber": phoneNumber ?? user["phoneNumber"]!,
                         "email": email ?? user["email"],
                     ] as [String : Any?]
                     userStore.set(value: value, for: key) { (postResult: Swift.Result) in

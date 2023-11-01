@@ -259,10 +259,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func updateUser(email: String?,
-                    name: String?,
+    func updateUser(name: String?,
+                    phoneNumber: String? = nil,
+                    email: String? = nil,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil else {
+        guard email != nil || name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
@@ -272,6 +273,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         if let name = name {
             parameters["name"] = name
+        }
+        if let phoneNumber = phoneNumber {
+            parameters["phoneNumber"] = phoneNumber
         }
         self.post("users/update", parameters: parameters, requiresAuthentication: false) { (result: Result<SHRemoteUser, Error>) in
             switch result {

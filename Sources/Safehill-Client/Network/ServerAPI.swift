@@ -15,12 +15,13 @@ public protocol SHServerAPI {
     
     /// Updates an existing user details or credentials
     /// - Parameters:
-    ///   - email  the new user email
     ///   - name  the new user name
-    ///   - password  the new user password
+    ///   - phoneNumber  the new user phone number
+    ///   - email  the new user email
     ///   - completionHandler: the callback method
-    func updateUser(email: String?,
-                    name: String?,
+    func updateUser(name: String?,
+                    phoneNumber: String?,
+                    email: String?,
                     completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information

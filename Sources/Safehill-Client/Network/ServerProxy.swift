@@ -57,13 +57,14 @@ extension SHServerProxy {
     }
     
     public func updateUser(email: String? = nil,
+                           phoneNumber: String? = nil,
                            name: String? = nil,
                            password: String? = nil,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.updateUser(email: email, name: name) { result in
+        self.localServer.updateUser(name: name, phoneNumber: phoneNumber, email: email) { result in
             switch result {
             case .success(_):
-                self.remoteServer.updateUser(email: email, name: name, completionHandler: completionHandler)
+                self.remoteServer.updateUser(name: name, phoneNumber: phoneNumber, email: email, completionHandler: completionHandler)
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -71,8 +72,8 @@ extension SHServerProxy {
     }
     
     public func updateLocalUser(with serverUser: SHServerUser,
-                           completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.updateUser(email: nil, name: serverUser.name, completionHandler: completionHandler)
+                                completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+        self.localServer.updateUser(name: serverUser.name, completionHandler: completionHandler)
     }
     
     public func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
