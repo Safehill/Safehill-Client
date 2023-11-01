@@ -264,12 +264,12 @@ struct SHServerHTTPAPI : SHServerAPI {
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
                         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let parameters: [String: Any] = [
+        let parameters = [
             "countryCode": countryCode,
             "phoneNumber": phoneNumber,
             "code": code,
             "medium": medium.rawValue
-        ]
+        ] as [String : Any]
         self.post("users/code/send", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):

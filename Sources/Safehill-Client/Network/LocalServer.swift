@@ -133,8 +133,8 @@ struct LocalServer : SHServerAPI {
                         "identifier": key,
                         "publicKey": self.requestor.publicKeyData,
                         "publicSignature": self.requestor.publicSignatureData,
-                        "name": name ?? user["name"]!,
-                        "phoneNumber": phoneNumber ?? user["phoneNumber"]!,
+                        "name": name ?? user["name"],
+                        "phoneNumber": phoneNumber ?? user["phoneNumber"],
                         "email": email ?? user["email"],
                     ] as [String : Any?]
                     userStore.set(value: value, for: key) { (postResult: Swift.Result) in
