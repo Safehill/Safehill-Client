@@ -208,7 +208,8 @@ public protocol SHShareableGroupableQueueItem: SHGroupableQueueItem {
 
 public extension SHShareableGroupableQueueItem {
     var isSharingWithOtherUsers: Bool {
-        return sharedWith.count > 0 || (sharedWith.count == 1 && sharedWith.first!.identifier == self.eventOriginator.identifier)
+        return sharedWith.count > 0
+    }
     }
 }
 
@@ -631,9 +632,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         self.eventOriginator = SHRemotePhantomUser(identifier: assetDescriptor.sharingInfo.sharedByUserIdentifier)
         self.receiverUserIdentifier = receiverUserIdentifier
         
-        /// Sharing information link sharing information such as the user id the asset is shared with to group identifiers
-        /// (aka the logical grouping of assets that was shared).
-        /// The code belows retrieves the group identifier specific to the local user
+        /// The relevant group id is the group id used to share this asset with the receiver
         for (userId, groupId) in self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
             if userId == receiverUserIdentifier {
                 self.groupId = groupId

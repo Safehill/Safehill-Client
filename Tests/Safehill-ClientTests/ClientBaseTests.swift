@@ -273,7 +273,7 @@ final class Safehill_ClientIntegrationTests: XCTestCase {
             createResult in
             switch createResult {
             case .success(_):
-                self.serverProxy.signIn(name: self.username) {
+                self.serverProxy.signIn(name: self.username, clientBuild: nil) {
                     signInResult in
                     switch signInResult {
                     case .success(let authResponse):

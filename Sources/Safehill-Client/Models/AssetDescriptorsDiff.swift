@@ -18,6 +18,7 @@ struct AssetDescriptorsDiff {
     let assetsRemovedOnServer: [SHRemoteAssetIdentifier]
     let stateDifferentOnServer: [AssetVersionState]
     let userIdsToRemoveFromGroup: [String: Set<UserIdentifier>]
+    let userIdsToAddToGroup: [String: Set<UserIdentifier>]
     
     
     ///
@@ -107,7 +108,9 @@ struct AssetDescriptorsDiff {
         return AssetDescriptorsDiff(
             assetsRemovedOnServer: onlyLocalAssets,
             stateDifferentOnServer: [],
-            userIdsToRemoveFromGroup: userIdsToRemoveFromGroup
+            userIdsToRemoveFromGroup: userIdsToRemoveFromGroup,
+            // TODO: Fill this
+            userIdsToAddToGroup: [:]
         )
     }
 }

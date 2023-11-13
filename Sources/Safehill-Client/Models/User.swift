@@ -1,6 +1,7 @@
 import Foundation
 import Safehill_Crypto
 
+
 public protocol SHServerUser : SHCryptoUser {
     var identifier: String { get }
     var name: String { get }
