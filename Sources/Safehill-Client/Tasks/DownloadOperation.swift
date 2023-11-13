@@ -272,6 +272,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<[GlobalIdentifier], Error>) -> Void
     ) {
+        completionHandler(.success([]))
+        return
+        
         guard original.count > 0 else {
             completionHandler(.success([]))
             return
@@ -916,24 +919,24 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                         globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
                     ) { descAssetResult in
-//                        switch descAssetResult {
-//                        case .failure(let error):
-//                            self.log.error("failed to process assets in descriptors: \(error.localizedDescription)")
-//                            completionHandler(.failure(error))
-//                        case .success():
-//                            ///
-//                            /// Get all asset descriptors associated with this user from the server.
-//                            /// Descriptors serve as a manifest to determine what to download
-//                            ///
-//                            self.downloadAssets { result in
-//                                if case .failure(let error) = result {
-//                                    self.log.error("failed to download assets: \(error.localizedDescription)")
-//                                    completionHandler(.failure(error))
-//                                } else {
+                        switch descAssetResult {
+                        case .failure(let error):
+                            self.log.error("failed to process assets in descriptors: \(error.localizedDescription)")
+                            completionHandler(.failure(error))
+                        case .success():
+                            ///
+                            /// Get all asset descriptors associated with this user from the server.
+                            /// Descriptors serve as a manifest to determine what to download
+                            ///
+                            self.downloadAssets { result in
+                                if case .failure(let error) = result {
+                                    self.log.error("failed to download assets: \(error.localizedDescription)")
+                                    completionHandler(.failure(error))
+                                } else {
                                     completionHandler(.success(()))
-//                                }
-//                            }
-//                        }
+                                }
+                            }
+                        }
                     }
                 }
             }
