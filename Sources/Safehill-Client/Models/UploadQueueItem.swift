@@ -210,7 +210,6 @@ public extension SHShareableGroupableQueueItem {
     var isSharingWithOtherUsers: Bool {
         return sharedWith.count > 0
     }
-    }
 }
 
 public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupableQueueItem {
