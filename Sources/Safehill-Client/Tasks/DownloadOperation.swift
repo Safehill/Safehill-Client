@@ -272,9 +272,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Swift.Result<[GlobalIdentifier], Error>) -> Void
     ) {
-        completionHandler(.success([]))
-        return
-        
         guard original.count > 0 else {
             completionHandler(.success([]))
             return
@@ -304,12 +301,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         for descriptor in descriptorsByGlobalIdentifier.values {
             if let localId = descriptor.localIdentifier,
                phAssetsByLocalIdentifier.keys.contains(localId) {
-                self.delegates.forEach({
-                    $0.didIdentify(
-                        localAsset: phAssetsByLocalIdentifier[localId]!,
-                        correspondingTo: descriptor.globalIdentifier
-                    )
-                })
+//                self.delegates.forEach({
+//                    $0.didIdentify(
+//                        localAsset: phAssetsByLocalIdentifier[localId]!,
+//                        correspondingTo: descriptor.globalIdentifier
+//                    )
+//                })
             } else {
                 filteredGlobalIdentifiers.append(descriptor.globalIdentifier)
             }
