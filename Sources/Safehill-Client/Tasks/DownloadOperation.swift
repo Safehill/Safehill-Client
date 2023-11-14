@@ -899,37 +899,39 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     private func runOnce(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
         
-        ///
-        /// Get all asset descriptors associated with this user from the server.
-        /// Descriptors serve as a manifest to determine what to download.
-        ///
-        self.processDescriptors { descResult in
-            switch descResult {
-            case .failure(let error):
-                self.log.error("failed to download descriptors: \(error.localizedDescription)")
-                completionHandler(.failure(error))
-            case .success(let tuple):
-                let descriptorsByGlobalIdentifier = tuple.0
-                let globalIdentifiersFromKnownUsers = tuple.1
-                self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
-                ) { descAssetResult in
-                    switch descAssetResult {
-                    case .failure(let error):
-                        self.log.error("failed to process assets in descriptors: \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                    case .success():
-                        ///
-                        /// Get all asset descriptors associated with this user from the server.
-                        /// Descriptors serve as a manifest to determine what to download
-                        ///
-                        self.downloadAssets { result in
-                            if case .failure(let error) = result {
-                                self.log.error("failed to download assets: \(error.localizedDescription)")
-                                completionHandler(.failure(error))
-                            } else {
-                                completionHandler(.success(()))
+        DispatchQueue.global(qos: .background).async {
+            ///
+            /// Get all asset descriptors associated with this user from the server.
+            /// Descriptors serve as a manifest to determine what to download.
+            ///
+            self.processDescriptors { descResult in
+                switch descResult {
+                case .failure(let error):
+                    self.log.error("failed to download descriptors: \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                case .success(let tuple):
+                    let descriptorsByGlobalIdentifier = tuple.0
+                    let globalIdentifiersFromKnownUsers = tuple.1
+                    self.processAssetsInDescriptors(
+                        descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                        globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
+                    ) { descAssetResult in
+                        switch descAssetResult {
+                        case .failure(let error):
+                            self.log.error("failed to process assets in descriptors: \(error.localizedDescription)")
+                            completionHandler(.failure(error))
+                        case .success():
+                            ///
+                            /// Get all asset descriptors associated with this user from the server.
+                            /// Descriptors serve as a manifest to determine what to download
+                            ///
+                            self.downloadAssets { result in
+                                if case .failure(let error) = result {
+                                    self.log.error("failed to download assets: \(error.localizedDescription)")
+                                    completionHandler(.failure(error))
+                                } else {
+                                    completionHandler(.success(()))
+                                }
                             }
                         }
                     }
