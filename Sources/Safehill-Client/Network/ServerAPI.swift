@@ -142,4 +142,74 @@ public protocol SHServerAPI {
         productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     )
+    
+    /// Creates a group and provides the encryption details for users in the group for E2EE.
+    /// This method needs to be called every time a share (group) is created so that reactions and comments can be added to it.
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - recipientsEncryptionDetails: the encryption details for each reciepient
+    ///   - completionHandler: the callback method
+    func createGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Adds a user to an existing, providing the their encryption details for E2EE.
+    /// This method needs to be called when users are added to a share (group), so they can see comments and reactions
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - recipientsEncryptionDetails: the encryption details for each reciepient
+    ///   - completionHandler: the callback method
+    func addToGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Adds a reaction from the user to a share (group)
+    /// - Parameters:
+    ///   - reactions: the reactions details
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func addReactions(
+        _: [ReactionOutputDTO],
+        toGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Removes a reaction to an asset or a message
+    /// - Parameters:
+    ///   - withIdentifier: the interaction identifier on the server
+    ///   - fromGroupId: the group the reaction belongs to
+    ///   - completionHandler: the callback method
+    func removeReaction(
+        withIdentifier: String,
+        fromGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Retrieves all the messages and reactions for a group id. Results are paginated and returned in reverse cronological order.
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - per: the number of items to retrieve
+    ///   - page: the page number, because results are paginated
+    ///   - completionHandler: the callback method
+    func retrieveInteractions(
+        in groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroup, Error>) -> ()
+    )
+    
+    /// Adds a reaction from the user to a share (group)
+    /// - Parameters:
+    ///   - message: the message details
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func addMessage(
+        _ message: MessageInputDTO,
+        toGroupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    )
 }

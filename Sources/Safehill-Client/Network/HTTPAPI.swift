@@ -748,4 +748,147 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
     }
+    
+    func createGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let parameters = [
+            "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
+                return [
+                    "encryptedSecret": encryptionDetails.encryptedSecret,
+                    "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
+                    "secretPublicSignature": encryptionDetails.secretPublicSignature,
+                    "userIdentifier": encryptionDetails.userIdentifier
+                ]
+            })
+        ] as [String: Any]
+        
+        self.post("groups/\(groupId)/create", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func addToGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let parameters = [
+            "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
+                return [
+                    "encryptedSecret": encryptionDetails.encryptedSecret,
+                    "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
+                    "secretPublicSignature": encryptionDetails.secretPublicSignature,
+                    "userIdentifier": encryptionDetails.userIdentifier
+                ]
+            })
+        ] as [String: Any]
+        
+        self.post("groups/\(groupId)/add-users", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func addReactions(
+        _ reactions: [ReactionOutputDTO],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard reactions.count == 1,
+              let reaction = reactions.first else {
+            completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            return
+        }
+        var parameters = [
+            "reactionType": reaction.reactionType.rawValue,
+        ] as [String: Any]
+        
+        if let aGid = reaction.inReplyToAssetGlobalIdentifier {
+            parameters["inReplyToAssetGlobalIdentifier"] = aGid
+        }
+        if let iId = reaction.inReplyToInteractionId {
+            parameters["inReplyToAssetGlobalIdentifier"] = iId
+        }
+        
+        self.post("intractions/reactions/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func removeReaction(
+        withIdentifier interactionId: String,
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("intractions/reactions/\(groupId)/\(interactionId)", parameters: nil) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func retrieveInteractions(
+        in groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroup, Error>) -> ()
+    ) {
+        let parameters = [
+            "per": per,
+            "page": page
+        ] as [String: Any]
+        
+        self.post("interactions/\(groupId)", 
+                  parameters: parameters,
+                  requiresAuthentication: true) { (result: Result<InteractionsGroupDTO, Error>) in
+            switch result {
+            case .success(let interactionsGroup):
+                completionHandler(.success(interactionsGroup))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func addMessage(
+        _ message: MessageInputDTO,
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
+        var parameters = [
+            "encryptedMessage": message.encryptedMessage,
+            "senderPublicSignature": message.senderPublicSignature,
+        ] as [String: Any]
+        
+        if let aGid = message.inReplyToAssetGlobalIdentifier {
+            parameters["inReplyToAssetGlobalIdentifier"] = aGid
+        }
+        if let iId = message.inReplyToInteractionId {
+            parameters["inReplyToAssetGlobalIdentifier"] = iId
+        }
+        
+        self.post("intractions/messages/\(groupId)",
+                  parameters: parameters,
+                  completionHandler: completionHandler)
+    }
 }

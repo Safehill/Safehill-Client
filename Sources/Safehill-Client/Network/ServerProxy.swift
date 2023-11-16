@@ -704,6 +704,34 @@ extension SHServerProxy {
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
     }
+    
+    func createGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.createGroup(groupId: groupId, recipientsEncryptionDetails: recipientsEncryptionDetails) { result in
+            switch result {
+            case .success(_):
+                self.remoteServer.createGroup(groupId: groupId, 
+                                              recipientsEncryptionDetails: recipientsEncryptionDetails,
+                                              completionHandler: completionHandler)
+            case .failure(let error):
+                log.error("failed to create group with encryption details locally")
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func addToGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.createGroup(groupId: groupId,
+                                      recipientsEncryptionDetails: recipientsEncryptionDetails,
+                                      completionHandler: completionHandler)
+    }
 }
 
 
