@@ -1244,7 +1244,7 @@ struct LocalServer : SHServerAPI {
         in groupId: String,
         per: Int,
         page: Int,
-        completionHandler: @escaping (Result<InteractionsGroup, Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         
         let reactionStore: KBKVStore
@@ -1321,11 +1321,14 @@ struct LocalServer : SHServerAPI {
                         messagesStore.keyValuesAndTimestamps(forKeysMatching: condition) { messagesResult in
                             switch messagesResult {
                             case .success(let messageKvts):
-                                var messages = [DecryptedMessageOutputDTO]()
+                                var messages = [MessageOutputDTO]()
                                 // TODO: Implement messages retrieval and decryption
-                                let result = DecryptedInteractionsGroupDTO(
+                                let result = InteractionsGroupDTO(
                                     messages: messages,
-                                    reactions: reactions
+                                    reactions: reactions,
+                                    ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
+                                    encryptedSecret: encryptionDetails.encryptedSecret,
+                                    secretPublicSignature: encryptionDetails.secretPublicSignature
                                 )
                                 completionHandler(.success(result))
                             case .failure(let err):

@@ -199,7 +199,7 @@ public protocol SHServerAPI {
         in groupId: String,
         per: Int,
         page: Int,
-        completionHandler: @escaping (Result<InteractionsGroup, Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
     /// Adds a reaction from the user to a share (group)

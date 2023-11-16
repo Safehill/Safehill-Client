@@ -851,7 +851,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         in groupId: String,
         per: Int,
         page: Int,
-        completionHandler: @escaping (Result<InteractionsGroup, Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         let parameters = [
             "per": per,
@@ -860,14 +860,8 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         self.post("interactions/\(groupId)", 
                   parameters: parameters,
-                  requiresAuthentication: true) { (result: Result<InteractionsGroupDTO, Error>) in
-            switch result {
-            case .success(let interactionsGroup):
-                completionHandler(.success(interactionsGroup))
-            case .failure(let err):
-                completionHandler(.failure(err))
-            }
-        }
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
     }
     
     func addMessage(

@@ -1,14 +1,7 @@
 import Foundation
 
-public protocol MessageOutput {
-    var interactionId: String { get }
-    var senderUserIdentifier: String { get }
-    var inReplyToAssetGlobalIdentifier: String? { get }
-    var inReplyToInteractionId: String? { get }
-    var createdAt: String { get } // ISO8601 formatted datetime
-}
 
-public struct MessageOutputDTO: MessageOutput {
+public struct MessageOutputDTO {
     public let interactionId: String
     public let senderUserIdentifier: String
     public let inReplyToAssetGlobalIdentifier: String?
@@ -16,16 +9,6 @@ public struct MessageOutputDTO: MessageOutput {
     public let encryptedMessage: String // base64EncodedData with the cipher
     public let createdAt: String // ISO8601 formatted datetime
 }
-
-public struct DecryptedMessageOutputDTO: MessageOutput {
-    public let interactionId: String
-    public let senderUserIdentifier: String
-    public let inReplyToAssetGlobalIdentifier: String?
-    public let inReplyToInteractionId: String?
-    public let decryptedMessage: String // base64EncodedData with the cipher
-    public let createdAt: String // ISO8601 formatted datetime
-}
-
 
 // - MARK: SERDE
 
