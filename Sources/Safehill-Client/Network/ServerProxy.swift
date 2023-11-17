@@ -18,7 +18,55 @@ public let SafehillServerURLComponents: URLComponents = {
 }()
 
 
-public struct SHServerProxy {
+public protocol SHServerProxyProtocol {
+    init(user: SHLocalUser)
+    
+    func createGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func addToGroup(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    )
+    
+    func removeReaction(
+        withIdentifier interactionId: String,
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func addMessage(
+        _ message: MessageInputDTO,
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    )
+    
+    func retrieveInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO, Error>) -> ()
+    )
+}
+
+
+public struct SHServerProxy: SHServerProxyProtocol {
     
     let localServer: LocalServer
     let remoteServer: SHServerHTTPAPI
@@ -705,13 +753,13 @@ extension SHServerProxy {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
     }
     
-    func createGroup(
+    public func createGroup(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.localServer.createGroup(groupId: groupId, recipientsEncryptionDetails: recipientsEncryptionDetails) { result in
-            switch result {
+        self.localServer.createGroup(groupId: groupId, recipientsEncryptionDetails: recipientsEncryptionDetails) { localResult in
+            switch localResult {
             case .success(_):
                 self.remoteServer.createGroup(groupId: groupId, 
                                               recipientsEncryptionDetails: recipientsEncryptionDetails,
@@ -723,14 +771,103 @@ extension SHServerProxy {
         }
     }
     
-    func addToGroup(
+    public func addToGroup(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.remoteServer.createGroup(groupId: groupId,
-                                      recipientsEncryptionDetails: recipientsEncryptionDetails,
-                                      completionHandler: completionHandler)
+        self.remoteServer.addToGroup(groupId: groupId,
+                                     recipientsEncryptionDetails: recipientsEncryptionDetails,
+                                     completionHandler: completionHandler)
+    }
+    
+    public func addReactions(
+        _ reactions: [ReactionInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.addReactions(reactions, toGroupId: groupId) { remoteResult in
+            switch remoteResult {
+            case .success(let reactionsOutput):
+                /// 
+                /// Pass the output of the reaction creation on the server to the local server
+                /// The output (rather than the input) is required, as an interaction identifier needs to be stored
+                ///
+                self.localServer.addReactions(reactionsOutput,
+                                              toGroupId: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(reactionsOutput))
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func removeReaction(
+        withIdentifier interactionId: String,
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.removeReaction(withIdentifier: interactionId,
+                                         fromGroupId: groupId) { remoteResult in
+            switch remoteResult {
+            case .success():
+                self.localServer.removeReaction(withIdentifier: interactionId,
+                                                fromGroupId: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(()))
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func addMessage(
+        _ message: MessageInputDTO,
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.addMessage(message, toGroupId: groupId) { remoteResult in
+            switch remoteResult {
+            case .success(let messageOutput):
+                self.localServer.addMessage(messageOutput, toGroupId: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func retrieveInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveInteractions(in: groupId, per: per, page: page) { remoteResult in
+            switch remoteResult {
+            case .success(let success):
+                completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
 }
 

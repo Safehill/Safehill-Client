@@ -173,9 +173,9 @@ public protocol SHServerAPI {
     ///   - groupId: the group identifier
     ///   - completionHandler: the callback method
     func addReactions(
-        _: [ReactionOutputDTO],
+        _: [ReactionInput],
         toGroupId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
     /// Removes a reaction to an asset or a message
@@ -208,7 +208,7 @@ public protocol SHServerAPI {
     ///   - groupId: the group identifier
     ///   - completionHandler: the callback method
     func addMessage(
-        _ message: MessageInputDTO,
+        _ message: MessageInput,
         toGroupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     )

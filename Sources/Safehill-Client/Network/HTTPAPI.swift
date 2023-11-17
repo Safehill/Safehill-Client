@@ -802,9 +802,9 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func addReactions(
-        _ reactions: [ReactionOutputDTO],
+        _ reactions: [ReactionInput],
         toGroupId groupId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         guard reactions.count == 1,
               let reaction = reactions.first else {
@@ -822,14 +822,9 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("intractions/reactions/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
-            switch result {
-            case .success(_):
-                completionHandler(.success(()))
-            case .failure(let err):
-                completionHandler(.failure(err))
-            }
-        }
+        self.post("intractions/reactions/\(groupId)",
+                  parameters: parameters,
+                  completionHandler: completionHandler)
     }
     
     func removeReaction(
@@ -865,7 +860,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func addMessage(
-        _ message: MessageInputDTO,
+        _ message: MessageInput,
         toGroupId groupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     ) {
