@@ -4,11 +4,11 @@ import CryptoKit
 
 
 public struct SHUserInteractionController {
-    let user: SHLocalCryptoUser
+    let user: SHLocalUser
     let protocolSalt: Data
     private var _serverProxy: SHServerProxyProtocol? = nil
     
-    init(user: SHLocalCryptoUser, protocolSalt: Data, serverProxy: SHServerProxyProtocol? = nil) {
+    init(user: SHLocalUser, protocolSalt: Data, serverProxy: SHServerProxyProtocol? = nil) {
         self.user = user
         self.protocolSalt = protocolSalt
         self._serverProxy = serverProxy
@@ -18,8 +18,7 @@ public struct SHUserInteractionController {
         if let sp = self._serverProxy {
             return sp
         }
-        let localUser = SHLocalUser(cryptoUser: self.user)
-        return SHServerProxy(user: localUser)
+        return SHServerProxy(user: self.user)
     }
     
     func createNewSecret() -> SymmetricKey {
@@ -33,7 +32,7 @@ public struct SHUserInteractionController {
     ) {
         do {
             let secret = createNewSecret()
-            let encryptedSecretForSelf = try SHUserContext(user: user).shareable(
+            let encryptedSecretForSelf = try SHUserContext(user: user.shUser).shareable(
                 data: secret.rawRepresentation,
                 protocolSalt: protocolSalt,
                 with: user
@@ -49,7 +48,7 @@ public struct SHUserInteractionController {
             ]
             
             for otherUser in users {
-                let encryptedSecretForOther = try SHUserContext(user: self.user).shareable(
+                let encryptedSecretForOther = try SHUserContext(user: self.user.shUser).shareable(
                     data: secret.rawRepresentation,
                     protocolSalt: protocolSalt,
                     with: otherUser
@@ -84,7 +83,7 @@ public struct SHUserInteractionController {
             
             var recipientEncryptionDetails = [RecipientEncryptionDetailsDTO]()
             for otherUser in users {
-                let encryptedSecretForOther = try SHUserContext(user: self.user).shareable(
+                let encryptedSecretForOther = try SHUserContext(user: self.user.shUser).shareable(
                     data: symmetricKey.rawRepresentation,
                     protocolSalt: protocolSalt,
                     with: otherUser
@@ -151,7 +150,7 @@ public struct SHUserInteractionController {
                 do {
                     let messages: [SHDecryptedMessage] = try self.decryptMessages(in: interactionsGroup, using: shareablePayload)
                     
-                    let usersController = SHUsersController(localUser: SHLocalUser(cryptoUser: self.user))
+                    let usersController = SHUsersController(localUser: self.user)
                     let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
                     let usersDict: [UserIdentifier: SHServerUser] = try usersController
                         .getUsers(withIdentifiers: userIds)
@@ -290,7 +289,7 @@ extension SHUserInteractionController {
         let shareablePayload = try self.fetchShareableSecretPayload(forGroup: groupId)
         let decryptedSecret = try SHCypher.decrypt(
             shareablePayload,
-            encryptionKeyData: user.privateKeyData,
+            encryptionKeyData: user.shUser.privateKeyData,
             protocolSalt: protocolSalt,
             from: user.publicSignatureData
         )
@@ -301,9 +300,7 @@ extension SHUserInteractionController {
                          using shareablePayload: SHShareablePayload) throws -> [SHDecryptedMessage] {
         var decryptedMessages = [SHDecryptedMessage]()
         
-        let usersWithMessages = try SHUsersController(
-            localUser: SHLocalUser(cryptoUser: self.user)
-        ).getUsers(
+        let usersWithMessages = try SHUsersController(localUser: self.user).getUsers(
             withIdentifiers: interactionsGroup.messages.map({ $0.senderUserIdentifier! })
         ).reduce([UserIdentifier: SHServerUser]()) { partialResult, serverUser in
             var result = partialResult
@@ -321,7 +318,7 @@ extension SHUserInteractionController {
                 continue
             }
             
-            let decryptedData = try SHUserContext(user: self.user).decrypt(
+            let decryptedData = try SHUserContext(user: self.user.shUser).decrypt(
                 Data(base64Encoded: encryptedMessageContainer.encryptedMessage)!,
                 usingEncryptedSecret: shareablePayload,
                 protocolSalt: protocolSalt,
