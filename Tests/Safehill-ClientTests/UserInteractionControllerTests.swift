@@ -43,11 +43,18 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             encryptedMessage: message.encryptedMessage,
             createdAt: Date().iso8601withFractionalSeconds
         )
-        self.localServer.addMessage(messageOutput, toGroupId: groupId, completionHandler: completionHandler)
+        self.localServer.addMessages([messageOutput], toGroupId: groupId) { result in
+            switch result {
+            case .success(let messages):
+                completionHandler(.success(messages.first!))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func retrieveInteractions(inGroup groupId: String, per: Int, page: Int, completionHandler: @escaping (Result<Safehill_Client.InteractionsGroupDTO, Error>) -> ()) {
-        self.localServer.retrieveInteractions(in: groupId, per: per, page: page, completionHandler: completionHandler)
+        self.localServer.retrieveInteractions(inGroup: groupId, per: per, page: page, completionHandler: completionHandler)
     }
     
     func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<Safehill_Client.RecipientEncryptionDetailsDTO, Error>) -> ()) {
@@ -58,7 +65,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
 
 final class Safehill_UserInteractionControllerTests: XCTestCase {
     
-    let myUser = SHLocalCryptoUser()
+    let myUser = SHLocalUser(cryptoUser: SHLocalCryptoUser())
     
     override func setUpWithError() throws {
         let _ = try SHDBManager.sharedInstance.assetStore().removeAll()
@@ -85,7 +92,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                          publicSignatureData: recipient1.publicSignatureData)
         )
         
-        let serverProxy = SHMockServerProxy(user: SHLocalUser(cryptoUser: myUser))
+        let serverProxy = SHMockServerProxy(user: myUser)
         
         let controller = SHUserInteractionController(
             user: myUser,

@@ -1249,8 +1249,51 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func countInteractions(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+    ) {
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let messagesStore: KBQueueStore
+        do {
+            messagesStore = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var result = (reactions: [ReactionType: Int](), messages: 0)
+        
+        let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+        reactionStore.dictionaryRepresentation(forKeysMatching: condition) { reactionsResult in
+            switch reactionsResult {
+            case .success(let reactionsKeysAndValues):
+                // TODO: Create the map
+                result.reactions = [ReactionType.like: reactionsKeysAndValues.count]
+            case .failure(let error):
+                log.critical("failed to retrieve reactions for group \(groupId): \(error.localizedDescription)")
+            }
+            messagesStore.keys(matching: condition) { messagesResult in
+                switch messagesResult {
+                case .success(let messagesKeys):
+                    result.messages = messagesKeys.count
+                case .failure(let error):
+                    log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
+                }
+                completionHandler(.success(result))
+            }
+        }
+    }
+    
     func retrieveInteractions(
-        in groupId: String,
+        inGroup groupId: String,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
@@ -1387,10 +1430,10 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func addMessage(
-        _ message: MessageInput,
+    func addMessages(
+        _ messages: [MessageInput],
         toGroupId groupId: String,
-        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         let messagesStore: KBQueueStore
         do {
@@ -1400,28 +1443,11 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let messageOutput = MessageOutputDTO(
-            interactionId: message.interactionId!,
-            senderUserIdentifier: message.senderUserIdentifier!,
-            inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
-            inReplyToInteractionId: message.inReplyToInteractionId,
-            encryptedMessage: message.encryptedMessage,
-            createdAt: message.createdAt!
-        )
+        var result = [MessageOutputDTO]()
+        var firstError: Error? = nil
         
-        do {
-            var key = "\(groupId)::\(message.senderUserIdentifier!)::\(message.interactionId!)"
-            if let assetGid = message.inReplyToAssetGlobalIdentifier {
-                key += "::\(assetGid)"
-            } else {
-                key += "::"
-            }
-            if let interactionId = message.inReplyToInteractionId {
-                key += "::\(interactionId)"
-            } else {
-                key += "::"
-            }
-            let value = DBSecureSerializableUserMessage(
+        for message in messages {
+            let messageOutput = MessageOutputDTO(
                 interactionId: message.interactionId!,
                 senderUserIdentifier: message.senderUserIdentifier!,
                 inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
@@ -1430,16 +1456,50 @@ struct LocalServer : SHServerAPI {
                 createdAt: message.createdAt!
             )
             
-            let data = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
-            try messagesStore.insert(
-                data,
-                withIdentifier: key,
-                timestamp: message.createdAt!.iso8601withFractionalSeconds!
-            )
+            do {
+                var key = "\(groupId)::\(message.senderUserIdentifier!)::\(message.interactionId!)"
+                if let assetGid = message.inReplyToAssetGlobalIdentifier {
+                    key += "::\(assetGid)"
+                } else {
+                    key += "::"
+                }
+                if let interactionId = message.inReplyToInteractionId {
+                    key += "::\(interactionId)"
+                } else {
+                    key += "::"
+                }
+                let value = DBSecureSerializableUserMessage(
+                    interactionId: message.interactionId!,
+                    senderUserIdentifier: message.senderUserIdentifier!,
+                    inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
+                    inReplyToInteractionId: message.inReplyToInteractionId,
+                    encryptedMessage: message.encryptedMessage,
+                    createdAt: message.createdAt!
+                )
+                
+                let data = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                try messagesStore.insert(
+                    data,
+                    withIdentifier: key,
+                    timestamp: message.createdAt!.iso8601withFractionalSeconds!
+                )
+                
+                result.append(messageOutput)
+            } catch {
+                if messages.count == 1 {
+                    completionHandler(.failure(error))
+                }
+                if firstError == nil {
+                    firstError = error
+                }
+                log.error("failed to locally add message with id \(message.interactionId!) to groupId \(groupId)")
+            }
             
-            completionHandler(.success(messageOutput))
-        } catch {
-            completionHandler(.failure(error))
+            if result.isEmpty {
+                completionHandler(.failure(firstError!))
+            } else {
+                completionHandler(.success(result))
+            }
         }
     }
     

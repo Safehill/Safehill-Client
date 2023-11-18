@@ -167,7 +167,7 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
-    /// Adds a reaction from the user to a share (group)
+    /// Adds reactions to a share (group)
     /// - Parameters:
     ///   - reactions: the reactions details
     ///   - groupId: the group identifier
@@ -196,20 +196,20 @@ public protocol SHServerAPI {
     ///   - page: the page number, because results are paginated
     ///   - completionHandler: the callback method
     func retrieveInteractions(
-        in groupId: String,
+        inGroup groupId: String,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
-    /// Adds a reaction from the user to a share (group)
+    /// Adds a messages to a share (group)
     /// - Parameters:
-    ///   - message: the message details
+    ///   - messages: the message details
     ///   - groupId: the group identifier
     ///   - completionHandler: the callback method
-    func addMessage(
-        _ message: MessageInput,
-        toGroupId: String,
-        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    func addMessages(
+        _ messages: [MessageInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
 }

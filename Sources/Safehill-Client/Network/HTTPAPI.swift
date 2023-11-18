@@ -843,7 +843,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func retrieveInteractions(
-        in groupId: String,
+        inGroup groupId: String,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
@@ -859,11 +859,16 @@ struct SHServerHTTPAPI : SHServerAPI {
                   completionHandler: completionHandler)
     }
     
-    func addMessage(
-        _ message: MessageInput,
+    func addMessages(
+        _ messages: [MessageInput],
         toGroupId groupId: String,
-        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
+        guard messages.count == 1, let message = messages.first else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("can't add more than one message at a time")))
+            return
+        }
+        
         var parameters = [
             "encryptedMessage": message.encryptedMessage,
             "senderPublicSignature": message.senderPublicSignature,
@@ -877,7 +882,13 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         
         self.post("intractions/messages/\(groupId)",
-                  parameters: parameters,
-                  completionHandler: completionHandler)
+                  parameters: parameters) { (result: Result<MessageOutputDTO, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let messageOutput):
+                completionHandler(.success([messageOutput]))
+            }
+        }
     }
 }

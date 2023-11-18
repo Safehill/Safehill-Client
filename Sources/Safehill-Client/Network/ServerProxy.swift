@@ -761,7 +761,7 @@ extension SHServerProxy {
         self.localServer.createGroup(groupId: groupId, recipientsEncryptionDetails: recipientsEncryptionDetails) { localResult in
             switch localResult {
             case .success(_):
-                self.remoteServer.createGroup(groupId: groupId, 
+                self.remoteServer.createGroup(groupId: groupId,
                                               recipientsEncryptionDetails: recipientsEncryptionDetails,
                                               completionHandler: completionHandler)
             case .failure(let error):
@@ -789,7 +789,7 @@ extension SHServerProxy {
         self.remoteServer.addReactions(reactions, toGroupId: groupId) { remoteResult in
             switch remoteResult {
             case .success(let reactionsOutput):
-                /// 
+                ///
                 /// Pass the output of the reaction creation on the server to the local server
                 /// The output (rather than the input) is required, as an interaction identifier needs to be stored
                 ///
@@ -833,10 +833,15 @@ extension SHServerProxy {
         toGroupId groupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     ) {
-        self.remoteServer.addMessage(message, toGroupId: groupId) { remoteResult in
+        self.remoteServer.addMessages([message], toGroupId: groupId) { remoteResult in
             switch remoteResult {
-            case .success(let messageOutput):
-                self.localServer.addMessage(messageOutput, toGroupId: groupId) { localResult in
+            case .success(let messageOutputs):
+                guard let messageOutput = messageOutputs.first else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("empty result")))
+                    return
+                }
+                completionHandler(.success(messageOutput))
+                self.localServer.addMessages([messageOutput], toGroupId: groupId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -847,16 +852,51 @@ extension SHServerProxy {
         }
     }
     
+    public func countLocalInteractions(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+    ) {
+        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    public func retrieveLocalInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveInteractions(
+            inGroup: groupId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
     public func retrieveInteractions(
         inGroup groupId: String,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        self.remoteServer.retrieveInteractions(in: groupId, per: per, page: page) { remoteResult in
+        self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
             switch remoteResult {
-            case .success(let success):
-                completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            case .success(let response):
+                completionHandler(.success(response))
+                
+                self.localServer.addReactions(response.reactions, 
+                                              toGroupId: groupId) { addReactionsResult in
+                    if case .failure(let failure) = addReactionsResult {
+                        log.warning("failed to add reactions retrieved from server on local")
+                    }
+                    
+                    self.localServer.addMessages(response.messages,
+                                                 toGroupId: groupId) { addMessagesResult in
+                        if case .failure(let failure) = addMessagesResult {
+                            log.warning("failed to add messages retrieved from server on local")
+                        }
+                    }
+                }
             case .failure(let failure):
                 completionHandler(.failure(failure))
             }
