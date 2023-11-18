@@ -109,23 +109,12 @@ public struct SHUserInteractionController {
     
     public func countInteractions(
         inGroup groupId: String,
-        completionHandler: @escaping (Result<(reactions: Int, messages: Int), Error>) -> ()
+        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
     ) {
-        self.serverProxy.retrieveInteractions(
+        self.serverProxy.countLocalInteractions(
             inGroup: groupId,
-            per: 10000,
-            page: 1
-        ) { result in
-            switch result {
-            case .success(let interactionsGroup):
-                completionHandler(.success((
-                    reactions: interactionsGroup.reactions.count,
-                    messages: interactionsGroup.messages.count
-                )))
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
+            completionHandler: completionHandler
+        )
     }
     
     public func retrieveInteractions(

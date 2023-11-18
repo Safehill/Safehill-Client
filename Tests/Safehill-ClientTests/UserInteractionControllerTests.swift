@@ -60,6 +60,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<Safehill_Client.RecipientEncryptionDetailsDTO, Error>) -> ()) {
         self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
+    
+    func countLocalInteractions(inGroup groupId: String, completionHandler: @escaping (Result<(reactions: [ReactionType : Int], messages: Int), Error>) -> ()) {
+        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+    }
 }
 
 

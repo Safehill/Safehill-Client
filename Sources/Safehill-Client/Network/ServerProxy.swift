@@ -63,6 +63,11 @@ public protocol SHServerProxyProtocol {
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO, Error>) -> ()
     )
+    
+    func countLocalInteractions(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+    )
 }
 
 
