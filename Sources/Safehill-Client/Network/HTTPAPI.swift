@@ -823,8 +823,14 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         
         self.post("interactions/reactions/\(groupId)",
-                  parameters: parameters,
-                  completionHandler: completionHandler)
+                  parameters: parameters) { (result: Result<ReactionOutputDTO, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let reactionOutput):
+                completionHandler(.success([reactionOutput]))
+            }
+        }
     }
     
     func removeReaction(
