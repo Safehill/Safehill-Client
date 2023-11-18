@@ -55,8 +55,8 @@ extension ReactionOutputDTO: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         _interactionId = try container.decode(String.self, forKey: .interactionId)
         _senderUserIdentifier = try container.decode(String.self, forKey: .senderUserIdentifier)
-        inReplyToInteractionId = try container.decode(String?.self, forKey: .inReplyToInteractionId)
-        inReplyToAssetGlobalIdentifier = try container.decode(String?.self, forKey: .inReplyToAssetGlobalIdentifier)
+        inReplyToInteractionId = try? container.decode(String?.self, forKey: .inReplyToInteractionId)
+        inReplyToAssetGlobalIdentifier = try? container.decode(String?.self, forKey: .inReplyToAssetGlobalIdentifier)
         if let reactionType = ReactionType(rawValue: try container.decode(Int.self, forKey: .reactionType)) {
             self.reactionType = reactionType
         } else {
