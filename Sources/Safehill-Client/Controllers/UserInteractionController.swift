@@ -74,9 +74,9 @@ public struct SHUserInteractionController {
         }
     }
     
-    func add(users: [SHServerUser],
-             toGroup groupId: String,
-             completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func add(users: [SHServerUser],
+                    toGroup groupId: String,
+                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
         
         do {
             let symmetricKey = try self.fetchSymmetricKey(forGroup: groupId)
@@ -183,11 +183,13 @@ public struct SHUserInteractionController {
         }
     }
     
-    func send(message: String,
-              inGroup groupId: String,
-              inReplyToAssetGlobalIdentifier: String? = nil,
-              inReplyToInteractionId: String? = nil,
-              completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
+    public func send(
+        message: String,
+        inGroup groupId: String,
+        inReplyToAssetGlobalIdentifier: String? = nil,
+        inReplyToInteractionId: String? = nil,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
         guard let messageData = message.data(using: .utf8) else {
             completionHandler(.failure(SHBackgroundOperationError.unexpectedData(message)))
             return
@@ -209,11 +211,13 @@ public struct SHUserInteractionController {
         }
     }
     
-    func addReaction(_ reactionType: ReactionType,
-                     inGroup groupId: String,
-                     inReplyToAssetGlobalIdentifier: String? = nil,
-                     inReplyToInteractionId: String? = nil,
-                     completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+    public func addReaction(
+        _ reactionType: ReactionType,
+        inGroup groupId: String,
+        inReplyToAssetGlobalIdentifier: String? = nil,
+        inReplyToInteractionId: String? = nil,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
         let reactionInput = ReactionInputDTO(
             inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: inReplyToInteractionId,
@@ -222,9 +226,11 @@ public struct SHUserInteractionController {
         serverProxy.addReactions([reactionInput], toGroupId: groupId, completionHandler: completionHandler)
     }
     
-    func removeReaction(with interactionIdentifier: String,
-                        fromGroup groupId: String,
-                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func removeReaction(
+        with interactionIdentifier: String,
+        fromGroup groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
         serverProxy.removeReaction(
             withIdentifier: self.user.identifier,
             fromGroupId: groupId,
