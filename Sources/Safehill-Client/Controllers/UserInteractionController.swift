@@ -8,7 +8,7 @@ public struct SHUserInteractionController {
     let protocolSalt: Data
     private var _serverProxy: SHServerProxyProtocol? = nil
     
-    init(user: SHLocalUser, protocolSalt: Data, serverProxy: SHServerProxyProtocol? = nil) {
+    public init(user: SHLocalUser, protocolSalt: Data, serverProxy: SHServerProxyProtocol? = nil) {
         self.user = user
         self.protocolSalt = protocolSalt
         self._serverProxy = serverProxy
