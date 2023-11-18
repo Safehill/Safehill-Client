@@ -822,7 +822,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("intractions/reactions/\(groupId)",
+        self.post("interactions/reactions/\(groupId)",
                   parameters: parameters,
                   completionHandler: completionHandler)
     }
@@ -832,7 +832,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.post("intractions/reactions/\(groupId)/\(interactionId)", parameters: nil) { (result: Result<NoReply, Error>) in
+        self.post("interactions/reactions/\(groupId)/\(interactionId)", parameters: nil) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -881,7 +881,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("intractions/messages/\(groupId)",
+        self.post("interactions/messages/\(groupId)",
                   parameters: parameters) { (result: Result<MessageOutputDTO, Error>) in
             switch result {
             case .failure(let error):
