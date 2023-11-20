@@ -18,6 +18,12 @@ public struct ReactionInputDTO {
     public let inReplyToAssetGlobalIdentifier: String?
     public let inReplyToInteractionId: String?
     public let reactionType: ReactionType
+    
+    public init(inReplyToAssetGlobalIdentifier: String?, inReplyToInteractionId: String?, reactionType: ReactionType) {
+        self.inReplyToAssetGlobalIdentifier = inReplyToAssetGlobalIdentifier
+        self.inReplyToInteractionId = inReplyToInteractionId
+        self.reactionType = reactionType
+    }
 }
 
 extension ReactionInputDTO : ReactionInput {
