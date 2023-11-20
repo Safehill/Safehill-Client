@@ -217,15 +217,47 @@ struct LocalServer : SHServerAPI {
             completionHandler(.failure(error))
             return
         }
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        let messagesQueue: KBQueueStore
+        do {
+            messagesQueue = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
         
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
+        var reactionsRemovalError: Error? = nil
+        var messagesRemovalError: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
         userStore.removeAll { result in
             if case .failure(let err) = result {
                 userRemovalError = err
+            }
+            group.leave()
+        }
+
+        group.enter()
+        reactionStore.removeAll { result in
+            if case .failure(let err) = result {
+                reactionsRemovalError = err
+            }
+            group.leave()
+        }
+        
+        group.enter()
+        messagesQueue.removeAll { result in
+            if case .failure(let err) = result {
+                messagesRemovalError = err
             }
             group.leave()
         }
@@ -247,6 +279,12 @@ struct LocalServer : SHServerAPI {
         }
         guard assetsRemovalError == nil else {
             return completionHandler(.failure(assetsRemovalError!))
+        }
+        guard reactionsRemovalError == nil else {
+            return completionHandler(.failure(reactionsRemovalError!))
+        }
+        guard messagesRemovalError == nil else {
+            return completionHandler(.failure(messagesRemovalError!))
         }
         completionHandler(.success(()))
     }
@@ -1122,7 +1160,7 @@ struct LocalServer : SHServerAPI {
         writeBatch.write(completionHandler: completionHandler)
     }
     
-    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
+    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
         let assetStore: KBKVStore
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
@@ -1141,11 +1179,11 @@ struct LocalServer : SHServerAPI {
             condition = condition.or(KBGenericCondition(.equal, value: key))
         }
         
-        assetStore.dictionaryRepresentation(forKeysMatching: condition) { result in
+        assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Result<KBKVPairs, Error>) in
             switch result {
             case .success(let keyValues):
                 guard keyValues.count > 0 else {
-                    completionHandler(.success(nil))
+                    completionHandler(.success([]))
                     return
                 }
                 
@@ -1173,7 +1211,7 @@ struct LocalServer : SHServerAPI {
                     completionHandler(.failure(KBError.unexpectedData(keyValues)))
                     return
                 }
-                completionHandler(.success(encryptionDetails))
+                completionHandler(.success([encryptionDetails]))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -1315,8 +1353,8 @@ struct LocalServer : SHServerAPI {
             switch encryptionDetailsResult {
             case .failure(let err):
                 completionHandler(.failure(err))
-            case .success(let encryptionDetails):
-                guard let encryptionDetails = encryptionDetails else {
+            case .success(let e2eeResult):
+                guard let encryptionDetails = e2eeResult.first else {
                     completionHandler(.failure(SHBackgroundOperationError.fatalError("missing encryption details for group \(groupId)")))
                     return
                 }

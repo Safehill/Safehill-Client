@@ -25,60 +25,111 @@ public struct SHUserInteractionController {
         SymmetricKey(size: .bits256)
     }
     
+    /// Creates the E2EE details for the group for all users involved, or updates such details if they already exist with the information for the missing users.
+    /// - Parameters:
+    ///   - groupId: the share group identifier
+    ///   - users: the users in the share
+    ///   - completionHandler: the callback method
     public func setupGroupEncryptionDetails(
         groupId: String,
         with users: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        do {
-            let secret: SymmetricKey
-            
-            if let existingSecret = try? self.fetchSymmetricKey(forGroup: groupId) {
-                secret = existingSecret
-            } else {
-                secret = createNewSecret()
+        if let encryptionDetails = try? self.fetchFullEncryptionDetails(forGroup: groupId) {
+            var missingUsers = [SHServerUser]()
+            for user in users {
+                guard encryptionDetails.contains(where: { $0.userIdentifier == user.identifier }) == false else {
+                    continue
+                }
+                missingUsers.append(user)
             }
             
-            let encryptedSecretForSelf = try SHUserContext(user: user.shUser).shareable(
+            guard missingUsers.count > 0 else {
+                completionHandler(.success(()))
+                return
+            }
+            
+            if let symmetricKey = try? self.fetchSymmetricKey(forGroup: groupId) {
+                do {
+                    try self.userGroupEncryptionSetup(
+                        groupId: groupId,
+                        secret: symmetricKey,
+                        users: missingUsers,
+                        completionHandler: completionHandler
+                    )
+                } catch {
+                    log.critical("""
+failed to add E2EE details to group \(groupId) for users \(missingUsers.map({ $0.identifier })). error=\(error.localizedDescription)
+""")
+                    completionHandler(.failure(error))
+                    return
+                }
+            } else {
+                log.critical("failed to fetch symmetric key for self user for existing group \(groupId)")
+                completionHandler(.failure(SHBackgroundOperationError.fatalError(
+                    "failed to fetch symmetric key for self user for existing group \(groupId)"
+                )))
+            }
+        } else {
+            do {
+                try self.createNewGroupEncryptionDetails(
+                    groupId: groupId,
+                    with: users,
+                    completionHandler: completionHandler
+                )
+            } catch {
+                log.critical("failed to initialize E2EE details for group \(groupId). error=\(error.localizedDescription)")
+                completionHandler(.failure(error))
+                return
+            }
+        }
+    }
+    
+    public func createNewGroupEncryptionDetails(
+        groupId: String,
+        with users: [SHServerUser],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) throws {
+        let secret: SymmetricKey = createNewSecret()
+        var usersAndSelf = users
+        usersAndSelf.append(user)
+        
+        try self.userGroupEncryptionSetup(
+            groupId: groupId,
+            secret: secret,
+            users: usersAndSelf,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func userGroupEncryptionSetup(
+        groupId: String,
+        secret: SymmetricKey,
+        users: [SHServerUser],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) throws {
+        var recipientEncryptionDetails = [RecipientEncryptionDetailsDTO]()
+        
+        for user in users {
+            let encryptedSecretForOther = try SHUserContext(user: self.user.shUser).shareable(
                 data: secret.rawRepresentation,
                 protocolSalt: protocolSalt,
                 with: user
             )
-            
-            var recipientEncryptionDetails = [
-                RecipientEncryptionDetailsDTO(
-                    userIdentifier: self.user.identifier,
-                    ephemeralPublicKey: encryptedSecretForSelf.ephemeralPublicKeyData.base64EncodedString(),
-                    encryptedSecret: encryptedSecretForSelf.cyphertext.base64EncodedString(),
-                    secretPublicSignature: encryptedSecretForSelf.signature.base64EncodedString()
-                )
-            ]
-            
-            for otherUser in users {
-                let encryptedSecretForOther = try SHUserContext(user: self.user.shUser).shareable(
-                    data: secret.rawRepresentation,
-                    protocolSalt: protocolSalt,
-                    with: otherUser
-                )
-                let recipientEncryptionForUser = RecipientEncryptionDetailsDTO(
-                    userIdentifier: otherUser.identifier,
-                    ephemeralPublicKey: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
-                    encryptedSecret: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
-                    secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString()
-                )
-                recipientEncryptionDetails.append(recipientEncryptionForUser)
-            }
-            
-            serverProxy.setupGroupEncryptionDetails(
-                groupId: groupId,
-                recipientsEncryptionDetails: recipientEncryptionDetails,
-                completionHandler: completionHandler
+            let recipientEncryptionForUser = RecipientEncryptionDetailsDTO(
+                userIdentifier: user.identifier,
+                ephemeralPublicKey: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
+                encryptedSecret: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
+                secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString()
             )
-        } catch {
-            log.error("failed to initialize E2EE details for group \(groupId). error=\(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
+            recipientEncryptionDetails.append(recipientEncryptionForUser)
         }
+        
+        serverProxy.setupGroupEncryptionDetails(
+            groupId: groupId,
+            recipientsEncryptionDetails: recipientEncryptionDetails,
+            completionHandler: completionHandler
+        )
     }
     
     public func countInteractions(
@@ -215,10 +266,10 @@ public struct SHUserInteractionController {
 
 extension SHUserInteractionController {
     
-    func fetchEncryptionDetails(forGroup groupId: String) throws -> RecipientEncryptionDetailsDTO? {
+    func fetchFullEncryptionDetails(forGroup groupId: String) throws -> [RecipientEncryptionDetailsDTO] {
         let semaphore = DispatchSemaphore(value: 0)
         
-        var encryptionDetails: RecipientEncryptionDetailsDTO? = nil
+        var encryptionDetails = [RecipientEncryptionDetailsDTO]()
         var error: Error? = nil
         
         serverProxy.retrieveGroupUserEncryptionDetails(forGroup: groupId) { result in
@@ -242,22 +293,43 @@ extension SHUserInteractionController {
         return encryptionDetails
     }
     
-    func fetchShareableSecretPayload(forGroup groupId: String) throws -> SHShareablePayload? {
-        guard let encryptionDetails = try self.fetchEncryptionDetails(forGroup: groupId) else {
-            return nil
+    func fetchSelfEncryptionDetails(forGroup groupId: String) throws -> RecipientEncryptionDetailsDTO? {
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        var encryptionDetails: RecipientEncryptionDetailsDTO? = nil
+        var error: Error? = nil
+        
+        serverProxy.retrieveSelfGroupUserEncryptionDetails(forGroup: groupId) { result in
+            switch result {
+            case .success(let e):
+                encryptionDetails = e
+            case .failure(let err):
+                error = err
+            }
+            semaphore.signal()
         }
         
-        return SHShareablePayload(
+        let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        return encryptionDetails
+    }
+    
+    func fetchSymmetricKey(forGroup groupId: String) throws -> SymmetricKey {
+        guard let encryptionDetails = try? self.fetchSelfEncryptionDetails(forGroup: groupId) else {
+            throw SHBackgroundOperationError.fatalError("trying to decrypt a symmetric key for non-existent E2EE details for group \(groupId)")
+        }
+        
+        let shareablePayload = SHShareablePayload(
             ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
             cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
             signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
         )
-    }
-    
-    func fetchSymmetricKey(forGroup groupId: String) throws -> SymmetricKey {
-        guard let shareablePayload = try? self.fetchShareableSecretPayload(forGroup: groupId) else {
-            throw SHBackgroundOperationError.fatalError("trying to decrypt a symmetric key for non-existent E2EE details for group \(groupId)")
-        }
         let decryptedSecret = try SHCypher.decrypt(
             shareablePayload,
             encryptionKeyData: user.shUser.privateKeyData,

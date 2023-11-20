@@ -52,9 +52,14 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
-    func retrieveGroupUserEncryptionDetails(
+    func retrieveSelfGroupUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    )
+    
+    func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
     )
     
     func countLocalInteractions(
@@ -446,7 +451,7 @@ extension SHServerProxy {
            versionsToRetrieve.contains(.midResolution) == false {
             versionsToRetrieve.insert(.midResolution)
         }
-
+        
         if cacheHiResolution {
             ///
             /// A `.midResolution` version for asset being requested from the local cache
@@ -581,7 +586,7 @@ extension SHServerProxy {
             completionHandler(.success(localDictionary))
             return
         }
-         
+        
         ///
         /// Get the asset descriptors from the remote Safehill server.
         /// This is needed to:
@@ -715,7 +720,7 @@ extension SHServerProxy {
                     }
                 }
                 completionHandler(result)
-            
+                
             case .failure(let err):
                 log.error("asset deletion failed. Error: \(err.localizedDescription)")
                 completionHandler(.failure(err))
@@ -756,6 +761,7 @@ extension SHServerProxy {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        /// Save the encryption details for this user
         self.localServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails
@@ -774,25 +780,44 @@ extension SHServerProxy {
         }
     }
     
-    public func retrieveGroupUserEncryptionDetails(
+    public func retrieveSelfGroupUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
         self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
-            switch localE2EEResult {
-            case .failure(let error):
-                log.warning("failed to retrieve E2EE details for group \(groupId) locally: \(error.localizedDescription)")
-                break
-            case .success(let details):
-                if details != nil {
-                    completionHandler(.success(details))
-                    return
+            if case .success(let details) = localE2EEResult, details.count > 0 {
+                completionHandler(.success(details.first))
+            } else {
+                if case .failure(let error) = localE2EEResult {
+                    log.warning("failed to retrieve <SELF> E2EE details for group \(groupId) from local: \(error.localizedDescription)")
                 }
-                
-                self.remoteServer.retrieveGroupUserEncryptionDetails(
-                    forGroup: groupId,
-                    completionHandler: completionHandler
-                )
+                self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
+                    switch remoteE2EEResult {
+                    case .success(let details):
+                        self.localServer.setGroupEncryptionDetails(groupId: groupId, recipientsEncryptionDetails: details) { _ in }
+                        let response = details.first(where: { $0.userIdentifier == self.localServer.requestor.identifier })
+                        completionHandler(.success(response))
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+            }
+        }
+    }
+    
+    public func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+    ) {
+        // TODO: Cache these results and always serve from the cache
+        
+        self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
+            switch remoteE2EEResult {
+            case .failure(let error):
+                log.warning("failed to retrieve E2EE details for group \(groupId) from remote: \(error.localizedDescription)")
+                self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
+            case .success(let detailsForUsers):
+                completionHandler(.success(detailsForUsers))
             }
         }
     }
@@ -900,7 +925,7 @@ extension SHServerProxy {
             case .success(let response):
                 completionHandler(.success(response))
                 
-                self.localServer.addReactions(response.reactions, 
+                self.localServer.addReactions(response.reactions,
                                               toGroupId: groupId) { addReactionsResult in
                     if case .failure(let failure) = addReactionsResult {
                         log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
