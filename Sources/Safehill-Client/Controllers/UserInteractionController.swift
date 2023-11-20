@@ -2,6 +2,8 @@ import Foundation
 import Safehill_Crypto
 import CryptoKit
 
+public typealias InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]], messages: Int)
+
 
 public struct SHUserInteractionController {
     let user: SHLocalUser
@@ -142,7 +144,7 @@ failed to add E2EE details to group \(groupId) for users \(missingUsers.map({ $0
     
     public func countInteractions(
         inGroup groupId: String,
-        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
         self.serverProxy.countLocalInteractions(
             inGroup: groupId,

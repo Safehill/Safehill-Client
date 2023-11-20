@@ -1234,7 +1234,7 @@ struct LocalServer : SHServerAPI {
         let writeBatch = reactionStore.writeBatch()
         
         for reaction in reactions {
-            var key = "\(groupId)::\(reaction.senderUserIdentifier!)::\(reaction.interactionId!)"
+            var key = "\(groupId)::\(reaction.senderUserIdentifier!)"
             if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
                 key += "::\(assetGid)"
             } else {
@@ -1286,7 +1286,7 @@ struct LocalServer : SHServerAPI {
     
     func countInteractions(
         inGroup groupId: String,
-        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
         let reactionStore: KBKVStore
         do {
@@ -1304,25 +1304,42 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        var result = (reactions: [ReactionType: Int](), messages: 0)
+        var counts: InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]](), messages: 0)
         
         let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
         reactionStore.dictionaryRepresentation(forKeysMatching: condition) { reactionsResult in
             switch reactionsResult {
             case .success(let reactionsKeysAndValues):
-                // TODO: Create the map
-                result.reactions = [ReactionType.like: reactionsKeysAndValues.count]
+                var reactionsCountDict = [ReactionType: [UserIdentifier]]()
+                for (k, v) in reactionsKeysAndValues {
+                    guard let rawValue = v as? Int, let reactionType = ReactionType(rawValue: rawValue) else {
+                        log.warning("unknown reaction type in local DB for group \(groupId): \(String(describing: v))")
+                        continue
+                    }
+                    let components = k.components(separatedBy: "::")
+                    guard components.count >= 2 else {
+                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k))")
+                        continue
+                    }
+                    let senderIdentifier = components[1]
+                    if reactionsCountDict[reactionType] != nil {
+                        reactionsCountDict[reactionType]!.append(senderIdentifier)
+                    } else {
+                        reactionsCountDict[reactionType] = [senderIdentifier]
+                    }
+                }
+                counts.reactions = reactionsCountDict
             case .failure(let error):
                 log.critical("failed to retrieve reactions for group \(groupId): \(error.localizedDescription)")
             }
             messagesStore.keys(matching: condition) { messagesResult in
                 switch messagesResult {
                 case .success(let messagesKeys):
-                    result.messages = messagesKeys.count
+                    counts.messages = messagesKeys.count
                 case .failure(let error):
                     log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
                 }
-                completionHandler(.success(result))
+                completionHandler(.success(counts))
             }
         }
     }

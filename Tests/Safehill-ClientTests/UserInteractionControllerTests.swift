@@ -3,14 +3,14 @@ import XCTest
 import Safehill_Crypto
 
 struct SHMockServerProxy: SHServerProxyProtocol {
-
+    
     let localServer: LocalServer
     
     init(user: SHLocalUser) {
         self.localServer = LocalServer(requestor: user)
     }
     
-    func setupGroupEncryptionDetails(groupId: String, recipientsEncryptionDetails: [Safehill_Client.RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func setupGroupEncryptionDetails(groupId: String, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails,
@@ -18,7 +18,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         )
     }
     
-    func addReactions(_ reactions: [Safehill_Client.ReactionInput], toGroupId groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+    func addReactions(_ reactions: [ReactionInput], toGroupId groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
         self.localServer.addReactions(reactions, toGroupId: groupId, completionHandler: completionHandler)
     }
     
@@ -26,7 +26,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.removeReaction(withIdentifier: interactionId, fromGroupId: groupId, completionHandler: completionHandler)
     }
     
-    func addMessage(_ message: Safehill_Client.MessageInputDTO, toGroupId groupId: String, completionHandler: @escaping (Result<Safehill_Client.MessageOutputDTO, Error>) -> ()) {
+    func addMessage(_ message: MessageInputDTO, toGroupId groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: "interactionId",
             senderUserIdentifier: self.localServer.requestor.identifier,
@@ -45,16 +45,27 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func retrieveInteractions(inGroup groupId: String, per: Int, page: Int, completionHandler: @escaping (Result<Safehill_Client.InteractionsGroupDTO, Error>) -> ()) {
+    func retrieveInteractions(inGroup groupId: String, per: Int, page: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
         self.localServer.retrieveInteractions(inGroup: groupId, per: per, page: page, completionHandler: completionHandler)
     }
     
-    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<Safehill_Client.RecipientEncryptionDetailsDTO, Error>) -> ()) {
-        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
+    func countLocalInteractions(inGroup groupId: String, completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()) {
+        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
     }
     
-    func countLocalInteractions(inGroup groupId: String, completionHandler: @escaping (Result<(reactions: [ReactionType : Int], messages: Int), Error>) -> ()) {
-        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+    func retrieveSelfGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
+        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { result in
+            switch result {
+            case .success(let array):
+                completionHandler(.success(array.first))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
+        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
 }
 

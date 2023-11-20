@@ -64,7 +64,7 @@ public protocol SHServerProxyProtocol {
     
     func countLocalInteractions(
         inGroup groupId: String,
-        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     )
 }
 
@@ -895,7 +895,7 @@ extension SHServerProxy {
     
     public func countLocalInteractions(
         inGroup groupId: String,
-        completionHandler: @escaping (Result<(reactions: [ReactionType: Int], messages: Int), Error>) -> ()
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
         self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
     }
