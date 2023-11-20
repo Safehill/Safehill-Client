@@ -1261,7 +1261,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func removeReaction(
-        withIdentifier interactionId: String,
+        _ reaction: ReactionInput,
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -1273,7 +1273,20 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::\(self.requestor.identifier)::\(interactionId)")
+        var key = "\(groupId)::\(reaction.senderUserIdentifier!)"
+        if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
+            key += "::\(assetGid)"
+        } else {
+            key += "::"
+        }
+        if let interactionId = reaction.inReplyToInteractionId {
+            key += "::\(interactionId)"
+        } else {
+            key += "::"
+        }
+        
+        let condition = KBGenericCondition(.equal, value: key)
+        
         reactionStore.removeValues(forKeysMatching: condition) { result in
             switch result {
             case .success(_):

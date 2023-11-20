@@ -177,12 +177,12 @@ public protocol SHServerAPI {
     
     /// Removes a reaction to an asset or a message
     /// - Parameters:
-    ///   - withIdentifier: the interaction identifier on the server
+    ///   - reactoin: the reaction type and references to remove
     ///   - fromGroupId: the group the reaction belongs to
     ///   - completionHandler: the callback method
     func removeReaction(
-        withIdentifier: String,
-        fromGroupId: String,
+        _ reaction: ReactionInput,
+        fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     

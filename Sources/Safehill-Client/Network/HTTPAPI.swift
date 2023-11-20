@@ -830,11 +830,22 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func removeReaction(
-        withIdentifier interactionId: String,
+        _ reaction: ReactionInput,
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.post("interactions/reactions/\(groupId)/\(interactionId)", parameters: nil) { (result: Result<NoReply, Error>) in
+        var parameters = [
+            "reactionType": reaction.reactionType.rawValue,
+        ] as [String: Any]
+
+        if let iId = reaction.inReplyToInteractionId {
+            parameters["inReplyToInteractionId"] = iId
+        }
+        if let aGid = reaction.inReplyToAssetGlobalIdentifier {
+            parameters["inReplyToAssetGlobalIdentifier"] = aGid
+        }
+        
+        self.post("interactions/reactions/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))

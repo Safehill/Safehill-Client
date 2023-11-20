@@ -34,7 +34,7 @@ public protocol SHServerProxyProtocol {
     )
     
     func removeReaction(
-        withIdentifier interactionId: String,
+        _: ReactionInput,
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
@@ -848,16 +848,14 @@ extension SHServerProxy {
     }
     
     public func removeReaction(
-        withIdentifier interactionId: String,
+        _ reaction: ReactionInput,
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.remoteServer.removeReaction(withIdentifier: interactionId,
-                                         fromGroupId: groupId) { remoteResult in
+        self.remoteServer.removeReaction(reaction, fromGroupId: groupId) { remoteResult in
             switch remoteResult {
             case .success():
-                self.localServer.removeReaction(withIdentifier: interactionId,
-                                                fromGroupId: groupId) { localResult in
+                self.localServer.removeReaction(reaction, fromGroupId: groupId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }

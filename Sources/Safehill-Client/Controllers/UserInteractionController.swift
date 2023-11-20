@@ -262,12 +262,12 @@ failed to add E2EE details to group \(groupId) for users \(missingUsers.map({ $0
     }
     
     public func removeReaction(
-        with interactionIdentifier: String,
+        _ reaction: ReactionInput,
         fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         serverProxy.removeReaction(
-            withIdentifier: self.user.identifier,
+            reaction,
             fromGroupId: groupId,
             completionHandler: completionHandler
         )
