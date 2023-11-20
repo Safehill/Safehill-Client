@@ -9,12 +9,14 @@ public struct ReactionOutputDTO {
     public let reactionType: ReactionType
     private let _addedAt: String // ISO8601 formatted datetime
     
-    init(interactionId: String,
-         senderUserIdentifier: String,
-         inReplyToAssetGlobalIdentifier: String?,
-         inReplyToInteractionId: String?,
-         reactionType: ReactionType,
-         addedAt: String) {
+    public init(
+        interactionId: String,
+        senderUserIdentifier: String,
+        inReplyToAssetGlobalIdentifier: String?,
+        inReplyToInteractionId: String?,
+        reactionType: ReactionType,
+        addedAt: String
+    ) {
         self._interactionId = interactionId
         self._senderUserIdentifier = senderUserIdentifier
         self.inReplyToAssetGlobalIdentifier = inReplyToAssetGlobalIdentifier
