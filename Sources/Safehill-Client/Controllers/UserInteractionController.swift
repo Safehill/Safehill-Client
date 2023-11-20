@@ -35,7 +35,15 @@ public struct SHUserInteractionController {
         with users: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        if let encryptionDetails = try? self.fetchFullEncryptionDetails(forGroup: groupId) {
+        let encryptionDetails: [RecipientEncryptionDetailsDTO]
+        do {
+            encryptionDetails = try self.fetchFullEncryptionDetails(forGroup: groupId)
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        if encryptionDetails.count > 0 {
             var missingUsers = [SHServerUser]()
             for user in users {
                 guard encryptionDetails.contains(where: { $0.userIdentifier == user.identifier }) == false else {
