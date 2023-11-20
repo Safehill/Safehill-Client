@@ -1094,7 +1094,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func createGroup(
+    func setGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
@@ -1122,15 +1122,7 @@ struct LocalServer : SHServerAPI {
         writeBatch.write(completionHandler: completionHandler)
     }
     
-    func addToGroup(
-        groupId: String,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO, Error>) -> ()) {
+    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
         let assetStore: KBKVStore
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
@@ -1152,6 +1144,11 @@ struct LocalServer : SHServerAPI {
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { result in
             switch result {
             case .success(let keyValues):
+                guard keyValues.count > 0 else {
+                    completionHandler(.success(nil))
+                    return
+                }
+                
                 var encryptionDetails = RecipientEncryptionDetailsDTO(
                     userIdentifier: requestor.identifier,
                     ephemeralPublicKey: "",
@@ -1319,6 +1316,11 @@ struct LocalServer : SHServerAPI {
             case .failure(let err):
                 completionHandler(.failure(err))
             case .success(let encryptionDetails):
+                guard let encryptionDetails = encryptionDetails else {
+                    completionHandler(.failure(SHBackgroundOperationError.fatalError("missing encryption details for group \(groupId)")))
+                    return
+                }
+                
                 let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
                 reactionStore.keyValuesAndTimestamps(forKeysMatching: condition) { reactionsResult in
                     switch reactionsResult {

@@ -749,7 +749,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func createGroup(
+    func setGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
@@ -762,10 +762,11 @@ struct SHServerHTTPAPI : SHServerAPI {
                     "secretPublicSignature": encryptionDetails.secretPublicSignature,
                     "userIdentifier": encryptionDetails.userIdentifier
                 ]
-            })
+            }),
+            "overwrite": false
         ] as [String: Any]
         
-        self.post("groups/\(groupId)/create", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+        self.post("groups/\(groupId)/setup", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -775,28 +776,23 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func addToGroup(
-        groupId: String,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
+    func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        let parameters = [
-            "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
-                return [
-                    "encryptedSecret": encryptionDetails.encryptedSecret,
-                    "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
-                    "secretPublicSignature": encryptionDetails.secretPublicSignature,
-                    "userIdentifier": encryptionDetails.userIdentifier
-                ]
-            })
-        ] as [String: Any]
-        
-        self.post("groups/\(groupId)/add-users", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+        self.get("groups/\(groupId)/encryptionDetails", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
             switch result {
-            case .success(_):
-                completionHandler(.success(()))
-            case .failure(let err):
-                completionHandler(.failure(err))
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let encryptionDetails):
+                completionHandler(.success(encryptionDetails))
             }
         }
     }
@@ -877,7 +873,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         
         var parameters = [
             "encryptedMessage": message.encryptedMessage,
-            "senderPublicSignature": message.senderPublicSignature,
+            "senderPublicSignature": message.senderPublicSignature!,
         ] as [String: Any]
         
         if let aGid = message.inReplyToAssetGlobalIdentifier {

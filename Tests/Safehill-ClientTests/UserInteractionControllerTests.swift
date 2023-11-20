@@ -10,16 +10,8 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer = LocalServer(requestor: user)
     }
     
-    func createGroup(groupId: String, recipientsEncryptionDetails: [Safehill_Client.RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.createGroup(
-            groupId: groupId,
-            recipientsEncryptionDetails: recipientsEncryptionDetails,
-            completionHandler: completionHandler
-        )
-    }
-    
-    func addToGroup(groupId: String, recipientsEncryptionDetails: [Safehill_Client.RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.addToGroup(
+    func setupGroupEncryptionDetails(groupId: String, recipientsEncryptionDetails: [Safehill_Client.RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails,
             completionHandler: completionHandler
@@ -105,7 +97,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         )
         
         var expectation = XCTestExpectation(description: "initialize the group")
-        controller.initializeGroup(
+        controller.setupGroupEncryptionDetails(
             groupId: groupId,
             with: [
                 SHRemoteUser(

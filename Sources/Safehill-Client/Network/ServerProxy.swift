@@ -21,18 +21,11 @@ public let SafehillServerURLComponents: URLComponents = {
 public protocol SHServerProxyProtocol {
     init(user: SHLocalUser)
     
-    func createGroup(
+    func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
-    
-    func addToGroup(
-        groupId: String,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    )
-    
     
     func addReactions(
         _ reactions: [ReactionInput],
@@ -61,7 +54,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveGroupUserEncryptionDetails(
         forGroup groupId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
     func countLocalInteractions(
@@ -758,17 +751,22 @@ extension SHServerProxy {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
     }
     
-    public func createGroup(
+    public func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.localServer.createGroup(groupId: groupId, recipientsEncryptionDetails: recipientsEncryptionDetails) { localResult in
+        self.localServer.setGroupEncryptionDetails(
+            groupId: groupId,
+            recipientsEncryptionDetails: recipientsEncryptionDetails
+        ) { localResult in
             switch localResult {
             case .success(_):
-                self.remoteServer.createGroup(groupId: groupId,
-                                              recipientsEncryptionDetails: recipientsEncryptionDetails,
-                                              completionHandler: completionHandler)
+                self.remoteServer.setGroupEncryptionDetails(
+                    groupId: groupId,
+                    recipientsEncryptionDetails: recipientsEncryptionDetails,
+                    completionHandler: completionHandler
+                )
             case .failure(let error):
                 log.error("failed to create group with encryption details locally")
                 completionHandler(.failure(error))
@@ -776,14 +774,27 @@ extension SHServerProxy {
         }
     }
     
-    public func addToGroup(
-        groupId: String,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
+    public func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.remoteServer.addToGroup(groupId: groupId,
-                                     recipientsEncryptionDetails: recipientsEncryptionDetails,
-                                     completionHandler: completionHandler)
+        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
+            switch localE2EEResult {
+            case .failure(let error):
+                log.warning("failed to retrieve E2EE details for group \(groupId) locally: \(error.localizedDescription)")
+                break
+            case .success(let details):
+                if details != nil {
+                    completionHandler(.success(details))
+                    return
+                }
+                
+                self.remoteServer.retrieveGroupUserEncryptionDetails(
+                    forGroup: groupId,
+                    completionHandler: completionHandler
+                )
+            }
+        }
     }
     
     public func addReactions(
@@ -892,13 +903,13 @@ extension SHServerProxy {
                 self.localServer.addReactions(response.reactions, 
                                               toGroupId: groupId) { addReactionsResult in
                     if case .failure(let failure) = addReactionsResult {
-                        log.warning("failed to add reactions retrieved from server on local")
+                        log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
                     }
                     
                     self.localServer.addMessages(response.messages,
                                                  toGroupId: groupId) { addMessagesResult in
                         if case .failure(let failure) = addMessagesResult {
-                            log.warning("failed to add messages retrieved from server on local")
+                            log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
                         }
                     }
                 }
@@ -906,13 +917,6 @@ extension SHServerProxy {
                 completionHandler(.failure(failure))
             }
         }
-    }
-    
-    public func retrieveGroupUserEncryptionDetails(
-        forGroup groupId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO, Error>) -> ()
-    ) {
-        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
 }
 

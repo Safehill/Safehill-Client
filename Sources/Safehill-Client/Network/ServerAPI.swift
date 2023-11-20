@@ -149,22 +149,19 @@ public protocol SHServerAPI {
     ///   - groupId: the group identifier
     ///   - recipientsEncryptionDetails: the encryption details for each reciepient
     ///   - completionHandler: the callback method
-    func createGroup(
+    func setGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
-    /// Adds a user to an existing, providing the their encryption details for E2EE.
-    /// This method needs to be called when users are added to a share (group), so they can see comments and reactions
+    /// Retrieved the E2EE details for a group, if one exists
     /// - Parameters:
     ///   - groupId: the group identifier
-    ///   - recipientsEncryptionDetails: the encryption details for each reciepient
     ///   - completionHandler: the callback method
-    func addToGroup(
-        groupId: String,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
+    func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
     /// Adds reactions to a share (group)

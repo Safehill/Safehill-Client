@@ -319,6 +319,36 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             throw error
         }
+        
+        if shareRequest.isBackground == false {
+            var errorInitializingGroup: Error? = nil
+            let semaphore = DispatchSemaphore(value: 0)
+            
+            let interactionsController = SHUserInteractionController(
+                user: self.user,
+                protocolSalt: self.user.encryptionProtocolSalt!
+            )
+            interactionsController.setupGroupEncryptionDetails(
+                groupId: shareRequest.groupId,
+                with: shareRequest.sharedWith,
+                completionHandler: { initializeGroupResult in
+                    switch initializeGroupResult {
+                    case .failure(let error):
+                        errorInitializingGroup = error
+                    default: break
+                    }
+                    semaphore.signal()
+                }
+            )
+            
+            let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+            guard dispatchResult == .success else {
+                throw SHBackgroundOperationError.timedOut
+            }
+            guard errorInitializingGroup == nil else {
+                throw errorInitializingGroup!
+            }
+        }
 
         try self.markAsSuccessful(
             item: item,
