@@ -1190,9 +1190,10 @@ struct LocalServer : SHServerAPI {
         
         do {
             let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
-            try assetStore.removeValues(forKeysMatching: condition)
-            try reactionStore.removeValues(forKeysMatching: condition)
-            try messagesStore.removeValues(forKeysMatching: condition)
+            let _ = try assetStore.removeValues(forKeysMatching: condition)
+            let _ = try reactionStore.removeValues(forKeysMatching: condition)
+            let _ = try messagesStore.removeValues(forKeysMatching: condition)
+            completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
         }
