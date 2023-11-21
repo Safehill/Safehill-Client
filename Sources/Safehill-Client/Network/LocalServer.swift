@@ -1160,6 +1160,44 @@ struct LocalServer : SHServerAPI {
         writeBatch.write(completionHandler: completionHandler)
     }
     
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let messagesStore: KBQueueStore
+        do {
+            messagesStore = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        do {
+            let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+            try assetStore.removeValues(forKeysMatching: condition)
+            try reactionStore.removeValues(forKeysMatching: condition)
+            try messagesStore.removeValues(forKeysMatching: condition)
+        } catch {
+            completionHandler(.failure(error))
+        }
+    }
+    
     func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
         let assetStore: KBKVStore
         do {

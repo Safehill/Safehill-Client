@@ -142,6 +142,10 @@ failed to add E2EE details to group \(groupId) for users \(missingUsers.map({ $0
         )
     }
     
+    public func deleteGroup(groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        serverProxy.deleteGroup(groupId: groupId, completionHandler: completionHandler)
+    }
+    
     public func countInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()

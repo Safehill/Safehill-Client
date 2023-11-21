@@ -155,6 +155,15 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    /// Delete a group, related messages and reactions, given its id
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     /// Retrieved the E2EE details for a group, if one exists
     /// - Parameters:
     ///   - groupId: the group identifier

@@ -212,14 +212,15 @@ struct SHServerHTTPAPI : SHServerAPI {
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
-    func post<T: Decodable>(_ route: String,
-                            parameters: [String: Any?]?,
-                            requiresAuthentication: Bool = true,
-                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+    private func route<T: Decodable>(_ route: String,
+                                     method: String,
+                                     parameters: [String: Any?]?,
+                                     requiresAuthentication: Bool,
+                                     completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route)
         
         var request = URLRequest(url: url, timeoutInterval: 90)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         if requiresAuthentication {
@@ -239,6 +240,32 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
+    }
+    
+    func post<T: Decodable>(_ route: String,
+                            parameters: [String: Any?]?,
+                            requiresAuthentication: Bool = true,
+                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+        self.route(
+            route,
+            method: "POST",
+            parameters: parameters,
+            requiresAuthentication: requiresAuthentication,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func delete<T: Decodable>(_ route: String,
+                            parameters: [String: Any?]?,
+                            requiresAuthentication: Bool = true,
+                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+        self.route(
+            route,
+            method: "DELETE",
+            parameters: parameters,
+            requiresAuthentication: requiresAuthentication,
+            completionHandler: completionHandler
+        )
     }
     
     func createUser(name: String,
@@ -767,6 +794,20 @@ struct SHServerHTTPAPI : SHServerAPI {
         ] as [String: Any]
         
         self.post("groups/\(groupId)/setup", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.delete("groups/\(groupId)", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))

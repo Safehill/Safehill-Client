@@ -27,6 +27,11 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     func addReactions(
         _ reactions: [ReactionInput],
         toGroupId groupId: String,
@@ -775,6 +780,20 @@ extension SHServerProxy {
                 )
             case .failure(let error):
                 log.error("failed to create group with encryption details locally")
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    public func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.deleteGroup(groupId: groupId) { localResult in
+            switch localResult {
+            case .success():
+                self.remoteServer.deleteGroup(groupId: groupId, completionHandler: completionHandler)
+            case .failure(let error):
                 completionHandler(.failure(error))
             }
         }
