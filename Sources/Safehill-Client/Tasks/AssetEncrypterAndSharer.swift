@@ -343,9 +343,21 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
             guard dispatchResult == .success else {
+                // Retry (by not dequeueing) on timeout
                 throw SHBackgroundOperationError.timedOut
             }
             guard errorInitializingGroup == nil else {
+                // Mark as failed on any other error
+                do {
+                    try self.markAsFailed(
+                        encryptionRequest: shareRequest,
+                        globalIdentifier: globalIdentifier,
+                        queueItem: item
+                    )
+                } catch {
+                    log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
+                    // TODO: Handle
+                }
                 throw errorInitializingGroup!
             }
         }
