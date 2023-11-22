@@ -129,7 +129,7 @@ failed to add E2EE details to group \(groupId) for users \(missingUsers.map({ $0
             let recipientEncryptionForUser = RecipientEncryptionDetailsDTO(
                 userIdentifier: user.identifier,
                 ephemeralPublicKey: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
-                encryptedSecret: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
+                encryptedSecret: encryptedSecretForOther.cyphertext.base64EncodedString(),
                 secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString()
             )
             recipientEncryptionDetails.append(recipientEncryptionForUser)
