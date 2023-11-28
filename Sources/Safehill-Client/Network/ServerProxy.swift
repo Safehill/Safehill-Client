@@ -940,7 +940,10 @@ extension SHServerProxy {
         self.retrieveLocalInteractions(inGroup: groupId, per: 10000, page: 1) { localResult in
             var localMessages = [MessageOutputDTO]()
             var localReactions = [ReactionOutputDTO]()
-            if case .success(let localInteractions) = localResult {
+            switch localResult {
+            case .failure(let err):
+                log.error("failed to retrieve local interactions for groupId \(groupId)")
+            case .success(let localInteractions):
                 localMessages = localInteractions.messages
                 localReactions = localInteractions.reactions
             }
@@ -1018,7 +1021,6 @@ extension SHServerProxy {
                             if case .failure(let failure) = addMessagesResult {
                                 log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
                             }
-                            
                             dispatchGroup.leave()
                         }
                     }
