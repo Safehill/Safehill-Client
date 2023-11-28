@@ -917,7 +917,7 @@ extension SHServerProxy {
         self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
     }
     
-    public func retrieveLocalInteractions(
+    public func retrieveInteractions(
         inGroup groupId: String,
         per: Int,
         page: Int,
@@ -931,140 +931,18 @@ extension SHServerProxy {
         )
     }
     
-    public func retrieveInteractions(
+    public func retrieveRemoteInteractions(
         inGroup groupId: String,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        self.retrieveLocalInteractions(inGroup: groupId, per: 10000, page: 1) { localResult in
-            var groupE2EDetailsToCreate = [String]()
-            var localMessages = [MessageOutputDTO]()
-            var localReactions = [ReactionOutputDTO]()
-            switch localResult {
-            case .failure(let err):
-                if case SHBackgroundOperationError.missingE2EEDetailsForGroup(_) = err {
-                    groupE2EDetailsToCreate.append(groupId)
-                }
-                log.error("failed to retrieve local interactions for groupId \(groupId)")
-            case .success(let localInteractions):
-                localMessages = localInteractions.messages
-                localReactions = localInteractions.reactions
-            }
-            
-            self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
-                switch remoteResult {
-                case .success(let remoteInteractions):
-                    completionHandler(.success(remoteInteractions))
-                    
-                    let dispatchGroup = DispatchGroup()
-                    
-                    for groupId in groupE2EDetailsToCreate {
-                        let recipientEncryptionDetails = RecipientEncryptionDetailsDTO(
-                            userIdentifier: self.localServer.requestor.identifier,
-                            ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
-                            encryptedSecret: remoteInteractions.encryptedSecret,
-                            secretPublicSignature: remoteInteractions.secretPublicSignature
-                        )
-                        
-                        dispatchGroup.enter()
-                        self.localServer.setGroupEncryptionDetails(
-                            groupId: groupId,
-                            recipientsEncryptionDetails: [recipientEncryptionDetails]
-                        ) { setE2EEDetailsResult in
-                            switch setE2EEDetailsResult {
-                            case .success(_):
-                                break
-                            case .failure(let err):
-                                log.error("Cache interactions for group \(groupId) won't be readable because setting the E2EE details for such group failed")
-                            }
-                            dispatchGroup.leave()
-                        }
-                    }
-                    
-                    var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-                    if dispatchResult != .success {
-                        log.warning("timeout while setting E2EE details for groupId \(groupId)")
-                    }
-                    
-                    let remoteReactions = remoteInteractions.reactions
-                    var reactionsToUpdate = [ReactionOutputDTO]()
-                    var reactionsToRemove = [ReactionOutputDTO]()
-                    for remoteReaction in remoteReactions {
-                        let existing = localReactions.first(where: {
-                            $0.senderUserIdentifier == remoteReaction.senderUserIdentifier
-                            && $0.inReplyToInteractionId == remoteReaction.inReplyToInteractionId
-                            && $0.inReplyToAssetGlobalIdentifier == remoteReaction.inReplyToAssetGlobalIdentifier
-                            && $0.reactionType == remoteReaction.reactionType
-                        })
-                        if existing == nil {
-                            reactionsToUpdate.append(remoteReaction)
-                        }
-                    }
-                    
-                    for localReaction in localReactions {
-                        let existingOnRemote = remoteReactions.first(where: {
-                            $0.senderUserIdentifier == localReaction.senderUserIdentifier
-                            && $0.inReplyToInteractionId == localReaction.inReplyToInteractionId
-                            && $0.inReplyToAssetGlobalIdentifier == localReaction.inReplyToAssetGlobalIdentifier
-                            && $0.reactionType == localReaction.reactionType
-                        })
-                        if existingOnRemote == nil {
-                            reactionsToRemove.append(localReaction)
-                        }
-                    }
-                    
-                    if reactionsToUpdate.count > 0 {
-                        dispatchGroup.enter()
-                        self.localServer.addReactions(reactionsToUpdate,
-                                                      toGroupId: groupId) { addReactionsResult in
-                            if case .failure(let failure) = addReactionsResult {
-                                log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
-                            }
-                            dispatchGroup.leave()
-                        }
-                    }
-                    if reactionsToRemove.count > 0 {
-                        dispatchGroup.enter()
-                        self.localServer.removeReactions(reactionsToRemove,
-                                                         fromGroupId: groupId) { removeReactionsResult in
-                            if case .failure(let failure) = removeReactionsResult {
-                                log.warning("failed to remove reactions from local. \(failure.localizedDescription)")
-                            }
-                            dispatchGroup.leave()
-                        }
-                    }
-                    
-                    let remoteMessages = remoteInteractions.messages
-                    var messagesToUpdate = [MessageOutputDTO]()
-                    for remoteMessage in remoteMessages {
-                        let existing = localMessages.first(where: {
-                            $0.interactionId == remoteMessage.interactionId
-                        })
-                        if existing == nil {
-                            messagesToUpdate.append(remoteMessage)
-                        }
-                    }
-                    
-                    if messagesToUpdate.count > 0 {
-                        dispatchGroup.enter()
-                        self.localServer.addMessages(messagesToUpdate,
-                                                     toGroupId: groupId) { addMessagesResult in
-                            if case .failure(let failure) = addMessagesResult {
-                                log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
-                            }
-                            dispatchGroup.leave()
-                        }
-                    }
-                    
-                    dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 3))
-                    if dispatchResult != .success {
-                        log.warning("timeout while adding messages and reactions retrieved from server on local")
-                    }
-                    
-                case .failure(let failure):
-                    completionHandler(.failure(failure))
-                }
+        self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
+            switch remoteResult {
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
             }
         }
     }
