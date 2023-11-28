@@ -938,10 +938,14 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveLocalInteractions(inGroup: groupId, per: 10000, page: 1) { localResult in
+            var groupE2EDetailsToCreate = [String]()
             var localMessages = [MessageOutputDTO]()
             var localReactions = [ReactionOutputDTO]()
             switch localResult {
             case .failure(let err):
+                if case SHBackgroundOperationError.missingE2EEDetailsForGroup(_) = err {
+                    groupE2EDetailsToCreate.append(groupId)
+                }
                 log.error("failed to retrieve local interactions for groupId \(groupId)")
             case .success(let localInteractions):
                 localMessages = localInteractions.messages
@@ -954,6 +958,34 @@ extension SHServerProxy {
                     completionHandler(.success(remoteInteractions))
                     
                     let dispatchGroup = DispatchGroup()
+                    
+                    for groupId in groupE2EDetailsToCreate {
+                        let recipientEncryptionDetails = RecipientEncryptionDetailsDTO(
+                            userIdentifier: self.localServer.requestor.identifier,
+                            ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
+                            encryptedSecret: remoteInteractions.encryptedSecret,
+                            secretPublicSignature: remoteInteractions.secretPublicSignature
+                        )
+                        
+                        dispatchGroup.enter()
+                        self.localServer.setGroupEncryptionDetails(
+                            groupId: groupId,
+                            recipientsEncryptionDetails: [recipientEncryptionDetails]
+                        ) { setE2EEDetailsResult in
+                            switch setE2EEDetailsResult {
+                            case .success(_):
+                                break
+                            case .failure(let err):
+                                log.error("Cache interactions for group \(groupId) won't be readable because setting the E2EE details for such group failed")
+                            }
+                            dispatchGroup.leave()
+                        }
+                    }
+                    
+                    var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+                    if dispatchResult != .success {
+                        log.warning("timeout while setting E2EE details for groupId \(groupId)")
+                    }
                     
                     let remoteReactions = remoteInteractions.reactions
                     var reactionsToUpdate = [ReactionOutputDTO]()
@@ -1025,7 +1057,7 @@ extension SHServerProxy {
                         }
                     }
                     
-                    let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 3))
+                    dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 3))
                     if dispatchResult != .success {
                         log.warning("timeout while adding messages and reactions retrieved from server on local")
                     }

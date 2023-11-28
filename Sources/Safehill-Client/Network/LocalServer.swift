@@ -1427,7 +1427,7 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(err))
             case .success(let e2eeResult):
                 guard let encryptionDetails = e2eeResult.first else {
-                    completionHandler(.failure(SHBackgroundOperationError.fatalError("missing encryption details for group \(groupId)")))
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(groupId)))
                     return
                 }
                 
