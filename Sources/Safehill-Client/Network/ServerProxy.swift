@@ -969,10 +969,10 @@ extension SHServerProxy {
                     
                     for localReaction in localReactions {
                         let existingOnRemote = remoteReactions.first(where: {
-                            $0.senderUserIdentifier == remoteReaction.senderUserIdentifier
-                            && $0.inReplyToInteractionId == remoteReaction.inReplyToInteractionId
-                            && $0.inReplyToAssetGlobalIdentifier == remoteReaction.inReplyToAssetGlobalIdentifier
-                            && $0.reactionType == remoteReaction.reactionType
+                            $0.senderUserIdentifier == localReaction.senderUserIdentifier
+                            && $0.inReplyToInteractionId == localReaction.inReplyToInteractionId
+                            && $0.inReplyToAssetGlobalIdentifier == localReaction.inReplyToAssetGlobalIdentifier
+                            && $0.reactionType == localReaction.reactionType
                         })
                         if existingOnRemote == nil {
                             reactionsToRemove.append(localReaction)
