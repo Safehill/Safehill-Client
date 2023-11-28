@@ -859,8 +859,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("interactions/reactions/\(groupId)",
-                  parameters: parameters) { (result: Result<ReactionOutputDTO, Error>) in
+        self.delete("interactions/reactions/\(groupId)",
+                    parameters: parameters) { (result: Result<ReactionOutputDTO, Error>) in
             switch result {
             case .failure(let error):
                 completionHandler(.failure(error))
