@@ -957,7 +957,10 @@ extension SHServerProxy {
                     var reactionsToRemove = [ReactionOutputDTO]()
                     for remoteReaction in remoteReactions {
                         let existing = localReactions.first(where: {
-                            $0.interactionId == remoteReaction.interactionId
+                            $0.senderUserIdentifier == remoteReaction.senderUserIdentifier
+                            && $0.inReplyToInteractionId == remoteReaction.inReplyToInteractionId
+                            && $0.inReplyToAssetGlobalIdentifier == remoteReaction.inReplyToAssetGlobalIdentifier
+                            && $0.reactionType == remoteReaction.reactionType
                         })
                         if existing == nil {
                             reactionsToUpdate.append(remoteReaction)
@@ -966,7 +969,10 @@ extension SHServerProxy {
                     
                     for localReaction in localReactions {
                         let existingOnRemote = remoteReactions.first(where: {
-                            $0.interactionId == localReaction.interactionId
+                            $0.senderUserIdentifier == remoteReaction.senderUserIdentifier
+                            && $0.inReplyToInteractionId == remoteReaction.inReplyToInteractionId
+                            && $0.inReplyToAssetGlobalIdentifier == remoteReaction.inReplyToAssetGlobalIdentifier
+                            && $0.reactionType == remoteReaction.reactionType
                         })
                         if existingOnRemote == nil {
                             reactionsToRemove.append(localReaction)
