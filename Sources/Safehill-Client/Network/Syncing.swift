@@ -553,6 +553,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     localMessages = localInteractions.messages
                     localReactions = localInteractions.reactions
                 }
+                dispatchGroup.leave()
             }
             
             var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
