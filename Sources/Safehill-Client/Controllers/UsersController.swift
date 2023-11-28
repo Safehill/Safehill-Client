@@ -2,7 +2,7 @@ import Foundation
 
 public typealias UserIdentifier = String
 
-internal struct ServerUserCache {
+internal class ServerUserCache {
     
     private let writeQueue = DispatchQueue(label: "ServerUserCache.write", attributes: .concurrent)
     
@@ -25,26 +25,29 @@ internal struct ServerUserCache {
         return nil
     }
     
-    mutating func cache(_ user: any SHServerUser) {
+    func cache(_ user: any SHServerUser) {
         let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
         
-        writeQueue.sync(flags: .barrier) {
-            cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
+        writeQueue.sync(flags: .barrier) { [weak self] in
+            self?.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
             
-            evictors[user.identifier]?.invalidate()
+            self?.evictors[user.identifier]?.invalidate()
             
-            // Cache retention policy: TTL = 2 minutes
-            evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [self] (timer) in
-                cache.removeObject(forKey: NSString(string: user.identifier))
-            })
+            DispatchQueue.main.async { [weak self] in
+                // Cache retention policy: TTL = 2 minutes
+                self?.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [weak self] (timer) in
+                    self?.cache.removeObject(forKey: NSString(string: user.identifier))
+                    timer.invalidate()
+                })
+            }
         }
     }
     
-    mutating func evict(usersWithIdentifiers userIdentifiers: [String]) {
-        writeQueue.sync(flags: .barrier) {
+    func evict(usersWithIdentifiers userIdentifiers: [String]) {
+        writeQueue.sync(flags: .barrier) { [weak self] in
             for userIdentifier in userIdentifiers {
-                cache.removeObject(forKey: NSString(string: userIdentifier))
-                evictors[userIdentifier]?.invalidate()
+                self?.cache.removeObject(forKey: NSString(string: userIdentifier))
+                self?.evictors[userIdentifier]?.invalidate()
             }
         }
     }
