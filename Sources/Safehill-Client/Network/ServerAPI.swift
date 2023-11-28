@@ -11,7 +11,7 @@ public protocol SHServerAPI {
     ///   - name  the user name
     ///   - completionHandler: the callback method
     func createUser(name: String,
-                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
+                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
     
     /// Send a code to a user to verify identity, via either phone or SMS
     /// - Parameters:
@@ -24,7 +24,7 @@ public protocol SHServerAPI {
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
-                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+                        completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Updates an existing user details or credentials. If the value is nil, it's not updated
     /// - Parameters:
@@ -35,39 +35,39 @@ public protocol SHServerAPI {
     func updateUser(name: String?,
                     phoneNumber: String?,
                     email: String?,
-                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ())
+                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
     ///   - name: the user name
     ///   - password: the password for authorization
     ///   - completionHandler: the callback method
-    func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
     ///   - completionHandler: the callback method
-    func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ())
+    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
     ///   - userIdentifiers: the unique identifiers for the users. If NULL, retrieves all the connected users
     ///   - completionHandler: the callback method
-    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
+    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
     ///   - query: the query string
     ///   - completionHandler: the callback method
-    func searchUsers(query: String, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ())
+    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
     
     // MARK: Assets Fetch
     
     func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]?,
-                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ())
+                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ())
     
     /// Retrieve assets data and metadata
     /// - Parameters:
@@ -76,7 +76,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(withGlobalIdentifiers: [String],
                    versions: [SHAssetQuality]?,
-                   completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ())
+                   completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ())
     
     // MARK: Assets Write
     
@@ -89,14 +89,14 @@ public protocol SHServerAPI {
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
-                completionHandler: @escaping (Swift.Result<[SHServerAsset], Error>) -> ())
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ())
     
     /// Shares one or more assets with a set of users
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
-               completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+               completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Unshares one asset (all of its versions) with a user. If the asset or the user don't exist, or the asset is not shared with the user, it's a no-op
     /// - Parameters:
@@ -105,13 +105,13 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func unshare(assetId: GlobalIdentifier,
                  with userPublicIdentifier: String,
-                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+                 completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Upload encrypted asset versions data to the CDN.
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
                 filterVersions: [SHAssetQuality]?,
-                completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+                completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Mark encrypted asset versions data as uploaded to the CDN.
     /// - Parameters:
@@ -119,7 +119,7 @@ public protocol SHServerAPI {
     ///   - quality: the version of the asset
     ///   - as: the new state
     ///   - completionHandler: the callback method
-    func markAsset(with assetGlobalIdentifier: String,
+    func markAsset(with assetGlobalIdentifier: GlobalIdentifier,
                    quality: SHAssetQuality,
                    as: SHAssetDescriptorUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ())
@@ -189,8 +189,8 @@ public protocol SHServerAPI {
     ///   - reaction: the reaction type and references to remove
     ///   - fromGroupId: the group the reaction belongs to
     ///   - completionHandler: the callback method
-    func removeReaction(
-        _ reaction: ReactionInput,
+    func removeReactions(
+        _ reactions: [ReactionInput],
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )

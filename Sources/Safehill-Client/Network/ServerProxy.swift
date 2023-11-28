@@ -871,10 +871,10 @@ extension SHServerProxy {
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.remoteServer.removeReaction(reaction, fromGroupId: groupId) { remoteResult in
+        self.remoteServer.removeReactions([reaction], fromGroupId: groupId) { remoteResult in
             switch remoteResult {
             case .success():
-                self.localServer.removeReaction(reaction, fromGroupId: groupId) { localResult in
+                self.localServer.removeReactions([reaction], fromGroupId: groupId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -937,26 +937,94 @@ extension SHServerProxy {
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
-            switch remoteResult {
-            case .success(let response):
-                completionHandler(.success(response))
-                
-                self.localServer.addReactions(response.reactions,
-                                              toGroupId: groupId) { addReactionsResult in
-                    if case .failure(let failure) = addReactionsResult {
-                        log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
-                    }
+        self.retrieveLocalInteractions(inGroup: groupId, per: 10000, page: 1) { localResult in
+            var localMessages = [MessageOutputDTO]()
+            var localReactions = [ReactionOutputDTO]()
+            if case .success(let localInteractions) = localResult {
+                localMessages = localInteractions.messages
+                localReactions = localInteractions.reactions
+            }
+            
+            self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
+                switch remoteResult {
+                case .success(let remoteInteractions):
+                    completionHandler(.success(remoteInteractions))
                     
-                    self.localServer.addMessages(response.messages,
-                                                 toGroupId: groupId) { addMessagesResult in
-                        if case .failure(let failure) = addMessagesResult {
-                            log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
+                    let dispatchGroup = DispatchGroup()
+                    
+                    let remoteReactions = remoteInteractions.reactions
+                    var reactionsToUpdate = [ReactionOutputDTO]()
+                    var reactionsToRemove = [ReactionOutputDTO]()
+                    for remoteReaction in remoteReactions {
+                        let existing = localReactions.first(where: {
+                            $0.interactionId == remoteReaction.interactionId
+                        })
+                        if existing == nil {
+                            reactionsToUpdate.append(remoteReaction)
                         }
                     }
+                    
+                    for localReaction in localReactions {
+                        let existingOnRemote = remoteReactions.first(where: {
+                            $0.interactionId == localReaction.interactionId
+                        })
+                        if existingOnRemote == nil {
+                            reactionsToRemove.append(localReaction)
+                        }
+                    }
+                    
+                    if reactionsToUpdate.count > 0 {
+                        dispatchGroup.enter()
+                        self.localServer.addReactions(reactionsToUpdate,
+                                                      toGroupId: groupId) { addReactionsResult in
+                            if case .failure(let failure) = addReactionsResult {
+                                log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
+                            }
+                            dispatchGroup.leave()
+                        }
+                    }
+                    if reactionsToRemove.count > 0 {
+                        dispatchGroup.enter()
+                        self.localServer.removeReactions(reactionsToRemove,
+                                                         fromGroupId: groupId) { removeReactionsResult in
+                            if case .failure(let failure) = removeReactionsResult {
+                                log.warning("failed to remove reactions from local. \(failure.localizedDescription)")
+                            }
+                            dispatchGroup.leave()
+                        }
+                    }
+                    
+                    let remoteMessages = remoteInteractions.messages
+                    var messagesToUpdate = [MessageOutputDTO]()
+                    for remoteMessage in remoteMessages {
+                        let existing = localMessages.first(where: {
+                            $0.interactionId == remoteMessage.interactionId
+                        })
+                        if existing == nil {
+                            messagesToUpdate.append(remoteMessage)
+                        }
+                    }
+                    
+                    if messagesToUpdate.count > 0 {
+                        dispatchGroup.enter()
+                        self.localServer.addMessages(messagesToUpdate,
+                                                     toGroupId: groupId) { addMessagesResult in
+                            if case .failure(let failure) = addMessagesResult {
+                                log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
+                            }
+                            
+                            dispatchGroup.leave()
+                        }
+                    }
+                    
+                    let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 3))
+                    if dispatchResult != .success {
+                        log.warning("timeout while adding messages and reactions retrieved from server on local")
+                    }
+                    
+                case .failure(let failure):
+                    completionHandler(.failure(failure))
                 }
-            case .failure(let failure):
-                completionHandler(.failure(failure))
             }
         }
     }

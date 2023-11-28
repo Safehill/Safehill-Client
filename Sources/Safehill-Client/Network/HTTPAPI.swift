@@ -290,7 +290,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
-                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "countryCode": countryCode,
             "phoneNumber": phoneNumber,
@@ -310,7 +310,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     func updateUser(name: String?,
                     phoneNumber: String? = nil,
                     email: String? = nil,
-                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         guard email != nil || name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
@@ -503,7 +503,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality]? = nil,
-                   completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+                   completionHandler: @escaping (Swift.Result<[GlobalIdentifier: SHEncryptedAsset], Error>) -> ()) {
         var parameters = [
             "globalIdentifiers": assetIdentifiers,
         ] as [String : Any]
@@ -870,11 +870,16 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func removeReaction(
-        _ reaction: ReactionInput,
+    func removeReactions(
+        _ reactions: [ReactionInput],
         fromGroupId groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        guard reactions.count == 1, let reaction = reactions.first else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("can't remove more than one reaction at a time")))
+            return
+        }
+        
         var parameters = [
             "reactionType": reaction.reactionType.rawValue,
         ] as [String: Any]

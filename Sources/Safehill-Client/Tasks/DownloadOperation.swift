@@ -897,6 +897,52 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
     }
     
+    /// 
+    /// Best attempt to sync the interactions from the server to the local server proxy by calling SHUserInteractionController::retrieveInteractions
+    ///
+    /// - Parameter descriptorsByGlobalIdentifier: the descriptors retrieved from server, from which to collect all unique groups
+    /// 
+    private func processInteractions(descriptorsByGlobalIdentifier: [GlobalIdentifier : any SHAssetDescriptor]) throws {
+        let allGroupIds = Array(descriptorsByGlobalIdentifier.reduce([String: Int](), { partialResult, item in
+            var result = partialResult
+            let descriptor = item.value
+            let itemGroupIds = Set(descriptor.sharingInfo.groupInfoById.keys)
+            for groupId in itemGroupIds {
+                result[groupId] = 1
+            }
+            return result
+        }).keys)
+        
+        let dispatchGroup = DispatchGroup()
+        var error: Error? = nil
+        
+        for groupId in allGroupIds {
+            dispatchGroup.enter()
+            let interactionController = SHUserInteractionController(
+                user: self.user,
+                protocolSalt: self.user.encryptionProtocolSalt!
+            )
+            
+            interactionController.retrieveInteractions(
+                inGroup: groupId,
+                per: 1000, page: 1
+            ) { result in
+                if case .failure(let err) = result {
+                    error = err
+                }
+                dispatchGroup.leave()
+            }
+            
+            let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+            guard dispatchResult == .success else {
+                throw SHBackgroundOperationError.timedOut
+            }
+            guard error == nil else {
+                throw error!
+            }
+        }
+    }
+    
     private func runOnce(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
         
         DispatchQueue.global(qos: .background).async {
@@ -912,6 +958,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 case .success(let tuple):
                     let descriptorsByGlobalIdentifier = tuple.0
                     let globalIdentifiersFromKnownUsers = tuple.1
+                    
+                    do { try self.processInteractions(descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier) }
+                    catch { self.log.warning("failed syncing interactions from server. \(error.localizedDescription)") }
+                    
                     self.processAssetsInDescriptors(
                         descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                         globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
