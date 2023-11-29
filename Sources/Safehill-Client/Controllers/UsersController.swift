@@ -27,10 +27,13 @@ internal class ServerUserCache {
     
     func cache(users: [any SHServerUser]) {
         writeQueue.async(flags: .barrier) { [weak self] in
+            guard let sself = self else {
+                return
+            }
             for user in users {
                 let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
-                self?.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
-                self?.evictors[user.identifier]?.invalidate()
+                sself.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
+                sself.evictors[user.identifier]?.invalidate()
                    
                 DispatchQueue.main.async { [weak self] in
                     // Cache retention policy: TTL = 2 minutes
