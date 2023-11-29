@@ -25,20 +25,20 @@ internal class ServerUserCache {
         return nil
     }
     
-    func cache(_ user: any SHServerUser) {
-        let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
-        
+    func cache(users: [any SHServerUser]) {
         writeQueue.sync(flags: .barrier) { [weak self] in
-            self?.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
-            
-            self?.evictors[user.identifier]?.invalidate()
-            
-            DispatchQueue.main.async { [weak self] in
-                // Cache retention policy: TTL = 2 minutes
-                self?.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [weak self] (timer) in
-                    self?.cache.removeObject(forKey: NSString(string: user.identifier))
-                    timer.invalidate()
-                })
+            for user in users {
+                let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
+                self?.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
+                self?.evictors[user.identifier]?.invalidate()
+                   
+                DispatchQueue.main.async { [weak self] in
+                    // Cache retention policy: TTL = 2 minutes
+                    self?.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [weak self] (timer) in
+                        self?.cache.removeObject(forKey: NSString(string: user.identifier))
+                        timer.invalidate()
+                    })
+                }
             }
         }
     }
@@ -106,9 +106,7 @@ public class SHUsersController {
             throw error!
         }
         
-        for user in users {
-            ServerUserCache.shared.cache(user)
-        }
+        ServerUserCache.shared.cache(users: users)
         
         return users
     }
