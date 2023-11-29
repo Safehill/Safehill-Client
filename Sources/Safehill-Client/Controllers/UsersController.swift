@@ -35,8 +35,7 @@ internal class ServerUserCache {
                 DispatchQueue.main.async { [weak self] in
                     // Cache retention policy: TTL = 2 minutes
                     self?.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [weak self] (timer) in
-                        self?.cache.removeObject(forKey: NSString(string: user.identifier))
-                        timer.invalidate()
+                        self?.evict(usersWithIdentifiers: [user.identifier])
                     })
                 }
             }
@@ -69,16 +68,17 @@ public class SHUsersController {
         
         var shouldFetch = false
         var users = [any SHServerUser]()
+        var missingUserIds = [String]()
         
         for userIdentifier in userIdentifiers {
             if let user = ServerUserCache.shared.user(with: userIdentifier) {
                 users.append(user)
             } else {
-                shouldFetch = true
+                missingUserIds.append(userIdentifier)
             }
         }
         
-        guard shouldFetch else {
+        guard missingUserIds.isEmpty == false else {
             return users
         }
         
@@ -87,7 +87,7 @@ public class SHUsersController {
         
         group.enter()
         serverProxy.getUsers(
-            withIdentifiers: userIdentifiers
+            withIdentifiers: missingUserIds
         ) { result in
             switch result {
             case .success(let serverUsers):
