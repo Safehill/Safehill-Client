@@ -66,19 +66,6 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         SHSyncOperation(user: self.user, delegates: self.delegates)
     }
     
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        self.sync()
-        
-        self.state = .finished
-    }
-    
     /// Removes any evidence of the users from the local storage:
     /// - Replaces the items in the `ShareHistoryQueue` with the same items by omitting the users removed.
     /// - Removes the sharing information from the `assetsStore`
@@ -191,11 +178,15 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         return (changed: Array(queueItemsChanged), removed: Array(queueItemsRemoved))
     }
     
-    private func syncDescriptors(completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()) {
-        var localDescriptors = [any SHAssetDescriptor](), remoteDescriptors = [any SHAssetDescriptor]()
-        var localError: Error? = nil, remoteError: Error? = nil
+    private func syncDescriptors(
+        _ remoteDescriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()
+    ) {
+        var localDescriptors = [any SHAssetDescriptor]()
+        var localError: Error? = nil
         var remoteUsers = [SHServerUser]()
         var remoteUsersError: Error? = nil
+        var dispatchResult: DispatchTimeoutResult? = nil
         
         ///
         /// Get all the local descriptors
@@ -213,28 +204,13 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        ///
-        /// Get all the remote descriptors
-        ///
-        group.enter()
-        self.serverProxy.getRemoteAssetDescriptors { remoteResult in
-            switch remoteResult {
-            case .success(let descriptors):
-                remoteDescriptors = descriptors
-            case .failure(let err):
-                self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
-                remoteError = err
-            }
-            group.leave()
-        }
-        
-        let dispatcResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatcResult == .success else {
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
             completionHandler(.failure(SHBackgroundOperationError.timedOut))
             return
         }
-        guard localError == nil, remoteError == nil else {
-            completionHandler(.failure(localError ?? remoteError!))
+        guard localError == nil else {
+            completionHandler(.failure(localError!))
             return
         }
         
@@ -272,7 +248,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
         guard dispatchResult == .success else {
             completionHandler(.failure(SHBackgroundOperationError.timedOut))
             return
@@ -398,9 +374,300 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         completionHandler(.success(diff))
     }
     
+    private func syncReactions(
+        in groupId: String,
+        localReactions: [ReactionOutputDTO],
+        remoteReactions: [ReactionOutputDTO]
+    ) throws {
+        var reactionsToUpdate = [ReactionOutputDTO]()
+        var reactionsToRemove = [ReactionOutputDTO]()
+        for remoteReaction in remoteReactions {
+            let existing = localReactions.first(where: {
+                $0.senderUserIdentifier == remoteReaction.senderUserIdentifier
+                && $0.inReplyToInteractionId == remoteReaction.inReplyToInteractionId
+                && $0.inReplyToAssetGlobalIdentifier == remoteReaction.inReplyToAssetGlobalIdentifier
+                && $0.reactionType == remoteReaction.reactionType
+            })
+            if existing == nil {
+                reactionsToUpdate.append(remoteReaction)
+            }
+        }
+        
+        for localReaction in localReactions {
+            let existingOnRemote = remoteReactions.first(where: {
+                $0.senderUserIdentifier == localReaction.senderUserIdentifier
+                && $0.inReplyToInteractionId == localReaction.inReplyToInteractionId
+                && $0.inReplyToAssetGlobalIdentifier == localReaction.inReplyToAssetGlobalIdentifier
+                && $0.reactionType == localReaction.reactionType
+            })
+            if existingOnRemote == nil {
+                reactionsToRemove.append(localReaction)
+            }
+        }
+        
+        let dispatchGroup = DispatchGroup()
+        var anyChanged = false
+        
+        if reactionsToUpdate.count > 0 {
+            dispatchGroup.enter()
+            serverProxy.localServer.addReactions(reactionsToUpdate,
+                                                 toGroupId: groupId) { addReactionsResult in
+                if case .failure(let failure) = addReactionsResult {
+                    self.log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
+                } else {
+                    anyChanged = true
+                }
+                dispatchGroup.leave()
+            }
+        }
+        if reactionsToRemove.count > 0 {
+            dispatchGroup.enter()
+            serverProxy.localServer.removeReactions(reactionsToRemove,
+                                                    fromGroupId: groupId) { removeReactionsResult in
+                if case .failure(let failure) = removeReactionsResult {
+                    self.log.warning("failed to remove reactions from local. \(failure.localizedDescription)")
+                } else {
+                    anyChanged = true
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        if anyChanged {
+            self.delegates.forEach({ $0.reactionsDidChange(in: groupId) })
+        }
+        
+        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+    }
+    
+    private func syncMessages(
+        in groupId: String,
+        localMessages: [MessageOutputDTO],
+        remoteMessages: [MessageOutputDTO]
+    ) throws {
+        var messagesToUpdate = [MessageOutputDTO]()
+        for remoteMessage in remoteMessages {
+            let existing = localMessages.first(where: {
+                $0.interactionId == remoteMessage.interactionId
+            })
+            if existing == nil {
+                messagesToUpdate.append(remoteMessage)
+            }
+        }
+        
+        let dispatchGroup = DispatchGroup()
+        
+        if messagesToUpdate.count > 0 {
+            dispatchGroup.enter()
+            serverProxy.localServer.addMessages(messagesToUpdate,
+                                                toGroupId: groupId) { addMessagesResult in
+                if case .failure(let failure) = addMessagesResult {
+                    self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
+                } else {
+                    self.delegates.forEach({ $0.didReceiveMessage(in: groupId) })
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+    }
+    
+    ///
+    /// Best attempt to sync the interactions from the server to the local server proxy by calling SHUserInteractionController::retrieveInteractions
+    ///
+    /// - Parameter descriptorsByGlobalIdentifier: the descriptors retrieved from server, from which to collect all unique groups
+    ///
+    private func syncInteractions(
+        remoteDescriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        ///
+        /// Extract unique group ids from the descriptors
+        ///
+        
+        let allGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
+            var result = partialResult
+            let itemGroupIds = Set(descriptor.sharingInfo.groupInfoById.keys)
+            for groupId in itemGroupIds {
+                result[groupId] = 1
+            }
+            return result
+        }).keys)
+        
+        let dispatchGroup = DispatchGroup()
+        var error: Error? = nil
+        
+        ///
+        /// For each group …
+        ///
+        
+        for groupId in allGroupIds {
+            
+            var remoteInteractions: InteractionsGroupDTO? = nil
+            
+            ///
+            /// Retrieve the REMOTE interactions
+            ///
+            
+            dispatchGroup.enter()
+            self.serverProxy.retrieveRemoteInteractions(
+                inGroup: groupId,
+                per: 1000, page: 1
+            ) { result in
+                switch result {
+                case .failure(let err):
+                    error = err
+                case .success(let interactions):
+                    remoteInteractions = interactions
+                }
+                dispatchGroup.leave()
+            }
+            
+            ///
+            /// Retrieve the LOCAL interactions
+            ///
+            
+            var shouldCreateE2EEDetailsLocally = false
+            var localMessages = [MessageOutputDTO]()
+            var localReactions = [ReactionOutputDTO]()
+            
+            dispatchGroup.enter()
+            serverProxy.retrieveInteractions(
+                inGroup: groupId,
+                per: 10000, page: 1
+            ) { localResult in
+                switch localResult {
+                case .failure(let err):
+                    if case SHBackgroundOperationError.missingE2EEDetailsForGroup(_) = err {
+                        shouldCreateE2EEDetailsLocally = true
+                    }
+                    self.log.error("failed to retrieve local interactions for groupId \(groupId)")
+                case .success(let localInteractions):
+                    localMessages = localInteractions.messages
+                    localReactions = localInteractions.reactions
+                }
+                dispatchGroup.leave()
+            }
+            
+            var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+            guard dispatchResult == .success else {
+                completionHandler(.failure(SHBackgroundOperationError.timedOut))
+                return
+            }
+            guard error == nil else {
+                log.error("error syncing interactions for group \(groupId). \(error!.localizedDescription)")
+                continue
+            }
+            guard let remoteInteractions = remoteInteractions else {
+                log.error("error retrieving remote interactions for group \(groupId)")
+                continue
+            }
+            
+            ///
+            /// Add the E2EE encryption details for the group locally if missing
+            ///
+            
+            if shouldCreateE2EEDetailsLocally {
+                let recipientEncryptionDetails = RecipientEncryptionDetailsDTO(
+                    userIdentifier: self.user.identifier,
+                    ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
+                    encryptedSecret: remoteInteractions.encryptedSecret,
+                    secretPublicSignature: remoteInteractions.secretPublicSignature
+                )
+                
+                dispatchGroup.enter()
+                serverProxy.localServer.setGroupEncryptionDetails(
+                    groupId: groupId,
+                    recipientsEncryptionDetails: [recipientEncryptionDetails]
+                ) { setE2EEDetailsResult in
+                    switch setE2EEDetailsResult {
+                    case .success(_):
+                        break
+                    case .failure(let err):
+                        self.log.error("Cache interactions for group \(groupId) won't be readable because setting the E2EE details for such group failed: \(err.localizedDescription)")
+                    }
+                    dispatchGroup.leave()
+                }
+            }
+            
+            dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+            if dispatchResult != .success {
+                log.warning("timeout while setting E2EE details for groupId \(groupId)")
+            }
+            
+            do {
+                ///
+                /// Sync (create, update and delete) reactions
+                ///
+                
+                let remoteReactions = remoteInteractions.reactions
+                try self.syncReactions(
+                    in: groupId,
+                    localReactions: localReactions,
+                    remoteReactions: remoteReactions
+                )
+                
+                ///
+                /// Sync (create, update and delete) messages
+                ///
+                
+                let remoteMessages = remoteInteractions.messages
+                try self.syncMessages(
+                    in: groupId,
+                    localMessages: localMessages,
+                    remoteMessages: remoteMessages
+                )
+            } catch {
+                log.warning("error while syncing messages and reactions retrieved from server on local")
+            }
+        }
+        
+        completionHandler(.success(()))
+    }
+    
     public func sync() {
-        let semaphore = DispatchSemaphore(value: 0)
-        self.syncDescriptors { result in
+        let group = DispatchGroup()
+        var dispatchResult: DispatchTimeoutResult? = nil
+        var remoteDescriptors = [any SHAssetDescriptor]()
+        var remoteError: Error? = nil
+        
+        ///
+        /// Get all the remote descriptors
+        ///
+        group.enter()
+        self.serverProxy.getRemoteAssetDescriptors { remoteResult in
+            switch remoteResult {
+            case .success(let descriptors):
+                remoteDescriptors = descriptors
+            case .failure(let err):
+                self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
+                remoteError = err
+            }
+            group.leave()
+        }
+        
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            log.error("timeout while retrieving remote asset descriptors")
+            return
+        }
+        guard remoteError == nil else {
+            log.error("timeout while retrieving remote asset descriptors")
+            return
+        }
+        
+        ///
+        /// Sync them with the local descriptors
+        ///
+        group.enter()
+        self.syncDescriptors(remoteDescriptors) { result in
             switch result {
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
@@ -430,10 +697,38 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             case .failure(let err):
                 self.log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
             }
-            semaphore.signal()
+            group.leave()
         }
         
-        semaphore.wait()
+        ///
+        /// Sync them with the local descriptors
+        ///
+        group.enter()
+        self.syncInteractions(remoteDescriptors: remoteDescriptors) { result in
+            if case .failure(let err) = result {
+                self.log.error("failed to sync interactions: \(err.localizedDescription)")
+            }
+            group.leave()
+        }
+        
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds * 2))
+        guard dispatchResult == .success else {
+            log.error("timeout while syncing")
+            return
+        }
+    }
+    
+    public override func main() {
+        guard !self.isCancelled else {
+            state = .finished
+            return
+        }
+        
+        state = .executing
+        
+        self.sync()
+        
+        self.state = .finished
     }
 }
 

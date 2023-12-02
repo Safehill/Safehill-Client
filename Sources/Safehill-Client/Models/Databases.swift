@@ -35,10 +35,11 @@ extension KBKVStore {
     }
 }
 
-extension BackgroundOperationQueue {
-    static func initWithRetries(type: OperationType,
-                                completionHandler: @escaping (Result<KBQueueStore, Error>) -> Void) {
-        if let q = KBQueueStore.store(withName: type.identifier, type: .fifo) {
+extension KBQueueStore {
+    static func initKBQueueStoreWithRetries(dbName name: String,
+                                            type: KBQueueStore.QueueType,
+                                            completionHandler: @escaping (Result<KBQueueStore, Error>) -> Void) {
+        if let q = KBQueueStore.store(withName: name, type: type) {
             completionHandler(.success(q))
             return
         }
@@ -52,7 +53,7 @@ extension BackgroundOperationQueue {
         )
         
         circuitBreaker.call = { circuitBreaker in
-            if let q = KBQueueStore.store(withName: type.identifier, type: .fifo) {
+            if let q = KBQueueStore.store(withName: name, type: type) {
                 circuitBreaker.success()
                 completionHandler(.success(q))
             } else {
@@ -61,7 +62,7 @@ extension BackgroundOperationQueue {
         }
         
         circuitBreaker.didTrip = { circuitBreaker, err in
-            let error = KBError.databaseException("Could not connect to queue database: \(err?.localizedDescription ?? "")")
+            let error = KBError.databaseException("Could not connect to queue DB \(name): \(err?.localizedDescription ?? "")")
             completionHandler(.failure(error))
         }
         
@@ -69,11 +70,20 @@ extension BackgroundOperationQueue {
     }
 }
 
+extension BackgroundOperationQueue {
+    static func initWithRetries(type: OperationType,
+                                completionHandler: @escaping (Result<KBQueueStore, Error>) -> Void) {
+        KBQueueStore.initKBQueueStoreWithRetries(dbName: type.identifier, type: .fifo, completionHandler: completionHandler)
+    }
+}
+
 public class SHDBManager {
     
     private enum DBName: String {
         case userStore = "com.gf.safehill.LocalServer.users"
-        case assetsStore = "com.gf.safehill.LocalServer.assets"
+        case assetStore = "com.gf.safehill.LocalServer.assets"
+        case reactionStore = "com.gf.safehill.LocalServer.reactions"
+        case messageQueue = "com.gf.safehill.LocalServer.messages"
         case knowledgeGraph = "com.gf.safehill.KnowledgeGraph"
     }
     
@@ -81,6 +91,8 @@ public class SHDBManager {
     
     private var _userStore: KBKVStore? = nil
     private var _assetStore: KBKVStore? = nil
+    private var _reactionStore: KBKVStore? = nil
+    private var _messageQueue: KBQueueStore? = nil
     private var _queues: [BackgroundOperationQueue.OperationType: KBQueueStore] = [:]
     
     public func queue(of type: BackgroundOperationQueue.OperationType) throws -> KBQueueStore {
@@ -102,7 +114,23 @@ public class SHDBManager {
         if let s = _assetStore {
             return s
         } else {
-            throw KBError.databaseException("\(DBName.assetsStore.rawValue) handler could not be initialized")
+            throw KBError.databaseException("\(DBName.assetStore.rawValue) handler could not be initialized")
+        }
+    }
+    
+    public func reactionStore() throws -> KBKVStore {
+        if let s = _reactionStore {
+            return s
+        } else {
+            throw KBError.databaseException("\(DBName.assetStore.rawValue) handler could not be initialized")
+        }
+    }
+    
+    public func messageQueue() throws -> KBQueueStore {
+        if let q = _messageQueue {
+            return q
+        } else {
+            throw KBError.databaseException("handler for message queue could not be initialized")
         }
     }
     
@@ -112,7 +140,7 @@ public class SHDBManager {
         if let g = _graph {
             return g
         } else {
-            throw KBError.databaseException("\(DBName.assetsStore.rawValue) handler could not be initialized")
+            throw KBError.databaseException("\(DBName.assetStore.rawValue) handler could not be initialized")
         }
     }
     
@@ -131,13 +159,40 @@ public class SHDBManager {
         }
         
         // Initialize asset store
-        if let s = KBKnowledgeStore.store(withName: DBName.assetsStore.rawValue) {
+        if let s = KBKnowledgeStore.store(withName: DBName.assetStore.rawValue) {
             self._assetStore = s
         } else {
             DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initKVStoreWithRetries(dbName: DBName.assetsStore.rawValue) { result in
+                KBKVStore.initKVStoreWithRetries(dbName: DBName.assetStore.rawValue) { result in
                     if case .success(let kvStore) = result {
                         self._assetStore = kvStore
+                    }
+                }
+            }
+        }
+        
+        // Initialize reaction store
+        if let s = KBKnowledgeStore.store(withName: DBName.reactionStore.rawValue) {
+            self._reactionStore = s
+        } else {
+            DispatchQueue.global(qos: .userInteractive).async { [self] in
+                KBKVStore.initKVStoreWithRetries(dbName: DBName.reactionStore.rawValue) { result in
+                    if case .success(let kvStore) = result {
+                        self._reactionStore = kvStore
+                    }
+                }
+            }
+        }
+        
+        // Initialize the user message queue
+        if let q = KBQueueStore.store(withName: DBName.messageQueue.rawValue, type: .lifo) {
+            self._messageQueue = q
+        } else {
+            DispatchQueue.global(qos: .userInteractive).async {
+                KBQueueStore.initKBQueueStoreWithRetries(dbName: DBName.messageQueue.rawValue,
+                                                         type: .lifo) { result in
+                    if case .success(let q) = result {
+                        self._messageQueue = q
                     }
                 }
             }

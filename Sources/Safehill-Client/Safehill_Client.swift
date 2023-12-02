@@ -39,9 +39,12 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible {
     case globalIdentifierDisagreement(String)
     case missingAssetInLocalServer(String)
     case missingUnauthorizedDownloadIndexForUserId(String)
+    case missingE2EEDetailsForGroup(String)
     
     public var description: String {
         switch self {
+        case .missingE2EEDetailsForGroup(let groupId):
+            return "no encryption details available for group \(groupId)"
         case .missingUnauthorizedDownloadIndexForUserId(let userId):
             return "no unauthorized downloads indexed for user \(userId)"
         case .missingAssetInLocalServer(let globalIdentifier):

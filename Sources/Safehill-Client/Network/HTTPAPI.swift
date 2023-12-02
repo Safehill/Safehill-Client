@@ -212,14 +212,15 @@ struct SHServerHTTPAPI : SHServerAPI {
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
     }
     
-    func post<T: Decodable>(_ route: String,
-                            parameters: [String: Any?]?,
-                            requiresAuthentication: Bool = true,
-                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+    private func route<T: Decodable>(_ route: String,
+                                     method: String,
+                                     parameters: [String: Any?]?,
+                                     requiresAuthentication: Bool,
+                                     completionHandler: @escaping (Result<T, Error>) -> Void) {
         let url = requestURL(route: route)
         
         var request = URLRequest(url: url, timeoutInterval: 90)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         if requiresAuthentication {
@@ -239,6 +240,32 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
+    }
+    
+    func post<T: Decodable>(_ route: String,
+                            parameters: [String: Any?]?,
+                            requiresAuthentication: Bool = true,
+                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+        self.route(
+            route,
+            method: "POST",
+            parameters: parameters,
+            requiresAuthentication: requiresAuthentication,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func delete<T: Decodable>(_ route: String,
+                            parameters: [String: Any?]?,
+                            requiresAuthentication: Bool = true,
+                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+        self.route(
+            route,
+            method: "DELETE",
+            parameters: parameters,
+            requiresAuthentication: requiresAuthentication,
+            completionHandler: completionHandler
+        )
     }
     
     func createUser(name: String,
@@ -263,7 +290,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
-                        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "countryCode": countryCode,
             "phoneNumber": phoneNumber,
@@ -283,7 +310,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     func updateUser(name: String?,
                     phoneNumber: String? = nil,
                     email: String? = nil,
-                    completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
+                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         guard email != nil || name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
@@ -476,7 +503,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality]? = nil,
-                   completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+                   completionHandler: @escaping (Swift.Result<[GlobalIdentifier: SHEncryptedAsset], Error>) -> ()) {
         var parameters = [
             "globalIdentifiers": assetIdentifiers,
         ] as [String : Any]
@@ -745,6 +772,181 @@ struct SHServerHTTPAPI : SHServerAPI {
                 completionHandler(.success(response))
             case .failure(let error):
                 completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func setGroupEncryptionDetails(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let parameters = [
+            "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
+                return [
+                    "encryptedSecret": encryptionDetails.encryptedSecret,
+                    "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
+                    "secretPublicSignature": encryptionDetails.secretPublicSignature,
+                    "userIdentifier": encryptionDetails.userIdentifier
+                ]
+            }),
+            "overwrite": false
+        ] as [String: Any]
+        
+        self.post("groups/\(groupId)/setup", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.delete("groups/\(groupId)", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+    ) {
+        self.get("groups/\(groupId)/encryptionDetails", parameters: nil, requiresAuthentication: true) { (result: Result<[RecipientEncryptionDetailsDTO], Error>) in
+            switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .unauthorized:
+                    completionHandler(.success([]))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let encryptionDetails):
+                completionHandler(.success(encryptionDetails))
+            }
+        }
+    }
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        guard reactions.count == 1,
+              let reaction = reactions.first else {
+            completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            return
+        }
+        var parameters = [
+            "reactionType": reaction.reactionType.rawValue,
+        ] as [String: Any]
+        
+        if let aGid = reaction.inReplyToAssetGlobalIdentifier {
+            parameters["inReplyToAssetGlobalIdentifier"] = aGid
+        }
+        if let iId = reaction.inReplyToInteractionId {
+            parameters["inReplyToAssetGlobalIdentifier"] = iId
+        }
+        
+        self.post("interactions/reactions/\(groupId)",
+                    parameters: parameters) { (result: Result<ReactionOutputDTO, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let reactionOutput):
+                completionHandler(.success([reactionOutput]))
+            }
+        }
+    }
+    
+    func removeReactions(
+        _ reactions: [ReactionInput],
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard reactions.count == 1, let reaction = reactions.first else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("can't remove more than one reaction at a time")))
+            return
+        }
+        
+        var parameters = [
+            "reactionType": reaction.reactionType.rawValue,
+        ] as [String: Any]
+
+        if let iId = reaction.inReplyToInteractionId {
+            parameters["inReplyToInteractionId"] = iId
+        }
+        if let aGid = reaction.inReplyToAssetGlobalIdentifier {
+            parameters["inReplyToAssetGlobalIdentifier"] = aGid
+        }
+        
+        self.delete("interactions/reactions/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func retrieveInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        let parameters = [
+            "per": per,
+            "page": page
+        ] as [String: Any]
+        
+        self.post("interactions/\(groupId)", 
+                  parameters: parameters,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        guard messages.count == 1, let message = messages.first else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("can't add more than one message at a time")))
+            return
+        }
+        
+        var parameters = [
+            "encryptedMessage": message.encryptedMessage,
+            "senderPublicSignature": message.senderPublicSignature!,
+        ] as [String: Any]
+        
+        if let aGid = message.inReplyToAssetGlobalIdentifier {
+            parameters["inReplyToAssetGlobalIdentifier"] = aGid
+        }
+        if let iId = message.inReplyToInteractionId {
+            parameters["inReplyToAssetGlobalIdentifier"] = iId
+        }
+        
+        self.post("interactions/messages/\(groupId)",
+                  parameters: parameters) { (result: Result<MessageOutputDTO, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let messageOutput):
+                completionHandler(.success([messageOutput]))
             }
         }
     }

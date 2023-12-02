@@ -18,7 +18,63 @@ public let SafehillServerURLComponents: URLComponents = {
 }()
 
 
-public struct SHServerProxy {
+public protocol SHServerProxyProtocol {
+    init(user: SHLocalUser)
+    
+    func setupGroupEncryptionDetails(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    )
+    
+    func removeReaction(
+        _: ReactionInput,
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func addMessage(
+        _ message: MessageInputDTO,
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    )
+    
+    func retrieveInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveSelfGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    )
+    
+    func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+    )
+    
+    func countLocalInteractions(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    )
+}
+
+
+public struct SHServerProxy: SHServerProxyProtocol {
     
     let localServer: LocalServer
     let remoteServer: SHServerHTTPAPI
@@ -400,7 +456,7 @@ extension SHServerProxy {
            versionsToRetrieve.contains(.midResolution) == false {
             versionsToRetrieve.insert(.midResolution)
         }
-
+        
         if cacheHiResolution {
             ///
             /// A `.midResolution` version for asset being requested from the local cache
@@ -535,7 +591,7 @@ extension SHServerProxy {
             completionHandler(.success(localDictionary))
             return
         }
-         
+        
         ///
         /// Get the asset descriptors from the remote Safehill server.
         /// This is needed to:
@@ -669,7 +725,7 @@ extension SHServerProxy {
                     }
                 }
                 completionHandler(result)
-            
+                
             case .failure(let err):
                 log.error("asset deletion failed. Error: \(err.localizedDescription)")
                 completionHandler(.failure(err))
@@ -703,6 +759,192 @@ extension SHServerProxy {
     func share(_ asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
+    }
+    
+    public func setupGroupEncryptionDetails(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        /// Save the encryption details for this user
+        self.localServer.setGroupEncryptionDetails(
+            groupId: groupId,
+            recipientsEncryptionDetails: recipientsEncryptionDetails
+        ) { localResult in
+            switch localResult {
+            case .success(_):
+                self.remoteServer.setGroupEncryptionDetails(
+                    groupId: groupId,
+                    recipientsEncryptionDetails: recipientsEncryptionDetails,
+                    completionHandler: completionHandler
+                )
+            case .failure(let error):
+                log.error("failed to create group with encryption details locally")
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    public func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.deleteGroup(groupId: groupId) { localResult in
+            switch localResult {
+            case .success():
+                self.remoteServer.deleteGroup(groupId: groupId, completionHandler: completionHandler)
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    public func retrieveSelfGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    ) {
+        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
+            if case .success(let details) = localE2EEResult, details.count > 0 {
+                completionHandler(.success(details.first))
+            } else {
+                if case .failure(let error) = localE2EEResult {
+                    log.warning("failed to retrieve <SELF> E2EE details for group \(groupId) from local: \(error.localizedDescription)")
+                }
+                self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
+                    switch remoteE2EEResult {
+                    case .success(let details):
+                        self.localServer.setGroupEncryptionDetails(groupId: groupId, recipientsEncryptionDetails: details) { _ in }
+                        let response = details.first(where: { $0.userIdentifier == self.localServer.requestor.identifier })
+                        completionHandler(.success(response))
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+            }
+        }
+    }
+    
+    public func retrieveGroupUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+    ) {
+        // TODO: Cache these results and always serve from the cache
+        
+        self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
+            switch remoteE2EEResult {
+            case .failure(let error):
+                log.warning("failed to retrieve E2EE details for group \(groupId) from remote: \(error.localizedDescription)")
+                self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
+            case .success(let detailsForUsers):
+                completionHandler(.success(detailsForUsers))
+            }
+        }
+    }
+    
+    public func addReactions(
+        _ reactions: [ReactionInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.addReactions(reactions, toGroupId: groupId) { remoteResult in
+            switch remoteResult {
+            case .success(let reactionsOutput):
+                ///
+                /// Pass the output of the reaction creation on the server to the local server
+                /// The output (rather than the input) is required, as an interaction identifier needs to be stored
+                ///
+                self.localServer.addReactions(reactionsOutput,
+                                              toGroupId: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(reactionsOutput))
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func removeReaction(
+        _ reaction: ReactionInput,
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.removeReactions([reaction], fromGroupId: groupId) { remoteResult in
+            switch remoteResult {
+            case .success():
+                self.localServer.removeReactions([reaction], fromGroupId: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(()))
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func addMessage(
+        _ message: MessageInputDTO,
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.addMessages([message], toGroupId: groupId) { remoteResult in
+            switch remoteResult {
+            case .success(let messageOutputs):
+                guard let messageOutput = messageOutputs.first else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("empty result")))
+                    return
+                }
+                completionHandler(.success(messageOutput))
+                self.localServer.addMessages([messageOutput], toGroupId: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func countLocalInteractions(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    ) {
+        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    public func retrieveInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveInteractions(
+            inGroup: groupId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    public func retrieveRemoteInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
+            switch remoteResult {
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
     }
 }
 

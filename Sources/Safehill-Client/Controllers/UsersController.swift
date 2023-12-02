@@ -2,7 +2,7 @@ import Foundation
 
 public typealias UserIdentifier = String
 
-internal struct ServerUserCache {
+internal class ServerUserCache {
     
     private let writeQueue = DispatchQueue(label: "ServerUserCache.write", attributes: .concurrent)
     
@@ -25,26 +25,31 @@ internal struct ServerUserCache {
         return nil
     }
     
-    mutating func cache(_ user: any SHServerUser) {
-        let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
-        
-        writeQueue.sync(flags: .barrier) {
-            cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
-            
-            evictors[user.identifier]?.invalidate()
-            
-            // Cache retention policy: TTL = 2 minutes
-            evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [self] (timer) in
-                cache.removeObject(forKey: NSString(string: user.identifier))
-            })
+    func cache(users: [any SHServerUser]) {
+        writeQueue.async(flags: .barrier) { [weak self] in
+            guard let sself = self else {
+                return
+            }
+            for user in users {
+                let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
+                sself.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
+                sself.evictors[user.identifier]?.invalidate()
+                   
+                DispatchQueue.main.async { [weak self] in
+                    // Cache retention policy: TTL = 2 minutes
+                    self?.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: 60 * 2, repeats: false, block: { [weak self] (timer) in
+                        self?.evict(usersWithIdentifiers: [user.identifier])
+                    })
+                }
+            }
         }
     }
     
-    mutating func evict(usersWithIdentifiers userIdentifiers: [String]) {
-        writeQueue.sync(flags: .barrier) {
+    func evict(usersWithIdentifiers userIdentifiers: [String]) {
+        writeQueue.async(flags: .barrier) { [weak self] in
             for userIdentifier in userIdentifiers {
-                cache.removeObject(forKey: NSString(string: userIdentifier))
-                evictors[userIdentifier]?.invalidate()
+                self?.cache.removeObject(forKey: NSString(string: userIdentifier))
+                self?.evictors[userIdentifier]?.invalidate()
             }
         }
     }
@@ -66,16 +71,17 @@ public class SHUsersController {
         
         var shouldFetch = false
         var users = [any SHServerUser]()
+        var missingUserIds = [String]()
         
         for userIdentifier in userIdentifiers {
             if let user = ServerUserCache.shared.user(with: userIdentifier) {
                 users.append(user)
             } else {
-                shouldFetch = true
+                missingUserIds.append(userIdentifier)
             }
         }
         
-        guard shouldFetch else {
+        guard missingUserIds.isEmpty == false else {
             return users
         }
         
@@ -84,7 +90,7 @@ public class SHUsersController {
         
         group.enter()
         serverProxy.getUsers(
-            withIdentifiers: userIdentifiers
+            withIdentifiers: missingUserIds
         ) { result in
             switch result {
             case .success(let serverUsers):
@@ -103,9 +109,7 @@ public class SHUsersController {
             throw error!
         }
         
-        for user in users {
-            ServerUserCache.shared.cache(user)
-        }
+        ServerUserCache.shared.cache(users: users)
         
         return users
     }

@@ -217,15 +217,47 @@ struct LocalServer : SHServerAPI {
             completionHandler(.failure(error))
             return
         }
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        let messagesQueue: KBQueueStore
+        do {
+            messagesQueue = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
         
         var userRemovalError: Error? = nil
         var assetsRemovalError: Error? = nil
+        var reactionsRemovalError: Error? = nil
+        var messagesRemovalError: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
         userStore.removeAll { result in
             if case .failure(let err) = result {
                 userRemovalError = err
+            }
+            group.leave()
+        }
+
+        group.enter()
+        reactionStore.removeAll { result in
+            if case .failure(let err) = result {
+                reactionsRemovalError = err
+            }
+            group.leave()
+        }
+        
+        group.enter()
+        messagesQueue.removeAll { result in
+            if case .failure(let err) = result {
+                messagesRemovalError = err
             }
             group.leave()
         }
@@ -247,6 +279,12 @@ struct LocalServer : SHServerAPI {
         }
         guard assetsRemovalError == nil else {
             return completionHandler(.failure(assetsRemovalError!))
+        }
+        guard reactionsRemovalError == nil else {
+            return completionHandler(.failure(reactionsRemovalError!))
+        }
+        guard messagesRemovalError == nil else {
+            return completionHandler(.failure(messagesRemovalError!))
         }
         completionHandler(.success(()))
     }
@@ -1093,4 +1131,488 @@ struct LocalServer : SHServerAPI {
             completionHandler(.success(Array(removedGlobalIdentifiers)))
         }
     }
+    
+    func setGroupEncryptionDetails(
+        groupId: String,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let writeBatch = assetStore.writeBatch()
+        
+        for recipientsEncryptionDetail in recipientsEncryptionDetails {
+            guard recipientsEncryptionDetail.userIdentifier == self.requestor.identifier else {
+                continue
+            }
+            
+            writeBatch.set(value: recipientsEncryptionDetail.encryptedSecret, for: "\(groupId)::encryptedSecret")
+            writeBatch.set(value: recipientsEncryptionDetail.ephemeralPublicKey, for: "\(groupId)::ephemeralPublicKey")
+            writeBatch.set(value: recipientsEncryptionDetail.secretPublicSignature, for: "\(groupId)::secretPublicSignature")
+        }
+        
+        writeBatch.write(completionHandler: completionHandler)
+    }
+    
+    func deleteGroup(
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let messagesStore: KBQueueStore
+        do {
+            messagesStore = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        do {
+            let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+            let _ = try assetStore.removeValues(forKeysMatching: condition)
+            let _ = try reactionStore.removeValues(forKeysMatching: condition)
+            let _ = try messagesStore.removeValues(forKeysMatching: condition)
+            completionHandler(.success(()))
+        } catch {
+            completionHandler(.failure(error))
+        }
+    }
+    
+    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let keysToRetrieve = [
+            "\(groupId)::encryptedSecret",
+            "\(groupId)::ephemeralPublicKey",
+            "\(groupId)::secretPublicSignature"
+        ]
+        var condition = KBGenericCondition(value: false)
+        for key in keysToRetrieve {
+            condition = condition.or(KBGenericCondition(.equal, value: key))
+        }
+        
+        assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Result<KBKVPairs, Error>) in
+            switch result {
+            case .success(let keyValues):
+                guard keyValues.count > 0 else {
+                    completionHandler(.success([]))
+                    return
+                }
+                
+                var encryptionDetails = RecipientEncryptionDetailsDTO(
+                    userIdentifier: requestor.identifier,
+                    ephemeralPublicKey: "",
+                    encryptedSecret: "",
+                    secretPublicSignature: ""
+                )
+                for (k, v) in keyValues {
+                    switch k {
+                    case let str where str.contains("encryptedSecret"):
+                        encryptionDetails.encryptedSecret = v as? String ?? encryptionDetails.encryptedSecret
+                    case let str where str.contains("ephemeralPublicKey"):
+                        encryptionDetails.ephemeralPublicKey = v as? String ?? encryptionDetails.ephemeralPublicKey
+                    case let str where str.contains("secretPublicSignature"):
+                        encryptionDetails.secretPublicSignature = v as? String ?? encryptionDetails.secretPublicSignature
+                    default:
+                        break
+                    }
+                }
+                guard !encryptionDetails.encryptedSecret.isEmpty,
+                      !encryptionDetails.encryptedSecret.isEmpty,
+                      !encryptionDetails.encryptedSecret.isEmpty else {
+                    completionHandler(.failure(KBError.unexpectedData(keyValues)))
+                    return
+                }
+                completionHandler(.success([encryptionDetails]))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let writeBatch = reactionStore.writeBatch()
+        
+        for reaction in reactions {
+            var key = "\(groupId)::\(reaction.senderUserIdentifier!)"
+            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
+                key += "::\(assetGid)"
+            } else {
+                key += "::"
+            }
+            if let interactionId = reaction.inReplyToInteractionId {
+                key += "::\(interactionId)"
+            } else {
+                key += "::"
+            }
+            writeBatch.set(value: reaction.reactionType.rawValue, for: key)
+        }
+        
+        writeBatch.write { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success():
+                completionHandler(.success(reactions.map({
+                    $0 as! ReactionOutputDTO
+                })))
+            }
+        }
+    }
+    
+    func removeReactions(
+        _ reactions: [ReactionInput],
+        fromGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var condition = KBGenericCondition(value: false)
+        for reaction in reactions {
+            var key = "\(groupId)::\(reaction.senderUserIdentifier!)"
+            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
+                key += "::\(assetGid)"
+            } else {
+                key += "::"
+            }
+            if let interactionId = reaction.inReplyToInteractionId {
+                key += "::\(interactionId)"
+            } else {
+                key += "::"
+            }
+            
+            condition = condition.or(KBGenericCondition(.equal, value: key))
+        }
+        
+        reactionStore.removeValues(forKeysMatching: condition) { result in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func countInteractions(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    ) {
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let messagesStore: KBQueueStore
+        do {
+            messagesStore = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var counts: InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]](), messages: 0)
+        
+        let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+        reactionStore.dictionaryRepresentation(forKeysMatching: condition) { reactionsResult in
+            switch reactionsResult {
+            case .success(let reactionsKeysAndValues):
+                var reactionsCountDict = [ReactionType: [UserIdentifier]]()
+                for (k, v) in reactionsKeysAndValues {
+                    guard let rawValue = v as? Int, let reactionType = ReactionType(rawValue: rawValue) else {
+                        log.warning("unknown reaction type in local DB for group \(groupId): \(String(describing: v))")
+                        continue
+                    }
+                    let components = k.components(separatedBy: "::")
+                    guard components.count >= 2 else {
+                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k))")
+                        continue
+                    }
+                    let senderIdentifier = components[1]
+                    if reactionsCountDict[reactionType] != nil {
+                        reactionsCountDict[reactionType]!.append(senderIdentifier)
+                    } else {
+                        reactionsCountDict[reactionType] = [senderIdentifier]
+                    }
+                }
+                counts.reactions = reactionsCountDict
+            case .failure(let error):
+                log.critical("failed to retrieve reactions for group \(groupId): \(error.localizedDescription)")
+            }
+            messagesStore.keys(matching: condition) { messagesResult in
+                switch messagesResult {
+                case .success(let messagesKeys):
+                    counts.messages = messagesKeys.count
+                case .failure(let error):
+                    log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
+                }
+                completionHandler(.success(counts))
+            }
+        }
+    }
+    
+    func retrieveInteractions(
+        inGroup groupId: String,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        let reactionStore: KBKVStore
+        do {
+            reactionStore = try SHDBManager.sharedInstance.reactionStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let messagesStore: KBQueueStore
+        do {
+            messagesStore = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        self.retrieveGroupUserEncryptionDetails(forGroup: groupId) { encryptionDetailsResult in
+            switch encryptionDetailsResult {
+            case .failure(let err):
+                completionHandler(.failure(err))
+            case .success(let e2eeResult):
+                guard let encryptionDetails = e2eeResult.first else {
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(groupId)))
+                    return
+                }
+                
+                let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+                reactionStore.keyValuesAndTimestamps(forKeysMatching: condition) { reactionsResult in
+                    switch reactionsResult {
+                    case .success(let reactionKvts):
+                        var reactions = [ReactionOutputDTO]()
+                        reactionKvts.forEach({
+                            let key = $0.key
+                            var interactionId: String? = nil
+                            var senderId: String? = nil
+                            var inReplyToAssetGid: String? = nil
+                            var inReplyToInteractionGid: String? = nil
+                            
+                            let keyComponents = key.components(separatedBy: "::")
+                            guard keyComponents.count > 3 else {
+                                log.warning("unexpected key format in reactions DB: \(key)")
+                                return
+                            }
+                            senderId = keyComponents[1]
+                            interactionId = keyComponents[2]
+                            if keyComponents.count > 4,
+                                !keyComponents[3].isEmpty {
+                                inReplyToAssetGid = keyComponents[3]
+                            }
+                            if keyComponents.count > 5,
+                                !keyComponents[4].isEmpty {
+                                inReplyToInteractionGid = keyComponents[4]
+                            }
+                            
+                            guard let senderId = senderId,
+                                  let interactionId = interactionId else {
+                                log.warning("invalid key format in reactions DB: \(key)")
+                                return
+                            }
+                            
+                            guard let reactionTypeInt = $0.value as? Int,
+                                  let reactionType = ReactionType(rawValue: reactionTypeInt) else {
+                                log.warning("unexpected value in reactions DB: \(String(describing: $0.value))")
+                                return
+                            }
+                            
+                            let output = ReactionOutputDTO(
+                                interactionId: interactionId,
+                                senderUserIdentifier: senderId,
+                                inReplyToAssetGlobalIdentifier: inReplyToAssetGid,
+                                inReplyToInteractionId: inReplyToInteractionGid,
+                                reactionType: reactionType,
+                                addedAt: $0.timestamp.iso8601withFractionalSeconds
+                            )
+                            reactions.append(output)
+                        })
+                        
+                        messagesStore.keyValuesAndTimestamps(forKeysMatching: condition) { messagesResult in
+                            switch messagesResult {
+                            case .success(let messageKvts):
+                                var messages = [MessageOutputDTO]()
+                                
+                                for messageKvt in messageKvts {
+                                    do {
+                                        guard let serializedMessage = messageKvt.value as? Data else {
+                                            throw SHBackgroundOperationError.unexpectedData(messageKvt.value)
+                                        }
+                                        
+                                        let unarchiver: NSKeyedUnarchiver
+                                        if #available(macOS 10.13, *) {
+                                            unarchiver = try NSKeyedUnarchiver(forReadingFrom: serializedMessage)
+                                        } else {
+                                            unarchiver = NSKeyedUnarchiver(forReadingWith: serializedMessage)
+                                        }
+                                        guard let message = unarchiver.decodeObject(
+                                            of: DBSecureSerializableUserMessage.self,
+                                            forKey: NSKeyedArchiveRootObjectKey
+                                        ) else {
+                                            continue
+                                        }
+                                        
+                                        messages.append(
+                                            MessageOutputDTO(
+                                                interactionId: message.interactionId,
+                                                senderUserIdentifier: message.senderUserIdentifier,
+                                                inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
+                                                inReplyToInteractionId: message.inReplyToInteractionId,
+                                                encryptedMessage: message.encryptedMessage,
+                                                createdAt: message.createdAt
+                                            )
+                                        )
+                                    } catch {
+                                        log.error("failed to retrieve message with key \(messageKvt.key)")
+                                        continue
+                                    }
+                                }
+                                
+                                let result = InteractionsGroupDTO(
+                                    messages: messages,
+                                    reactions: reactions,
+                                    ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
+                                    encryptedSecret: encryptionDetails.encryptedSecret,
+                                    secretPublicSignature: encryptionDetails.secretPublicSignature
+                                )
+                                completionHandler(.success(result))
+                            case .failure(let err):
+                                completionHandler(.failure(err))
+                            }
+                        }
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+            }
+        }
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        let messagesStore: KBQueueStore
+        do {
+            messagesStore = try SHDBManager.sharedInstance.messageQueue()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var result = [MessageOutputDTO]()
+        var firstError: Error? = nil
+        
+        for message in messages {
+            let messageOutput = MessageOutputDTO(
+                interactionId: message.interactionId!,
+                senderUserIdentifier: message.senderUserIdentifier!,
+                inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
+                inReplyToInteractionId: message.inReplyToInteractionId,
+                encryptedMessage: message.encryptedMessage,
+                createdAt: message.createdAt!
+            )
+            
+            do {
+                var key = "\(groupId)::\(message.senderUserIdentifier!)::\(message.interactionId!)"
+                if let assetGid = message.inReplyToAssetGlobalIdentifier {
+                    key += "::\(assetGid)"
+                } else {
+                    key += "::"
+                }
+                if let interactionId = message.inReplyToInteractionId {
+                    key += "::\(interactionId)"
+                } else {
+                    key += "::"
+                }
+                let value = DBSecureSerializableUserMessage(
+                    interactionId: message.interactionId!,
+                    senderUserIdentifier: message.senderUserIdentifier!,
+                    inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
+                    inReplyToInteractionId: message.inReplyToInteractionId,
+                    encryptedMessage: message.encryptedMessage,
+                    createdAt: message.createdAt!
+                )
+                
+                let data = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                try messagesStore.insert(
+                    data,
+                    withIdentifier: key,
+                    timestamp: message.createdAt!.iso8601withFractionalSeconds!
+                )
+                
+                result.append(messageOutput)
+            } catch {
+                if messages.count == 1 {
+                    completionHandler(.failure(error))
+                }
+                if firstError == nil {
+                    firstError = error
+                }
+                log.error("failed to locally add message with id \(message.interactionId!) to groupId \(groupId)")
+            }
+            
+            if result.isEmpty {
+                completionHandler(.failure(firstError!))
+            } else {
+                completionHandler(.success(result))
+            }
+        }
+    }
+    
 }
