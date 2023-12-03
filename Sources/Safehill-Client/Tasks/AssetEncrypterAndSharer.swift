@@ -255,7 +255,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         let asset = shareRequest.asset
-        let globalIdentifier = try asset.generateGlobalIdentifier(using: self.imageManager)
+        let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
 
         do {
             guard shareRequest.sharedWith.count > 0 else {
