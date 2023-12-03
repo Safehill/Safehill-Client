@@ -102,20 +102,6 @@ extension SHApplePhotoAsset {
         )
     }
     
-    ///
-    ///  **Use it carefully!!**
-    ///  This operation is expensive if the asset is not cached.
-    ///
-    /// - Parameters:
-    ///   - imageManager: the PHImageManager to use (in case anything was cached)
-    func generateGlobalIdentifier(using imageManager: PHImageManager) throws -> String {
-        let start = CFAbsoluteTimeGetCurrent()
-        let globalIdentifier = try self.phAsset.globalIdentifier(using: imageManager)
-        let end = CFAbsoluteTimeGetCurrent()
-        log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate a global identifier")
-        return globalIdentifier
-    }
-    
     func data(for versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
         var dict = [SHAssetQuality: Result<Data, Error>]()
         
@@ -478,7 +464,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             }
         }
         
-        let globalIdentifier = try asset.generateGlobalIdentifier(using: self.imageManager)
+        let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
         
         do {
             ///
