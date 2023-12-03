@@ -139,7 +139,6 @@ public extension PHAsset {
         options.isNetworkAccessAllowed = true
         options.resizeMode = .exact
         
-        log.debug("[ID-GEN] image size = \(self.pixelWidth) x \(self.pixelHeight)")
         let targetSize: CGSize
         if self.pixelWidth > self.pixelHeight {
             targetSize = CGSize(width: imageSizeForGlobalIdCalculation.width,
@@ -148,7 +147,6 @@ public extension PHAsset {
             targetSize = CGSize(width: floor(imageSizeForGlobalIdCalculation.height * Double(self.pixelWidth)/Double(self.pixelHeight)),
                                 height: imageSizeForGlobalIdCalculation.height)
         }
-        log.debug("[ID-GEN] requested image size = \(targetSize.width) x \(targetSize.height)")
 
         PHImageManager().requestImage(for: self,
                                       targetSize: targetSize,
@@ -156,8 +154,6 @@ public extension PHAsset {
                                       options: options) {
             image, _ in
             if let image = image {
-                log.debug("[ID-GEN] retrieved image size = \(image.size.width) x \(image.size.height)")
-//                
                 /// Make sure the image retrieved by the Photos framework is within range
                 /// If not two same assets will result in different global identifiers
                 if (
@@ -192,9 +188,6 @@ public extension PHAsset {
             throw SHBackgroundOperationError.unexpectedData(nil)
         }
         let hash = SHHash.stringDigest(for: data)
-        
-        log.debug("[ID-GEN] data for \(self.localIdentifier) => \(data.base64EncodedString())")
-        log.debug("[ID-GEN] globalIdentifier for \(self.localIdentifier) (dataSize=\(data.count)) => \(hash)")
         
         let end = CFAbsoluteTimeGetCurrent()
         log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate an asset global identifier")
