@@ -7,7 +7,7 @@ final class ThreadSafeS3Errors {
     private var _dictionary = [String: Error]()
     
     func set(_ error: Error, forKey key: String) {
-        queue.sync {
+        queue.sync(flags: .barrier) {
             _dictionary[key] = error
         }
     }
