@@ -359,19 +359,3 @@ internal extension SHAssetsDownloadManager {
         }
     }
 }
-
-// - MARK: User black/white listing
-
-public extension SHAssetsDownloadManager {
-    var blacklistedUsers: [String] {
-        DownloadBlacklist.shared.blacklistedUsers
-    }
-    
-    func blacklistUser(with userId: String) {
-        DownloadBlacklist.shared.blacklist(userIdentifier: userId)
-    }
-    
-    func removeUsersFromBlacklist(with userIds: [String]) {
-        DownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: userIds)
-    }
-}
