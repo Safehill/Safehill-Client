@@ -8,7 +8,8 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     
     @available(*, unavailable)
     public override init(user: SHLocalUser,
-                         delegates: [SHAssetDownloaderDelegate],
+                         downloaderDelegates: [SHAssetDownloaderDelegate],
+                         syncDelegates: [SHAssetSyncingDelegate],
                          restorationDelegate: SHAssetActivityRestorationDelegate,
                          limitPerRun limit: Int? = nil,
                          photoIndexer: SHPhotosIndexer? = nil) {
@@ -18,7 +19,10 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     public init(user: SHLocalUser,
                 delegates: [SHAssetDownloaderDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate) {
-        super.init(user: user, delegates: delegates, restorationDelegate: restorationDelegate)
+        super.init(user: user, 
+                   downloaderDelegates: delegates,
+                   syncDelegates: [],
+                   restorationDelegate: restorationDelegate)
     }
     
     internal override func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
@@ -180,7 +184,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             }
             
             for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                self.delegates.forEach({
+                self.downloaderDelegates.forEach({
                     $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId, in: groupId)
                 })
             }
@@ -192,11 +196,11 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     descriptor: descriptor
                 )
                 
-                self.delegates.forEach({
+                self.downloaderDelegates.forEach({
                     $0.didFetchLowResolutionAsset(decryptedAsset)
                 })
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegates.forEach({
+                    self.downloaderDelegates.forEach({
                         $0.didCompleteDownloadOfAsset(
                             withGlobalIdentifier: encryptedAsset.globalIdentifier,
                             in: groupId
@@ -207,7 +211,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.delegates.forEach({
+                    self.downloaderDelegates.forEach({
                         $0.didFailDownloadOfAsset(
                             withGlobalIdentifier: encryptedAsset.globalIdentifier,
                             in: groupId,
@@ -276,7 +280,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
-                self.delegates.forEach({
+                self.downloaderDelegates.forEach({
                     $0.didCompleteDownloadCycle(with: .failure(error))
                 })
                 completionHandler(.failure(error))
@@ -288,7 +292,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
                 ) {
                     secondResult in
-                    self.delegates.forEach({
+                    self.downloaderDelegates.forEach({
                         $0.didCompleteDownloadCycle(with: secondResult)
                     })
                     completionHandler(secondResult)
