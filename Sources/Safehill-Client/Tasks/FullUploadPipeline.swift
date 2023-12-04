@@ -90,55 +90,23 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     public func runOnce() {
         state = .executing
         
-        do { try runFetchCycle() }
-        catch {
-            log.critical("error running fetch cycle: \(error.localizedDescription)")
-        }
-        guard !isCancelled else {
-            log.info("upload pipeline cancelled. Finishing")
-            state = .finished
-            return
-        }
-        
-        do { try runEncryptionCycle() }
-        catch {
-            log.critical("error running encryption cycle: \(error.localizedDescription)")
-        }
-        guard !isCancelled else {
-            log.info("upload pipeline cancelled. Finishing")
-            state = .finished
-            return
+        let step: ((() throws -> Void, String) -> Void) = { throwingMethod, methodIdentifier in
+            do { try throwingMethod() }
+            catch {
+                self.log.critical("error running step '\(methodIdentifier)': \(error.localizedDescription)")
+            }
+            guard !self.isCancelled else {
+                self.log.info("upload pipeline cancelled. Finishing")
+                self.state = .finished
+                return
+            }
         }
         
-        do { try runUploadCycle() }
-        catch {
-            log.critical("error running upload cycle: \(error.localizedDescription)")
-        }
-        guard !isCancelled else {
-            log.info("upload pipeline cancelled. Finishing")
-            state = .finished
-            return
-        }
-        
-        do { try runFetchCycle() }
-        catch {
-            log.critical("error running share+fetch cycle: \(error.localizedDescription)")
-        }
-        guard !isCancelled else {
-            log.info("upload pipeline cancelled. Finishing")
-            state = .finished
-            return
-        }
-        
-        do { try runShareCycle() }
-        catch {
-            log.critical("error running share cycle: \(error.localizedDescription)")
-        }
-        guard !isCancelled else {
-            log.info("upload pipeline cancelled. Finishing")
-            state = .finished
-            return
-        }
+        step(runFetchCycle, "FetchForEncryptionUpload")
+        step(runEncryptionCycle, "Encryption")
+        step(runUploadCycle, "Upload")
+        step(runFetchCycle, "FetchForEncryptionShare")
+        step(runShareCycle, "Share")
         
         state = .finished
     }
