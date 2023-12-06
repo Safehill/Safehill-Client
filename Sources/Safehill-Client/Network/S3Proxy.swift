@@ -11,6 +11,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
     
     public static let sharedInstance = SHSessionDelegate()
     
+    private let writeQueueAccessQueue = DispatchQueue(label: "SHSessionDelegate.write", attributes: .concurrent)
     private var handlerQueue = [String: [(Result<Void, Error>) -> Void]]()
     
     public func urlSession(_ session: URLSession,
@@ -42,7 +43,9 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             try? FileManager.default.removeItem(atPath: filePath)
         }
         
-        handlerQueue.removeValue(forKey: identifier)
+        writeQueueAccessQueue.sync(flags: .barrier) {
+            self.handlerQueue.removeValue(forKey: identifier)
+        }
         
         for handler in handlers {
             if error == nil {
@@ -75,17 +78,22 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             return
         }
         
-        handlerQueue.removeValue(forKey: identifier)
+        writeQueueAccessQueue.sync(flags: .barrier) {
+            self.handlerQueue.removeValue(forKey: identifier)
+        }
+        
         for handler in handlers {
             handler(.success(()))
         }
     }
     
     public func addCompletionHandler(handler: @escaping (Result<Void, Error>) -> Void, identifier: String) {
-        if handlerQueue[identifier] == nil {
-            handlerQueue[identifier] = [handler]
-        } else {
-            handlerQueue[identifier]!.append(handler)
+        writeQueueAccessQueue.sync(flags: .barrier) {
+            if self.handlerQueue[identifier] == nil {
+                self.handlerQueue[identifier] = [handler]
+            } else {
+                self.handlerQueue[identifier]!.append(handler)
+            }
         }
     }
 }

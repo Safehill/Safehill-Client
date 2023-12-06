@@ -180,7 +180,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     private func syncDescriptors(
         _ remoteDescriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping (Swift.Result<AssetDescriptorsDiff, Error>) -> ()
+        completionHandler: @escaping (Result<AssetDescriptorsDiff, Error>) -> ()
     ) {
         var localDescriptors = [any SHAssetDescriptor]()
         var localError: Error? = nil
@@ -492,8 +492,24 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// Extract unique group ids from the descriptors
         ///
         
-        let allGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
+        let allSharedGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
             var result = partialResult
+            
+            var isShared = false
+            let userIdsSharedWith: Set<String> = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+            let myUserId = self.user.identifier
+            if descriptor.sharingInfo.sharedByUserIdentifier == myUserId {
+                if userIdsSharedWith.subtracting([myUserId]).count > 0 {
+                    isShared = true
+                }
+            } else if userIdsSharedWith.contains(myUserId) {
+                isShared = true
+            }
+            
+            guard isShared else {
+                return result
+            }
+            
             let itemGroupIds = Set(descriptor.sharingInfo.groupInfoById.keys)
             for groupId in itemGroupIds {
                 result[groupId] = 1
@@ -508,7 +524,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// For each group …
         ///
         
-        for groupId in allGroupIds {
+        for groupId in allSharedGroupIds {
             
             var remoteInteractions: InteractionsGroupDTO? = nil
             
@@ -632,36 +648,13 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         completionHandler(.success(()))
     }
     
-    public func sync() {
+    public func sync(
+        remoteDescriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let group = DispatchGroup()
-        var dispatchResult: DispatchTimeoutResult? = nil
-        var remoteDescriptors = [any SHAssetDescriptor]()
-        var remoteError: Error? = nil
-        
-        ///
-        /// Get all the remote descriptors
-        ///
-        group.enter()
-        self.serverProxy.getRemoteAssetDescriptors { remoteResult in
-            switch remoteResult {
-            case .success(let descriptors):
-                remoteDescriptors = descriptors
-            case .failure(let err):
-                self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
-                remoteError = err
-            }
-            group.leave()
-        }
-        
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            log.error("timeout while retrieving remote asset descriptors")
-            return
-        }
-        guard remoteError == nil else {
-            log.error("timeout while retrieving remote asset descriptors")
-            return
-        }
+        var descriptorsSyncError: Error? = nil
+        var interactionsSyncError: Error? = nil
         
         ///
         /// Sync them with the local descriptors
@@ -696,25 +689,51 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 }
             case .failure(let err):
                 self.log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
+                descriptorsSyncError = err
             }
             group.leave()
         }
         
         ///
-        /// Sync them with the local descriptors
+        /// Sync interactions
         ///
         group.enter()
         self.syncInteractions(remoteDescriptors: remoteDescriptors) { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
+                interactionsSyncError = err
             }
             group.leave()
         }
         
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds * 2))
-        guard dispatchResult == .success else {
-            log.error("timeout while syncing")
-            return
+        group.notify(queue: .global(qos: .background)) {
+            if let err = descriptorsSyncError {
+                completionHandler(.failure(err))
+            }
+            else if let err = interactionsSyncError {
+                completionHandler(.failure(err))
+            }
+            else {
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    private func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        ///
+        /// Get the descriptors from the server
+        ///
+        self.serverProxy.getRemoteAssetDescriptors { remoteResult in
+            switch remoteResult {
+            case .success(let descriptors):
+                ///
+                /// Start the sync process
+                ///
+                self.sync(remoteDescriptors: descriptors, completionHandler: completionHandler)
+            case .failure(let err):
+                self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
+                completionHandler(.failure(err))
+            }
         }
     }
     
@@ -726,14 +745,14 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         state = .executing
         
-        self.sync()
-        
-        self.state = .finished
+        self.runOnce { result in
+            self.state = .finished
+        }
     }
 }
 
 
-public class SHSyncProcessor : SHBackgroundOperationProcessor<SHSyncOperation> {
+private class SHSyncProcessor : SHBackgroundOperationProcessor<SHSyncOperation> {
     
     public static var shared = SHSyncProcessor(
         delayedStartInSeconds: 6,

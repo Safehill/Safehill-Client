@@ -1,17 +1,22 @@
 import KnowledgeBase
+import Foundation
 
 
 struct DownloadBlacklist {
     
     let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
     
+    private let writeQueue = DispatchQueue(label: "DownloadBlacklist.write", attributes: .concurrent)
+    
     static var shared = DownloadBlacklist()
     
     /// Give up retrying after a download for an asset after this many attempts
     static let FailedDownloadCountThreshold = 50
     
+    var repeatedDownloadFailuresByAssetId = [String: Int]()
+    
     private let blacklistUserStorage = KBKVStore.userDefaultsStore()!
-    var blacklistedUsers: [String] {
+    fileprivate var blacklistedUsers: [String] {
         get {
             do {
                 let savedList = try self.blacklistUserStorage.value(for: kSHUsersBlacklistKey)
@@ -31,22 +36,26 @@ struct DownloadBlacklist {
         }
     }
     
-    var repeatedDownloadFailuresByAssetId = [String: Int]()
-    
     mutating func recordFailedAttempt(globalIdentifier: String) {
-        if repeatedDownloadFailuresByAssetId[globalIdentifier] == nil {
-            repeatedDownloadFailuresByAssetId[globalIdentifier] = 1
-        } else {
-            repeatedDownloadFailuresByAssetId[globalIdentifier]! += 1
+        writeQueue.sync(flags: .barrier) {
+            if repeatedDownloadFailuresByAssetId[globalIdentifier] == nil {
+                self.repeatedDownloadFailuresByAssetId[globalIdentifier] = 1
+            } else {
+                self.repeatedDownloadFailuresByAssetId[globalIdentifier]! += 1
+            }
         }
     }
     
     mutating func blacklist(globalIdentifier: String) {
-        repeatedDownloadFailuresByAssetId[globalIdentifier] = DownloadBlacklist.FailedDownloadCountThreshold
+        writeQueue.sync(flags: .barrier) {
+            self.repeatedDownloadFailuresByAssetId[globalIdentifier] = DownloadBlacklist.FailedDownloadCountThreshold
+        }
     }
     
     mutating func removeFromBlacklist(assetGlobalIdentifier: GlobalIdentifier) {
-        repeatedDownloadFailuresByAssetId.removeValue(forKey: assetGlobalIdentifier)
+        let _ = writeQueue.sync(flags: .barrier) {
+            self.repeatedDownloadFailuresByAssetId.removeValue(forKey: assetGlobalIdentifier)
+        }
     }
     
     func isBlacklisted(assetGlobalIdentifier: GlobalIdentifier) -> Bool {
@@ -64,15 +73,19 @@ struct DownloadBlacklist {
     }
     
     mutating func removeFromBlacklist(userIdentifiers: [String]) {
-        var blUsers = blacklistedUsers
-        blUsers.removeAll(where: { userIdentifiers.contains($0) })
-        blacklistedUsers = blUsers
+        writeQueue.sync(flags: .barrier) {
+            var blUsers = self.blacklistedUsers
+            blUsers.removeAll(where: { userIdentifiers.contains($0) })
+            self.blacklistedUsers = blUsers
+        }
     }
     
     mutating func removeFromBlacklistIfNotIn(userIdentifiers: [String]) {
-        var blUsers = blacklistedUsers
-        blUsers.removeAll(where: { userIdentifiers.contains($0) == false })
-        blacklistedUsers = blUsers
+        writeQueue.sync(flags: .barrier) {
+            var blUsers = self.blacklistedUsers
+            blUsers.removeAll(where: { userIdentifiers.contains($0) == false })
+            self.blacklistedUsers = blUsers
+        }
     }
     
     func isBlacklisted(userIdentifier: String) -> Bool {
@@ -80,6 +93,26 @@ struct DownloadBlacklist {
     }
     
     mutating func deepClean() throws {
-        let _ = try self.blacklistUserStorage.removeAll()
+        try writeQueue.sync(flags: .barrier) {
+            let _ = try self.blacklistUserStorage.removeAll()
+            repeatedDownloadFailuresByAssetId.removeAll()
+        }
+    }
+}
+
+
+// - MARK: User black/white listing
+
+public extension SHAssetsDownloadManager {
+    var blacklistedUsers: [String] {
+        DownloadBlacklist.shared.blacklistedUsers
+    }
+    
+    func blacklistUser(with userId: String) {
+        DownloadBlacklist.shared.blacklist(userIdentifier: userId)
+    }
+    
+    func removeUsersFromBlacklist(with userIds: [String]) {
+        DownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: userIds)
     }
 }
