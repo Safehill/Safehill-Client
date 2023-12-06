@@ -496,10 +496,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             var result = partialResult
             
             var isShared = false
-            let userIdsSharedWith = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+            let userIdsSharedWith: Set<String> = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
             let myUserId = self.user.identifier
             if descriptor.sharingInfo.sharedByUserIdentifier == myUserId {
-                if userIdsSharedWith.subtracting(myUserId).count > 0 {
+                if userIdsSharedWith.subtracting([myUserId]).count > 0 {
                     isShared = true
                 }
             } else if userIdsSharedWith.contains(myUserId) {
