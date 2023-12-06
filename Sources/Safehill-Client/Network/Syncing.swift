@@ -492,8 +492,24 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// Extract unique group ids from the descriptors
         ///
         
-        let allGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
+        let allSharedGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
             var result = partialResult
+            
+            var isShared = false
+            let userIdsSharedWith = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+            let myUserId = self.user.identifier
+            if descriptor.sharingInfo.sharedByUserIdentifier == myUserId {
+                if userIdsSharedWith.subtracting(myUserId).count > 0 {
+                    isShared = true
+                }
+            } else if userIdsSharedWith.contains(myUserId) {
+                isShared = true
+            }
+            
+            guard isShared else {
+                return result
+            }
+            
             let itemGroupIds = Set(descriptor.sharingInfo.groupInfoById.keys)
             for groupId in itemGroupIds {
                 result[groupId] = 1
@@ -508,7 +524,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// For each group …
         ///
         
-        for groupId in allGroupIds {
+        for groupId in allSharedGroupIds {
             
             var remoteInteractions: InteractionsGroupDTO? = nil
             
