@@ -110,6 +110,13 @@ public struct SHUploadPipeline {
                 shouldUpload: forceUpload
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
+            
+            try SHKGQuery.ingestShareAttempt(
+                of: localIdentifier,
+                from: sender.identifier,
+                to: recipients.map({ $0.identifier })
+            )
+            
         } catch {
             let failedQueueItem = SHFailedShareRequestQueueItem(
                 localIdentifier: localIdentifier,
