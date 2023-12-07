@@ -95,12 +95,6 @@ public enum SHKGQuery {
         }
     }
     
-    internal static func ingestShareAttempt(of assetLocalIdentifier: String,
-                                          from senderUserId: UserIdentifier,
-                                          to receiverUserIds: [UserIdentifier]) throws {
-        try self.ingestShare(of: assetLocalIdentifier, from: senderUserId, to: receiverUserIds, provisional: true)
-    }
-    
     public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
         let removeGidsFromCache = {
             (cache: inout [UserIdentifier: Set<GlobalIdentifier>]) in

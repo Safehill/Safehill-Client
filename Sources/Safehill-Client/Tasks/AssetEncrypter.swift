@@ -466,6 +466,17 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         
         let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
         
+        ///
+        /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
+        /// ingest that identifier into the graph as a provisional share.
+        ///
+        try SHKGQuery.ingestShare(
+            of: globalIdentifier,
+            from: self.user.identifier,
+            to: encryptionRequest.sharedWith.map({ $0.identifier }),
+            provisional: true
+        )
+        
         do {
             ///
             /// The symmetric key is used to encrypt this asset (all of its version) moving forward.
