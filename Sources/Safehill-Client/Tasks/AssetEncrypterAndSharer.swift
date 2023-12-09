@@ -362,12 +362,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
         }
 
-        try self.markAsSuccessful(
-            item: item,
-            encryptionRequest: shareRequest,
-            globalIdentifier: globalIdentifier
-        )
-        
         if shareRequest.isBackground == false {
             // Ingest into the graph
             try SHKGQuery.ingestShare(
@@ -376,6 +370,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 to: shareRequest.sharedWith.map({ $0.identifier })
             )
         }
+        
+        try self.markAsSuccessful(
+            item: item,
+            encryptionRequest: shareRequest,
+            globalIdentifier: globalIdentifier
+        )
     }
     
     public override func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {

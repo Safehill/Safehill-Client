@@ -507,12 +507,14 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             }
             
             guard isShared else {
+                /// If not shared, do nothing (do not update the partial result)
                 return result
             }
             
-            let itemGroupIds = Set(descriptor.sharingInfo.groupInfoById.keys)
-            for groupId in itemGroupIds {
-                result[groupId] = 1
+            for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                if userId != self.user.identifier {
+                    result[groupId] = 1
+                }
             }
             return result
         }).keys)

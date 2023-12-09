@@ -2,15 +2,16 @@ import KnowledgeBase
 import Foundation
 
 public enum SHKGPredicates: String {
+    case attemptedShare = "attemptedShare"
     case shares = "shares"
     case sharedWith = "sharedWith"
 }
 
-var UserIdToAssetGidSharedByCache = [String: Set<GlobalIdentifier>]()
-var UserIdToAssetGidSharedWithCache = [String: Set<GlobalIdentifier>]()
+var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
+var UserIdToAssetGidSharedWithCache = [UserIdentifier: Set<GlobalIdentifier>]()
 
 public enum SHKGQuery {
-    public static func isKnownUser(withIdentifier userId: String) throws -> Bool {
+    public static func isKnownUser(withIdentifier userId: UserIdentifier) throws -> Bool {
         if let assetIdsSharedBy = UserIdToAssetGidSharedByCache[userId],
            let assetIdsSharedWith = UserIdToAssetGidSharedWithCache[userId] {
             return assetIdsSharedBy.count + assetIdsSharedWith.count > 0
@@ -29,7 +30,7 @@ public enum SHKGQuery {
         return false
     }
     
-    internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: String) throws {
+    internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: UserIdentifier) throws {
         var errors = [Error]()
         
         // TODO: We need support for writebatch (transaction) in KGGraph. DB writes in a for loop is never a good idea
@@ -51,15 +52,21 @@ public enum SHKGQuery {
     }
     
     internal static func ingestShare(of assetIdentifier: GlobalIdentifier,
-                                     from senderUserId: String,
-                                     to receiverUserIds: [String]) throws {
+                                     from senderUserId: UserIdentifier,
+                                     to receiverUserIds: [UserIdentifier],
+                                     provisional: Bool = false) throws {
         let graph = try SHDBManager.sharedInstance.graph()
         let kgSender = graph.entity(withIdentifier: senderUserId)
         var errors = [Error]()
         
         do {
             let kgAsset = graph.entity(withIdentifier: assetIdentifier)
-            try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
+            if provisional {
+                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.attemptedShare.rawValue)
+            } else {
+                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
+                try graph.removeTriples(matching: KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: nil))
+            }
             if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
                 UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
             } else {
@@ -90,7 +97,7 @@ public enum SHKGQuery {
     
     public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
         let removeGidsFromCache = {
-            (cache: inout [String: Set<GlobalIdentifier>]) in
+            (cache: inout [UserIdentifier: Set<GlobalIdentifier>]) in
             let userIds = Array(cache.keys)
             for userId in userIds {
                 if let cachedValue = cache[userId] {
@@ -116,7 +123,7 @@ public enum SHKGQuery {
         })
     }
     
-    internal static func removeUsers(with userIdentifiers: [String]) throws {
+    internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
         /// Invalidate cache
         userIdentifiers.forEach({ uid in
             UserIdToAssetGidSharedByCache.removeValue(forKey: uid)
@@ -140,13 +147,13 @@ public enum SHKGQuery {
     }
     
     public static func assetGlobalIdentifiers(
-        sharedBy userIdentifiers: [String]
-    ) throws -> [GlobalIdentifier: Set<String>] {
+        sharedBy userIdentifiers: [UserIdentifier]
+    ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
         let graph = try SHDBManager.sharedInstance.graph()
-        var assetsToUsers = [GlobalIdentifier: Set<String>]()
+        var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
         var sharedByUsersCondition = KBTripleCondition(value: false)
         
-        var usersIdsToSearch = Set<String>()
+        var usersIdsToSearch = Set<UserIdentifier>()
         for userId in userIdentifiers {
             if let assetIdsSharedBy = UserIdToAssetGidSharedByCache[userId] {
                 assetIdsSharedBy.forEach({
@@ -170,6 +177,12 @@ public enum SHKGQuery {
                 KBTripleCondition(
                     subject: userId,
                     predicate: SHKGPredicates.shares.rawValue,
+                    object: nil
+                )
+            ).or(
+                KBTripleCondition(
+                    subject: userId,
+                    predicate: SHKGPredicates.attemptedShare.rawValue,
                     object: nil
                 )
             )
@@ -202,13 +215,13 @@ public enum SHKGQuery {
     }
     
     public static func assetGlobalIdentifiers(
-        sharedWith userIdentifiers: [String]
-    ) throws -> [GlobalIdentifier: Set<String>] {
+        sharedWith userIdentifiers: [UserIdentifier]
+    ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
         let graph = try SHDBManager.sharedInstance.graph()
-        var assetsToUsers = [GlobalIdentifier: Set<String>]()
+        var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
         var sharedWithUsersCondition = KBTripleCondition(value: false)
         
-        var usersIdsToSearch = Set<String>()
+        var usersIdsToSearch = Set<UserIdentifier>()
         for userId in userIdentifiers {
             if let assetIdsSharedWith = UserIdToAssetGidSharedWithCache[userId] {
                 assetIdsSharedWith.forEach({
