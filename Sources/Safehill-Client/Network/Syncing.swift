@@ -511,7 +511,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 return result
             }
             
-            for (userId, groupId) in descriptor.sharingInfo.groupInfoById {
+            for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 if userId != self.user.identifier {
                     result[groupId] = 1
                 }
