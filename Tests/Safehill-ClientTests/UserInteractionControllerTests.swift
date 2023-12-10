@@ -22,10 +22,6 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.addReactions(reactions, toGroupId: groupId, completionHandler: completionHandler)
     }
     
-    func removeReaction(withIdentifier interactionId: String, fromGroupId groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.removeReaction(withIdentifier: interactionId, fromGroupId: groupId, completionHandler: completionHandler)
-    }
-    
     func addMessage(_ message: MessageInputDTO, toGroupId groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: "interactionId",
@@ -67,6 +63,14 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
         self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
+    
+    func deleteGroup(groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.deleteGroup(groupId: groupId, completionHandler: completionHandler)
+    }
+    
+    func removeReaction(_ reaction: ReactionInput, fromGroupId groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.removeReactions([reaction], fromGroupId: groupId, completionHandler: completionHandler)
+    }
 }
 
 
@@ -82,22 +86,25 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
     
     func testSendMessageE2EE() throws {
         ServerUserCache.shared.cache(
-            SHRemoteUser(identifier: myUser.identifier,
-                         name: "myUser",
-                         publicKeyData: myUser.publicKeyData,
-                         publicSignatureData: myUser.publicSignatureData)
-        )
+            users: [
+                SHRemoteUser(identifier: myUser.identifier,
+                             name: "myUser",
+                             publicKeyData: myUser.publicKeyData,
+                             publicSignatureData: myUser.publicSignatureData)
+                ]
+            )
         
         let groupId = "testGroupId"
         let recipient1 = SHLocalCryptoUser()
-        let recipient2 = SHLocalCryptoUser()
         
         ServerUserCache.shared.cache(
-            SHRemoteUser(identifier: recipient1.identifier,
-                         name: "recipient1",
-                         publicKeyData: recipient1.publicKeyData,
-                         publicSignatureData: recipient1.publicSignatureData)
-        )
+            users: [
+                SHRemoteUser(identifier: recipient1.identifier,
+                             name: "recipient1",
+                             publicKeyData: recipient1.publicKeyData,
+                             publicSignatureData: recipient1.publicSignatureData)
+                ]
+            )
         
         let serverProxy = SHMockServerProxy(user: myUser)
         
