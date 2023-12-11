@@ -50,7 +50,7 @@ public protocol SHServerAPI {
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(name: String, clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
+    func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
