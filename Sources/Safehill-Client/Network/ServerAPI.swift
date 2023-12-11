@@ -28,9 +28,9 @@ public protocol SHServerAPI {
     
     /// Updates an existing user details or credentials. If the value is nil, it's not updated
     /// - Parameters:
-    ///   - name  the new user name
-    ///   - phoneNumber  the new user phone number
-    ///   - email  the new user email
+    ///   - name  the new name
+    ///   - phoneNumber  the new phone number
+    ///   - email  the new email
     ///   - completionHandler: the callback method
     func updateUser(name: String?,
                     phoneNumber: String?,

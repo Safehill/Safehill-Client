@@ -123,7 +123,6 @@ extension SHServerProxy {
     public func updateUser(email: String? = nil,
                            phoneNumber: String? = nil,
                            name: String? = nil,
-                           password: String? = nil,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
         self.localServer.updateUser(name: name, phoneNumber: phoneNumber, email: email) { result in
             switch result {
