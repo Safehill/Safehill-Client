@@ -1,6 +1,10 @@
 import Foundation
 import Safehill_Crypto
 
+public enum SHLocalUserError: Error, LocalizedError {
+    case invalidKeychainEntry
+    case missingProtocolSalt
+}
 
 public protocol SHServerUser : SHCryptoUser {
     var identifier: String { get }
@@ -44,11 +48,6 @@ public struct SHRemoteUser : SHServerUser, Codable {
 /// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name).
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHServerUser {
-    
-    enum SHLocalUserError: Error, LocalizedError {
-        case invalidKeychainEntry
-        case missingProtocolSalt
-    }
     
     public var identifier: String {
         self.shUser.identifier
@@ -152,7 +151,7 @@ public struct SHLocalUser: SHServerUser {
         }
     }
     
-    public mutating func saveKeysToKeychain(withLabel label: String, force: Bool = false) throws {
+    public func saveKeysToKeychain(withLabel label: String, force: Bool = false) throws {
         try self.shUser.saveKeysToKeychain(withLabel: label, force: force)
     }
     
