@@ -111,23 +111,28 @@ public struct SHLocalUser: SHServerUser {
         let keysKeychainLabel = SHLocalUser.keysKeychainLabel(withPrefix: keychainPrefix)
         if let shUser = try? SHLocalCryptoUser(usingKeychainEntryWithLabel: keysKeychainLabel) {
             self.shUser = shUser
+            
+            // SSO identifier (if any)
+            do {
+                self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
+            } catch {
+                try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
+                self._ssoIdentifier = nil
+            }
+            
+            // Bearer token
+            do {
+                self._authToken = try SHKeychain.retrieveValue(from: authTokenKeychainLabel)
+            } catch {
+                self._authToken = nil
+            }
         } else {
             self.shUser = SHLocalCryptoUser()
-        }
-        
-        // SSO identifier (if any)
-        do {
-            self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
-        } catch {
-            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
             self._ssoIdentifier = nil
-        }
-        
-        // Bearer token
-        do {
-            self._authToken = try SHKeychain.retrieveValue(from: authTokenKeychainLabel)
-        } catch {
             self._authToken = nil
+            
+            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
+            try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
         }
         
         // Protocol SALT used for encryption
@@ -141,7 +146,6 @@ public struct SHLocalUser: SHServerUser {
             }
         } catch {
             self._encryptionProtocolSalt = nil
-            self._authToken = nil
         }
     }
     
