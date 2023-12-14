@@ -121,24 +121,37 @@ struct LocalServer : SHServerAPI {
         userStore.value(for: key) { getResult in
             switch getResult {
             case .success(let user):
-                // User already exists. Return it
-                guard let user = user as? [String: Any] else {
-                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse(String(describing: user))))
-                    return
+                var value = [String : Any]()
+                if let user = user as? [String: Any] {
+                    guard user["publicKey"] as? Data == self.requestor.publicKeyData,
+                          user["publicSignature"] as? Data == self.requestor.publicSignatureData
+                    else {
+                        completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
+                        return
+                    }
+                    
+                    value = [
+                        "identifier": key,
+                        "publicKey": requestor.publicKeyData,
+                        "publicSignature": requestor.publicSignatureData
+                    ]
+                    if let name = user["name"] {
+                        value["name"] = name
+                    }
+                    if let name = user["email"] {
+                        value["email"] = name
+                    }
+                    if let name = user["phoneNumber"] {
+                        value["phoneNumber"] = name
+                    }
+                } else {
+                    value = [
+                        "identifier": key,
+                        "publicKey": requestor.publicKeyData,
+                        "publicSignature": requestor.publicSignatureData
+                    ]
                 }
                 
-                guard user["publicKey"] as? Data == self.requestor.publicKeyData,
-                      user["publicSignature"] as? Data == self.requestor.publicSignatureData
-                else {
-                    completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
-                    return
-                }
-                
-                var value = [
-                    "identifier": key,
-                    "publicKey": self.requestor.publicKeyData,
-                    "publicSignature": self.requestor.publicSignatureData
-                ] as [String : Any]
                 if let name = name {
                     value["name"] = name
                 }
