@@ -100,11 +100,6 @@ public struct SHLocalUser: SHServerUser {
         && lhs.publicSignatureData == rhs.publicSignatureData
     }
     
-    public init(cryptoUser: SHLocalCryptoUser) {
-        self.keychainPrefix = ""
-        self.shUser = cryptoUser
-    }
-    
     /// Initializes a SHLocalUser and the corresponding keychain element.
     /// Creates a key pair if none exists in the keychain with label `keysKeychainLabel`,
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
@@ -118,7 +113,6 @@ public struct SHLocalUser: SHServerUser {
             self.shUser = shUser
         } else {
             self.shUser = SHLocalCryptoUser()
-            try? self.saveKeysToKeychain(withLabel: keysKeychainLabel)
         }
         
         // SSO identifier (if any)
@@ -153,6 +147,10 @@ public struct SHLocalUser: SHServerUser {
     
     public func saveKeysToKeychain(withLabel label: String, force: Bool = false) throws {
         try self.shUser.saveKeysToKeychain(withLabel: label, force: force)
+    }
+    
+    public func deleteKeysFromKeychain() throws {
+        try shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
     }
     
     public mutating func updateUserDetails(given user: SHServerUser?) {
@@ -222,12 +220,6 @@ public struct SHLocalUser: SHServerUser {
         }
         return try SHUserContext(user: self.shUser)
             .decrypt(data, usingEncryptedSecret: encryptedSecret, protocolSalt: salt, receivedFrom: user)
-    }
-    
-    public mutating func regenerateKeys() throws {
-        self.deauthenticate()
-        self.shUser = SHLocalCryptoUser()
-        try self.saveKeysToKeychain(withLabel: keysKeychainLabel, force: true)
     }
 }
 
