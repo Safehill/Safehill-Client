@@ -137,7 +137,7 @@ public extension PHAsset {
         let options = PHImageRequestOptions()
         options.isSynchronous = true
         options.isNetworkAccessAllowed = true
-        options.resizeMode = .exact
+        options.resizeMode = .none
         
         let targetSize: CGSize
         if self.pixelWidth > self.pixelHeight {
@@ -149,18 +149,23 @@ public extension PHAsset {
         }
 
         PHImageManager().requestImage(for: self,
-                                      targetSize: targetSize,
-                                      contentMode: .aspectFit,
+                                      targetSize: PHImageManagerMaximumSize,
+                                      contentMode: .default,
                                       options: options) {
             image, _ in
-            if let image = image {
-                /// Make sure the image retrieved by the Photos framework is within range
-                /// If not two same assets will result in different global identifiers
-                if (
-                    (image.size.width < targetSize.width - 1 || image.size.height < targetSize.height - 1)
-                    || (image.size.width > targetSize.width + 1 || image.size.height > targetSize.height + 1)
-                ) {
-                    error = SHBackgroundOperationError.fatalError("Photos returned an image size different than the one requested. A global identifier can't be calculated")
+            if var image = image {
+                /// Once we get the full size image, resize it to the desired size (standard size for id calculation)
+                let rect = CGRect(x: 0, y: 0, width: targetSize.width, height: targetSize.height)
+                
+                UIGraphicsBeginImageContextWithOptions(targetSize, false, 1.0)
+                image.draw(in: rect)
+                let newImage = UIGraphicsGetImageFromCurrentImageContext()
+                UIGraphicsEndImageContext()
+                
+                if let ni = newImage {
+                    image = ni
+                } else {
+                    error = SHBackgroundOperationError.fatalError("Photos returned an image size different than the one requested and resizing failed. A global identifier can't be calculated")
                     return
                 }
                 
