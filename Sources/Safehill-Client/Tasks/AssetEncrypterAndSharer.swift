@@ -40,17 +40,14 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func markAsFailed(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String
+        globalIdentifier: String?
     ) throws
     {
-        try self.markAsFailed(encryptionRequest: request,
-                              globalIdentifier: globalIdentifier,
-                              queueItem: item)
+        try self.markAsFailed(encryptionRequest: request, queueItem: item)
     }
     
     public func markAsFailed(
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String,
         queueItem: KBQueueItem
     ) throws {
         let localIdentifier = request.localIdentifier
@@ -232,7 +229,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
-    private func process(_ item: KBQueueItem) throws {
+    private func process(_ item: KBQueueItem) {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
         
         do {
@@ -248,23 +245,22 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         } catch {
             do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
             catch {
-                log.fault("dequeuing failed of unexpected data in SHARE queue. ATTENTION: this operation will be attempted again.")
+                log.fault("dequeuing failed of unexpected data in SHARE queue")
             }
-
-            throw SHBackgroundOperationError.unexpectedData(item.content)
+            return
         }
-        
-        let asset = shareRequest.asset
-        let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
 
         do {
+            let asset = shareRequest.asset
+            let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
+            
             guard shareRequest.sharedWith.count > 0 else {
                 log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
                 fatalError("sharingWith emtpy. No sharing info")
             }
             
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
-
+            
             if shareRequest.isBackground == false {
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
@@ -278,7 +274,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             ///
             do {
                 log.info("storing encryption secrets for asset \(globalIdentifier) for OTHER users in local server proxy")
-
+                
                 try self.storeSecrets(request: shareRequest, globalIdentifier: globalIdentifier)
                 
                 log.info("successfully stored asset \(globalIdentifier) sharing information in local server proxy")
@@ -292,7 +288,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             ///
 #if DEBUG
             guard ErrorSimulator.percentageShareFailures == 0
-                  || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
+                    || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
                 log.debug("simulating SHARE failure")
                 throw SHBackgroundOperationError.fatalError("share failed")
             }
@@ -304,78 +300,67 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier })")
                 throw SHBackgroundOperationError.fatalError("share failed")
             }
-
+            
+            if shareRequest.isBackground == false {
+                var errorInitializingGroup: Error? = nil
+                let semaphore = DispatchSemaphore(value: 0)
+                
+                let interactionsController = SHUserInteractionController(
+                    user: self.user,
+                    protocolSalt: self.user.encryptionProtocolSalt!
+                )
+                interactionsController.setupGroupEncryptionDetails(
+                    groupId: shareRequest.groupId,
+                    with: shareRequest.sharedWith,
+                    completionHandler: { initializeGroupResult in
+                        switch initializeGroupResult {
+                        case .failure(let error):
+                            errorInitializingGroup = error
+                        default: break
+                        }
+                        semaphore.signal()
+                    }
+                )
+                
+                let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+                guard dispatchResult == .success else {
+                    // Retry (by not dequeueing) on timeout
+                    throw SHBackgroundOperationError.timedOut
+                }
+                guard errorInitializingGroup == nil else {
+                    // Mark as failed on any other error
+                    throw errorInitializingGroup!
+                }
+                
+                // Ingest into the graph
+                try SHKGQuery.ingestShare(
+                    of: globalIdentifier,
+                    from: self.user.identifier,
+                    to: shareRequest.sharedWith.map({ $0.identifier })
+                )
+            }
+            
+            do {
+                try self.markAsSuccessful(
+                    item: item,
+                    encryptionRequest: shareRequest,
+                    globalIdentifier: globalIdentifier
+                )
+            } catch {
+                log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
+                throw error
+            }
         } catch {
             do {
                 try self.markAsFailed(
                     encryptionRequest: shareRequest,
-                    globalIdentifier: globalIdentifier,
                     queueItem: item
                 )
             } catch {
                 log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
                 // TODO: Handle
             }
-            
-            throw error
         }
-        
-        if shareRequest.isBackground == false {
-            var errorInitializingGroup: Error? = nil
-            let semaphore = DispatchSemaphore(value: 0)
-            
-            let interactionsController = SHUserInteractionController(
-                user: self.user,
-                protocolSalt: self.user.encryptionProtocolSalt!
-            )
-            interactionsController.setupGroupEncryptionDetails(
-                groupId: shareRequest.groupId,
-                with: shareRequest.sharedWith,
-                completionHandler: { initializeGroupResult in
-                    switch initializeGroupResult {
-                    case .failure(let error):
-                        errorInitializingGroup = error
-                    default: break
-                    }
-                    semaphore.signal()
-                }
-            )
-            
-            let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            guard dispatchResult == .success else {
-                // Retry (by not dequeueing) on timeout
-                throw SHBackgroundOperationError.timedOut
-            }
-            guard errorInitializingGroup == nil else {
-                // Mark as failed on any other error
-                do {
-                    try self.markAsFailed(
-                        encryptionRequest: shareRequest,
-                        globalIdentifier: globalIdentifier,
-                        queueItem: item
-                    )
-                } catch {
-                    log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
-                    // TODO: Handle
-                }
-                throw errorInitializingGroup!
-            }
-        }
-
-        if shareRequest.isBackground == false {
-            // Ingest into the graph
-            try SHKGQuery.ingestShare(
-                of: globalIdentifier,
-                from: self.user.identifier,
-                to: shareRequest.sharedWith.map({ $0.identifier })
-            )
-        }
-        
-        try self.markAsSuccessful(
-            item: item,
-            encryptionRequest: shareRequest,
-            globalIdentifier: globalIdentifier
-        )
     }
     
     public override func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
@@ -413,12 +398,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             setProcessingState(.sharing, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] share task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] share task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
         }
