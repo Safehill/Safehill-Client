@@ -150,7 +150,7 @@ public extension PHAsset {
 
         PHImageManager().requestImage(for: self,
                                       targetSize: targetSize,
-                                      contentMode: .aspectFill,
+                                      contentMode: .aspectFit,
                                       options: options) {
             image, _ in
             if let image = image {
