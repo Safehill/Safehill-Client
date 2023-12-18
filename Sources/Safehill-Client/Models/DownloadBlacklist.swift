@@ -6,7 +6,7 @@ struct DownloadBlacklist {
     
     let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
     
-    private let writeQueue = DispatchQueue(label: "DownloadBlacklist.write", attributes: .concurrent)
+    private let readWriteQueue = DispatchQueue(label: "DownloadBlacklist.readWrite", attributes: .concurrent)
     
     static var shared = DownloadBlacklist()
     
@@ -37,7 +37,7 @@ struct DownloadBlacklist {
     }
     
     mutating func recordFailedAttempt(globalIdentifier: String) {
-        writeQueue.sync(flags: .barrier) {
+        readWriteQueue.sync(flags: .barrier) {
             if repeatedDownloadFailuresByAssetId[globalIdentifier] == nil {
                 self.repeatedDownloadFailuresByAssetId[globalIdentifier] = 1
             } else {
@@ -47,33 +47,39 @@ struct DownloadBlacklist {
     }
     
     mutating func blacklist(globalIdentifier: String) {
-        writeQueue.sync(flags: .barrier) {
+        readWriteQueue.sync(flags: .barrier) {
             self.repeatedDownloadFailuresByAssetId[globalIdentifier] = DownloadBlacklist.FailedDownloadCountThreshold
         }
     }
     
     mutating func removeFromBlacklist(assetGlobalIdentifier: GlobalIdentifier) {
-        let _ = writeQueue.sync(flags: .barrier) {
+        let _ = readWriteQueue.sync(flags: .barrier) {
             self.repeatedDownloadFailuresByAssetId.removeValue(forKey: assetGlobalIdentifier)
         }
     }
     
     func isBlacklisted(assetGlobalIdentifier: GlobalIdentifier) -> Bool {
-        return DownloadBlacklist.FailedDownloadCountThreshold == repeatedDownloadFailuresByAssetId[assetGlobalIdentifier]
+        var result = false
+        readWriteQueue.sync(flags: .barrier) {
+            result = DownloadBlacklist.FailedDownloadCountThreshold == repeatedDownloadFailuresByAssetId[assetGlobalIdentifier]
+        }
+        return result
     }
     
     mutating func blacklist(userIdentifier: String) {
-        var blUsers = blacklistedUsers
-        guard isBlacklisted(userIdentifier: userIdentifier) == false else {
-            return
+        readWriteQueue.sync(flags: .barrier) {
+            var blUsers = blacklistedUsers
+            guard isBlacklisted(userIdentifier: userIdentifier) == false else {
+                return
+            }
+            
+            blUsers.append(userIdentifier)
+            blacklistedUsers = blUsers
         }
-        
-        blUsers.append(userIdentifier)
-        blacklistedUsers = blUsers
     }
     
     mutating func removeFromBlacklist(userIdentifiers: [String]) {
-        writeQueue.sync(flags: .barrier) {
+        readWriteQueue.sync(flags: .barrier) {
             var blUsers = self.blacklistedUsers
             blUsers.removeAll(where: { userIdentifiers.contains($0) })
             self.blacklistedUsers = blUsers
@@ -81,7 +87,7 @@ struct DownloadBlacklist {
     }
     
     mutating func removeFromBlacklistIfNotIn(userIdentifiers: [String]) {
-        writeQueue.sync(flags: .barrier) {
+        readWriteQueue.sync(flags: .barrier) {
             var blUsers = self.blacklistedUsers
             blUsers.removeAll(where: { userIdentifiers.contains($0) == false })
             self.blacklistedUsers = blUsers
@@ -89,11 +95,15 @@ struct DownloadBlacklist {
     }
     
     func isBlacklisted(userIdentifier: String) -> Bool {
-        blacklistedUsers.contains(userIdentifier)
+        var result = false
+        readWriteQueue.sync(flags: .barrier) {
+            result = blacklistedUsers.contains(userIdentifier)
+        }
+        return result
     }
     
     mutating func deepClean() throws {
-        try writeQueue.sync(flags: .barrier) {
+        try readWriteQueue.sync(flags: .barrier) {
             let _ = try self.blacklistUserStorage.removeAll()
             repeatedDownloadFailuresByAssetId.removeAll()
         }
