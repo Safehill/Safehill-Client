@@ -266,7 +266,7 @@ extension LocalServer {
             storeRequest.httpMethod = "POST"
             storeRequest.httpBody = requestData
             
-            let session = URLSession(configuration: URLSessionConfiguration.default)
+            let session = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
             let task = session.dataTask(with: storeRequest, completionHandler: { (data, response, error) in
                 guard let data = data else {
                     completionHandler(.failure(SHStoreKitHandlerError.receiptValidationError("failed to parse response")))

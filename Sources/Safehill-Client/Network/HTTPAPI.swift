@@ -88,10 +88,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         var stopTime = startTime
         var bytesReceived = 0
         
-        let configuration = URLSessionConfiguration.default
-        configuration.waitsForConnectivity = false
-        configuration.allowsCellularAccess = true
-        URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
+        URLSession(configuration: SafehillServerDefaultURLSessionConfiguration).dataTask(with: request) { data, response, error in
             
             guard error == nil else {
                 if let err = error as? URLError {

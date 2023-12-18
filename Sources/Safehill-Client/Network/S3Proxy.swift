@@ -134,10 +134,6 @@ struct S3Proxy {
             return
         }
         
-        let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-        configuration.allowsCellularAccess = true // defaults to true
-        configuration.waitsForConnectivity = true // default to false
-        
         let sessionDelegate = SHSessionDelegate.sharedInstance
         
         sessionDelegate.addCompletionHandler(
@@ -145,6 +141,7 @@ struct S3Proxy {
             identifier: sessionIdentifier
         )
         
+        let configuration = CDNServerDefaultBackgroundURLSessionConfiguration(with: sessionIdentifier)
         let backgroundSession = URLSession(configuration: configuration,
                                            delegate: sessionDelegate,
                                            delegateQueue: OperationQueue.main)
