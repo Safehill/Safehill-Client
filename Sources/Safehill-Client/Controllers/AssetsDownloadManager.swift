@@ -216,6 +216,7 @@ private extension SHAssetsDownloadManager {
                     do {
                         guard let item = item else {
                             /// If no such items exist in the queue, return
+                            group.leave()
                             return
                         }
                         
@@ -239,12 +240,11 @@ private extension SHAssetsDownloadManager {
                     } catch {
                         errors[assetGId] = error
                     }
-                    
                 case .failure(let error):
                     errors[assetGId] = error
                 }
                 
-                queue.removeValue(for: assetGId) { (_: Swift.Result) in
+                queue.removeValue(for: assetGId) { _ in
                     group.leave()
                 }
             }
