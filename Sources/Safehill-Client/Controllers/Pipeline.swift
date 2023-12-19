@@ -77,6 +77,7 @@ public struct SHUploadPipeline {
     ///   - forceUpload: whether or not it's a force-retry (and should re-upload)
     public static func enqueueShare(
         localIdentifier: String,
+        globalIdentifier: String?,
         groupId: String,
         sender: SHLocalUser,
         recipients: [SHServerUser],
@@ -103,6 +104,7 @@ public struct SHUploadPipeline {
         do {
             let queueItem = SHLocalFetchRequestQueueItem(
                 localIdentifier: localIdentifier,
+                globalIdentifier: globalIdentifier,
                 versions: versions,
                 groupId: groupId,
                 eventOriginator: sender,

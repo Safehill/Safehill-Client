@@ -289,11 +289,21 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             
             let photoAsset = try self.retrieveAsset(fetchRequest: fetchRequest)
-            ///
-            /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
-            /// along with the queue item being enqueued in `markAsSuccessful`
-            /// 
-            let _ = try photoAsset.retrieveOrGenerateGlobalIdentifier()
+            
+            if let gid = fetchRequest.globalIdentifier {
+                ///
+                /// Some `SHLocalFetchRequestQueueItem` have a global identifier set
+                /// for instance when these items are enqueued from an `SHUploadOperation`,
+                /// or when it's a share for an asset that is already on the server
+                ///
+                try photoAsset.setGlobalIdentifier(gid)
+            } else {
+                ///
+                /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
+                /// along with the queue item being enqueued in `markAsSuccessful`
+                ///
+                let _ = try photoAsset.retrieveOrGenerateGlobalIdentifier()
+            }
             
             do {
                 try self.markAsSuccessful(

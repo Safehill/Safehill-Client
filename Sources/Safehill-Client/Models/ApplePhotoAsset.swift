@@ -15,7 +15,7 @@ private let CalculatedGlobalIdentifier = "calculatedGlobalIdentifier"
 public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     public static var supportsSecureCoding = true
     
-    private var calculatedGlobalIdentifier: String? = nil
+    private var calculatedGlobalIdentifier: GlobalIdentifier? = nil
     
     var imageManager: PHImageManager
     
@@ -27,6 +27,16 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         options.isNetworkAccessAllowed = true
         options.resizeMode = .none
         return options
+    }
+    
+    internal func setGlobalIdentifier(_ gid: GlobalIdentifier) throws {
+        if self.calculatedGlobalIdentifier == nil {
+            self.calculatedGlobalIdentifier = gid
+        } else {
+            if self.calculatedGlobalIdentifier != gid {
+                throw SHBackgroundOperationError.fatalError("previously generated global identifier doesn't match the one provided")
+            }
+        }
     }
     
 #if os(iOS)
@@ -46,7 +56,7 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
             return nil
         }
         
-        guard let calculatedGlobalId = calculatedGlobalId as String? else {
+        guard let calculatedGlobalId = calculatedGlobalId as GlobalIdentifier? else {
             log.error("unexpected value for calculatedGlobalIdentifier when decoding SHApplePhotoAsset object")
             return nil
         }
@@ -112,7 +122,7 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
             return nil
         }
         
-        guard let calculatedGlobalId = calculatedGlobalId as String? else {
+        guard let calculatedGlobalId = calculatedGlobalId as GlobalIdentifier? else {
             log.error("unexpected value for calculatedGlobalIdentifier when decoding SHApplePhotoAsset object")
             return nil
         }
@@ -155,7 +165,7 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     ///
     /// - Returns:
     ///   - a hash representing the image fingerprint, that can be used as a unique global identifier
-    func retrieveOrGenerateGlobalIdentifier() throws -> String {
+    func retrieveOrGenerateGlobalIdentifier() throws -> GlobalIdentifier {
         guard calculatedGlobalIdentifier == nil else {
             return calculatedGlobalIdentifier!
         }

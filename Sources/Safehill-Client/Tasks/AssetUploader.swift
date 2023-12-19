@@ -212,6 +212,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
 
                 let fetchRequest = SHLocalFetchRequestQueueItem(
                     localIdentifier: localIdentifier,
+                    globalIdentifier: globalIdentifier,
                     versions: versions,
                     groupId: groupId,
                     eventOriginator: eventOriginator,
@@ -238,6 +239,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                 do {
                     let hiResFetchQueueItem = SHLocalFetchRequestQueueItem(
                         localIdentifier: request.localIdentifier,
+                        globalIdentifier: globalIdentifier,
                         versions: [.hiResolution],
                         groupId: request.groupId,
                         eventOriginator: request.eventOriginator,

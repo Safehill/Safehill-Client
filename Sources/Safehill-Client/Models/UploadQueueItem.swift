@@ -395,14 +395,18 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     
     public static var supportsSecureCoding: Bool = true
     
+    public let globalIdentifier: String?
+    
     public let shouldUpload: Bool
     
     public init(localIdentifier: String,
+                globalIdentifier: String? = nil,
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
                 isBackground: Bool = false) {
+        self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
         super.init(localIdentifier: localIdentifier,
                    groupId: groupId,
@@ -412,12 +416,14 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     }
     
     public init(localIdentifier: String,
+                globalIdentifier: String? = nil,
                 versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
                 isBackground: Bool = false) {
+        self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
         super.init(localIdentifier: localIdentifier,
                    versions: versions,
@@ -429,12 +435,19 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     
     public override func encode(with coder: NSCoder) {
         super.encode(with: coder)
+        coder.encode(self.globalIdentifier, forKey: GlobalAssetIdKey)
         coder.encode(NSNumber(booleanLiteral: self.shouldUpload), forKey: AssetShouldUploadKey)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+            let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
             let shouldUpload = decoder.decodeObject(of: NSNumber.self, forKey: AssetShouldUploadKey)
+            
+            guard let globalId = globalAssetId as String? else {
+                log.error("unexpected value for globalAssetId when decoding SHLocalFetchRequestQueueItem object")
+                return nil
+            }
             
             guard let su = shouldUpload else {
                 log.error("unexpected value for shouldUpload when decoding SHLocalFetchRequestQueueItem object")
@@ -442,6 +455,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
             }
             
             self.init(localIdentifier: superSelf.localIdentifier,
+                      globalIdentifier: globalId,
                       versions: superSelf.versions,
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
