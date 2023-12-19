@@ -244,7 +244,7 @@ private extension SHAssetsDownloadManager {
                     errors[assetGId] = error
                 }
                 
-                queue.removeValue(for: assetGId) { _ in
+                queue.removeValue(for: assetGId) { (_: Result) in
                     group.leave()
                 }
             }
