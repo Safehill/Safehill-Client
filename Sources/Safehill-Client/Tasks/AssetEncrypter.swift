@@ -621,6 +621,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     public func runOnce(maxItems: Int? = nil) throws {
         var count = 0
         let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        
         while let item = try encryptionQueue.peek() {
             guard maxItems == nil || count < maxItems! else {
                 break
@@ -676,6 +677,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
+                
                 self.process(item)
                 log.info("[√] encryption task completed for item \(item.identifier)")
                 

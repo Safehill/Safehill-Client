@@ -352,6 +352,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             log.info("fetching item \(item.identifier) created at \(item.createdAt)")
             
             setProcessingState(.fetching, for: item.identifier)
+            
+            self.process(item)
             log.info("[√] fetch task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
