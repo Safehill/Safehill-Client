@@ -132,7 +132,8 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
             let end = CFAbsoluteTimeGetCurrent()
             log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate an asset global identifier")
             
-            return hash
+            self.calculatedGlobalIdentifier = hash
+            return self.calculatedGlobalIdentifier
         } else {
             throw SHBackgroundOperationError.unexpectedData(resizedImage)
         }
