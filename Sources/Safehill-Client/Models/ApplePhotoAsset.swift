@@ -51,13 +51,8 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         let phAssetIdentifier = decoder.decodeObject(of: NSString.self, forKey: PHAssetIdentifierKey)
         let calculatedGlobalId = decoder.decodeObject(of: NSString.self, forKey: CalculatedGlobalIdentifier)
         
-        guard let phAssetIdentifier = phAssetIdentifier as String? else {
+        guard let phAssetIdentifier = phAssetIdentifier as? String else {
             log.error("unexpected value for phAssetIdentifier when decoding SHApplePhotoAsset object")
-            return nil
-        }
-        
-        guard let calculatedGlobalId = calculatedGlobalId as GlobalIdentifier? else {
-            log.error("unexpected value for calculatedGlobalIdentifier when decoding SHApplePhotoAsset object")
             return nil
         }
         
@@ -68,7 +63,9 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         
         let asset = fetchResult.object(at: 0)
         self.init(for: asset)
-        self.calculatedGlobalIdentifier = calculatedGlobalId
+        if let calculatedGlobalId = calculatedGlobalId as? GlobalIdentifier {
+            self.calculatedGlobalIdentifier = calculatedGlobalId
+        }
     }
     
     public func fetchOriginalSizeImage() throws -> UIImage {
@@ -117,13 +114,8 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         let phAssetIdentifier = decoder.decodeObject(of: NSString.self, forKey: PHAssetIdentifierKey)
         let calculatedGlobalId = decoder.decodeObject(of: NSString.self, forKey: CalculatedGlobalIdentifier)
         
-        guard let phAssetIdentifier = phAssetIdentifier as String? else {
+        guard let phAssetIdentifier = phAssetIdentifier as? String else {
             log.error("unexpected value for phAssetIdentifier when decoding SHApplePhotoAsset object")
-            return nil
-        }
-        
-        guard let calculatedGlobalId = calculatedGlobalId as GlobalIdentifier? else {
-            log.error("unexpected value for calculatedGlobalIdentifier when decoding SHApplePhotoAsset object")
             return nil
         }
         
@@ -134,7 +126,9 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         
         let asset = fetchResult.object(at: 0)
         self.init(for: asset)
-        self.calculatedGlobalIdentifier = calculatedGlobalId
+        if let calculatedGlobalId = calculatedGlobalId as? GlobalIdentifier {
+            self.calculatedGlobalIdentifier = calculatedGlobalId
+        }
     }
     
     public func fetchOriginalSizeImage() throws -> NSImage {

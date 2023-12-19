@@ -120,4 +120,50 @@ final class Safehill_SerializationTests: XCTestCase {
         XCTAssertNil(authResponse.metadata)
         XCTAssertNotNil(authResponse.encryptionProtocolSalt)
     }
+    
+    func testSerializeFetchRequest() throws {
+        let sender = SHLocalUser(keychainPrefix: "")
+        let queueItems = [
+            SHLocalFetchRequestQueueItem(
+                localIdentifier: "localIdentifier",
+                globalIdentifier: "globalIdentifier",
+                versions: [.lowResolution, .hiResolution],
+                groupId: "groupId",
+                eventOriginator: sender,
+                sharedWith: [],
+                shouldUpload: true
+            ),
+            SHLocalFetchRequestQueueItem(
+                localIdentifier: "localIdentifier",
+                globalIdentifier: nil,
+                groupId: "groupId",
+                eventOriginator: sender,
+                sharedWith: [sender],
+                shouldUpload: false,
+                isBackground: true
+            ),
+        ]
+        
+        for queueItem in queueItems {
+            let data = try NSKeyedArchiver.archivedData(withRootObject: queueItem, requiringSecureCoding: true)
+            
+            let unarchiver: NSKeyedUnarchiver = NSKeyedUnarchiver(forReadingWith: data)
+            let deserialized = unarchiver.decodeObject(of: SHLocalFetchRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey)
+            
+            guard let deserialized = deserialized else {
+                XCTFail()
+                return
+            }
+            XCTAssertEqual(queueItem.localIdentifier, deserialized.localIdentifier)
+            XCTAssertEqual(queueItem.globalIdentifier, deserialized.globalIdentifier)
+            XCTAssertEqual(queueItem.groupId, deserialized.groupId)
+            XCTAssert(queueItem.versions.count == deserialized.versions.count)
+            XCTAssert(queueItem.versions.sorted(by: { $0.rawValue >= $1.rawValue }).elementsEqual(deserialized.versions.sorted(by: { $0.rawValue >= $1.rawValue })))
+            XCTAssertEqual(queueItem.eventOriginator.identifier, deserialized.eventOriginator.identifier)
+            XCTAssert(queueItem.sharedWith.count == deserialized.sharedWith.count)
+            XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
+            XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
+            XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)
+        }
+    }
 }

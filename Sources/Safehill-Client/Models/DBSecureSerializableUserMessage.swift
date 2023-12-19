@@ -43,19 +43,19 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
         let encryptedMessage = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.encryptedMessage.rawValue)
         let createdAt = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.createdAt.rawValue)
         
-        guard let interactionId = interactionId as String? else {
+        guard let interactionId = interactionId as? String else {
             log.error("unexpected value for interactionId when decoding SecureSerializableUserMessage object")
             return nil
         }
-        guard let senderUserIdentifier = senderUserIdentifier as String? else {
+        guard let senderUserIdentifier = senderUserIdentifier as? String else {
             log.error("unexpected senderUserIdentifier for name when decoding SecureSerializableUserMessage object")
             return nil
         }
-        guard let encryptedMessage = encryptedMessage as String? else {
+        guard let encryptedMessage = encryptedMessage as? String else {
             log.error("unexpected value for encryptedMessage when decoding SecureSerializableUserMessage object")
             return nil
         }
-        guard let createdAt = createdAt as String? else {
+        guard let createdAt = createdAt as? String else {
             log.error("unexpected value for createdAt when decoding SecureSerializableUserMessage object")
             return nil
         }
@@ -63,8 +63,8 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
         self.init(
             interactionId: interactionId,
             senderUserIdentifier: senderUserIdentifier,
-            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier as String?,
-            inReplyToInteractionId: inReplyToInteractionId as String?,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier as? String,
+            inReplyToInteractionId: inReplyToInteractionId as? String,
             encryptedMessage: encryptedMessage,
             createdAt: createdAt
         )
