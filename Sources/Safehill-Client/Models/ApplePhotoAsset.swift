@@ -21,7 +21,16 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     
     public let phAsset: PHAsset
     
+    internal static var imageRequestOptions: PHImageRequestOptions {
+        let options = PHImageRequestOptions()
+        options.isSynchronous = true
+        options.isNetworkAccessAllowed = true
+        options.resizeMode = .none
+        return options
+    }
+    
 #if os(iOS)
+    
     public init(for asset: PHAsset,
                 usingCachingImageManager manager: PHCachingImageManager? = nil) {
         self.phAsset = asset
@@ -50,14 +59,6 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         let asset = fetchResult.object(at: 0)
         self.init(for: asset)
         self.calculatedGlobalIdentifier = calculatedGlobalId
-    }
-    
-    internal static var imageRequestOptions: PHImageRequestOptions {
-        let options = PHImageRequestOptions()
-        options.isSynchronous = true
-        options.isNetworkAccessAllowed = true
-        options.resizeMode = .none
-        return options
     }
     
     public func fetchOriginalSizeImage() throws -> UIImage {
@@ -94,53 +95,8 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         return ni
     }
     
-    ///
-    ///  **Use it carefully!!**
-    ///  This operation can take time, as it needs to retrieve the full resolution asset from the Apple Photos library.
-    ///
-    /// - Returns:
-    ///   - a hash representing the image fingerprint, that can be used as a unique global identifier
-    func retrieveOrGenerateGlobalIdentifier() throws -> String {
-        guard calculatedGlobalIdentifier == nil else {
-            return calculatedGlobalIdentifier!
-        }
-        
-        let start = CFAbsoluteTimeGetCurrent()
-        
-        let targetSize: CGSize
-        if self.phAsset.pixelWidth > self.phAsset.pixelHeight {
-            targetSize = CGSize(width: imageSizeForGlobalIdCalculation.width,
-                                height: floor(imageSizeForGlobalIdCalculation.width * Double(self.phAsset.pixelHeight)/Double(self.phAsset.pixelWidth)))
-        } else {
-            targetSize = CGSize(width: floor(imageSizeForGlobalIdCalculation.height * Double(self.phAsset.pixelWidth)/Double(self.phAsset.pixelHeight)),
-                                height: imageSizeForGlobalIdCalculation.height)
-        }
-        
-        let fullSizeImage = try self.fetchOriginalSizeImage()
-        let resizedImage = try SHApplePhotoAsset.resizeImage(fullSizeImage, to: targetSize)
-        
-        let cgImage: CGImage?
-#if os(iOS)
-        cgImage = resizedImage.cgImage
 #else
-        var imageRect = CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height)
-        cgImage = image.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
-#endif
-        if let data = cgImage?.dataProvider?.data as? Data {
-            let hash = SHHash.stringDigest(for: data)
-            
-            let end = CFAbsoluteTimeGetCurrent()
-            log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate an asset global identifier")
-            
-            self.calculatedGlobalIdentifier = hash
-            return hash
-        } else {
-            throw SHBackgroundOperationError.unexpectedData(resizedImage)
-        }
-    }
-#endif
     
-#if os(macOS)
     public init(for asset: PHAsset,
                 usingCachingImageManager manager: PHCachingImageManager? = nil) {
         self.phAsset = asset
@@ -171,7 +127,72 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         self.calculatedGlobalIdentifier = calculatedGlobalId
     }
     
+    public func fetchOriginalSizeImage() throws -> NSImage {
+        var image: NSImage? = nil
+        
+        PHImageManager().requestImage(
+            for: self.phAsset,
+            targetSize: PHImageManagerMaximumSize,
+            contentMode: .default,
+            options: SHApplePhotoAsset.imageRequestOptions
+        ) {
+            img, _ in
+            image = img
+        }
+        
+        guard let image = image else {
+            throw SHBackgroundOperationError.applePhotosAssetRetrievalError("could not fetch full size image")
+        }
+        
+        return image
+    }
 #endif
+    
+    
+    ///
+    ///  **Use it carefully!!**
+    ///  This operation can take time, as it needs to retrieve the full resolution asset from the Apple Photos library.
+    ///
+    /// - Returns:
+    ///   - a hash representing the image fingerprint, that can be used as a unique global identifier
+    func retrieveOrGenerateGlobalIdentifier() throws -> String {
+        guard calculatedGlobalIdentifier == nil else {
+            return calculatedGlobalIdentifier!
+        }
+        
+        let start = CFAbsoluteTimeGetCurrent()
+        
+        let targetSize: CGSize
+        if self.phAsset.pixelWidth > self.phAsset.pixelHeight {
+            targetSize = CGSize(width: imageSizeForGlobalIdCalculation.width,
+                                height: floor(imageSizeForGlobalIdCalculation.width * Double(self.phAsset.pixelHeight)/Double(self.phAsset.pixelWidth)))
+        } else {
+            targetSize = CGSize(width: floor(imageSizeForGlobalIdCalculation.height * Double(self.phAsset.pixelWidth)/Double(self.phAsset.pixelHeight)),
+                                height: imageSizeForGlobalIdCalculation.height)
+        }
+        
+        let fullSizeImage = try self.fetchOriginalSizeImage()
+        
+        let cgImage: CGImage?
+#if os(iOS)
+        let resizedImage = try SHApplePhotoAsset.resizeImage(fullSizeImage, to: targetSize)
+        cgImage = resizedImage.cgImage
+#else
+        var imageRect = CGRect(x: 0, y: 0, width: targetSize.width, height: targetSize.height)
+        cgImage = fullSizeImage.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
+#endif
+        if let data = cgImage?.dataProvider?.data as? Data {
+            let hash = SHHash.stringDigest(for: data)
+            
+            let end = CFAbsoluteTimeGetCurrent()
+            log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate an asset global identifier")
+            
+            self.calculatedGlobalIdentifier = hash
+            return hash
+        } else {
+            throw SHBackgroundOperationError.unexpectedData(cgImage)
+        }
+    }
     
     public func encode(with coder: NSCoder) {
         coder.encode(self.phAsset.localIdentifier, forKey: PHAssetIdentifierKey)

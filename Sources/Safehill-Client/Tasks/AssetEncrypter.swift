@@ -4,7 +4,11 @@ import KnowledgeBase
 import Photos
 import os
 import CryptoKit
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 
 
 extension SHApplePhotoAsset {
@@ -106,7 +110,11 @@ extension SHApplePhotoAsset {
     func data(for versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
         var dict = [SHAssetQuality: Result<Data, Error>]()
         
+#if os(iOS)
         let fullSizeImage: UIImage
+#else
+        let fullSizeImage: NSImage
+#endif
         do {
             fullSizeImage = try self.fetchOriginalSizeImage()
         } catch {
@@ -119,6 +127,7 @@ extension SHApplePhotoAsset {
         
         for version in versions {
             let size = kSHSizeForQuality(quality: version)
+#if os(iOS)
             let resizedImage: UIImage
             do {
                 try resizedImage = SHApplePhotoAsset.resizeImage(fullSizeImage, to: size)
@@ -132,6 +141,13 @@ extension SHApplePhotoAsset {
             } else {
                 dict[version] = .failure(SHBackgroundOperationError.fatalError("could not retrieve data for resized image (default size for quality '\(version.rawValue)')"))
             }
+#else
+            if let data = fullSizeImage.cgImage(forProposedRect: nil, context: nil, hints: nil)?.dataProvider?.data as? Data {
+                dict[version] = .success(data)
+            } else {
+                dict[version] = .failure(SHBackgroundOperationError.fatalError("could not retrieve data for resized image (default size for quality '\(version.rawValue)')"))
+            }
+#endif
         }
 
         return dict
