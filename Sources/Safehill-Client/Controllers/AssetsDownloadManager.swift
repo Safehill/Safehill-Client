@@ -214,8 +214,13 @@ private extension SHAssetsDownloadManager {
                 switch result {
                 case .success(let item):
                     do {
-                        guard let data = item?.content as? Data else {
-                            throw SHBackgroundOperationError.unexpectedData(item?.content)
+                        guard let item = item else {
+                            /// If no such items exist in the queue, return
+                            return
+                        }
+                        
+                        guard let data = item.content as? Data else {
+                            throw SHBackgroundOperationError.unexpectedData(item.content)
                         }
                         
                         let unarchiver: NSKeyedUnarchiver
