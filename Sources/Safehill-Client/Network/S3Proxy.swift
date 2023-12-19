@@ -43,7 +43,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             try? FileManager.default.removeItem(atPath: filePath)
         }
         
-        writeQueueAccessQueue.sync(flags: .barrier) {
+        let _ = writeQueueAccessQueue.sync(flags: .barrier) {
             self.handlerQueue.removeValue(forKey: identifier)
         }
         
@@ -78,7 +78,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             return
         }
         
-        writeQueueAccessQueue.sync(flags: .barrier) {
+        let _ = writeQueueAccessQueue.sync(flags: .barrier) {
             self.handlerQueue.removeValue(forKey: identifier)
         }
         

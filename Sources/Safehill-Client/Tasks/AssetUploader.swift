@@ -256,7 +256,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         }
     }
     
-    func process(_ item: KBQueueItem) throws {
+    func process(_ item: KBQueueItem) {
         
         let uploadRequest: SHUploadRequestQueueItem
         
@@ -276,7 +276,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             catch {
                 log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
             }
-            throw error
+            return
         }
         
         if uploadRequest.isBackground == false {
@@ -342,8 +342,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                 log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                 // TODO: Handle
             }
-            
-            throw error
         }
 
         ///
@@ -396,12 +394,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             
             setProcessingState(.uploading, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] upload task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] upload task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
         }
@@ -423,12 +417,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             
             setProcessingState(.uploading, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] upload task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] upload task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
             
@@ -470,12 +460,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
-                do {
-                    try self.process(item)
-                    log.info("[√] upload task completed for item \(item.identifier)")
-                } catch {
-                    log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
-                }
+                
+                self.process(item)
+                log.info("[√] upload task completed for item \(item.identifier)")
                 
                 setProcessingState(nil, for: item.identifier)
             }

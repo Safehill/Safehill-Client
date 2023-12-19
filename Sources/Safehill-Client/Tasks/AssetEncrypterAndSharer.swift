@@ -245,14 +245,17 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         } catch {
             do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
             catch {
-                log.fault("dequeuing failed of unexpected data in SHARE queue")
+                log.fault("dequeuing failed of unexpected data in SHARE queue. \(error.localizedDescription)")
             }
             return
         }
 
         do {
-            let asset = shareRequest.asset
-            let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
+            ///
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            let globalIdentifier = try shareRequest.asset.retrieveOrGenerateGlobalIdentifier()
             
             guard shareRequest.sharedWith.count > 0 else {
                 log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
@@ -351,6 +354,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 throw error
             }
         } catch {
+            log.critical("Error in SHARE asset: \(error.localizedDescription)")
             do {
                 try self.markAsFailed(
                     encryptionRequest: shareRequest,
@@ -421,12 +425,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             setProcessingState(.sharing, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] share task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] share task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
             
@@ -467,12 +467,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
-                do {
-                    try self.process(item)
-                    log.info("[√] share task completed for item \(item.identifier)")
-                } catch {
-                    log.error("[x] share task failed for item \(item.identifier): \(error.localizedDescription)")
-                }
+                
+                self.process(item)
+                log.info("[√] share task completed for item \(item.identifier)")
                 
                 setProcessingState(nil, for: item.identifier)
             }

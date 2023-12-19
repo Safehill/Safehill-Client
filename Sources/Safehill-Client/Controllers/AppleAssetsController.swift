@@ -229,15 +229,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
             let writeBatch = index.writeBatch()
             
             fetchResult.enumerateObjects { asset, count, stop in
-                if let cacheHit = try? index.value(for: asset.localIdentifier) as? SHApplePhotoAsset {
-                    if let whenCached = cacheHit.cacheUpdatedAt,
-                       whenCached.compare(asset.modificationDate ?? .distantPast) == .orderedAscending {
-                        // Asset was modified since cached -> remove from the persistent cache
-                        cachedAssetIdsToInvalidate.append(asset.localIdentifier)
-                    }
-                }
                 let kvsAssetValue = SHApplePhotoAsset(for: asset, usingCachingImageManager: self.imageManager)
                 writeBatch.set(value: kvsAssetValue, for: asset.localIdentifier)
+                cachedAssetIdsToInvalidate.append(asset.localIdentifier)
             }
             
             do {

@@ -56,7 +56,6 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     private func retrieveAsset(fetchRequest request: SHLocalFetchRequestQueueItem) throws -> SHApplePhotoAsset {
         let localIdentifier = request.localIdentifier
-        let versions = request.versions
         
         var photoAsset: SHApplePhotoAsset? = nil
         
@@ -81,36 +80,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     return
                 }
                 
-                ///
-                /// Fetch the higest-needed resolution asset based on the versions,
-                /// using the same imageManager used to display the asset (so that it's likely that it was already cached by Photos).
-                /// Doing this here avoids fetching large assets from the Apple Photos library in the SHEncryptOperation,
-                /// as cachedImage on the SHApplePhotoAsset will be set here, and will be resized to smaller images
-                /// when generating the SHAssetQuality versions.
-                ///
-                
-                let highestSize: CGSize
-                if versions.contains(.hiResolution) {
-                    highestSize = kSHSizeForQuality(quality: .hiResolution)
-                } else if versions.contains(.midResolution) {
-                    highestSize = kSHSizeForQuality(quality: .midResolution)
-                } else {
-                    highestSize = kSHSizeForQuality(quality: .lowResolution)
-                }
-                 
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.deliveryMode = .highQualityFormat
-                self.imageManager.startCachingImages(for: [phAsset],
-                                                     targetSize: highestSize,
-                                                     contentMode: .default,
-                                                     options: options)
-                
-                self.log.info("asking imageManager \(self.imageManager) to cache image size \(highestSize.debugDescription) for asset \(phAsset.localIdentifier)")
-                
                 photoAsset = SHApplePhotoAsset(
                     for: phAsset,
-                    cachedImage: nil,
                     usingCachingImageManager: self.imageManager
                 )
                 
@@ -118,7 +89,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .seconds(30))
+        let dispatchResult = group.wait(timeout: .now() + .seconds(5))
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
@@ -269,11 +240,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
     }
     
-    private func process(_ item: KBQueueItem) throws {
-        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
-        let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-        let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
-        
+    private func process(_ item: KBQueueItem) {
         let fetchRequest: SHLocalFetchRequestQueueItem
         
         do {
@@ -285,57 +252,70 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             fetchRequest = content
         } catch {
-            do { _ = try fetchQueue.dequeue(item: item) }
+            do { _ = try BackgroundOperationQueue.of(type: .fetch).dequeue(item: item) }
             catch {
-                log.warning("dequeuing failed of unexpected data in FETCH queue. This task will be attempted again.")
+                log.fault("dequeuing failed of unexpected data in FETCH queue. \(error.localizedDescription)")
             }
-            throw error
+            return
         }
         
-        if fetchRequest.isBackground == false {
-            ///
-            /// Background requests have no side effects, so they shouldn't remove items in the SUCCESS or FAILED queues created by non-background requests.
-            /// All other requests when triggered (by adding them to the FetchQueue) should remove previous side effects in the following queues:
-            /// - `FailedUploadQueue` (all items with same local identifier)
-            /// - `FailedShareQueue` (all items with same local identifier, group and users (there can be many with same local identifier and group, when asset is shared with different users at different times)
-            ///
-            let _ = try? failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: fetchRequest.localIdentifier)))
-            let _ = try? failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: fetchRequest.identifier))
-            
-            for delegate in delegates {
-                if let delegate = delegate as? SHAssetFetcherDelegate {
-                    if fetchRequest.shouldUpload == true {
-                        delegate.didStartFetchingForUpload(queueItemIdentifier: fetchRequest.identifier)
-                    } else {
-                        delegate.didStartFetchingForSharing(queueItemIdentifier: fetchRequest.identifier)
+        do {
+            if fetchRequest.isBackground == false {
+                ///
+                /// Background requests should have no side effects, so they shouldn't remove items in the SUCCESS or FAILED queues created by non-background requests.
+                /// All other requests when triggered (by adding them to the FetchQueue) should remove previous side effects in the following queues:
+                /// - `FailedUploadQueue` (all items with same local identifier)
+                /// - `FailedShareQueue` (all items with same local identifier, group and users (there can be many with same local identifier and group, when asset is shared with different users at different times)
+                ///
+                
+                let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
+                let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
+                
+                let _ = try? failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: fetchRequest.localIdentifier)))
+                let _ = try? failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: fetchRequest.identifier))
+                
+                ///
+                /// Notify the delegates the upload or sharing operation was kicked off
+                ///
+                for delegate in delegates {
+                    if let delegate = delegate as? SHAssetFetcherDelegate {
+                        if fetchRequest.shouldUpload == true {
+                            delegate.didStartFetchingForUpload(queueItemIdentifier: fetchRequest.identifier)
+                        } else {
+                            delegate.didStartFetchingForSharing(queueItemIdentifier: fetchRequest.identifier)
+                        }
                     }
                 }
             }
-        }
-        
-        guard let photoAsset = try? self.retrieveAsset(fetchRequest: fetchRequest) else {
-            log.error("failed to fetch data for item \(item.identifier). Dequeueing item, as it's unlikely to succeed again.")
+            
+            let photoAsset = try self.retrieveAsset(fetchRequest: fetchRequest)
+            ///
+            /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
+            /// along with the queue item being enqueued in `markAsSuccessful`
+            /// 
+            let _ = try photoAsset.retrieveOrGenerateGlobalIdentifier()
+            
+            do {
+                try self.markAsSuccessful(
+                    photoAsset: photoAsset,
+                    fetchRequest: fetchRequest,
+                    queueItem: item
+                )
+            } catch {
+                log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
+                throw error
+            }
+        } catch {
+            log.critical("Error in FETCH asset: \(error.localizedDescription)")
             do {
                 try self.markAsFailed(fetchRequest: fetchRequest,
                                       queueItem: item)
             } catch {
-                log.critical("failed to mark FETCH as failed. This will likely cause infinite loops")
+                log.critical("failed to mark FETCH as failed. This will likely cause infinite loops. \(error.localizedDescription)")
                 // TODO: Handle
             }
-            
-            throw SHBackgroundOperationError.fatalError("failed to retrieve asset from Apple library")
         }
         
-        do {
-            try self.markAsSuccessful(
-                photoAsset: photoAsset,
-                fetchRequest: fetchRequest,
-                queueItem: item
-            )
-        } catch {
-            log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
-            // TODO: Handle
-        }
     }
     
     public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
@@ -372,13 +352,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             log.info("fetching item \(item.identifier) created at \(item.createdAt)")
             
             setProcessingState(.fetching, for: item.identifier)
-            
-            do {
-                try self.process(item)
-                log.info("[√] fetch task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            log.info("[√] fetch task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
         }
@@ -399,12 +373,8 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             log.info("fetching item \(item.identifier) created at \(item.createdAt)")
             setProcessingState(.fetching, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] fetch task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] fetch task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
             
@@ -445,12 +415,9 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
-                do {
-                    try self.process(item)
-                    log.info("[√] fetch task completed for item \(item.identifier)")
-                } catch {
-                    log.error("[x] fetch task failed for item \(item.identifier): \(error.localizedDescription)")
-                }
+                
+                self.process(item)
+                log.info("[√] fetch task completed for item \(item.identifier)")
                 
                 setProcessingState(nil, for: item.identifier)
             }

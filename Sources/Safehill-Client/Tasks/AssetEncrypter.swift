@@ -4,6 +4,7 @@ import KnowledgeBase
 import Photos
 import os
 import CryptoKit
+import UIKit
 
 
 extension SHApplePhotoAsset {
@@ -105,33 +106,31 @@ extension SHApplePhotoAsset {
     func data(for versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
         var dict = [SHAssetQuality: Result<Data, Error>]()
         
+        let fullSizeImage: UIImage
+        do {
+            fullSizeImage = try self.fetchOriginalSizeImage()
+        } catch {
+            return versions.reduce([:]) { partialResult, quality in
+                var result = partialResult
+                result[quality] = .failure(SHBackgroundOperationError.applePhotosAssetRetrievalError("could not fetch full size image"))
+                return result
+            }
+        }
+        
         for version in versions {
             let size = kSHSizeForQuality(quality: version)
-            
+            let resizedImage: UIImage
             do {
-                let data = try self.cachedData(forSize: size)
-                if let data = data {
-                    dict[version] = Result<Data, Error>.success(data)
-                } else {
-                    log.info("retrieving asset \(self.phAsset.localIdentifier) data for size \(size.debugDescription) using   imageManager \(self.imageManager)")
-                    self.phAsset.data(forSize: size,
-                                      usingImageManager: imageManager,
-                                      synchronousFetch: true,
-                                      deliveryMode: .highQualityFormat)
-                    { (result: Result<Data, Error>) in
-                        dict[version] = result
-#if DEBUG
-                        if case .success(let data) = result {
-                            let bcf = ByteCountFormatter()
-                            bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
-                            bcf.countStyle = .file
-                            log.debug("\(version.rawValue) bytes (\(bcf.string(fromByteCount: Int64(data.count))))")
-                        }
-#endif
-                    }
-                }
+                try resizedImage = SHApplePhotoAsset.resizeImage(fullSizeImage, to: size)
             } catch {
-                dict[version] = Result.failure(error)
+                dict[version] = .failure(SHBackgroundOperationError.fatalError("could not resize image (default size for quality '\(version.rawValue)')"))
+                continue
+            }
+            
+            if let data = resizedImage.cgImage?.dataProvider?.data as? Data {
+                dict[version] = .success(data)
+            } else {
+                dict[version] = .failure(SHBackgroundOperationError.fatalError("could not retrieve data for resized image (default size for quality '\(version.rawValue)')"))
             }
         }
 
@@ -469,7 +468,11 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                 }
             }
             
-            globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
+            /// 
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
             
             ///
             /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
@@ -492,7 +495,10 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             ///
             let privateSecret: SymmetricKey
             do {
-                let privateSecretData = try asset.retrieveCommonEncryptionKey(sender: self.user, globalIdentifier: globalIdentifier!)
+                let privateSecretData = try asset.retrieveCommonEncryptionKey(
+                    sender: self.user,
+                    globalIdentifier: globalIdentifier!
+                )
                 privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
             } catch SHBackgroundOperationError.missingAssetInLocalServer(_) {
                 privateSecret = SymmetricKey(size: .bits256)
@@ -611,12 +617,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             
             setProcessingState(.encrypting, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] encryption task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] encryption task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
             
@@ -658,12 +660,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
-                do {
-                    try self.process(item)
-                    log.info("[√] encryption task completed for item \(item.identifier)")
-                } catch {
-                    log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
-                }
+                self.process(item)
+                log.info("[√] encryption task completed for item \(item.identifier)")
                 
                 setProcessingState(nil, for: item.identifier)
             }

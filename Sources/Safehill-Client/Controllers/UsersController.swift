@@ -73,8 +73,6 @@ public class SHUsersController {
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws -> [SHServerUser] {
-        
-        var shouldFetch = false
         var users = [any SHServerUser]()
         var missingUserIds = [String]()
         
