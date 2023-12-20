@@ -490,16 +490,18 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             ///
             globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
             
-            ///
-            /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
-            /// ingest that identifier into the graph as a provisional share.
-            ///
-            try SHKGQuery.ingestShare(
-                of: globalIdentifier!,
-                from: self.user.identifier,
-                to: encryptionRequest.sharedWith.map({ $0.identifier }),
-                provisional: true
-            )
+            if encryptionRequest.isBackground == false {
+                ///
+                /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
+                /// ingest that identifier into the graph as a provisional share.
+                ///
+                try SHKGQuery.ingestShare(
+                    of: globalIdentifier!,
+                    from: self.user.identifier,
+                    to: encryptionRequest.sharedWith.map({ $0.identifier }),
+                    provisional: true
+                )
+            }
             
             
             ///
