@@ -111,10 +111,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             let httpResponse = response as! HTTPURLResponse
             if httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
-                log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+                log.warning("request \(request.httpMethod!) \(request.url!) received \(httpResponse.statusCode) response")
                 if let data = data {
                     let convertedString = String(data: data, encoding: String.Encoding.utf8)
-                    log.debug("response body: \(convertedString ?? "")")
+                    log.warning("response body: \(convertedString ?? "")")
                 }
             }
             
