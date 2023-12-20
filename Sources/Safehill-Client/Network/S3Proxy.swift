@@ -28,7 +28,11 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
     public func urlSession(_ session: URLSession,
                            task: URLSessionTask,
                            didCompleteWithError error: Error?) {
-        log.error("[BACKGROUND-URLSESSION] \(session.configuration.identifier ?? "") did complete with error: \(error?.localizedDescription ?? "nil")")
+        if error == nil {
+            log.info("[BACKGROUND-URLSESSION] \(session.configuration.identifier ?? "") completed successfully")
+        } else {
+            log.error("[BACKGROUND-URLSESSION] \(session.configuration.identifier ?? "") completed with error: \(error!.localizedDescription)")
+        }
         guard let identifier = session.configuration.identifier,
               identifier.isEmpty == false,
               let handlers = handlerQueue[identifier]
