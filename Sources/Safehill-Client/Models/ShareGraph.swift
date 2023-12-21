@@ -63,6 +63,9 @@ public struct SHKGQuery {
         do {
             try readWriteGraphQueue.sync(flags: .barrier) {
                 let graph = try SHDBManager.sharedInstance.graph()
+                
+                log.debug("[sh-kg] graph before ingest \(graph.triples(matching: nil))")
+                
                 let kgSender = graph.entity(withIdentifier: senderUserId)
                 let kgAsset = graph.entity(withIdentifier: assetIdentifier)
                 
@@ -82,6 +85,7 @@ public struct SHKGQuery {
                 } else {
                     UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
                 }
+                
                 for userId in receiverUserIds {
                     if userId == senderUserId {
                         continue
@@ -96,6 +100,8 @@ public struct SHKGQuery {
                         UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
                     }
                 }
+                
+                log.debug("[sh-kg] graph after ingest \(graph.triples(matching: nil))")
             }
         } catch {
             log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
