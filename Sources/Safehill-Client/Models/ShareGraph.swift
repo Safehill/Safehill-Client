@@ -71,10 +71,10 @@ public struct SHKGQuery {
                     log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
                 } else {
                     try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
-                    let tripleCondition = KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: nil)
+                    let tripleCondition = KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: kgAsset.identifier)
                     try graph.removeTriples(matching: tripleCondition)
                     log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.shares.rawValue), asset=\(kgAsset.identifier)>")
-                    log.debug("[sh-kg] removing triples matching \(tripleCondition)")
+                    log.debug("[sh-kg] removing triples matching <user=\(senderUserId), \(SHKGPredicates.attemptedShare.rawValue), \(kgAsset.identifier)>")
                 }
                 
                 if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
