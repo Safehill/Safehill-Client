@@ -150,7 +150,7 @@ public struct SHKGQuery {
             let graph = try SHDBManager.sharedInstance.graph()
             for userId in userIdentifiers {
                 try graph.removeEntity(userId)
-                log.debug("[sh-kg] removing entity <user=\(assetEntity.identifier)>")
+                log.debug("[sh-kg] removing entity <user=\(userId)>")
             }
         }
     }
