@@ -68,11 +68,14 @@ public struct SHKGQuery {
                 
                 if provisional {
                     try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.attemptedShare.rawValue)
+                    log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
                 } else {
                     try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
-                    try graph.removeTriples(matching: KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: nil))
+                    let tripleCondition = KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: nil)
+                    try graph.removeTriples(matching: tripleCondition)
+                    log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.shares.rawValue), asset=\(kgAsset.identifier)>")
+                    log.debug("[sh-kg] removing triples matching \(tripleCondition)")
                 }
-                
                 
                 if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
                     UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
@@ -85,6 +88,7 @@ public struct SHKGQuery {
                     }
                     let kgOtherUser = graph.entity(withIdentifier: userId)
                     try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
+                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicates.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
                     
                     if let _ = UserIdToAssetGidSharedWithCache[userId] {
                         UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
@@ -129,6 +133,7 @@ public struct SHKGQuery {
             try globalIdentifiers.forEach({
                 let assetEntity = graph.entity(withIdentifier: $0)
                 try assetEntity.remove()
+                log.debug("[sh-kg] removing entity <asset=\(assetEntity.identifier)>")
             })
         }
     }
@@ -145,6 +150,7 @@ public struct SHKGQuery {
             let graph = try SHDBManager.sharedInstance.graph()
             for userId in userIdentifiers {
                 try graph.removeEntity(userId)
+                log.debug("[sh-kg] removing entity <user=\(assetEntity.identifier)>")
             }
         }
     }
@@ -157,6 +163,7 @@ public struct SHKGQuery {
         try readWriteGraphQueue.sync(flags: .barrier) {
             let graph = try SHDBManager.sharedInstance.graph()
             let _ = try graph.removeAll()
+            log.debug("[sh-kg] removing all triples")
         }
     }
     

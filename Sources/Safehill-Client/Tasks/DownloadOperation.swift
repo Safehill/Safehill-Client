@@ -502,11 +502,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         }
                         
                     case .failure(let error):
-                        self.log.warning("[downloadAssets] failed to create assets in local server. Assets in the local libarary but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                        self.log.warning("[downloadAssets] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
                     }
                 }
             case .failure(let error):
-                self.log.warning("[downloadAssets] failed to fetch assets from remote server. Assets in the local libarary but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                self.log.warning("[downloadAssets] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
             }
         }
     }
