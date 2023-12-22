@@ -30,13 +30,8 @@ public let SafehillServerURLComponents: URLComponents = {
 internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfiguration {
     let configuration = URLSessionConfiguration.default
     
-    /// The session should wait for connectivity to become available, instead of fail immediately
-    configuration.waitsForConnectivity = true
-    
-    /// How long (in seconds) a task should wait for additional data
-    configuration.timeoutIntervalForRequest = Double(SHDefaultNetworkTimeoutInMilliseconds / (1000 * 10))
-    /// How long (in seconds) to wait for a complete resource to transfer before giving up
-    configuration.timeoutIntervalForResource = 60 * 60 // 1 hour
+    /// Fail immediately if there is no connectivity. Re-attempts are managed in the app
+    configuration.waitsForConnectivity = false
     
     /// Defaults to `false` to only allow WiFi/Ethernet. Set it to `true`
     configuration.allowsCellularAccess = true
