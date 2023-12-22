@@ -204,7 +204,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
         guard dispatchResult == .success else {
             completionHandler(.failure(SHBackgroundOperationError.timedOut))
             return
@@ -309,7 +309,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             try downloadsManager.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds,
                                                    allUserIds: userIdsInRemoteDescriptors)
         } catch {
-            log.error("failed to clean up download queues and index on deleted assets")
+            log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
         }
         let userBlacklist = downloadsManager.blacklistedUsers
         let uIdsToRemoveFromBlacklist = userBlacklist.subtract(userIdsInRemoteDescriptors)
@@ -673,7 +673,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         let downloadsManager = SHAssetsDownloadManager(user: self.user)
                         try downloadsManager.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
                     } catch {
-                        self.log.error("failed to clean up download queues and index on deleted assets")
+                        self.log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
                     }
                     
                     //

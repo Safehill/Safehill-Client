@@ -25,6 +25,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                    restorationDelegate: restorationDelegate)
     }
     
+    /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch
+    /// happen against the local server (instead of the remote server)
+    /// - Returns: the list of descriptors
     internal override func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
         let group = DispatchGroup()
         
@@ -65,7 +68,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     func restoreQueueItems(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
-        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         guard original.count > 0 else {
             completionHandler(.success(()))
@@ -151,7 +154,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     internal func decryptFromLocalStore(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
-        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         guard original.count > 0 else {
             completionHandler(.success(()))
@@ -231,7 +234,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
         globalIdentifiersFromKnownUsers: [GlobalIdentifier],
-        completionHandler: @escaping (Swift.Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         ///
         /// FOR THE ONES SHARED BY THIS USER
@@ -275,8 +278,16 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    public func runOnce(completionHandler: @escaping (Swift.Result<Void, Error>) -> Void) {
-        self.processDescriptors { result in
+    public func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        let descriptors: [any SHAssetDescriptor]
+        do {
+            descriptors = try self.fetchDescriptorsFromServer()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        self.processDescriptors(descriptors) { result in
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
