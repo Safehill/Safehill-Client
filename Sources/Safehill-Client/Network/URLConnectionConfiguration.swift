@@ -31,10 +31,10 @@ internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfigurati
     let configuration = URLSessionConfiguration.default
     
     /// The session should wait for connectivity to become available, instead of fail immediately
-    configuration.waitsForConnectivity = false
+    configuration.waitsForConnectivity = true
     
     /// How long (in seconds) a task should wait for additional data
-    configuration.timeoutIntervalForRequest = Double(SHDefaultNetworkTimeoutInMilliseconds / 1000)
+    configuration.timeoutIntervalForRequest = Double(SHDefaultNetworkTimeoutInMilliseconds / (1000 * 10))
     /// How long (in seconds) to wait for a complete resource to transfer before giving up
     configuration.timeoutIntervalForResource = 60 * 60 // 1 hour
     
