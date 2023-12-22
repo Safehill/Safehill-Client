@@ -34,7 +34,7 @@ internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfigurati
     configuration.waitsForConnectivity = false
     
     /// How long (in seconds) a task should wait for additional data
-    configuration.timeoutIntervalForRequest = SHDefaultNetworkTimeoutInMilliseconds / 1000
+    configuration.timeoutIntervalForRequest = Double(SHDefaultNetworkTimeoutInMilliseconds / 1000)
     /// How long (in seconds) to wait for a complete resource to transfer before giving up
     configuration.timeoutIntervalForResource = 60 * 60 // 1 hour
     
@@ -55,7 +55,7 @@ internal func CDNServerDefaultBackgroundURLSessionConfiguration(with sessionIden
     configuration.waitsForConnectivity = true
     
     /// How long (in seconds) a task should wait for additional data
-    configuration.timeoutIntervalForRequest = SHUploadTimeoutInMilliseconds / 1000
+    configuration.timeoutIntervalForRequest = Double(SHUploadTimeoutInMilliseconds / 1000)
     /// How long (in seconds) to wait for a complete resource to transfer before giving up
     configuration.timeoutIntervalForResource = 60 * 60 * 24 // 24 hours
     
