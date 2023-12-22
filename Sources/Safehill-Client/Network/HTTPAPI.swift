@@ -17,10 +17,6 @@ public class SHNetwork {
     }
 }
 
-public let SHDefaultNetworkTimeoutInMilliseconds = 30000 // 30 seconds
-public let SHUploadTimeoutInMilliseconds = 300000 // 5 minutes
-public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
-
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
         self.init()

@@ -1,5 +1,11 @@
 import Foundation
 
+
+public let SHDefaultNetworkTimeoutInMilliseconds = 30000 // 30 seconds
+public let SHUploadTimeoutInMilliseconds = 300000 // 5 minutes
+public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
+
+
 public let SafehillServerURLComponents: URLComponents = {
     var components = URLComponents()
     
@@ -25,10 +31,10 @@ internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfigurati
     let configuration = URLSessionConfiguration.default
     
     /// The session should wait for connectivity to become available, instead of fail immediately
-    configuration.waitsForConnectivity = true
+    configuration.waitsForConnectivity = false
     
     /// How long (in seconds) a task should wait for additional data
-    configuration.timeoutIntervalForRequest = 60 // 1 minute
+    configuration.timeoutIntervalForRequest = SHDefaultNetworkTimeoutInMilliseconds / 1000
     /// How long (in seconds) to wait for a complete resource to transfer before giving up
     configuration.timeoutIntervalForResource = 60 * 60 // 1 hour
     
@@ -49,7 +55,7 @@ internal func CDNServerDefaultBackgroundURLSessionConfiguration(with sessionIden
     configuration.waitsForConnectivity = true
     
     /// How long (in seconds) a task should wait for additional data
-    configuration.timeoutIntervalForRequest = 60 // 1 minute
+    configuration.timeoutIntervalForRequest = SHUploadTimeoutInMilliseconds / 1000
     /// How long (in seconds) to wait for a complete resource to transfer before giving up
     configuration.timeoutIntervalForResource = 60 * 60 * 24 // 24 hours
     
