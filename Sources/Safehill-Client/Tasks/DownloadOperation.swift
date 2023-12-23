@@ -947,11 +947,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 group.leave()
             }
             
-            guard descriptorsByGlobalIdentifier.count > 0 else {
-                completionHandler(.success(()))
-                return
-            }
-            
             ///
             /// Given these descriptors, determine what needs to be downloaded (CREATES)
             ///
