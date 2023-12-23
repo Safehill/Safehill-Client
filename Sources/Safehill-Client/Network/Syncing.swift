@@ -361,11 +361,13 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
+            self.log.debug("[sync] notifying queue items changed \(queueDiff.changed)")
             self.delegates.forEach({
                 $0.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
             })
         }
         if queueDiff.removed.count > 0 {
+            self.log.debug("[sync] notifying queue items removed \(queueDiff.removed)")
             self.delegates.forEach({
                 $0.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
             })
@@ -673,7 +675,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         let downloadsManager = SHAssetsDownloadManager(user: self.user)
                         try downloadsManager.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
                     } catch {
-                        self.log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
+                        self.log.error("[sync] failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
                     }
                     
                     //
@@ -682,6 +684,8 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     // TODO: The framework should be responsible for it instead.
                     // TODO: Deletion of entities in the graph should be taken care of here, too. Currently it can't because the client is currently querying the graph before deleting to understand which conversation threads need to be removed
                     //
+                    
+                    self.log.debug("[sync] notifying about deleted assets \(diff.assetsRemovedOnServer)")
                     self.delegates.forEach({
                         $0.assetsWereDeleted(diff.assetsRemovedOnServer)
                     })
