@@ -938,11 +938,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 return
             }
             
-            guard descriptorsByGlobalIdentifier.count > 0 else {
-                completionHandler(.success(()))
-                return
-            }
-            
             ///
             /// Given these descriptors, sync local and remote state (REMOVALS and UPDATES)
             ///
@@ -950,6 +945,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             group.enter()
             syncOperation.sync(remoteDescriptors: descriptors) { syncResult in
                 group.leave()
+            }
+            
+            guard descriptorsByGlobalIdentifier.count > 0 else {
+                completionHandler(.success(()))
+                return
             }
             
             ///
