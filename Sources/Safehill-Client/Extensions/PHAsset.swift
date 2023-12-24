@@ -238,7 +238,7 @@ public extension PHAsset {
 
         let targetSize = CGSize(
             width: min(size?.width ?? CGFloat(self.pixelWidth), CGFloat(self.pixelWidth)),
-            height: min(size?.width ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight))
+            height: min(size?.height ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight))
         )
 
         imageManager.requestImage(
