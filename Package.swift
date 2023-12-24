@@ -32,6 +32,7 @@ let package = Package(
         ),
         .testTarget(
             name: "Safehill-ClientTests",
-            dependencies: ["Safehill-Client"]),
+            dependencies: ["Safehill-Client"]
+        ),
     ]
 )

@@ -40,7 +40,6 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
     case missingAssetInLocalServer(String)
     case missingUnauthorizedDownloadIndexForUserId(String)
     case missingE2EEDetailsForGroup(String)
-    case applePhotosAssetRetrievalError(String)
     
     public var description: String {
         switch self {
@@ -58,8 +57,6 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
             return "The global identifier for local id \(localIdentifier) doesn't match the one previously computed"
         case .unexpectedData(let data):
             return "unexpected data: \(String(describing: data))"
-        case .applePhotosAssetRetrievalError(let reason):
-            return "error while retrieving asset from Apple photos library: \(reason)"
         }
     }
     

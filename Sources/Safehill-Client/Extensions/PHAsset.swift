@@ -18,6 +18,7 @@ public extension NSImage {
 
 let imageSizeForGlobalIdCalculation = CGSize(width: 320.0, height: 320.0)
 
+
 public enum NSUIImage {
 #if os(iOS)
     case uiKit(UIImage)
@@ -59,7 +60,7 @@ extension NSImage {
                 sizeKeepingRatio = CGSize(width: newSize.width, height: newSize.width * ratio)
             } else {
                 ///
-                /// **Landscape**
+                /// **Portrait**
                 /// `self.size.width : x = self.size.height : newSize.height
                 /// `x = newSize.height * self.size.width / self.size.height
                 ///
@@ -97,7 +98,7 @@ extension UIImage {
             sizeKeepingRatio = CGSize(width: newSize.width, height: newSize.width * ratio)
         } else {
             ///
-            /// **Landscape**
+            /// **Portrait**
             /// `self.size.width : x = self.size.height : newSize.height
             /// `x = newSize.height * self.size.width / self.size.height
             ///
@@ -130,6 +131,7 @@ public extension PHAsset {
               usingImageManager imageManager: PHImageManager,
               synchronousFetch: Bool,
               deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
+              resizeMode: PHImageRequestOptionsResizeMode = .fast,
               shouldCache: Bool = false,
               exactSize: Bool = false,
               completionHandler: @escaping (Swift.Result<Data, Error>) -> ()) {
@@ -138,10 +140,28 @@ public extension PHAsset {
             return
         }
         
+        switch self.mediaType {
+        case .image:
+            break
+//        case .video:
+//            imageManager.requestAVAsset(forVideo: self, options: nil) { asset, audioMix, info in
+//                if let asset = asset as? AVURLAsset,
+//                   let data = NSData(contentsOf: asset.url) as Data? {
+//                    completionHandler(.success(data))
+//                } else {
+//                    completionHandler(.failure(SHAssetFetchError.unexpectedData(asset)))
+//                }
+//            }
+        default:
+            completionHandler(.failure(SHPhotoAssetError.unsupportedMediaType))
+        }
+        
         self.image(forSize: size,
                    usingImageManager: imageManager,
                    synchronousFetch: synchronousFetch,
-                   deliveryMode: deliveryMode) { (result: Result<NSUIImage, Error>) in
+                   deliveryMode: deliveryMode,
+                   resizeMode: resizeMode
+        ) { (result: Result<NSUIImage, Error>) in
             switch result {
             case .success(let nsuiimage):
 #if os(iOS)
@@ -199,44 +219,60 @@ public extension PHAsset {
                usingImageManager imageManager: PHImageManager,
                synchronousFetch: Bool,
                deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
+               resizeMode: PHImageRequestOptionsResizeMode = .fast,
                // TODO: Implement iCloud progress handler when downloading the image
                progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
                completionHandler: @escaping (Swift.Result<NSUIImage, Error>) -> ()) {
+        
+        guard self.mediaType == .image else {
+            completionHandler(.failure(SHPhotoAssetError.unsupportedMediaType))
+            return
+        }
         
         let options = PHImageRequestOptions()
         options.isSynchronous = synchronousFetch
         options.isNetworkAccessAllowed = true
         options.deliveryMode = deliveryMode
         options.progressHandler = progressHandler
+        options.resizeMode = resizeMode
 
-        let targetSize = CGSize(width: min(size?.width ?? CGFloat(self.pixelWidth), CGFloat(self.pixelWidth)),
-                                height: min(size?.width ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight)))
+        let targetSize = CGSize(
+            width: min(size?.width ?? CGFloat(self.pixelWidth), CGFloat(self.pixelWidth)),
+            height: min(size?.width ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight))
+        )
 
-        switch self.mediaType {
-        case .image:
-            imageManager.requestImage(for: self, targetSize: targetSize, contentMode: PHImageContentMode.default, options: options) {
-                image, _ in
-                if let image = image {
-#if os(iOS)
-                    completionHandler(.success(NSUIImage.uiKit(image)))
-#else
-                    completionHandler(.success(NSUIImage.appKit(image)))
-#endif
-                    return
+        imageManager.requestImage(
+            for: self,
+            targetSize: targetSize,
+            contentMode: PHImageContentMode.default,
+            options: options
+        ) {
+            image, _ in
+            if let image = image {
+                
+                var exactSizeImage = image
+                if resizeMode == .exact,
+                   image.size.width != targetSize.width || image.size.height != targetSize.height {
+                    log.warning("Even a resize=exact was requested, Photos returned an asset whose size is \(image.size.width)x\(image.size.height) (requested size \(targetSize.width)x\(targetSize.height)")
+                    if let resized = image.resized(to: targetSize) {
+                        exactSizeImage = resized
+                    } else {
+                        completionHandler(.failure(SHPhotoAssetError.applePhotosAssetRetrievalError("")))
+                        return
+                    }
                 }
+                
+#if os(iOS)
+                completionHandler(.success(NSUIImage.uiKit(exactSizeImage)))
+#else
+                completionHandler(.success(NSUIImage.appKit(exactSizeImage)))
+#endif
+                return
+
+            } else {
                 completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
+                return
             }
-//        case .video:
-//            imageManager.requestAVAsset(forVideo: self, options: nil) { asset, audioMix, info in
-//                if let asset = asset as? AVURLAsset,
-//                   let data = NSData(contentsOf: asset.url) as Data? {
-//                    completionHandler(.success(data))
-//                } else {
-//                    completionHandler(.failure(SHAssetFetchError.unexpectedData(asset)))
-//                }
-//            }
-        default:
-            completionHandler(.failure(SHBackgroundOperationError.fatalError("PHAsset mediaType not supported \(self.mediaType)")))
         }
     }
 }

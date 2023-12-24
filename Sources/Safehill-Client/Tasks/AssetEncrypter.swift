@@ -110,44 +110,17 @@ extension SHApplePhotoAsset {
     func data(for versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
         var dict = [SHAssetQuality: Result<Data, Error>]()
         
-#if os(iOS)
-        let fullSizeImage: UIImage
-#else
-        let fullSizeImage: NSImage
-#endif
-        do {
-            fullSizeImage = try self.fetchOriginalSizeImage()
-        } catch {
-            return versions.reduce([:]) { partialResult, quality in
-                var result = partialResult
-                result[quality] = .failure(SHBackgroundOperationError.applePhotosAssetRetrievalError("could not fetch full size image"))
-                return result
-            }
-        }
-        
         for version in versions {
             let size = kSHSizeForQuality(quality: version)
-#if os(iOS)
-            let resizedImage: UIImage
-            do {
-                try resizedImage = SHApplePhotoAsset.resizeImage(fullSizeImage, to: size)
-            } catch {
-                dict[version] = .failure(SHBackgroundOperationError.fatalError("could not resize image (default size for quality '\(version.rawValue)')"))
-                continue
+            self.phAsset.data(
+                forSize: size,
+                usingImageManager: self.imageManager,
+                synchronousFetch: true,
+                deliveryMode: .highQualityFormat,
+                resizeMode: .exact
+            ) { result in
+                dict[version] = result
             }
-            
-            if let data = resizedImage.cgImage?.dataProvider?.data as? Data {
-                dict[version] = .success(data)
-            } else {
-                dict[version] = .failure(SHBackgroundOperationError.fatalError("could not retrieve data for resized image (default size for quality '\(version.rawValue)')"))
-            }
-#else
-            if let data = fullSizeImage.cgImage(forProposedRect: nil, context: nil, hints: nil)?.dataProvider?.data as? Data {
-                dict[version] = .success(data)
-            } else {
-                dict[version] = .failure(SHBackgroundOperationError.fatalError("could not retrieve data for resized image (default size for quality '\(version.rawValue)')"))
-            }
-#endif
         }
 
         return dict
