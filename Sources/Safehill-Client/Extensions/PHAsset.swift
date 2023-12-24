@@ -253,7 +253,7 @@ public extension PHAsset {
                 var exactSizeImage = image
                 if resizeMode == .exact,
                    image.size.width != targetSize.width || image.size.height != targetSize.height {
-                    log.warning("Even a resize=exact was requested, Photos returned an asset whose size is \(image.size.width)x\(image.size.height) (requested size \(targetSize.width)x\(targetSize.height)")
+                    log.warning("Although a resize=exact was requested, Photos returned an asset whose size ( \(image.size.width)x\(image.size.height)) is not the one requested (\(targetSize.width)x\(targetSize.height))")
                     if let resized = image.resized(to: targetSize) {
                         exactSizeImage = resized
                     } else {
