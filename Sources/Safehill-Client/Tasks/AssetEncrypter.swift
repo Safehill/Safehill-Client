@@ -116,8 +116,7 @@ extension SHApplePhotoAsset {
                 forSize: size,
                 usingImageManager: self.imageManager,
                 synchronousFetch: true,
-                deliveryMode: .highQualityFormat,
-                resizeMode: .exact
+                deliveryMode: .highQualityFormat
             ) { result in
                 dict[version] = result
             }
