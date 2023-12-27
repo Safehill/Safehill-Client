@@ -819,6 +819,69 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func addAssetRecipients(to globalIdentifier: GlobalIdentifier,
+                            basedOn groupIdByRecipientId: [UserIdentifier: String],
+                            versions: [SHAssetQuality]? = nil,
+                            completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let versions = versions ?? SHAssetQuality.all
+        
+        let writeBatch = assetStore.writeBatch()
+        
+        for version in versions {
+            for (recipientUserId, groupId) in groupIdByRecipientId {
+                writeBatch.set(
+                    value: ["groupId": groupId],
+                    for: [
+                        "receiver",
+                        recipientUserId,
+                        version.rawValue,
+                        globalIdentifier
+                       ].joined(separator: "::")
+                )
+            }
+        }
+        
+        writeBatch.write(completionHandler: completionHandler)
+    }
+    
+    func removeAssetRecipients(recipientUserIds: [UserIdentifier],
+                               from globalIdentifier: GlobalIdentifier,
+                               versions: [SHAssetQuality]? = nil,
+                               completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let assetStore: KBKVStore
+        do {
+            assetStore = try SHDBManager.sharedInstance.assetStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let versions = versions ?? SHAssetQuality.all
+        
+        let writeBatch = assetStore.writeBatch()
+        
+        for version in versions {
+            for recipientUserId in recipientUserIds {
+                writeBatch.set(value: nil, for: [
+                    "receiver",
+                    recipientUserId,
+                    version.rawValue,
+                    globalIdentifier
+                   ].joined(separator: "::"))
+            }
+        }
+        
+        writeBatch.write(completionHandler: completionHandler)
+    }
+    
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
                 filterVersions: [SHAssetQuality]?,

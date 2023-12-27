@@ -373,6 +373,107 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             })
         }
         
+        if diff.userIdsToAddToSharesOfAssetGid.count > 0 {
+            let dispatchGroup = DispatchGroup()
+            var addRecipientErrorById = [GlobalIdentifier: Error]()
+            
+            ///
+            /// Add users to the shares in the graph and notify the delegates
+            ///
+            for (globalIdentifier, shareDiff) in diff.userIdsToAddToSharesOfAssetGid {
+                do {
+                    try SHKGQuery.ingestShare(
+                        of: globalIdentifier,
+                        from: shareDiff.from,
+                        to: Array(shareDiff.groupIdByRecipientId.keys)
+                    )
+                    
+                    dispatchGroup.enter()
+                    self.serverProxy.localServer.addAssetRecipients(
+                        to: globalIdentifier,
+                        basedOn: shareDiff.groupIdByRecipientId
+                    ) { result in
+                        switch result {
+                        case .success():
+                            self.delegates.forEach {
+                                $0.usersWereAddedToShare(of: globalIdentifier, groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                            }
+                        case .failure(let err):
+                            addRecipientErrorById[globalIdentifier] = err
+                        }
+                        dispatchGroup.leave()
+                    }
+                } catch {
+                    log.error("[sync] failed to add recipients to the share of \(globalIdentifier): \(error.localizedDescription)")
+                    continue
+                }
+            }
+            
+            let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * diff.userIdsToRemoveToSharesOfAssetGid.count))
+            if dispatchResult != .success {
+                log.error("[sync] failed to add recipients to some shares: \(SHBackgroundOperationError.timedOut.localizedDescription)")
+            }
+            if addRecipientErrorById.count != 0 {
+                log.error("[sync] failed to add recipients to some shares: \(addRecipientErrorById)")
+            }
+        }
+        
+        if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
+            var condition = KBTripleCondition(value: false)
+            let dispatchGroup = DispatchGroup()
+            var removeRecipientErrorById = [GlobalIdentifier: Error]()
+            
+            ///
+            /// Remove users from the shares
+            ///
+            for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
+                for recipientId in shareDiff.groupIdByRecipientId.keys {
+                    condition = condition.or(KBTripleCondition(
+                        subject: globalIdentifier,
+                        predicate: SHKGPredicates.sharedWith.rawValue,
+                        object: recipientId
+                    ))
+                }
+            }
+            do {
+                try SHKGQuery.removeTriples(matching: condition)
+                
+                ///
+                /// Only after the Graph is updated, remove the recipients from the DB
+                /// This ensures that if the graph update fails is attempted again (as the descriptors from local haven't been updated yet)
+                ///
+                for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
+                    dispatchGroup.enter()
+                    let userIds = Array(shareDiff.groupIdByRecipientId.keys)
+                    self.serverProxy.localServer.removeAssetRecipients(
+                        recipientUserIds: userIds,
+                        from: globalIdentifier
+                    ) { result in
+                        switch result {
+                        case .success():
+                            self.delegates.forEach {
+                                $0.usersWereRemovedFromShare(of: globalIdentifier,
+                                                             groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                            }
+                        case .failure(let err):
+                            removeRecipientErrorById[globalIdentifier] = err
+                        }
+                        dispatchGroup.leave()
+                    }
+                }
+                
+                let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * diff.userIdsToRemoveToSharesOfAssetGid.count))
+                guard dispatchResult == .success else {
+                    throw SHBackgroundOperationError.timedOut
+                }
+                if removeRecipientErrorById.count != 0 {
+                    log.error("[sync] failed to remove recipients from some shares: \(removeRecipientErrorById)")
+                }
+            } catch {
+                log.error("[sync] failed to remove recipients from some shares: \(error.localizedDescription)")
+            }
+        }
+        
         completionHandler(.success(diff))
     }
     

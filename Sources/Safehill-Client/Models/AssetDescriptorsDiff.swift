@@ -1,5 +1,7 @@
 import Foundation
 
+typealias ShareSenderReceivers = (from: UserIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+
 ///
 /// Utility class to diff descriptors coming from `LocalServer` and `RemoteServer`
 ///
@@ -18,7 +20,8 @@ struct AssetDescriptorsDiff {
     let assetsRemovedOnServer: [SHRemoteAssetIdentifier]
     let stateDifferentOnServer: [AssetVersionState]
     let userIdsToRemoveFromGroup: [String: Set<UserIdentifier>]
-    let userIdsToAddToGroup: [String: Set<UserIdentifier>]
+    let userIdsToAddToSharesOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
+    let userIdsToRemoveToSharesOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
     
     
     ///
@@ -102,6 +105,54 @@ struct AssetDescriptorsDiff {
             }
         }
         
+        var userIdsToAddToSharesByAssetGid = [GlobalIdentifier: ShareSenderReceivers]()
+        var userIdsToRemoveFromSharesByAssetGid = [GlobalIdentifier: ShareSenderReceivers]()
+        for serverDescriptor in serverDescriptors {
+            /// 
+            /// If the descriptor exists on local, check if all users are listed in the share info
+            /// If any user is missing add to the `userIdsToAddToSharesByAssetGid` portion of the diff
+            /// a list of dictionaries `globalIdentifier` -> `(from: sender, to: recipients)`
+            /// for all the missing `recipients`
+            ///
+            if let localDescriptor = localDescriptors.filter({ $0.globalIdentifier == serverDescriptor.globalIdentifier }).first {
+                for (userId, groupId) in serverDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
+                        if userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] == nil {
+                            userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
+                                from: localDescriptor.sharingInfo.sharedByUserIdentifier,
+                                groupIdByRecipientId: [userId: groupId]
+                            )
+                        } else {
+                            var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
+                            newDict[userId] = groupId
+                            userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
+                                from: localDescriptor.sharingInfo.sharedByUserIdentifier,
+                                groupIdByRecipientId: newDict
+                            )
+                        }
+                    }
+                }
+                
+                for (userId, groupId) in localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    if serverDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
+                        if userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] == nil {
+                            userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] = (
+                                from: localDescriptor.sharingInfo.sharedByUserIdentifier,
+                                groupIdByRecipientId: [userId: groupId]
+                            )
+                        } else {
+                            var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
+                            newDict[userId] = groupId
+                            userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
+                                from: localDescriptor.sharingInfo.sharedByUserIdentifier,
+                                groupIdByRecipientId: newDict
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
         // TODO: Handle missing cases
         /// - Upload state changes?
 
@@ -109,8 +160,8 @@ struct AssetDescriptorsDiff {
             assetsRemovedOnServer: onlyLocalAssets,
             stateDifferentOnServer: [],
             userIdsToRemoveFromGroup: userIdsToRemoveFromGroup,
-            // TODO: Fill this
-            userIdsToAddToGroup: [:]
+            userIdsToAddToSharesOfAssetGid: userIdsToAddToSharesByAssetGid,
+            userIdsToRemoveToSharesOfAssetGid: userIdsToRemoveFromSharesByAssetGid
         )
     }
 }

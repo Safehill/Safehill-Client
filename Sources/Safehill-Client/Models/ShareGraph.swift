@@ -310,4 +310,9 @@ public struct SHKGQuery {
         
         return assetsToUsers
     }
+    
+    internal static func removeTriples(matching condition: KBTripleCondition) throws {
+        let graph = try SHDBManager.sharedInstance.graph()
+        try graph.removeTriples(matching: condition)
+    }
 }
