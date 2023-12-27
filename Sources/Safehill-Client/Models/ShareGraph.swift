@@ -311,8 +311,41 @@ public struct SHKGQuery {
         return assetsToUsers
     }
     
-    internal static func removeTriples(matching condition: KBTripleCondition) throws {
+    public static func usersConnectedTo(assets globalIdentifiers: [GlobalIdentifier]) throws -> [UserIdentifier] {
         let graph = try SHDBManager.sharedInstance.graph()
-        try graph.removeTriples(matching: condition)
+        var sharedWithCondition = KBTripleCondition(value: false)
+        var sharedByCondition = KBTripleCondition(value: false)
+        
+        for assetId in globalIdentifiers {
+            sharedWithCondition = sharedWithCondition.or(
+                KBTripleCondition(
+                    subject: assetId, predicate: SHKGPredicates.sharedWith.rawValue, object: nil
+                )
+            )
+            sharedByCondition = sharedByCondition.or(
+                KBTripleCondition(
+                    subject: nil, predicate: SHKGPredicates.shares.rawValue, object: assetId
+                )
+            ).or(
+                KBTripleCondition(
+                    subject: nil, predicate: SHKGPredicates.attemptedShare.rawValue, object: assetId
+                )
+            )
+        }
+        
+        var userIds = [UserIdentifier]()
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            userIds = try graph.triples(matching: sharedWithCondition).map({ $0.object })
+            userIds.append(contentsOf: try graph.triples(matching: sharedByCondition).map({ $0.subject }))
+        }
+        
+        return Array(Set(userIds))
+    }
+    
+    internal static func removeTriples(matching condition: KBTripleCondition) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            let graph = try SHDBManager.sharedInstance.graph()
+            try graph.removeTriples(matching: condition)
+        }
     }
 }
