@@ -194,13 +194,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         guard filteredDescriptors.count > 0 else {
             self.downloaderDelegates.forEach({
-                $0.didReceiveAssetDescriptors([], referencing: [], completionHandler: nil)
+                $0.didReceiveAssetDescriptors([], referencing: [])
             })
             completionHandler(.success(([:], [])))
             return
         }
         
-        /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:completionHandler)`
+        /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
         /// filter out the ones whose sender is unknown.
         /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
         let descriptorsFromKnownUsers = filteredDescriptors.filter {
@@ -230,8 +230,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         self.downloaderDelegates.forEach({
             $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                          referencing: users,
-                                          completionHandler: nil)
+                                          referencing: users)
         })
         
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
