@@ -42,7 +42,7 @@ public enum NSUIImage {
 }
 
 #if os(macOS)
-extension NSImage {
+public extension NSImage {
     func resized(to newSize: NSSize) -> NSImage? {
         if let bitmapRep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: Int(newSize.width), pixelsHigh: Int(newSize.height),
@@ -85,7 +85,7 @@ extension NSImage {
 #endif
 
 #if os(iOS)
-extension UIImage {
+public extension UIImage {
     func resized(to newSize: CGSize) -> UIImage? {
         let sizeKeepingRatio: CGSize
         if self.size.width > self.size.height {
