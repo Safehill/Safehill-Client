@@ -40,6 +40,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// Notifies about the start of a network download of a an asset from the CDN
     /// - Parameter downloadRequest: the request
     func didStartDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
+                                 descriptor: any SHAssetDescriptor,
                                  in groupId: String)
     
     /// Notify about a failed attempt to download some assets

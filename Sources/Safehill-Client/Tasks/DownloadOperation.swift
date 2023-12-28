@@ -775,7 +775,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
                     self.downloaderDelegates.forEach({
-                        $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier, in: groupId)
+                        $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier,
+                                                   descriptor: descriptor,
+                                                   in: groupId)
                     })
                 }
                 

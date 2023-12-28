@@ -188,7 +188,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             
             for groupId in descriptor.sharingInfo.groupInfoById.keys {
                 self.downloaderDelegates.forEach({
-                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId, in: groupId)
+                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
+                                               descriptor: descriptor,
+                                               in: groupId)
                 })
             }
             
