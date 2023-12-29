@@ -184,6 +184,8 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     ) {
         var localDescriptors = [any SHAssetDescriptor]()
         var localError: Error? = nil
+        var remoteUsersById = [UserIdentifier: SHServerUser]()
+        var remoteUsersError: Error? = nil
         var dispatchResult: DispatchTimeoutResult? = nil
         
         ///
@@ -232,6 +234,35 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         let userIdsInRemoteDescriptors = Array(userIdsInRemoteDescriptorsSet)
         
         ///
+        /// Get the `SHServerUser` for each of the users mentioned in the remote descriptors
+        ///
+        group.enter()
+        self.serverProxy.remoteServer.getUsers(withIdentifiers: userIdsInRemoteDescriptors) { result in
+            switch result {
+            case .success(let serverUsers):
+                remoteUsersById = serverUsers.reduce([:], { partialResult, serverUser in
+                    var result = partialResult
+                    result[serverUser.identifier] = serverUser
+                    return result
+                })
+            case .failure(let err):
+                self.log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
+                remoteUsersError = err
+            }
+            group.leave()
+        }
+        
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            completionHandler(.failure(SHBackgroundOperationError.timedOut))
+            return
+        }
+        guard remoteUsersError == nil else {
+            completionHandler(.failure(remoteUsersError!))
+            return
+        }
+        
+        ///
         /// Remove all users that don't exist on the server from the local server and the graph
         ///
         let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
@@ -255,11 +286,11 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// Get all the asset identifiers and user identifiers mentioned in the remote descriptors
         ///
         let assetIdToUserIds = remoteDescriptors
-            .reduce([GlobalIdentifier: [UserIdentifier]]()) { partialResult, descriptor in
+            .reduce([GlobalIdentifier: [SHServerUser]]()) { partialResult, descriptor in
                 var result = partialResult
                 var userIdList = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
                 userIdList.append(descriptor.sharingInfo.sharedByUserIdentifier)
-                result[descriptor.globalIdentifier] = userIdList
+                result[descriptor.globalIdentifier] = userIdList.compactMap({ remoteUsersById[$0] })
                 return result
             }
         self.delegates.forEach({

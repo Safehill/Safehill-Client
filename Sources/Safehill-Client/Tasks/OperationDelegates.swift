@@ -5,12 +5,14 @@ import Photos
 public protocol SHInboundAssetOperationDelegate {}
 
 public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
-    func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [UserIdentifier]])
+    func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [SHServerUser]])
+    
     func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
-    func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
-    func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
     func usersWereAddedToShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
     func usersWereRemovedFromShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+    
+    func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
+    func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
     
     func reactionsDidChange(in groupId: String)
     func didReceiveMessage(in groupId: String)
