@@ -199,14 +199,19 @@ struct LocalServer : SHServerAPI {
         userStore.removeValues(forKeysMatching: condition) { getResult in
             switch getResult {
             case .success(_):
-                completionHandler(.success(()))
+                do {
+                    try SHKGQuery.removeUsers(with: identifiers)
+                    completionHandler(.success(()))
+                } catch {
+                    completionHandler(.failure(error))
+                }
             case .failure(let error):
                 completionHandler(.failure(error))
             }
         }
     }
     
-    func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.deleteAccount(completionHandler: completionHandler)
     }
     
@@ -214,12 +219,12 @@ struct LocalServer : SHServerAPI {
         let assetStore: KBKVStore
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
+            assetStore.removeAll(completionHandler: completionHandler)
+            try SHKGQuery.deepClean()
         } catch {
             completionHandler(.failure(error))
             return
         }
-        
-        assetStore.removeAll(completionHandler: completionHandler)
     }
     
     func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
@@ -629,15 +634,12 @@ struct LocalServer : SHServerAPI {
             }
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 10))
-        guard dispatchResult == .success else {
-            return completionHandler(.failure(SHBackgroundOperationError.timedOut))
-        }
-        
-        if let err = err {
-            completionHandler(.failure(err))
-        } else {
-            completionHandler(.success(resultDictionary))
+        group.notify(queue: .global()) {
+            if let err = err {
+                completionHandler(.failure(err))
+            } else {
+                completionHandler(.success(resultDictionary))
+            }
         }
     }
     
@@ -1159,7 +1161,7 @@ struct LocalServer : SHServerAPI {
         var err: Error? = nil
         let group = DispatchGroup()
         
-        for globalIdentifierBatch in globalIdentifiers.chunked(into: 5) {
+        for globalIdentifierBatch in globalIdentifiers.chunked(into: 10) {
             for globalIdentifier in globalIdentifierBatch {
                 var condition = KBGenericCondition(value: true)
                 for quality in SHAssetQuality.all {
@@ -1201,11 +1203,18 @@ struct LocalServer : SHServerAPI {
             return completionHandler(.failure(SHBackgroundOperationError.timedOut))
         }
         
-        if let err = err {
-            completionHandler(.failure(err))
-        } else {
-            completionHandler(.success(Array(removedGlobalIdentifiers)))
+        guard err == nil else {
+            completionHandler(.failure(err!))
+            return
         }
+        
+        do {
+            try SHKGQuery.removeAssets(with: globalIdentifiers)
+        } catch {
+            completionHandler(.failure(error))
+        }
+        
+        completionHandler(.success(Array(removedGlobalIdentifiers)))
     }
     
     func setGroupEncryptionDetails(

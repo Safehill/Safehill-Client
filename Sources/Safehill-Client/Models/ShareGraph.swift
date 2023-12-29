@@ -115,7 +115,7 @@ public struct SHKGQuery {
         }
     }
     
-    public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
+    internal static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
         let removeGidsFromCache = {
             (cache: inout [UserIdentifier: Set<GlobalIdentifier>]) in
             let userIds = Array(cache.keys)
@@ -163,7 +163,7 @@ public struct SHKGQuery {
         }
     }
     
-    public static func deepClean() throws {
+    internal static func deepClean() throws {
         /// Invalidate cache
         UserIdToAssetGidSharedByCache.removeAll()
         UserIdToAssetGidSharedWithCache.removeAll()

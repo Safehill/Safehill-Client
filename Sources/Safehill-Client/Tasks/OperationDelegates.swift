@@ -1,19 +1,14 @@
 import Foundation
 import Photos
 
-public protocol SHAssetDescriptorsChangeDelegate {
-    func assetWasRemoved(globalIdentifier: String)
-}
-
 /// Inbound operation delegate.
 public protocol SHInboundAssetOperationDelegate {}
 
 public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
+    func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [UserIdentifier]])
     func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
     func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
-    func usersAreConnectedAndVerified(_: [SHServerUser])
-    func assetIdsAreSharedWithUser(_: [GlobalIdentifier])
     func usersWereAddedToShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
     func usersWereRemovedFromShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
     
