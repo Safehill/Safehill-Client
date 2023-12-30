@@ -141,9 +141,9 @@ struct AssetDescriptorsDiff {
                                 groupIdByRecipientId: [userId: groupId]
                             )
                         } else {
-                            var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
+                            var newDict = userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
                             newDict[userId] = groupId
-                            userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
+                            userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] = (
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
                                 groupIdByRecipientId: newDict
                             )
