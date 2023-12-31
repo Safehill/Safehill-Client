@@ -335,6 +335,20 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             guard globalIdentifier == serverAsset.globalIdentifier else {
                 throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
             }
+            
+            ///
+            /// Upload is completed.
+            /// Create an item in the history queue for this upload, and remove the one in the upload queue
+            ///
+            do {
+                try self.markAsSuccessful(
+                    item: item,
+                    uploadRequest: uploadRequest
+                )
+            } catch {
+                log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                // TODO: Handle
+            }
         } catch {
             do {
                 try self.markAsFailed(item: item,
@@ -344,20 +358,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                 log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                 // TODO: Handle
             }
-        }
-
-        ///
-        /// Upload is completed.
-        /// Create an item in the history queue for this upload, and remove the one in the upload queue
-        ///
-        do {
-            try self.markAsSuccessful(
-                item: item,
-                uploadRequest: uploadRequest
-            )
-        } catch {
-            log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-            // TODO: Handle
         }
     }
     
