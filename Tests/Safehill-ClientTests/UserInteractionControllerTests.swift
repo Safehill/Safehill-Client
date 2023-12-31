@@ -76,7 +76,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
 
 final class Safehill_UserInteractionControllerTests: XCTestCase {
     
-    let myUser = SHLocalUser(cryptoUser: SHLocalCryptoUser())
+    let myUser = SHLocalUser(keychainPrefix: "")
     
     override func setUpWithError() throws {
         let _ = try SHDBManager.sharedInstance.assetStore().removeAll()

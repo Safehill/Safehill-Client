@@ -32,7 +32,7 @@ enum ErrorSimulator {
 }
 
 
-public enum SHBackgroundOperationError : Error, CustomStringConvertible {
+public enum SHBackgroundOperationError : Error, CustomStringConvertible, LocalizedError {
     case unexpectedData(Any?)
     case fatalError(String)
     case timedOut
@@ -58,5 +58,9 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible {
         case .unexpectedData(let data):
             return "unexpected data: \(String(describing: data))"
         }
+    }
+    
+    public var errorDescription: String? {
+        return description
     }
 }

@@ -5,43 +5,43 @@ import UIKit
 #elseif os(macOS)
 import AppKit
 #endif
+import Safehill_Crypto
 
 
 private let PHAssetIdentifierKey = "phAssetLocalIdentifier"
-private let CachedImageKey = "cachedImage"
-private let CacheUpdatedAtKey = "cacheUpdatedAt"
+private let CalculatedGlobalIdentifier = "calculatedGlobalIdentifier"
+
 
 public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     public static var supportsSecureCoding = true
     
+    private var calculatedGlobalIdentifier: GlobalIdentifier? = nil
+    
     var imageManager: PHImageManager
     
     public let phAsset: PHAsset
-    var cachedImage: NSUIImage?
-    public var cacheUpdatedAt: Date?
     
-#if os(iOS)
+    internal func setGlobalIdentifier(_ gid: GlobalIdentifier) throws {
+        if self.calculatedGlobalIdentifier == nil {
+            self.calculatedGlobalIdentifier = gid
+        } else {
+            if self.calculatedGlobalIdentifier != gid {
+                throw SHBackgroundOperationError.fatalError("previously generated global identifier doesn't match the one provided")
+            }
+        }
+    }
+    
     public init(for asset: PHAsset,
-                cachedImage: UIImage? = nil,
-                cacheUpdatedAt: Date? = nil,
                 usingCachingImageManager manager: PHCachingImageManager? = nil) {
         self.phAsset = asset
-        if let cachedImage = cachedImage {
-            self.cachedImage = .uiKit(cachedImage)
-            self.cacheUpdatedAt = cacheUpdatedAt ?? Date()
-        } else {
-            self.cachedImage = nil
-            self.cacheUpdatedAt = nil
-        }
         self.imageManager = manager ?? PHImageManager.default()
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         let phAssetIdentifier = decoder.decodeObject(of: NSString.self, forKey: PHAssetIdentifierKey)
-        let cachedImage = decoder.decodeObject(of: UIImage.self, forKey: CachedImageKey)
-        let cacheUpdatedAt = decoder.decodeObject(of: NSDate.self, forKey: CacheUpdatedAtKey)
+        let calculatedGlobalId = decoder.decodeObject(of: NSString.self, forKey: CalculatedGlobalIdentifier)
         
-        guard let phAssetIdentifier = phAssetIdentifier as String? else {
+        guard let phAssetIdentifier = phAssetIdentifier as? String else {
             log.error("unexpected value for phAssetIdentifier when decoding SHApplePhotoAsset object")
             return nil
         }
@@ -52,85 +52,65 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         }
         
         let asset = fetchResult.object(at: 0)
-        
-        guard let cachedImage = cachedImage as UIImage?,
-              let cacheUpdatedAt = cacheUpdatedAt as Date? else {
-                  self.init(for: asset)
-                  return
+        self.init(for: asset)
+        if let calculatedGlobalId = calculatedGlobalId as? GlobalIdentifier {
+            self.calculatedGlobalIdentifier = calculatedGlobalId
         }
-        self.init(for: asset, cachedImage: cachedImage, cacheUpdatedAt: cacheUpdatedAt)
     }
     
-    
-    public func cachedData(forSize size: CGSize?) throws -> Data? {
-        guard let cachedImage = cachedImage else {
-            return nil
-        }
-        guard let size = size else {
-            return cachedImage.platformImage.pngData()
+    ///
+    ///  **Use it carefully!!**
+    ///  This operation can take time, as it needs to retrieve the full resolution asset from the Apple Photos library.
+    ///
+    /// - Returns:
+    ///   - a hash representing the image fingerprint, that can be used as a unique global identifier
+    func retrieveOrGenerateGlobalIdentifier() throws -> GlobalIdentifier {
+        guard calculatedGlobalIdentifier == nil else {
+            return calculatedGlobalIdentifier!
         }
         
-        return cachedImage.platformImage.resized(to: size)?.pngData()
-    }
-#endif
-    
-#if os(macOS)
-    public init(for asset: PHAsset,
-                cachedImage: NSImage? = nil,
-                cacheUpdatedAt: Date? = nil,
-                usingCachingImageManager manager: PHCachingImageManager? = nil) {
-        self.phAsset = asset
-        if let cachedImage = cachedImage {
-            self.cachedImage = .appKit(cachedImage)
+        let start = CFAbsoluteTimeGetCurrent()
+        
+        let targetSize: CGSize
+        if self.phAsset.pixelWidth > self.phAsset.pixelHeight {
+            targetSize = CGSize(width: imageSizeForGlobalIdCalculation.width,
+                                height: floor(imageSizeForGlobalIdCalculation.width * Double(self.phAsset.pixelHeight)/Double(self.phAsset.pixelWidth)))
         } else {
-            self.cachedImage = nil
+            targetSize = CGSize(width: floor(imageSizeForGlobalIdCalculation.height * Double(self.phAsset.pixelWidth)/Double(self.phAsset.pixelHeight)),
+                                height: imageSizeForGlobalIdCalculation.height)
         }
-        self.cacheUpdatedAt = cacheUpdatedAt ?? Date()
-        self.imageManager = manager ?? PHImageManager.default()
+        
+        var error: Error? = nil
+
+        self.phAsset.data(
+            forSize: targetSize,
+            usingImageManager: self.imageManager,
+            synchronousFetch: true,
+            deliveryMode: .highQualityFormat,
+            resizeMode: .exact
+        ) { result in
+            switch result {
+            case .failure(let err):
+                error = err
+            case .success(let data):
+                let hash = SHHash.stringDigest(for: data)
+                
+                let end = CFAbsoluteTimeGetCurrent()
+                log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate an asset global identifier")
+                
+                self.calculatedGlobalIdentifier = hash
+            }
+        }
+        
+        guard error == nil else {
+            throw error!
+        }
+        return self.calculatedGlobalIdentifier!
     }
-    
-    public required convenience init?(coder decoder: NSCoder) {
-        let phAssetIdentifier = decoder.decodeObject(of: NSString.self, forKey: PHAssetIdentifierKey)
-        let cachedImage = decoder.decodeObject(of: NSImage.self, forKey: CachedImageKey)
-        let cacheUpdatedAt = decoder.decodeObject(of: NSDate.self, forKey: CacheUpdatedAtKey)
-        
-        guard let phAssetIdentifier = phAssetIdentifier as String? else {
-            log.error("unexpected value for phAssetIdentifier when decoding SHApplePhotoAsset object")
-            return nil
-        }
-        
-        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [phAssetIdentifier], options: nil)
-        guard fetchResult.count > 0 else {
-            return nil
-        }
-        
-        let asset = fetchResult.object(at: 0)
-        
-        guard let cachedImage = cachedImage as NSImage?,
-              let cacheUpdatedAt = cacheUpdatedAt as Date? else {
-                  self.init(for: asset)
-                  return
-        }
-        self.init(for: asset, cachedImage: cachedImage, cacheUpdatedAt: cacheUpdatedAt)
-    }
-    
-    
-    public func cachedData(forSize size: CGSize?) throws -> Data? {
-        guard let cachedImage = cachedImage else {
-            return nil
-        }
-        guard let size = size else {
-            return cachedImage.platformImage.png
-        }
-        
-        return cachedImage.platformImage.resized(to: size)?.png
-    }
-#endif
     
     public func encode(with coder: NSCoder) {
         coder.encode(self.phAsset.localIdentifier, forKey: PHAssetIdentifierKey)
-        coder.encode(self.cachedImage?.platformImage, forKey: CachedImageKey)
-        coder.encode(self.cacheUpdatedAt, forKey: CacheUpdatedAtKey)
+        coder.encode(self.calculatedGlobalIdentifier, forKey: CalculatedGlobalIdentifier)
     }
     
 }

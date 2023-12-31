@@ -2,37 +2,6 @@ import Foundation
 import os
 import KnowledgeBase
 
-protocol SHUploadStepBackgroundOperation {
-    var log: Logger { get }
-    var serverProxy: SHServerProxy { get }
-    
-    func markLocalAssetAsFailed(globalIdentifier: String, versions: [SHAssetQuality]) throws
-}
-
-extension SHUploadStepBackgroundOperation {
-    
-    func markLocalAssetAsFailed(globalIdentifier: String, versions: [SHAssetQuality]) throws {
-        let group = DispatchGroup()
-        for quality in versions {
-            group.enter()
-            self.serverProxy.localServer.markAsset(with: globalIdentifier, quality: quality, as: .failed) { result in
-                if case .failure(let err) = result {
-                    if case SHAssetStoreError.noEntries = err {
-                        self.log.error("No entries found when trying to update local asset upload state for \(globalIdentifier)::\(quality.rawValue)")
-                    }
-                    self.log.info("failed to mark local asset \(globalIdentifier) as failed in local server: \(err.localizedDescription)")
-                }
-                group.leave()
-            }
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-    }
-}
 
 open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
@@ -87,7 +56,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         let versions = request.versions
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
-        let sharedWith = request.sharedWith
+        let users = request.sharedWith
         
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
@@ -101,32 +70,16 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             throw error
         }
         
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
+        self.markAsFailed(
             localIdentifier: localIdentifier,
             versions: versions,
             groupId: groupId,
             eventOriginator: eventOriginator,
-            sharedWith: sharedWith,
+            sharedWith: users,
             isBackground: request.isBackground
         )
-          
-        do {
-            /// Enquque to FailedUpload queue
-            log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
-            
-            let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
-            
-            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
-            
-            /// Remove items in the `UploadHistoryQueue` for the same request identifier
-            let _ = try? successfulUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
-        }
-        catch {
-            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
-            throw error
-        }
+        
+        self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
         
         guard request.isBackground == false else {
             /// Avoid other side-effects for background  `SHUploadRequestQueueItem`
@@ -136,7 +89,12 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         /// Notify the delegates
         for delegate in delegates {
             if let delegate = delegate as? SHAssetUploaderDelegate {
-                delegate.didFailUpload(queueItemIdentifier: failedUploadQueueItem.identifier, error: error)
+                delegate.didFailUpload(queueItemIdentifier: request.identifier, error: error)
+            }
+            if users.count > 0 {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                }
             }
         }
     }
@@ -212,6 +170,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
 
                 let fetchRequest = SHLocalFetchRequestQueueItem(
                     localIdentifier: localIdentifier,
+                    globalIdentifier: globalIdentifier,
                     versions: versions,
                     groupId: groupId,
                     eventOriginator: eventOriginator,
@@ -238,6 +197,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                 do {
                     let hiResFetchQueueItem = SHLocalFetchRequestQueueItem(
                         localIdentifier: request.localIdentifier,
+                        globalIdentifier: globalIdentifier,
                         versions: [.hiResolution],
                         groupId: request.groupId,
                         eventOriginator: request.eventOriginator,
@@ -256,7 +216,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
         }
     }
     
-    func process(_ item: KBQueueItem) throws {
+    func process(_ item: KBQueueItem) {
         
         let uploadRequest: SHUploadRequestQueueItem
         
@@ -276,7 +236,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             catch {
                 log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
             }
-            throw error
+            return
         }
         
         if uploadRequest.isBackground == false {
@@ -333,6 +293,20 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             guard globalIdentifier == serverAsset.globalIdentifier else {
                 throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
             }
+            
+            ///
+            /// Upload is completed.
+            /// Create an item in the history queue for this upload, and remove the one in the upload queue
+            ///
+            do {
+                try self.markAsSuccessful(
+                    item: item,
+                    uploadRequest: uploadRequest
+                )
+            } catch {
+                log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                // TODO: Handle
+            }
         } catch {
             do {
                 try self.markAsFailed(item: item,
@@ -342,22 +316,6 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                 log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                 // TODO: Handle
             }
-            
-            throw error
-        }
-
-        ///
-        /// Upload is completed.
-        /// Create an item in the history queue for this upload, and remove the one in the upload queue
-        ///
-        do {
-            try self.markAsSuccessful(
-                item: item,
-                uploadRequest: uploadRequest
-            )
-        } catch {
-            log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-            // TODO: Handle
         }
     }
     
@@ -396,12 +354,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             
             setProcessingState(.uploading, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] upload task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] upload task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
         }
@@ -423,12 +377,8 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             
             setProcessingState(.uploading, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] upload task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] upload task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
             
@@ -470,12 +420,9 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
-                do {
-                    try self.process(item)
-                    log.info("[√] upload task completed for item \(item.identifier)")
-                } catch {
-                    log.error("[x] upload task failed for item \(item.identifier): \(error.localizedDescription)")
-                }
+                
+                self.process(item)
+                log.info("[√] upload task completed for item \(item.identifier)")
                 
                 setProcessingState(nil, for: item.identifier)
             }

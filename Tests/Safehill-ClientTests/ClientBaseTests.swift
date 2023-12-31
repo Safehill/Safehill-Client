@@ -273,7 +273,7 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
 
 final class Safehill_ClientIntegrationTests { // : XCTestCase {
     
-    var user = SHLocalUser(cryptoUser: SHLocalCryptoUser())
+    var user = SHLocalUser(keychainPrefix: "")
     let username = "testUser"
     let password = "abc"
     

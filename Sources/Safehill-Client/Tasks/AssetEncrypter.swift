@@ -4,6 +4,11 @@ import KnowledgeBase
 import Photos
 import os
 import CryptoKit
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 
 extension SHApplePhotoAsset {
@@ -107,31 +112,13 @@ extension SHApplePhotoAsset {
         
         for version in versions {
             let size = kSHSizeForQuality(quality: version)
-            
-            do {
-                let data = try self.cachedData(forSize: size)
-                if let data = data {
-                    dict[version] = Result<Data, Error>.success(data)
-                } else {
-                    log.info("retrieving asset \(self.phAsset.localIdentifier) data for size \(size.debugDescription) using   imageManager \(self.imageManager)")
-                    self.phAsset.data(forSize: size,
-                                      usingImageManager: imageManager,
-                                      synchronousFetch: true,
-                                      deliveryMode: .highQualityFormat)
-                    { (result: Result<Data, Error>) in
-                        dict[version] = result
-#if DEBUG
-                        if case .success(let data) = result {
-                            let bcf = ByteCountFormatter()
-                            bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
-                            bcf.countStyle = .file
-                            log.debug("\(version.rawValue) bytes (\(bcf.string(fromByteCount: Int64(data.count))))")
-                        }
-#endif
-                    }
-                }
-            } catch {
-                dict[version] = Result.failure(error)
+            self.phAsset.data(
+                forSize: size,
+                usingImageManager: self.imageManager,
+                synchronousFetch: true,
+                deliveryMode: .highQualityFormat
+            ) { result in
+                dict[version] = result
             }
         }
 
@@ -306,7 +293,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     public func markAsFailed(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String
+        globalIdentifier: String?
     ) throws
     {
         let localIdentifier = request.localIdentifier
@@ -329,7 +316,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             throw error
         }
         
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
+        self.markAsFailed(
             localIdentifier: localIdentifier,
             versions: versions,
             groupId: groupId,
@@ -338,23 +325,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             isBackground: request.isBackground
         )
         
-        do {
-            ///
-            /// Enqueue to FailedUpload queue
-            ///
-            log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
-            
-            let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
-            
-            try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
-            
-            /// Remove items in the `UploadHistoryQueue` for the same identifier
-            let _ = try? successfulUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
-        } catch {
-            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
-            throw error
+        if let globalIdentifier = globalIdentifier {
+            self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
         }
         
         guard request.isBackground == false else {
@@ -366,6 +338,11 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         for delegate in delegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
                 delegate.didFailEncryption(queueItemIdentifier: request.identifier)
+            }
+            if users.count > 0 {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                }
             }
         }
     }
@@ -430,7 +407,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
     }
     
-    private func process(_ item: KBQueueItem) throws {
+    private func process(_ item: KBQueueItem) {
         
         let encryptionRequest: SHEncryptionRequestQueueItem
         
@@ -448,36 +425,45 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                 _ = try encryptionQueue.dequeue(item: item)
             }
             catch {
-                log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
+                log.fault("dequeuing failed of unexpected data in ENCRYPT queue")
             }
-            throw error
+            return
         }
         
-        let asset = encryptionRequest.asset
-        let encryptedAsset: any SHEncryptedAsset
-        
-        if encryptionRequest.isBackground == false {
-            for delegate in delegates {
-                if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
-                }
-            }
-        }
-        
-        let globalIdentifier = try asset.phAsset.generateGlobalIdentifier()
-        
-        ///
-        /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
-        /// ingest that identifier into the graph as a provisional share.
-        ///
-        try SHKGQuery.ingestShare(
-            of: globalIdentifier,
-            from: self.user.identifier,
-            to: encryptionRequest.sharedWith.map({ $0.identifier }),
-            provisional: true
-        )
+        var globalIdentifier: GlobalIdentifier? = nil
         
         do {
+            let asset = encryptionRequest.asset
+            let encryptedAsset: any SHEncryptedAsset
+            
+            if encryptionRequest.isBackground == false {
+                for delegate in delegates {
+                    if let delegate = delegate as? SHAssetEncrypterDelegate {
+                        delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
+                    }
+                }
+            }
+            
+            /// 
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
+            
+            if encryptionRequest.isBackground == false {
+                ///
+                /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
+                /// ingest that identifier into the graph as a provisional share.
+                ///
+                try SHKGQuery.ingestShare(
+                    of: globalIdentifier!,
+                    from: self.user.identifier,
+                    to: encryptionRequest.sharedWith.map({ $0.identifier }),
+                    provisional: true
+                )
+            }
+            
+            
             ///
             /// The symmetric key is used to encrypt this asset (all of its version) moving forward.
             /// For assets that are already in the local store, do a best effort to retrieve the key from the store.
@@ -487,7 +473,10 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             ///
             let privateSecret: SymmetricKey
             do {
-                let privateSecretData = try asset.retrieveCommonEncryptionKey(sender: self.user, globalIdentifier: globalIdentifier)
+                let privateSecretData = try asset.retrieveCommonEncryptionKey(
+                    sender: self.user,
+                    globalIdentifier: globalIdentifier!
+                )
                 privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
             } catch SHBackgroundOperationError.missingAssetInLocalServer(_) {
                 privateSecret = SymmetricKey(size: .bits256)
@@ -495,7 +484,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             
             encryptedAsset = try self.generateEncryptedAsset(
                 for: asset,
-                with: globalIdentifier,
+                with: globalIdentifier!,
                 usingPrivateSecret: privateSecret.rawRepresentation,
                 recipients: [self.user],
                 request: encryptionRequest
@@ -524,6 +513,21 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                 
                 throw SHBackgroundOperationError.fatalError("failed to create local asset")
             }
+            
+            ///
+            /// Encryption is completed.
+            /// Create an item in the history queue for this upload, and remove the one in the upload queue
+            ///
+            do {
+                try self.markAsSuccessful(
+                    item: item,
+                    encryptionRequest: encryptionRequest,
+                    globalIdentifier: encryptedAsset.globalIdentifier
+                )
+            } catch {
+                log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
+                throw error
+            }
         } catch {
             do {
                 try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
@@ -531,23 +535,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                 log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
                 // TODO: Handle
             }
-            
-            throw error
-        }
-        
-        ///
-        /// Encryption is completed.
-        /// Create an item in the history queue for this upload, and remove the one in the upload queue
-        ///
-        do {
-            try self.markAsSuccessful(
-                item: item,
-                encryptionRequest: encryptionRequest,
-                globalIdentifier: encryptedAsset.globalIdentifier
-            )
-        } catch {
-            log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
-            // TODO: Handle
         }
     }
     
@@ -586,12 +573,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             
             setProcessingState(.encrypting, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] encryption task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] encryption task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
         }
@@ -600,6 +583,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     public func runOnce(maxItems: Int? = nil) throws {
         var count = 0
         let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        
         while let item = try encryptionQueue.peek() {
             guard maxItems == nil || count < maxItems! else {
                 break
@@ -612,12 +596,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             
             setProcessingState(.encrypting, for: item.identifier)
             
-            do {
-                try self.process(item)
-                log.info("[√] encryption task completed for item \(item.identifier)")
-            } catch {
-                log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
-            }
+            self.process(item)
+            log.info("[√] encryption task completed for item \(item.identifier)")
             
             setProcessingState(nil, for: item.identifier)
             
@@ -659,12 +639,9 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                     setProcessingState(nil, for: item.identifier)
                     return
                 }
-                do {
-                    try self.process(item)
-                    log.info("[√] encryption task completed for item \(item.identifier)")
-                } catch {
-                    log.error("[x] encryption task failed for item \(item.identifier): \(error.localizedDescription)")
-                }
+                
+                self.process(item)
+                log.info("[√] encryption task completed for item \(item.identifier)")
                 
                 setProcessingState(nil, for: item.identifier)
             }

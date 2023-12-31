@@ -10,7 +10,10 @@ public enum SHKGPredicates: String {
 var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
 var UserIdToAssetGidSharedWithCache = [UserIdentifier: Set<GlobalIdentifier>]()
 
-public enum SHKGQuery {
+public struct SHKGQuery {
+    
+    private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
+    
     public static func isKnownUser(withIdentifier userId: UserIdentifier) throws -> Bool {
         if let assetIdsSharedBy = UserIdToAssetGidSharedByCache[userId],
            let assetIdsSharedWith = UserIdToAssetGidSharedWithCache[userId] {
@@ -55,35 +58,52 @@ public enum SHKGQuery {
                                      from senderUserId: UserIdentifier,
                                      to receiverUserIds: [UserIdentifier],
                                      provisional: Bool = false) throws {
-        let graph = try SHDBManager.sharedInstance.graph()
-        let kgSender = graph.entity(withIdentifier: senderUserId)
         var errors = [Error]()
         
         do {
-            let kgAsset = graph.entity(withIdentifier: assetIdentifier)
-            if provisional {
-                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.attemptedShare.rawValue)
-            } else {
-                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
-                try graph.removeTriples(matching: KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: nil))
-            }
-            if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
-                UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
-            } else {
-                UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
-            }
-            for userId in receiverUserIds {
-                if userId == senderUserId {
-                    continue
-                }
-                let kgOtherUser = graph.entity(withIdentifier: userId)
-                try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
+            try readWriteGraphQueue.sync(flags: .barrier) {
+                let graph = try SHDBManager.sharedInstance.graph()
                 
-                if let _ = UserIdToAssetGidSharedWithCache[userId] {
-                    UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
+                let allTriplesBefore = try graph.triples(matching: nil)
+                log.debug("[sh-kg] graph before ingest \(allTriplesBefore)")
+                
+                let kgSender = graph.entity(withIdentifier: senderUserId)
+                let kgAsset = graph.entity(withIdentifier: assetIdentifier)
+                
+                if provisional {
+                    try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.attemptedShare.rawValue)
+                    log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
                 } else {
-                    UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
+                    try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
+                    let tripleCondition = KBTripleCondition(subject: senderUserId, predicate: SHKGPredicates.attemptedShare.rawValue, object: kgAsset.identifier)
+                    try graph.removeTriples(matching: tripleCondition)
+                    log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.shares.rawValue), asset=\(kgAsset.identifier)>")
+                    log.debug("[sh-kg] removing triples matching <user=\(senderUserId), \(SHKGPredicates.attemptedShare.rawValue), \(kgAsset.identifier)>")
                 }
+                
+                if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
+                    UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
+                } else {
+                    UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
+                }
+                
+                for userId in receiverUserIds {
+                    if userId == senderUserId {
+                        continue
+                    }
+                    let kgOtherUser = graph.entity(withIdentifier: userId)
+                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
+                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicates.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
+                    
+                    if let _ = UserIdToAssetGidSharedWithCache[userId] {
+                        UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
+                    } else {
+                        UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
+                    }
+                }
+                
+                let allTriplesAfter = try graph.triples(matching: nil)
+                log.debug("[sh-kg] graph after ingest \(allTriplesAfter)")
             }
         } catch {
             log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
@@ -95,7 +115,7 @@ public enum SHKGQuery {
         }
     }
     
-    public static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
+    internal static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
         let removeGidsFromCache = {
             (cache: inout [UserIdentifier: Set<GlobalIdentifier>]) in
             let userIds = Array(cache.keys)
@@ -116,11 +136,14 @@ public enum SHKGQuery {
         removeGidsFromCache(&UserIdToAssetGidSharedWithCache)
         
         // TODO: Support writebatch in KnowledgeGraph
-        let graph = try SHDBManager.sharedInstance.graph()
-        try globalIdentifiers.forEach({
-            let assetEntity = graph.entity(withIdentifier: $0)
-            try assetEntity.remove()
-        })
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            let graph = try SHDBManager.sharedInstance.graph()
+            try globalIdentifiers.forEach({
+                let assetEntity = graph.entity(withIdentifier: $0)
+                try assetEntity.remove()
+                log.debug("[sh-kg] removing entity <asset=\(assetEntity.identifier)>")
+            })
+        }
     }
     
     internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
@@ -131,19 +154,25 @@ public enum SHKGQuery {
         })
         
         // TODO: Support writebatch in KnowledgeGraph
-        let graph = try SHDBManager.sharedInstance.graph()
-        for userId in userIdentifiers {
-            try graph.removeEntity(userId)
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            let graph = try SHDBManager.sharedInstance.graph()
+            for userId in userIdentifiers {
+                try graph.removeEntity(userId)
+                log.debug("[sh-kg] removing entity <user=\(userId)>")
+            }
         }
     }
     
-    public static func deepClean() throws {
+    internal static func deepClean() throws {
         /// Invalidate cache
         UserIdToAssetGidSharedByCache.removeAll()
         UserIdToAssetGidSharedWithCache.removeAll()
         
-        let graph = try SHDBManager.sharedInstance.graph()
-        let _ = try graph.removeAll()
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            let graph = try SHDBManager.sharedInstance.graph()
+            let _ = try graph.removeAll()
+            log.debug("[sh-kg] removing all triples")
+        }
     }
     
     public static func assetGlobalIdentifiers(
@@ -188,7 +217,10 @@ public enum SHKGQuery {
             )
         }
         
-        let triples = try graph.triples(matching: sharedByUsersCondition)
+        var triples = [KBTriple]()
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            triples = try graph.triples(matching: sharedByUsersCondition)
+        }
         
         if triples.count == 0 {
             for userId in usersIdsToSearch {
@@ -250,7 +282,10 @@ public enum SHKGQuery {
             )
         }
         
-        let triples = try graph.triples(matching: sharedWithUsersCondition)
+        var triples = [KBTriple]()
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            triples = try graph.triples(matching: sharedWithUsersCondition)
+        }
         
         if triples.count == 0 {
             for userId in usersIdsToSearch {
@@ -274,5 +309,43 @@ public enum SHKGQuery {
         }
         
         return assetsToUsers
+    }
+    
+    public static func usersConnectedTo(assets globalIdentifiers: [GlobalIdentifier]) throws -> [UserIdentifier] {
+        let graph = try SHDBManager.sharedInstance.graph()
+        var sharedWithCondition = KBTripleCondition(value: false)
+        var sharedByCondition = KBTripleCondition(value: false)
+        
+        for assetId in globalIdentifiers {
+            sharedWithCondition = sharedWithCondition.or(
+                KBTripleCondition(
+                    subject: assetId, predicate: SHKGPredicates.sharedWith.rawValue, object: nil
+                )
+            )
+            sharedByCondition = sharedByCondition.or(
+                KBTripleCondition(
+                    subject: nil, predicate: SHKGPredicates.shares.rawValue, object: assetId
+                )
+            ).or(
+                KBTripleCondition(
+                    subject: nil, predicate: SHKGPredicates.attemptedShare.rawValue, object: assetId
+                )
+            )
+        }
+        
+        var userIds = [UserIdentifier]()
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            userIds = try graph.triples(matching: sharedWithCondition).map({ $0.object })
+            userIds.append(contentsOf: try graph.triples(matching: sharedByCondition).map({ $0.subject }))
+        }
+        
+        return Array(Set(userIds))
+    }
+    
+    internal static func removeTriples(matching condition: KBTripleCondition) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            let graph = try SHDBManager.sharedInstance.graph()
+            try graph.removeTriples(matching: condition)
+        }
     }
 }

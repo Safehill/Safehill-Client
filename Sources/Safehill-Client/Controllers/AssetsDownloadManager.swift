@@ -180,7 +180,7 @@ private extension SHAssetsDownloadManager {
             let queueItemIdentifier = descr.globalIdentifier
             guard let existingItemIdentifiers = try? queue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
                   existingItemIdentifiers.isEmpty else {
-                log.info("Not enqueuing item \(queueItemIdentifier) in queue \(queue.name) as a request with the same identifier hasn't been fulfilled yet")
+                log.info("Not enqueueing item \(queueItemIdentifier) in queue \(queue.name) as a request with the same identifier hasn't been fulfilled yet")
                 continue
             }
             
@@ -188,7 +188,7 @@ private extension SHAssetsDownloadManager {
                 assetDescriptor: descr,
                 receiverUserIdentifier: self.user.identifier
             )
-            log.info("enqueuing item \(queueItemIdentifier) in queue \(queue.name)")
+            log.info("enqueueing item \(queueItemIdentifier) in queue \(queue.name)")
             do {
                 try queueItem.enqueue(in: queue, with: queueItemIdentifier)
             } catch {
@@ -214,8 +214,14 @@ private extension SHAssetsDownloadManager {
                 switch result {
                 case .success(let item):
                     do {
-                        guard let data = item?.content as? Data else {
-                            throw SHBackgroundOperationError.unexpectedData(item?.content)
+                        guard let item = item else {
+                            /// If no such items exist in the queue, return
+                            group.leave()
+                            return
+                        }
+                        
+                        guard let data = item.content as? Data else {
+                            throw SHBackgroundOperationError.unexpectedData(item.content)
                         }
                         
                         let unarchiver: NSKeyedUnarchiver
@@ -234,12 +240,11 @@ private extension SHAssetsDownloadManager {
                     } catch {
                         errors[assetGId] = error
                     }
-                    
                 case .failure(let error):
                     errors[assetGId] = error
                 }
                 
-                queue.removeValue(for: assetGId) { (_: Swift.Result) in
+                queue.removeValue(for: assetGId) { (_: Result) in
                     group.leave()
                 }
             }

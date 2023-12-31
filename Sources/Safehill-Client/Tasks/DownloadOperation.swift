@@ -177,42 +177,33 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///
     /// - Parameter completionHandler: the callback
     internal func processDescriptors(
+        _ descriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<([GlobalIdentifier: any SHAssetDescriptor], [GlobalIdentifier]), Error>) -> Void
     ) {
-        let start = CFAbsoluteTimeGetCurrent()
-        
-        var descriptors = [any SHAssetDescriptor]()
-        do {
-            descriptors = try self.fetchDescriptorsFromServer()
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
         ///
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
-        descriptors = descriptors.filter {
+        let filteredDescriptors = descriptors.filter {
             DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
             && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
             && $0.uploadState == .completed || $0.uploadState == .partial
         }
         
-        guard descriptors.count > 0 else {
+        guard filteredDescriptors.count > 0 else {
             self.downloaderDelegates.forEach({
-                $0.didReceiveAssetDescriptors([], referencing: [], completionHandler: nil)
+                $0.didReceiveAssetDescriptors([], referencing: [])
             })
             completionHandler(.success(([:], [])))
             return
         }
         
-        /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:completionHandler)`
+        /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
         /// filter out the ones whose sender is unknown.
         /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-        let descriptorsFromKnownUsers = descriptors.filter {
+        let descriptorsFromKnownUsers = filteredDescriptors.filter {
             $0.sharingInfo.sharedByUserIdentifier == user.identifier
             || ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
         }
@@ -239,15 +230,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         self.downloaderDelegates.forEach({
             $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                          referencing: users,
-                                          completionHandler: nil)
+                                          referencing: users)
         })
         
-        let end = CFAbsoluteTimeGetCurrent()
-        self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
-        
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-        for descriptor in descriptors {
+        for descriptor in filteredDescriptors {
             descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
             ///
             /// Limit based on the task configuration
@@ -502,11 +489,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         }
                         
                     case .failure(let error):
-                        self.log.warning("[downloadAssets] failed to create assets in local server. Assets in the local libarary but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                        self.log.warning("[downloadAssets] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
                     }
                 }
             case .failure(let error):
-                self.log.warning("[downloadAssets] failed to fetch assets from remote server. Assets in the local libarary but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                self.log.warning("[downloadAssets] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
             }
         }
     }
@@ -788,7 +775,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 for groupId in descriptor.sharingInfo.groupInfoById.keys {
                     self.downloaderDelegates.forEach({
-                        $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier, in: groupId)
+                        $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier,
+                                                   descriptor: descriptor,
+                                                   in: groupId)
                     })
                 }
                 
@@ -905,6 +894,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         DispatchQueue.global(qos: .background).async {
             let group = DispatchGroup()
             
+            let descriptors: [any SHAssetDescriptor]
             var descriptorsByGlobalIdentifier = [GlobalIdentifier: any SHAssetDescriptor]()
             var globalIdentifiersFromKnownUsers = [GlobalIdentifier]()
             var error: Error? = nil
@@ -914,8 +904,17 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// Get all asset descriptors associated with this user from the server.
             /// Descriptors serve as a manifest to determine what to download.
             ///
+            do {
+                descriptors = try self.fetchDescriptorsFromServer()
+            } catch {
+                completionHandler(.failure(error))
+                return
+            }
+            
+            let start = CFAbsoluteTimeGetCurrent()
+            
             group.enter()
-            self.processDescriptors { descResult in
+            self.processDescriptors(descriptors) { descResult in
                 switch descResult {
                 case .failure(let err):
                     self.log.error("failed to download descriptors: \(err.localizedDescription)")
@@ -925,6 +924,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     globalIdentifiersFromKnownUsers = tuple.1
                 }
                 group.leave()
+                
+                let end = CFAbsoluteTimeGetCurrent()
+                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
             }
             
             dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
@@ -937,17 +939,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 return
             }
             
-            guard descriptorsByGlobalIdentifier.count > 0 else {
-                completionHandler(.success(()))
-                return
-            }
-            
             ///
             /// Given these descriptors, sync local and remote state (REMOVALS and UPDATES)
             ///
             let syncOperation = SHSyncOperation(user: self.user, delegates: self.syncDelegates)
             group.enter()
-            syncOperation.sync(remoteDescriptors: Array(descriptorsByGlobalIdentifier.values)) { syncResult in
+            syncOperation.sync(remoteDescriptors: descriptors) { syncResult in
                 group.leave()
             }
             

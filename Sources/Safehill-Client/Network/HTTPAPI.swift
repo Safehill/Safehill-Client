@@ -17,10 +17,6 @@ public class SHNetwork {
     }
 }
 
-public let SHDefaultNetworkTimeoutInMilliseconds = 30000 // 30 seconds
-public let SHUploadTimeoutInMilliseconds = 300000 // 5 minutes
-public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
-
 extension ISO8601DateFormatter {
     convenience init(_ formatOptions: Options) {
         self.init()
@@ -88,10 +84,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         var stopTime = startTime
         var bytesReceived = 0
         
-        let configuration = URLSessionConfiguration.default
-        configuration.waitsForConnectivity = false
-        configuration.allowsCellularAccess = true
-        URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
+        URLSession(configuration: SafehillServerDefaultURLSessionConfiguration).dataTask(with: request) { data, response, error in
             
             guard error == nil else {
                 if let err = error as? URLError {
@@ -114,10 +107,10 @@ struct SHServerHTTPAPI : SHServerAPI {
             
             let httpResponse = response as! HTTPURLResponse
             if httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
-                log.debug("request \(request.url!) received \(httpResponse.statusCode) response")
+                log.warning("request \(request.httpMethod!) \(request.url!) received \(httpResponse.statusCode) response")
                 if let data = data {
                     let convertedString = String(data: data, encoding: String.Encoding.utf8)
-                    log.debug("response body: \(convertedString ?? "")")
+                    log.warning("response body: \(convertedString ?? "")")
                 }
             }
             

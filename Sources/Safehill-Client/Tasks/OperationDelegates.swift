@@ -1,19 +1,18 @@
 import Foundation
 import Photos
 
-public protocol SHAssetDescriptorsChangeDelegate {
-    func assetWasRemoved(globalIdentifier: String)
-}
-
 /// Inbound operation delegate.
 public protocol SHInboundAssetOperationDelegate {}
 
 public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
+    func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [SHServerUser]])
+    
     func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
+    func usersWereAddedToShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+    func usersWereRemovedFromShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+    
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
     func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
-    func usersAreConnectedAndVerified(_: [SHServerUser])
-    func assetIdsAreSharedWithUser(_: [GlobalIdentifier])
     
     func reactionsDidChange(in groupId: String)
     func didReceiveMessage(in groupId: String)
@@ -26,8 +25,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter users: the `SHServerUser` objects for user ids mentioned in the descriptors
     /// - Parameter completionHandler: called when handling is complete
     func didReceiveAssetDescriptors(_ descriptors: [any SHAssetDescriptor],
-                                    referencing users: [SHServerUser],
-                                    completionHandler: (() -> Void)?)
+                                    referencing users: [SHServerUser])
     
     /// Notifies there are assets to download from unknown users
     /// - Parameters:
@@ -39,6 +37,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// Notifies about the start of a network download of a an asset from the CDN
     /// - Parameter downloadRequest: the request
     func didStartDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
+                                 descriptor: any SHAssetDescriptor,
                                  in groupId: String)
     
     /// Notify about a failed attempt to download some assets

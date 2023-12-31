@@ -59,20 +59,20 @@ public class SHRemoteUserClass: NSObject, NSSecureCoding {
         let publicKeyDataBase64 = decoder.decodeObject(of: NSString.self, forKey: PublicKeyKey)
         let publicSignatureDataBase64 = decoder.decodeObject(of: NSString.self, forKey: PublicSignatureKey)
         
-        guard let identifier = identifier as String? else {
+        guard let identifier = identifier as? String else {
             log.error("unexpected value for identifier when decoding SHRemoteUserClass object")
             return nil
         }
-        guard let name = name as String? else {
+        guard let name = name as? String else {
             log.error("unexpected value for name when decoding SHRemoteUserClass object")
             return nil
         }
-        guard let publicKeyDataBase64 = publicKeyDataBase64 as String?,
+        guard let publicKeyDataBase64 = publicKeyDataBase64 as? String,
               let publicKeyData = Data(base64Encoded: publicKeyDataBase64) else {
             log.error("unexpected value for publicKey when decoding SHRemoteUserClass object")
             return nil
         }
-        guard let publicSignatureDataBase64 = publicSignatureDataBase64 as String?,
+        guard let publicSignatureDataBase64 = publicSignatureDataBase64 as? String,
               let publicSignatureData = Data(base64Encoded: publicSignatureDataBase64) else {
             log.error("unexpected value for publicSignature when decoding SHRemoteUserClass object")
             return nil
@@ -133,35 +133,28 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
         let creationDate = decoder.decodeObject(of: NSDate.self, forKey: CodingKeys.creationDate.rawValue)
         let uploadStateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.uploadState.rawValue)
-        let sharingInfoData = decoder.decodeObject(of: [NSData.self], forKey: CodingKeys.sharingInfo.rawValue) as! Data
+        let sharingInfoData = decoder.decodeObject(of: NSData.self, forKey: CodingKeys.sharingInfo.rawValue)
                 
-        guard let globalIdentifier = globalIdentifier as String? else {
+        guard let globalIdentifier = globalIdentifier as? String else {
             log.error("unexpected value for globalIdentifier when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
-        guard let localIdentifier = localIdentifier as String? else {
-            log.error("unexpected value for localIdentifier when decoding SHGenericAssetDescriptorClass object")
-            return nil
-        }
-        guard let creationDate = creationDate as Date? else {
-            log.error("unexpected value for creationDate when decoding SHGenericAssetDescriptorClass object")
-            return nil
-        }
-        guard let uploadStateStr = uploadStateStr as String?,
+        guard let uploadStateStr = uploadStateStr as? String,
               let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr)
         else {
             log.error("unexpected value for uploadState when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
-        guard let sharingInfo = try? JSONDecoder().decode(SHGenericDescriptorSharingInfo.self, from: sharingInfoData) else {
+        guard let sharingInfoData = sharingInfoData as? Data,
+              let sharingInfo = try? JSONDecoder().decode(SHGenericDescriptorSharingInfo.self, from: sharingInfoData) else {
             log.error("unexpected value for sharingInfo when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
         
         self.init(
             globalIdentifier: globalIdentifier,
-            localIdentifier: localIdentifier,
-            creationDate: creationDate,
+            localIdentifier: localIdentifier as? String,
+            creationDate: creationDate as? Date,
             uploadState: uploadState,
             sharingInfo: sharingInfo
         )
@@ -308,7 +301,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: IsBackgroundKey)
         
-        guard let assetId = assetId as String? else {
+        guard let assetId = assetId as? String else {
             log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
             return nil
         }
@@ -332,7 +325,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             return nil
         }
         
-        guard let groupId = groupId as String? else {
+        guard let groupId = groupId as? String else {
             log.error("unexpected value for groupId when decoding \(Self.Type.self) object")
             return nil
         }
@@ -395,14 +388,18 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     
     public static var supportsSecureCoding: Bool = true
     
+    public let globalIdentifier: String?
+    
     public let shouldUpload: Bool
     
     public init(localIdentifier: String,
+                globalIdentifier: String? = nil,
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
                 isBackground: Bool = false) {
+        self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
         super.init(localIdentifier: localIdentifier,
                    groupId: groupId,
@@ -412,12 +409,14 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     }
     
     public init(localIdentifier: String,
+                globalIdentifier: String? = nil,
                 versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
                 isBackground: Bool = false) {
+        self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
         super.init(localIdentifier: localIdentifier,
                    versions: versions,
@@ -429,11 +428,13 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     
     public override func encode(with coder: NSCoder) {
         super.encode(with: coder)
+        coder.encode(self.globalIdentifier, forKey: GlobalAssetIdKey)
         coder.encode(NSNumber(booleanLiteral: self.shouldUpload), forKey: AssetShouldUploadKey)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+            let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
             let shouldUpload = decoder.decodeObject(of: NSNumber.self, forKey: AssetShouldUploadKey)
             
             guard let su = shouldUpload else {
@@ -442,6 +443,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
             }
             
             self.init(localIdentifier: superSelf.localIdentifier,
+                      globalIdentifier: globalAssetId as? String,
                       versions: superSelf.versions,
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
@@ -487,7 +489,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             let asset = decoder.decodeObject(of: SHApplePhotoAsset.self, forKey: AssetKey)
             
-            guard let asset = asset as SHApplePhotoAsset? else {
+            guard let asset = asset else {
                 log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
                 return nil
             }
@@ -536,7 +538,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
             
-            guard let globalAssetId = globalAssetId as String? else {
+            guard let globalAssetId = globalAssetId as? String else {
                 log.error("unexpected value for globalAssetId when decoding SHConcreteShareableGroupableQueueItem object")
                 return nil
             }

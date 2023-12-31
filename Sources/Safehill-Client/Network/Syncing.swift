@@ -184,7 +184,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     ) {
         var localDescriptors = [any SHAssetDescriptor]()
         var localError: Error? = nil
-        var remoteUsers = [SHServerUser]()
+        var remoteUsersById = [UserIdentifier: SHServerUser]()
         var remoteUsersError: Error? = nil
         var dispatchResult: DispatchTimeoutResult? = nil
         
@@ -204,7 +204,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
         guard dispatchResult == .success else {
             completionHandler(.failure(SHBackgroundOperationError.timedOut))
             return
@@ -217,7 +217,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         /// Get all users referenced in either local or remote descriptors (excluding THIS user)
         ///
-        var userIdsInLocalDescriptorsSet = Set<String>()
+        var userIdsInLocalDescriptorsSet = Set<UserIdentifier>()
         for localDescriptor in localDescriptors {
             userIdsInLocalDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
             localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInLocalDescriptorsSet.insert($0) })
@@ -225,7 +225,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         userIdsInLocalDescriptorsSet.remove(self.user.identifier)
         let userIdsInLocalDescriptors = Array(userIdsInLocalDescriptorsSet)
         
-        var userIdsInRemoteDescriptorsSet = Set<String>()
+        var userIdsInRemoteDescriptorsSet = Set<UserIdentifier>()
         for remoteDescriptor in remoteDescriptors {
             userIdsInRemoteDescriptorsSet.insert(remoteDescriptor.sharingInfo.sharedByUserIdentifier)
             remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInRemoteDescriptorsSet.insert($0) })
@@ -240,7 +240,11 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         self.serverProxy.remoteServer.getUsers(withIdentifiers: userIdsInRemoteDescriptors) { result in
             switch result {
             case .success(let serverUsers):
-                remoteUsers = serverUsers
+                remoteUsersById = serverUsers.reduce([:], { partialResult, serverUser in
+                    var result = partialResult
+                    result[serverUser.identifier] = serverUser
+                    return result
+                })
             case .failure(let err):
                 self.log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
                 remoteUsersError = err
@@ -263,7 +267,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
         if uIdsToRemoveFromLocal.count > 0 {
-            log.info("removing user ids from graph \(uIdsToRemoveFromLocal)")
+            log.info("removing user ids from local store and the graph \(uIdsToRemoveFromLocal)")
             do {
                 try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
             } catch {
@@ -279,20 +283,18 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         ///
-        /// Let the delegate know about the new list of verified users
+        /// Get all the asset identifiers and user identifiers mentioned in the remote descriptors
         ///
+        let assetIdToUserIds = remoteDescriptors
+            .reduce([GlobalIdentifier: [SHServerUser]]()) { partialResult, descriptor in
+                var result = partialResult
+                var userIdList = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                userIdList.append(descriptor.sharingInfo.sharedByUserIdentifier)
+                result[descriptor.globalIdentifier] = userIdList.compactMap({ remoteUsersById[$0] })
+                return result
+            }
         self.delegates.forEach({
-            $0.usersAreConnectedAndVerified(remoteUsers)
-        })
-        
-        ///
-        /// Get all the asset identifiers mentioned in the remote descriptors
-        ///
-        let allSharedAssetGIds = remoteDescriptors
-            .filter({ $0.sharingInfo.sharedByUserIdentifier != self.user.identifier })
-            .map({ $0.globalIdentifier })
-        self.delegates.forEach({
-            $0.assetIdsAreSharedWithUser(Array(Set(allSharedAssetGIds)))
+            $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
         })
         
         ///
@@ -306,10 +308,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         let downloadsManager = SHAssetsDownloadManager(user: self.user)
         do {
-            try downloadsManager.cleanEntriesNotIn(allSharedAssetIds: allSharedAssetGIds,
+            try downloadsManager.cleanEntriesNotIn(allSharedAssetIds: Array(assetIdToUserIds.keys),
                                                    allUserIds: userIdsInRemoteDescriptors)
         } catch {
-            log.error("failed to clean up download queues and index on deleted assets")
+            log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
         }
         let userBlacklist = downloadsManager.blacklistedUsers
         let uIdsToRemoveFromBlacklist = userBlacklist.subtract(userIdsInRemoteDescriptors)
@@ -361,14 +363,117 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
+            self.log.debug("[sync] notifying queue items changed \(queueDiff.changed)")
             self.delegates.forEach({
                 $0.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
             })
         }
         if queueDiff.removed.count > 0 {
+            self.log.debug("[sync] notifying queue items removed \(queueDiff.removed)")
             self.delegates.forEach({
                 $0.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
             })
+        }
+        
+        if diff.userIdsToAddToSharesOfAssetGid.count > 0 {
+            let dispatchGroup = DispatchGroup()
+            var addRecipientErrorById = [GlobalIdentifier: Error]()
+            
+            ///
+            /// Add users to the shares in the graph and notify the delegates
+            ///
+            for (globalIdentifier, shareDiff) in diff.userIdsToAddToSharesOfAssetGid {
+                do {
+                    try SHKGQuery.ingestShare(
+                        of: globalIdentifier,
+                        from: shareDiff.from,
+                        to: Array(shareDiff.groupIdByRecipientId.keys)
+                    )
+                    
+                    dispatchGroup.enter()
+                    self.serverProxy.localServer.addAssetRecipients(
+                        to: globalIdentifier,
+                        basedOn: shareDiff.groupIdByRecipientId
+                    ) { result in
+                        switch result {
+                        case .success():
+                            self.delegates.forEach {
+                                $0.usersWereAddedToShare(of: globalIdentifier, groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                            }
+                        case .failure(let err):
+                            addRecipientErrorById[globalIdentifier] = err
+                        }
+                        dispatchGroup.leave()
+                    }
+                } catch {
+                    log.error("[sync] failed to add recipients to the share of \(globalIdentifier): \(error.localizedDescription)")
+                    continue
+                }
+            }
+            
+            let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * diff.userIdsToRemoveToSharesOfAssetGid.count))
+            if dispatchResult != .success {
+                log.error("[sync] failed to add recipients to some shares: \(SHBackgroundOperationError.timedOut.localizedDescription)")
+            }
+            if addRecipientErrorById.count != 0 {
+                log.error("[sync] failed to add recipients to some shares: \(addRecipientErrorById)")
+            }
+        }
+        
+        if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
+            var condition = KBTripleCondition(value: false)
+            let dispatchGroup = DispatchGroup()
+            var removeRecipientErrorById = [GlobalIdentifier: Error]()
+            
+            ///
+            /// Remove users from the shares
+            ///
+            for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
+                for recipientId in shareDiff.groupIdByRecipientId.keys {
+                    condition = condition.or(KBTripleCondition(
+                        subject: globalIdentifier,
+                        predicate: SHKGPredicates.sharedWith.rawValue,
+                        object: recipientId
+                    ))
+                }
+            }
+            do {
+                try SHKGQuery.removeTriples(matching: condition)
+                
+                ///
+                /// Only after the Graph is updated, remove the recipients from the DB
+                /// This ensures that if the graph update fails is attempted again (as the descriptors from local haven't been updated yet)
+                ///
+                for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
+                    dispatchGroup.enter()
+                    let userIds = Array(shareDiff.groupIdByRecipientId.keys)
+                    self.serverProxy.localServer.removeAssetRecipients(
+                        recipientUserIds: userIds,
+                        from: globalIdentifier
+                    ) { result in
+                        switch result {
+                        case .success():
+                            self.delegates.forEach {
+                                $0.usersWereRemovedFromShare(of: globalIdentifier,
+                                                             groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                            }
+                        case .failure(let err):
+                            removeRecipientErrorById[globalIdentifier] = err
+                        }
+                        dispatchGroup.leave()
+                    }
+                }
+                
+                let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * diff.userIdsToRemoveToSharesOfAssetGid.count))
+                guard dispatchResult == .success else {
+                    throw SHBackgroundOperationError.timedOut
+                }
+                if removeRecipientErrorById.count != 0 {
+                    log.error("[sync] failed to remove recipients from some shares: \(removeRecipientErrorById)")
+                }
+            } catch {
+                log.error("[sync] failed to remove recipients from some shares: \(error.localizedDescription)")
+            }
         }
         
         completionHandler(.success(diff))
@@ -667,21 +772,33 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             case .success(let diff):
                 if diff.assetsRemovedOnServer.count > 0 {
                     ///
-                    /// Remove items in download queues and indices that no longer exist
+                    /// Remove items in DOWNLOAD queues and indices that no longer exist
                     ///
                     do {
                         let downloadsManager = SHAssetsDownloadManager(user: self.user)
                         try downloadsManager.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
                     } catch {
-                        self.log.error("failed to clean up download queues and index on deleted assets")
+                        let _ = try? SHDBManager.sharedInstance.graph().removeAll()
+                        self.log.error("[sync] failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
                     }
                     
-                    //
-                    // TODO: THIS IS A BIG ONE!!!
-                    // TODO: The deletion of these assets from all the other queues is currently taken care of by the delegate.
-                    // TODO: The framework should be responsible for it instead.
-                    // TODO: Deletion of entities in the graph should be taken care of here, too. Currently it can't because the client is currently querying the graph before deleting to understand which conversation threads need to be removed
-                    //
+                    ///
+                    /// Remove items in the UPLOAD and SHARE queues that no longer exist
+                    ///
+                    do {
+                        try SHQueueOperation.removeItems(correspondingTo: diff.assetsRemovedOnServer.compactMap({ $0.localIdentifier }))
+                    } catch {
+                        self.log.error("[sync] failed to clean up UPLOAD and SHARE queues on deleted assets: \(error.localizedDescription)")
+                    }
+                    
+                    do {
+                        try SHKGQuery.removeAssets(with: diff.assetsRemovedOnServer.compactMap({ $0.globalIdentifier }))
+                    } catch {
+                        let _ = try? SHDBManager.sharedInstance.graph().removeAll()
+                        self.log.error("[sync] error removing deleted assets from the graph. Removing all triples in the graph and re-building it")
+                    }
+                    
+                    self.log.debug("[sync] notifying delegates about deleted assets \(diff.assetsRemovedOnServer)")
                     self.delegates.forEach({
                         $0.assetsWereDeleted(diff.assetsRemovedOnServer)
                     })

@@ -28,7 +28,11 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
     public func urlSession(_ session: URLSession,
                            task: URLSessionTask,
                            didCompleteWithError error: Error?) {
-        log.error("[BACKGROUND-URLSESSION] \(session.configuration.identifier ?? "") did complete with error: \(error?.localizedDescription ?? "nil")")
+        if error == nil {
+            log.info("[BACKGROUND-URLSESSION] \(session.configuration.identifier ?? "") completed successfully")
+        } else {
+            log.error("[BACKGROUND-URLSESSION] \(session.configuration.identifier ?? "") completed with error: \(error!.localizedDescription)")
+        }
         guard let identifier = session.configuration.identifier,
               identifier.isEmpty == false,
               let handlers = handlerQueue[identifier]
@@ -43,7 +47,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             try? FileManager.default.removeItem(atPath: filePath)
         }
         
-        writeQueueAccessQueue.sync(flags: .barrier) {
+        let _ = writeQueueAccessQueue.sync(flags: .barrier) {
             self.handlerQueue.removeValue(forKey: identifier)
         }
         
@@ -78,7 +82,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
             return
         }
         
-        writeQueueAccessQueue.sync(flags: .barrier) {
+        let _ = writeQueueAccessQueue.sync(flags: .barrier) {
             self.handlerQueue.removeValue(forKey: identifier)
         }
         
@@ -134,10 +138,6 @@ struct S3Proxy {
             return
         }
         
-        let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-        configuration.allowsCellularAccess = true // defaults to true
-        configuration.waitsForConnectivity = true // default to false
-        
         let sessionDelegate = SHSessionDelegate.sharedInstance
         
         sessionDelegate.addCompletionHandler(
@@ -145,6 +145,7 @@ struct S3Proxy {
             identifier: sessionIdentifier
         )
         
+        let configuration = CDNServerDefaultBackgroundURLSessionConfiguration(with: sessionIdentifier)
         let backgroundSession = URLSession(configuration: configuration,
                                            delegate: sessionDelegate,
                                            delegateQueue: OperationQueue.main)
