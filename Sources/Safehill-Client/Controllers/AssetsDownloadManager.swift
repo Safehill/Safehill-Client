@@ -180,7 +180,7 @@ private extension SHAssetsDownloadManager {
             let queueItemIdentifier = descr.globalIdentifier
             guard let existingItemIdentifiers = try? queue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
                   existingItemIdentifiers.isEmpty else {
-                log.info("Not enqueuing item \(queueItemIdentifier) in queue \(queue.name) as a request with the same identifier hasn't been fulfilled yet")
+                log.info("Not enqueueing item \(queueItemIdentifier) in queue \(queue.name) as a request with the same identifier hasn't been fulfilled yet")
                 continue
             }
             
@@ -188,7 +188,7 @@ private extension SHAssetsDownloadManager {
                 assetDescriptor: descr,
                 receiverUserIdentifier: self.user.identifier
             )
-            log.info("enqueuing item \(queueItemIdentifier) in queue \(queue.name)")
+            log.info("enqueueing item \(queueItemIdentifier) in queue \(queue.name)")
             do {
                 try queueItem.enqueue(in: queue, with: queueItemIdentifier)
             } catch {
