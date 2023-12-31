@@ -316,7 +316,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             throw error
         }
         
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
+        self.markAsFailed(
             localIdentifier: localIdentifier,
             versions: versions,
             groupId: groupId,
@@ -325,25 +325,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             isBackground: request.isBackground
         )
         
-        do {
-            ///
-            /// Enqueue to FailedUpload queue
-            ///
-            log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
-            
-            let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
-            
-            if let globalIdentifier = globalIdentifier {
-                try self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-            }
-            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
-            
-            /// Remove items in the `UploadHistoryQueue` for the same identifier
-            let _ = try? successfulUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
-        } catch {
-            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
-            throw error
+        if let globalIdentifier = globalIdentifier {
+            self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
         }
         
         guard request.isBackground == false else {
@@ -355,6 +338,11 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         for delegate in delegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
                 delegate.didFailEncryption(queueItemIdentifier: request.identifier)
+            }
+            if users.count > 0 {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                }
             }
         }
     }
