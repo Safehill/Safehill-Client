@@ -105,7 +105,7 @@ extension SHServerProxy {
     }
     
     public func updateUser(email: String? = nil,
-                           phoneNumber: String? = nil,
+                           phoneNumber: SHPhoneNumber? = nil,
                            name: String? = nil,
                            completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
         self.localServer.updateUser(name: name, phoneNumber: phoneNumber, email: email) { result in
@@ -163,6 +163,10 @@ extension SHServerProxy {
                 }
             }
         }
+    }
+    
+    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ()) {
+        self.remoteServer.getUsers(withPhoneNumbers: phoneNumbers, completionHandler: completionHandler)
     }
     
     public func searchUsers(query: String, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {

@@ -33,7 +33,7 @@ public protocol SHServerAPI {
     ///   - email  the new email
     ///   - completionHandler: the callback method
     func updateUser(name: String?,
-                    phoneNumber: String?,
+                    phoneNumber: SHPhoneNumber?,
                     email: String?,
                     completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
     
@@ -57,6 +57,13 @@ public protocol SHServerAPI {
     ///   - userIdentifiers: the unique identifiers for the users. If NULL, retrieves all the connected users
     ///   - completionHandler: the callback method
     func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
+
+    /// Get a list of verified users given a list of phone numbers.
+    /// Used to determine who - from the user's address book - is a Safehill user
+    /// - Parameters:
+    ///   - phoneNumbers: the list of phone numbers
+    ///   - completionHandler: the callback method
+    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:

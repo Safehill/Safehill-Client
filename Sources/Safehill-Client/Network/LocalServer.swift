@@ -101,7 +101,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func updateUser(name: String?,
-                    phoneNumber: String? = nil,
+                    phoneNumber: SHPhoneNumber? = nil,
                     email: String? = nil,
                     completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         guard email != nil || name != nil || phoneNumber != nil else {
@@ -135,14 +135,14 @@ struct LocalServer : SHServerAPI {
                         "publicKey": requestor.publicKeyData,
                         "publicSignature": requestor.publicSignatureData
                     ]
-                    if let name = user["name"] {
-                        value["name"] = name
+                    if let existingName = user["name"] {
+                        value["name"] = existingName
                     }
-                    if let name = user["email"] {
-                        value["email"] = name
+                    if let existingEmail = user["email"] {
+                        value["email"] = existingEmail
                     }
-                    if let name = user["phoneNumber"] {
-                        value["phoneNumber"] = name
+                    if let existingPn = user["phoneNumber"] {
+                        value["phoneNumber"] = existingPn
                     }
                 } else {
                     value = [
@@ -156,7 +156,7 @@ struct LocalServer : SHServerAPI {
                     value["name"] = name
                 }
                 if let phoneNumber = phoneNumber {
-                    value["phoneNumber"] = phoneNumber
+                    value["phoneNumber"] = phoneNumber.hashedPhoneNumber
                 }
                 if let email = email {
                     value["email"] = email
@@ -353,6 +353,10 @@ struct LocalServer : SHServerAPI {
         } else {
             userStore.values(completionHandler: callback)
         }
+    }
+    
+    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {

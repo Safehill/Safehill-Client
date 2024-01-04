@@ -301,7 +301,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func updateUser(name: String?,
-                    phoneNumber: String? = nil,
+                    phoneNumber: SHPhoneNumber? = nil,
                     email: String? = nil,
                     completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
         guard email != nil || name != nil || phoneNumber != nil else {
@@ -316,7 +316,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["name"] = name
         }
         if let phoneNumber = phoneNumber {
-            parameters["phoneNumber"] = phoneNumber
+            parameters["phoneNumber"] = phoneNumber.hashedPhoneNumber
         }
         self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {
@@ -433,6 +433,20 @@ struct SHServerHTTPAPI : SHServerAPI {
             "userIdentifiers": userIdentifiers ?? []
         ] as [String : Any]
         self.post("users/retrieve", parameters: parameters) { (result: Result<[SHRemoteUser], Error>) in
+            switch result {
+            case .success(let users):
+                return completionHandler(.success(users))
+            case .failure(let error):
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ()) {
+        let parameters = [
+            "phoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
+        ] as [String : Any]
+        self.post("users/retrieve/phone_number", parameters: parameters) { (result: Result<[String: SHRemoteUser], Error>) in
             switch result {
             case .success(let users):
                 return completionHandler(.success(users))
