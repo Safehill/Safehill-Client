@@ -1,7 +1,7 @@
 import Foundation
 import Contacts
 
-struct SHAddressBookContact {
+public struct SHAddressBookContact {
     
     var id = UUID()
     var givenName: String
@@ -44,7 +44,7 @@ struct SHAddressBookContact {
 
 
 extension SHAddressBookContact : Equatable {
-    static func == (lhs: SHAddressBookContact, rhs: SHAddressBookContact) -> Bool {
+    public static func == (lhs: SHAddressBookContact, rhs: SHAddressBookContact) -> Bool {
         lhs.id == rhs.id
     }
 }
