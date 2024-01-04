@@ -85,7 +85,7 @@ public class SHAddressBookContactHandler {
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
-        guard error != nil else {
+        guard error == nil else {
             throw error!
         }
         
@@ -117,7 +117,7 @@ public class SHAddressBookContactHandler {
         guard dispatchResult == .success else {
             throw SHBackgroundOperationError.timedOut
         }
-        guard error != nil else {
+        guard error == nil else {
             throw error!
         }
         
