@@ -4,7 +4,7 @@ public struct SHPhoneNumber: Hashable {
     public let number: String
     public let label: String?
     
-    init(_ phoneNumber: String, label: String? = nil) {
+    public init(_ phoneNumber: String, label: String? = nil) {
         self.number = phoneNumber
         self.label = label
     }
