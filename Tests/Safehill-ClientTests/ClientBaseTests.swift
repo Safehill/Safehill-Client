@@ -3,11 +3,29 @@ import XCTest
 @testable import Safehill_Crypto
 import CryptoKit
 import KnowledgeBase
+import Contacts
 
 
 let kTestStaticProtocolSalt = Data(base64Encoded: "0PT/RKOwUpk8dxYU/pJ3Vx/zespMkey8yMMgFp4ov2E=")!
 
 final class Safehill_ClientBaseUnitTests: XCTestCase {
+    
+    func testContactPhoneParsing() {
+        let contact = CNMutableContact()
+        contact.phoneNumbers = [
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "(408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+1 (408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "335 8765433")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+39 3358765433")),
+        ]
+        
+        let obj = SHAddressBookContact.fromCNContact(contact: contact)
+        XCTAssert(obj.numbers.count == 4)
+        XCTAssert(obj.numbers[0].number == "+14085555270")
+        XCTAssert(obj.numbers[1].number == "+14085555270")
+        XCTAssert(obj.numbers[2].number == "+13358765433")
+        XCTAssert(obj.numbers[3].number == "+393358765433")
+    }
     
     func testValidations() {
         for name in [

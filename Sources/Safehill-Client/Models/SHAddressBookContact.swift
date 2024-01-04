@@ -25,13 +25,11 @@ public struct SHAddressBookContact {
     }
 
     static func fromCNContact(contact: CNContact) -> SHAddressBookContact {
-        let numbers = contact.phoneNumbers.map({
-            (value: CNLabeledValue<CNPhoneNumber>) -> SHPhoneNumber in
+        let numbers = contact.phoneNumbers.compactMap({
+            (value: CNLabeledValue<CNPhoneNumber>) -> SHPhoneNumber? in
 
-            let localized = CNLabeledValue<NSString>.localizedString(forLabel: value.label ?? "")
-
-            return SHPhoneNumber.init(value.value.stringValue, label: localized)
-
+            let localizedLabel = CNLabeledValue<NSString>.localizedString(forLabel: value.label ?? "")
+            return SHPhoneNumber.init(value.value.stringValue, label: localizedLabel)
         })
 
         return self.init(givenName: contact.givenName, lastName: contact.familyName, numbers: numbers, systemContact: contact)
