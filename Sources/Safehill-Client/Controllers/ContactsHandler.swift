@@ -63,7 +63,7 @@ public class SHAddressBookContactHandler {
         }
     }
     
-    func fetchSafehillUserMatches(requestor: SHLocalUser) throws -> [SHPhoneNumber: (SHAddressBookContact, SHServerUser)] {
+    public func fetchSafehillUserMatches(requestor: SHLocalUser) throws -> [SHPhoneNumber: (SHAddressBookContact, SHServerUser)] {
         var usersByPhoneNumber = [SHPhoneNumber: (SHAddressBookContact, SHServerUser)]()
         
         let group = DispatchGroup()
