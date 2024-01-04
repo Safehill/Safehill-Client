@@ -7,11 +7,13 @@ public enum SHAddressBookError : Error, LocalizedError {
 
 public class SHAddressBookContactHandler {
     
-    static let shared = SHAddressBookContactHandler()
-    
     var contactStore: CNContactStore?
     
-    func fetchOrRequestPermission(completionHandler: @escaping (Result<Bool, Error>) -> Void) {
+    public init(contactStore: CNContactStore? = nil) {
+        self.contactStore = contactStore
+    }
+    
+    private func fetchOrRequestPermission(completionHandler: @escaping (Result<Bool, Error>) -> Void) {
         self.contactStore = CNContactStore.init()
         self.contactStore!.requestAccess(for: .contacts) { authorized, error in
             guard error == nil else {
@@ -22,7 +24,7 @@ public class SHAddressBookContactHandler {
         }
     }
     
-    func fetchSystemContacts(completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void) {
+    public func fetchSystemContacts(completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void) {
         self.fetchOrRequestPermission() { result in
             switch result {
             case .success(let authorized):
