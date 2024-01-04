@@ -446,10 +446,10 @@ struct SHServerHTTPAPI : SHServerAPI {
         let parameters = [
             "phoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
         ] as [String : Any]
-        self.post("users/retrieve/phone_number", parameters: parameters) { (result: Result<[String: SHRemoteUser], Error>) in
+        self.post("users/retrieve/phone_number", parameters: parameters) { (result: Result<UsersByPhoneNumberResponseDTO, Error>) in
             switch result {
-            case .success(let users):
-                return completionHandler(.success(users))
+            case .success(let dto):
+                return completionHandler(.success(dto.result))
             case .failure(let error):
                 return completionHandler(.failure(error))
             }
