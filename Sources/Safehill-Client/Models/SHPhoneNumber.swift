@@ -24,14 +24,14 @@ public struct SHPhoneNumber: Hashable {
                 ///
                 /// Add a country code based on the carrier information or the system locale
                 ///
-                parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumber.currentCountryDialingCode(useCarrierSettings: false))\(phoneNumberString)",
+                parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumber.currentCountryDialingCode())\(phoneNumberString)",
                                                              ignoreType: true)
             } catch {
                 do {
                     ///
-                    /// Add a country code based on the carrier information or the system locale
+                    /// Add a country code just based the system locale
                     ///
-                    parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumber.currentCountryDialingCode())\(phoneNumberString)",
+                    parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumber.currentCountryDialingCode(useCarrierSettings: false))\(phoneNumberString)",
                                                                  ignoreType: true)
                 } catch {
                     return nil
