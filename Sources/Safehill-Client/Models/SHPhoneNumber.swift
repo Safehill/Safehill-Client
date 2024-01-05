@@ -50,7 +50,7 @@ public struct SHPhoneNumber: Hashable {
     }
     
     public var hashedPhoneNumber: String {
-        SHHash.stringDigest(for: stringValue.data(using: .utf8)!)
+        SHHash.stringDigest(for: e164FormattedNumber.data(using: .utf8)!)
     }
     
     static func currentLocaleCountryCode() -> String {
