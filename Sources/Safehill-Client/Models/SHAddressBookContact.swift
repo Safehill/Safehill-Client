@@ -3,13 +3,13 @@ import Contacts
 
 public struct SHAddressBookContact {
     
-    var id = UUID()
-    var givenName: String
-    var lastName: String
+    public var id = UUID()
+    private var givenName: String
+    private var lastName: String
 
-    var numbers: [SHPhoneNumber]
+    public var numbers: [SHPhoneNumber]
 
-    var systemContact: CNContact? // Keep a reference, although it's not necessary
+    public var systemContact: CNContact? // Keep a reference, although it's not necessary
 
     init(givenName: String, lastName: String, numbers: [SHPhoneNumber], systemContact: CNContact) {
         self.givenName = givenName
@@ -35,7 +35,7 @@ public struct SHAddressBookContact {
         return self.init(givenName: contact.givenName, lastName: contact.familyName, numbers: numbers, systemContact: contact)
     }
 
-    func fullName() -> String {
+    public func fullName() -> String {
         return "\(self.givenName) \(self.lastName)"
     }
 }
