@@ -33,7 +33,13 @@ public class SHAddressBookContactHandler {
                     return
                 }
                 do {
-                    let keysToFetch = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
+                    let keysToFetch = [
+                        CNContactGivenNameKey,
+                        CNContactFamilyNameKey,
+                        CNContactPhoneNumbersKey,
+                        CNContactImageDataAvailableKey,
+                        CNContactThumbnailImageDataKey
+                    ] as [CNKeyDescriptor]
 
                     var contacts = [CNContact]()
                     let request = CNContactFetchRequest(keysToFetch: keysToFetch)
