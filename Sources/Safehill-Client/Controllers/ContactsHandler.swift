@@ -24,7 +24,9 @@ public class SHAddressBookContactHandler {
         }
     }
     
-    public func fetchSystemContacts(completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void) {
+    public func fetchSystemContacts(
+        completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void
+    ) {
         self.fetchOrRequestPermission() { result in
             switch result {
             case .success(let authorized):
@@ -38,6 +40,7 @@ public class SHAddressBookContactHandler {
                         CNContactFamilyNameKey,
                         CNContactPhoneNumbersKey,
                         CNContactImageDataAvailableKey,
+                        CNContactImageDataKey,
                         CNContactThumbnailImageDataKey
                     ] as [CNKeyDescriptor]
 
@@ -69,33 +72,12 @@ public class SHAddressBookContactHandler {
         }
     }
     
-    public func fetchSafehillUserMatches(requestor: SHLocalUser) throws -> [SHPhoneNumber: (SHAddressBookContact, SHServerUser)] {
-        var usersByPhoneNumber = [SHPhoneNumber: (SHAddressBookContact, SHServerUser)]()
-        
-        let group = DispatchGroup()
-        var contacts = [SHAddressBookContact]()
-        var error: Error? = nil
-        
-        group.enter()
-        self.fetchSystemContacts { result in
-            switch result {
-            case .success(let cs):
-                contacts = cs
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        var dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        let contactsByPhoneNumber = contacts.reduce([SHPhoneNumber: SHAddressBookContact]()) { partialResult, contact in
+    public func fetchSafehillUserMatches(
+        requestor: SHLocalUser,
+        systemContacts: [SHAddressBookContact],
+        completionHandler: @escaping (Result<[SHPhoneNumber: (SHAddressBookContact, SHServerUser)], Error>) -> Void)
+    {
+        let contactsByPhoneNumber = systemContacts.reduce([SHPhoneNumber: SHAddressBookContact]()) { partialResult, contact in
             var result = partialResult
             for number in contact.numbers {
                 result[number] = contact
@@ -103,30 +85,20 @@ public class SHAddressBookContactHandler {
             return result
         }
         
-        group.enter()
         let serverProxy = SHServerProxy(user: requestor)
         serverProxy.getUsers(withPhoneNumbers: Array(contactsByPhoneNumber.keys)) { result in
             switch result {
             case .failure(let err):
-                error = err
+                completionHandler(.failure(err))
             case .success(let usersByHashedNumber):
+                var usersByPhoneNumber = [SHPhoneNumber: (SHAddressBookContact, SHServerUser)]()
                 for (phoneNumber, contact) in contactsByPhoneNumber {
                     if let shUserMatch = usersByHashedNumber[phoneNumber.hashedPhoneNumber] {
                         usersByPhoneNumber[phoneNumber] = (contact, shUserMatch)
                     }
                 }
+                completionHandler(.success(usersByPhoneNumber))
             }
-            group.leave()
         }
-        
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        return usersByPhoneNumber
     }
 }
