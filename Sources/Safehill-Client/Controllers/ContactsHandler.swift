@@ -157,7 +157,7 @@ public class SHAddressBookContactHandler {
     
     public func fetchSafehillUserMatches(
         requestor: SHLocalUser,
-        systemContacts: [SHAddressBookContact],
+        allSystemContacts: [SHAddressBookContact],
         completionHandler: @escaping (Result<[SHPhoneNumber: (SHAddressBookContact, SHServerUser)], Error>) -> Void)
     {
         let contactsByPhoneNumber = systemContacts.reduce([SHPhoneNumber: SHAddressBookContact]()) { partialResult, contact in
@@ -179,7 +179,7 @@ public class SHAddressBookContactHandler {
                     if let shUserMatch = usersByHashedNumber[phoneNumber.hashedPhoneNumber] {
                         usersByPhoneNumber[phoneNumber] = (contact, shUserMatch)
                         
-                        DispatchQueue.global(qos: .background).async {
+                        DispatchQueue.global(qos: .utility).async {
                             ///
                             /// Cache the phone number and the system contact identifier in the user store
                             ///
@@ -197,7 +197,7 @@ public class SHAddressBookContactHandler {
                     }
                 }
                 
-                DispatchQueue.global(qos: .background).async {
+                DispatchQueue.global(qos: .utility).async {
                     ///
                     /// Remove items from the cache for users that are no longer in the Contacts
                     /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
@@ -206,12 +206,11 @@ public class SHAddressBookContactHandler {
                         switch result {
                         case .success(let serverUsers):
                             for serverUser in serverUsers {
-                                if let linkedToSystemContact = serverUser as? SHRemoteUserLinkedToContact,
-                                   let phoneNumber = SHPhoneNumber(linkedToSystemContact.phoneNumber),
-                                   let userTuple = usersByPhoneNumber[phoneNumber],
-                                   userTuple.0.systemContact == nil
+                                if let linkedToSystemContactUser = serverUser as? SHRemoteUserLinkedToContact,
+                                   let phoneNumber = SHPhoneNumber(linkedToSystemContactUser.phoneNumber),
+                                   contactsByPhoneNumber[phoneNumber] == nil
                                 {
-                                    serverProxy.removeLinkedSystemContact(from: linkedToSystemContact) {
+                                    serverProxy.removeLinkedSystemContact(from: linkedToSystemContactUser) {
                                         result in
                                         if case .failure(let failure) = result {
                                             log.error("failed to remove link to contact to user cache: \(failure.localizedDescription)")
