@@ -19,7 +19,7 @@ public struct SHAddressBookContact {
         self.systemContact = systemContact
     }
 
-    static func fromCNContact(contact: CNContact) -> SHAddressBookContact {
+    public static func fromCNContact(contact: CNContact) -> SHAddressBookContact {
         let numbers = contact.phoneNumbers.compactMap({
             (value: CNLabeledValue<CNPhoneNumber>) -> SHPhoneNumber? in
 

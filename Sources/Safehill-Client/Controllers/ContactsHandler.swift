@@ -133,7 +133,7 @@ public class SHAddressBookContactHandler {
                     let request = CNContactFetchRequest(keysToFetch: keysToFetch)
                     request.sortOrder = .userDefault
                     if let identifiers = withIdentifiers {
-                        request.predicate = CNContact.predicateForContacts(withIdentifiers: withIdentifiers)
+                        request.predicate = CNContact.predicateForContacts(withIdentifiers: identifiers)
                     }
                     
                     try self.contactStore!.enumerateContacts(with: request) {
