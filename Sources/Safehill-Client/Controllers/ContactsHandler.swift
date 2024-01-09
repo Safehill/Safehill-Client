@@ -25,6 +25,8 @@ public class SHAddressBookContactHandler {
     }
     
     public func fetchSystemContacts(
+        withThumbnail: Bool = false,
+        withFullImage: Bool = false,
         completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void
     ) {
         self.fetchOrRequestPermission() { result in
@@ -35,14 +37,21 @@ public class SHAddressBookContactHandler {
                     return
                 }
                 do {
-                    let keysToFetch = [
+                    var keysToFetch = [
                         CNContactGivenNameKey,
                         CNContactFamilyNameKey,
-                        CNContactPhoneNumbersKey,
-                        CNContactImageDataAvailableKey,
-                        CNContactImageDataKey,
-                        CNContactThumbnailImageDataKey
+                        CNContactPhoneNumbersKey
                     ] as [CNKeyDescriptor]
+                    
+                    if withThumbnail {
+                        keysToFetch.append(CNContactThumbnailImageDataKey as CNKeyDescriptor)
+                    }
+                    if withFullImage {
+                        keysToFetch.append(contentsOf: [
+                            CNContactImageDataAvailableKey,
+                            CNContactImageDataKey
+                        ] as [CNKeyDescriptor])
+                    }
 
                     var contacts = [CNContact]()
                     let request = CNContactFetchRequest(keysToFetch: keysToFetch)
