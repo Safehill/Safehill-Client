@@ -20,13 +20,13 @@ public struct SHPhoneNumber: Hashable {
             ///
             parsedPhoneNumber = try phoneNumberKit.parse(phoneNumberString, ignoreType: true)
         } catch {
-            do {
-                ///
-                /// Add a country code based on the carrier information or the system locale
-                ///
-                parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumber.currentCountryDialingCode())\(phoneNumberString)",
-                                                             ignoreType: true)
-            } catch {
+//            do {
+//                ///
+//                /// Add a country code based on the carrier information or the system locale
+//                ///
+//                parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumber.currentCountryDialingCode())\(phoneNumberString)",
+//                                                             ignoreType: true)
+//            } catch {
                 do {
                     ///
                     /// Add a country code just based the system locale
@@ -36,7 +36,7 @@ public struct SHPhoneNumber: Hashable {
                 } catch {
                     return nil
                 }
-            }
+//            }
         }
         
         ///
