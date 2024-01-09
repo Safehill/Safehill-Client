@@ -160,7 +160,7 @@ public class SHAddressBookContactHandler {
         allSystemContacts: [SHAddressBookContact],
         completionHandler: @escaping (Result<[SHPhoneNumber: (SHAddressBookContact, SHServerUser)], Error>) -> Void)
     {
-        let contactsByPhoneNumber = systemContacts.reduce([SHPhoneNumber: SHAddressBookContact]()) { partialResult, contact in
+        let contactsByPhoneNumber = allSystemContacts.reduce([SHPhoneNumber: SHAddressBookContact]()) { partialResult, contact in
             var result = partialResult
             for number in contact.numbers {
                 result[number] = contact
