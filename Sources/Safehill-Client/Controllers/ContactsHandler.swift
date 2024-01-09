@@ -1,5 +1,6 @@
 import Foundation
 import Contacts
+import SwiftUI
 
 public enum SHAddressBookError : Error, LocalizedError {
     case unauthorized
@@ -24,9 +25,50 @@ public class SHAddressBookContactHandler {
         }
     }
     
+    public func fetchThumbnail(
+        for contact: CNContact,
+        completionHandler: @escaping (Result<NSUIImage?, Error>) -> Void
+    ) {
+        self.fetchOrRequestPermission() { result in
+            switch result {
+            case .success(let authorized):
+                guard authorized else {
+                    completionHandler(.failure(SHAddressBookError.unauthorized))
+                    return
+                }
+                do {
+                    let keysToFetch = [
+                        CNContactThumbnailImageDataKey
+                    ] as [CNKeyDescriptor]
+                    
+                    let contactWithThumbnail = try self.contactStore!.unifiedContact(withIdentifier: contact.identifier,
+                                                                                     keysToFetch: keysToFetch)
+                    
+#if os(macOS)
+                    if let data = contactWithThumbnail.thumbnailImageData,
+                       let image = NSImage(data: data) {
+                        completionHandler(.success(NSUIImage.appKit(image)))
+                        return
+                    }
+#else
+                    if let data = contactWithThumbnail.thumbnailImageData,
+                       let image = UIImage(data: data) {
+                        completionHandler(.success(NSUIImage.uiKit(image)))
+                        return
+                    }
+#endif
+                    
+                    return completionHandler(.success(nil))
+                } catch {
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
     public func fetchSystemContacts(
-        withThumbnail: Bool = false,
-        withFullImage: Bool = false,
         completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void
     ) {
         self.fetchOrRequestPermission() { result in
@@ -37,24 +79,15 @@ public class SHAddressBookContactHandler {
                     return
                 }
                 do {
-                    var keysToFetch = [
+                    let keysToFetch = [
                         CNContactGivenNameKey,
                         CNContactFamilyNameKey,
                         CNContactPhoneNumbersKey
                     ] as [CNKeyDescriptor]
-                    
-                    if withThumbnail {
-                        keysToFetch.append(CNContactThumbnailImageDataKey as CNKeyDescriptor)
-                    }
-                    if withFullImage {
-                        keysToFetch.append(contentsOf: [
-                            CNContactImageDataAvailableKey,
-                            CNContactImageDataKey
-                        ] as [CNKeyDescriptor])
-                    }
 
                     var contacts = [CNContact]()
-                    let request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                    var request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                    request.sortOrder = .userDefault
 
                     try self.contactStore!.enumerateContacts(with: request) {
                         (contact, stop) in
