@@ -112,7 +112,7 @@ public class SHAddressBookContactHandler {
     }
     
     public func fetchSystemContacts(
-        withIdentifiers: [String]?,
+        withIdentifiers: [String]? = nil,
         completionHandler: @escaping (Result<[CNContact], Error>) -> Void
     ) {
         self.fetchOrRequestPermission() { result in
