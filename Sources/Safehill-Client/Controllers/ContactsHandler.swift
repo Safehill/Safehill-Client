@@ -69,7 +69,7 @@ public class SHAddressBookContactHandler {
     }
     
     public func fetchSystemContacts(
-        completionHandler: @escaping (Result<[SHAddressBookContact], Error>) -> Void
+        completionHandler: @escaping (Result<[CNContact], Error>) -> Void
     ) {
         self.fetchOrRequestPermission() { result in
             switch result {
@@ -86,24 +86,18 @@ public class SHAddressBookContactHandler {
                     ] as [CNKeyDescriptor]
 
                     var contacts = [CNContact]()
-                    var request = CNContactFetchRequest(keysToFetch: keysToFetch)
+                    let request = CNContactFetchRequest(keysToFetch: keysToFetch)
                     request.sortOrder = .userDefault
 
                     try self.contactStore!.enumerateContacts(with: request) {
                         (contact, stop) in
-                        contacts.append(contact)
+                        // filter out all contacts with no phone number or empty names
+                        if (contact.phoneNumbers.count > 0 && (contact.givenName.count + contact.familyName.count > 0)) {
+                            contacts.append(contact)
+                        }
                     }
 
-                    let formatted = contacts.compactMap({
-                        // filter out all contacts with no phone number or empty names
-                        if ($0.phoneNumbers.count > 0 && ($0.givenName.count > 0 || $0.familyName.count > 0)) {
-                            return SHAddressBookContact.fromCNContact(contact: $0)
-                        }
-
-                        return nil
-                    })
-
-                    completionHandler(.success(formatted))
+                    completionHandler(.success(contacts))
                 } catch {
                     log.critical("Failed to fetch contact, error: \(error)")
                     completionHandler(.failure(error))
