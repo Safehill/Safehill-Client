@@ -112,6 +112,7 @@ public class SHAddressBookContactHandler {
     }
     
     public func fetchSystemContacts(
+        withIdentifiers: [String]?,
         completionHandler: @escaping (Result<[CNContact], Error>) -> Void
     ) {
         self.fetchOrRequestPermission() { result in
@@ -131,7 +132,10 @@ public class SHAddressBookContactHandler {
                     var contacts = [CNContact]()
                     let request = CNContactFetchRequest(keysToFetch: keysToFetch)
                     request.sortOrder = .userDefault
-
+                    if let identifiers = withIdentifiers {
+                        request.predicate = CNContact.predicateForContacts(withIdentifiers: withIdentifiers)
+                    }
+                    
                     try self.contactStore!.enumerateContacts(with: request) {
                         (contact, stop) in
                         // filter out all contacts with no phone number or empty names
