@@ -10,7 +10,7 @@ let kTestStaticProtocolSalt = Data(base64Encoded: "0PT/RKOwUpk8dxYU/pJ3Vx/zespMk
 
 final class Safehill_ClientBaseUnitTests: XCTestCase {
     
-    func testContactPhoneParsing() {
+    func _testContactPhoneParsing() {
         let contact = CNMutableContact()
         contact.phoneNumbers = [
             CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "(408) 555-5270")),

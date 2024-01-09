@@ -1,5 +1,6 @@
 import Foundation
 import KnowledgeBase
+import Contacts
 
 public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
@@ -11,9 +12,11 @@ struct LocalServer : SHServerAPI {
         self.requestor = requestor
     }
     
-    private func createUser(name: String,
-                            ssoIdentifier: String?,
-                            completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+    internal func createOrUpdateUser(identifier: UserIdentifier,
+                                     name: String,
+                                     publicKeyData: Data,
+                                     publicSignatureData: Data,
+                                     completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         let userStore: KBKVStore
         do {
             userStore = try SHDBManager.sharedInstance.userStore()
@@ -22,36 +25,36 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let key = requestor.identifier
-        userStore.value(for: key) { getResult in
+        userStore.value(for: identifier) { getResult in
             switch getResult {
-            case .success(let value):
-                // User already exists. Return it
-                if let value = value as? [String: Any] {
-                    guard value["publicKey"] as? Data == self.requestor.publicKeyData,
-                          value["publicSignature"] as? Data == self.requestor.publicSignatureData else {
-                              completionHandler(.failure(SHHTTPError.ClientError.methodNotAllowed))
-                              return
-                          }
-                    
-                    completionHandler(.success(self.requestor))
-                    return
-                }
+            case .success(let oldValue):
+                var newValue = [String : Any]()
                 
-                // User doesn't exist. Create it
-                var value = [
-                    "identifier": key,
-                    "publicKey": self.requestor.publicKeyData,
-                    "publicSignature": self.requestor.publicSignatureData,
-                    "name": name,
-                ] as [String : Any]
-                if let ssoIdentifier = ssoIdentifier {
-                    value["ssoIdentifier"] = ssoIdentifier
+                if let oldValue = oldValue as? [String: Any] {
+                    ///
+                    /// User already exists. Update it
+                    ///
+                    newValue = oldValue
+                    newValue["identifier"] = identifier
+                    newValue["publicKey"] = publicKeyData
+                    newValue["publicSignature"] = publicSignatureData
+                    newValue["name"] = name
+                } else {
+                    ///
+                    /// User doesn't exists. Create it
+                    ///
+                    newValue = [
+                        "identifier": identifier,
+                        "publicKey": publicKeyData,
+                        "publicSignature": publicSignatureData,
+                        "name": name,
+                    ] as [String : Any]
                 }
-                userStore.set(value: value, for: key) { (postResult: Result) in
+                userStore.set(value: newValue, for: identifier) { (postResult: Result) in
                     switch postResult {
                     case .success:
-                        completionHandler(.success(self.requestor))
+                        let serverUser = serializeUser(newValue)!
+                        completionHandler(.success(serverUser))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }
@@ -59,35 +62,6 @@ struct LocalServer : SHServerAPI {
             case .failure(let err):
                 completionHandler(.failure(err))
                 return
-            }
-        }
-    }
-    
-    internal func createUser(identifier: UserIdentifier,
-                             name: String,
-                             publicKeyData: Data,
-                             publicSignatureData: Data,
-                             completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        let value = [
-            "identifier": identifier,
-            "publicKey": publicKeyData,
-            "publicSignature": publicSignatureData,
-            "name": name,
-        ] as [String : Any]
-        userStore.set(value: value, for: identifier) { (postResult: Result) in
-            switch postResult {
-            case .success:
-                completionHandler(.success(self.requestor))
-            case .failure(let err):
-                completionHandler(.failure(err))
             }
         }
     }
@@ -102,9 +76,8 @@ struct LocalServer : SHServerAPI {
     
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber? = nil,
-                    email: String? = nil,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil || phoneNumber != nil else {
+                    completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
@@ -138,9 +111,6 @@ struct LocalServer : SHServerAPI {
                     if let existingName = user["name"] {
                         value["name"] = existingName
                     }
-                    if let existingEmail = user["email"] {
-                        value["email"] = existingEmail
-                    }
                     if let existingPn = user["phoneNumber"] {
                         value["phoneNumber"] = existingPn
                     }
@@ -158,14 +128,12 @@ struct LocalServer : SHServerAPI {
                 if let phoneNumber = phoneNumber {
                     value["phoneNumber"] = phoneNumber.hashedPhoneNumber
                 }
-                if let email = email {
-                    value["email"] = email
-                }
                 
                 userStore.set(value: value, for: key) { (postResult: Result) in
                     switch postResult {
                     case .success:
-                        completionHandler(.success(self.requestor))
+                        let serializedUser = serializeUser(value)!
+                        completionHandler(.success(serializedUser))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }
@@ -174,11 +142,75 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(err))
             }
         }
-
     }
     
-    func createUser(name: String, completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        self.createUser(name: name, ssoIdentifier: nil, completionHandler: completionHandler)
+    func update(user: SHRemoteUser,
+                phoneNumber: SHPhoneNumber,
+                linkedSystemContact: CNContact,
+                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let value = [
+            "identifier": user.identifier,
+            "name": user.name,
+            "phoneNumber": phoneNumber.e164FormattedNumber,
+            "publicKey": user.publicKeyData,
+            "publicSignature": user.publicSignatureData,
+            "systemContactId": linkedSystemContact.identifier
+        ] as [String : Any]
+        
+        userStore.set(value: value, for: user.identifier) { (postResult: Result) in
+            switch postResult {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func removeLinkedSystemContact(from user: SHRemoteUserLinkedToContact,
+                                   completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let value = [
+            "identifier": user.identifier,
+            "name": user.name,
+            "phoneNumber": user.phoneNumber,
+            "publicKey": user.publicKeyData,
+            "publicSignature": user.publicSignatureData
+        ] as [String : Any]
+        
+        userStore.set(value: value, for: user.identifier) { (postResult: Result) in
+            switch postResult {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func createOrUpdateUser(name: String, completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        self.createOrUpdateUser(
+            identifier: requestor.identifier,
+            name: name,
+            publicKeyData: requestor.publicKeyData,
+            publicSignatureData: requestor.publicSignatureData,
+            completionHandler: completionHandler
+        )
     }
     
     func deleteUsers(withIdentifiers identifiers: [UserIdentifier],
@@ -311,6 +343,41 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
+    private func serializeUser(_ res: Any?) -> (any SHServerUser)? {
+        var serialized: (any SHServerUser)? = nil
+        
+        if let res = res as? [String: Any] {
+            if let identifier = res["identifier"] as? String,
+               let name = res["name"] as? String,
+               let publicKeyData = res["publicKey"] as? Data,
+               let publicSignatureData = res["publicSignature"] as? Data {
+                
+                let remoteUser: SHServerUser
+                if let phoneNumber = res["phoneNumber"] as? String,
+                   let systemContactId = res["systemContactId"] as? String {
+                    remoteUser = SHRemoteUserLinkedToContact(
+                        identifier: identifier,
+                        name: name,
+                        publicKeyData: publicKeyData,
+                        publicSignatureData: publicSignatureData,
+                        phoneNumber: phoneNumber,
+                        linkedSystemContactId: systemContactId
+                    )
+                } else {
+                    remoteUser = SHRemoteUser(
+                        identifier: identifier,
+                        name: name,
+                        publicKeyData: publicKeyData,
+                        publicSignatureData: publicSignatureData
+                    )
+                }
+                serialized = remoteUser
+            }
+        }
+        
+        return serialized
+    }
+    
     func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
         let userStore: KBKVStore
         do {
@@ -323,18 +390,13 @@ struct LocalServer : SHServerAPI {
         let callback: (Result<[Any], Error>) -> () = { result in
             switch result {
             case .success(let resList):
-                var userList = [SHServerUser]()
+                var userList = [any SHServerUser]()
                 if let resList = resList as? [[String: Any]] {
                     for res in resList {
-                        if let identifier = res["identifier"] as? String,
-                           let name = res["name"] as? String,
-                           let publicKeyData = res["publicKey"] as? Data,
-                           let publicSignatureData = res["publicSignature"] as? Data {
-                            let user = SHRemoteUser(identifier: identifier,
-                                                    name: name,
-                                                    publicKeyData: publicKeyData,
-                                                    publicSignatureData: publicSignatureData)
-                            userList.append(user)
+                        if let serverUser = serializeUser(res) {
+                            userList.append(serverUser)
+                        } else {
+                            log.warning("unable to serialize user in local DB \(res)")
                         }
                     }
                 }
@@ -357,6 +419,35 @@ struct LocalServer : SHServerAPI {
     
     func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func getAllLocalUsers(completionHandler: @escaping (Swift.Result<[any SHServerUser], Error>) -> ()) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        userStore.values() { getResult in
+            switch getResult {
+            case .success(let resList):
+                var userList = [any SHServerUser]()
+                if let resList = resList as? [[String: Any]] {
+                    for res in resList {
+                        if let serverUser = serializeUser(res) {
+                            userList.append(serverUser)
+                        } else {
+                            log.warning("unable to serialize user in local DB \(res)")
+                        }
+                    }
+                }
+                completionHandler(.success(userList))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
     }
     
     func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {

@@ -261,8 +261,8 @@ struct SHServerHTTPAPI : SHServerAPI {
         )
     }
     
-    func createUser(name: String,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+    func createOrUpdateUser(name: String,
+                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         let parameters = [
             "identifier": requestor.identifier,
             "publicKey": requestor.publicKeyData.base64EncodedString(),
@@ -302,16 +302,12 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber? = nil,
-                    email: String? = nil,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil || phoneNumber != nil else {
+                    completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
         var parameters = [String : Any]()
-        if let email = email {
-            parameters["email"] = email
-        }
         if let name = name {
             parameters["name"] = name
         }
@@ -321,7 +317,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {
             case .success(let user):
-                return completionHandler(.success(user))
+                return completionHandler(.success(self.requestor))
             case .failure(let error):
                 return completionHandler(.failure(error))
             }
@@ -428,7 +424,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+    func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         let parameters = [
             "userIdentifiers": userIdentifiers ?? []
         ] as [String : Any]
@@ -442,7 +438,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ()) {
+    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
         let parameters = [
             "phoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
         ] as [String : Any]
@@ -456,7 +452,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+    func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         let parameters = [
             "query": query,
             "page": "1",

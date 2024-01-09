@@ -10,8 +10,8 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - name  the user name
     ///   - completionHandler: the callback method
-    func createUser(name: String,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
+    func createOrUpdateUser(name: String,
+                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ())
     
     /// Send a code to a user to verify identity, via either phone or SMS
     /// - Parameters:
@@ -30,12 +30,10 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - name  the new name
     ///   - phoneNumber  the new phone number
-    ///   - email  the new email
     ///   - completionHandler: the callback method
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber?,
-                    email: String?,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
+                    completionHandler: @escaping (Result<any SHServerUser, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
@@ -56,20 +54,20 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - userIdentifiers: the unique identifiers for the users. If NULL, retrieves all the connected users
     ///   - completionHandler: the callback method
-    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
+    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
 
     /// Get a list of verified users given a list of phone numbers.
     /// Used to determine who - from the user's address book - is a Safehill user
     /// - Parameters:
     ///   - phoneNumbers: the list of phone numbers
     ///   - completionHandler: the callback method
-    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ())
+    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
     ///   - query: the query string
     ///   - completionHandler: the callback method
-    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
+    func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
     
     // MARK: Assets Fetch
     

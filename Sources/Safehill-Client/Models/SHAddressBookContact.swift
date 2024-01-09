@@ -3,7 +3,7 @@ import Contacts
 
 public struct SHAddressBookContact {
     
-    public var id = UUID()
+    public var id: String
     private var givenName: String
     private var lastName: String
 
@@ -11,17 +11,12 @@ public struct SHAddressBookContact {
 
     public var systemContact: CNContact? // Keep a reference, although it's not necessary
 
-    init(givenName: String, lastName: String, numbers: [SHPhoneNumber], systemContact: CNContact) {
+    private init(id: String, givenName: String, lastName: String, numbers: [SHPhoneNumber], systemContact: CNContact) {
+        self.id = id
         self.givenName = givenName
         self.lastName = lastName
         self.numbers = numbers
         self.systemContact = systemContact
-    }
-
-    init(givenName: String, lastName: String, numbers: [SHPhoneNumber]) {
-        self.givenName = givenName
-        self.lastName = lastName
-        self.numbers = numbers
     }
 
     static func fromCNContact(contact: CNContact) -> SHAddressBookContact {
@@ -32,7 +27,11 @@ public struct SHAddressBookContact {
             return SHPhoneNumber.init(value.value.stringValue, label: localizedLabel)
         })
 
-        return self.init(givenName: contact.givenName, lastName: contact.familyName, numbers: numbers, systemContact: contact)
+        return self.init(id: contact.identifier,
+                         givenName: contact.givenName,
+                         lastName: contact.familyName,
+                         numbers: numbers,
+                         systemContact: contact)
     }
 
     public func fullName() -> String {

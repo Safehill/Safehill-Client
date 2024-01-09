@@ -68,6 +68,49 @@ public class SHAddressBookContactHandler {
         }
     }
     
+    public func fetchImage(
+        for contact: CNContact,
+        completionHandler: @escaping (Result<NSUIImage?, Error>) -> Void
+    ) {
+        self.fetchOrRequestPermission() { result in
+            switch result {
+            case .success(let authorized):
+                guard authorized else {
+                    completionHandler(.failure(SHAddressBookError.unauthorized))
+                    return
+                }
+                do {
+                    let keysToFetch = [
+                        CNContactImageDataKey
+                    ] as [CNKeyDescriptor]
+                    
+                    let contactWithThumbnail = try self.contactStore!.unifiedContact(withIdentifier: contact.identifier,
+                                                                                     keysToFetch: keysToFetch)
+                    
+#if os(macOS)
+                    if let data = contactWithThumbnail.imageData,
+                       let image = NSImage(data: data) {
+                        completionHandler(.success(NSUIImage.appKit(image)))
+                        return
+                    }
+#else
+                    if let data = contactWithThumbnail.imageData,
+                       let image = UIImage(data: data) {
+                        completionHandler(.success(NSUIImage.uiKit(image)))
+                        return
+                    }
+#endif
+                    
+                    return completionHandler(.success(nil))
+                } catch {
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
     public func fetchSystemContacts(
         completionHandler: @escaping (Result<[CNContact], Error>) -> Void
     ) {
@@ -131,8 +174,53 @@ public class SHAddressBookContactHandler {
                 for (phoneNumber, contact) in contactsByPhoneNumber {
                     if let shUserMatch = usersByHashedNumber[phoneNumber.hashedPhoneNumber] {
                         usersByPhoneNumber[phoneNumber] = (contact, shUserMatch)
+                        
+                        DispatchQueue.global(qos: .background).async {
+                            ///
+                            /// Cache the phone number and the system contact identifier in the user store
+                            ///
+                            if let systemContact = contact.systemContact {
+                                serverProxy.updateLocalUser(shUserMatch as! SHRemoteUser,
+                                                            phoneNumber: phoneNumber,
+                                                            linkedSystemContact: systemContact) {
+                                    result in
+                                    if case .failure(let failure) = result {
+                                        log.error("failed to add link to contact to user cache: \(failure.localizedDescription)")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+                
+                DispatchQueue.global(qos: .background).async {
+                    ///
+                    /// Remove items from the cache for users that are no longer in the Contacts
+                    /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
+                    ///
+                    serverProxy.getAllLocalUsers { result in
+                        switch result {
+                        case .success(let serverUsers):
+                            for serverUser in serverUsers {
+                                if let linkedToSystemContact = serverUser as? SHRemoteUserLinkedToContact,
+                                   let phoneNumber = SHPhoneNumber(linkedToSystemContact.phoneNumber),
+                                   let userTuple = usersByPhoneNumber[phoneNumber],
+                                   userTuple.0.systemContact == nil
+                                {
+                                    serverProxy.removeLinkedSystemContact(from: linkedToSystemContact) {
+                                        result in
+                                        if case .failure(let failure) = result {
+                                            log.error("failed to remove link to contact to user cache: \(failure.localizedDescription)")
+                                        }
+                                    }
+                                }
+                            }
+                        case .failure(_):
+                            break
+                        }
+                    }
+                }
+                
                 completionHandler(.success(usersByPhoneNumber))
             }
         }

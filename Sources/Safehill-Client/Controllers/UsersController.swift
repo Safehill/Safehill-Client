@@ -117,6 +117,33 @@ public class SHUsersController {
         return users
     }
     
+    public func getAllLocalUsers() throws -> [any SHServerUser] {
+        var userList = [any SHServerUser]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        
+        group.enter()
+        serverProxy.getAllLocalUsers() { result in
+            switch result {
+            case .success(let serverUsers):
+                userList = serverUsers
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        return userList
+    }
+    
     internal func deleteUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws {
         var error: Error? = nil
         let group = DispatchGroup()
