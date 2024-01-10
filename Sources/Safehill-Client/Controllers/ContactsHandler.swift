@@ -196,7 +196,7 @@ public class SHAddressBookContactHandler {
                         .reduce([SHPhoneNumber: SHAddressBookContact]()) {
                             (partialResult: [SHPhoneNumber: SHAddressBookContact], contact: SHAddressBookContact) in
                             var result = partialResult
-                            for parsedPhoneNumber in contact.parsedPhoneNumbers! {
+                            for parsedPhoneNumber in contact.parsedPhoneNumbers ?? [] {
                                 result[parsedPhoneNumber] = contact
                             }
                             return result
@@ -258,9 +258,11 @@ public class SHAddressBookContactHandler {
                 switch result {
                 case .success(let serverUsers):
                     var usersWithLinksToRemove = [SHRemoteUserLinkedToContact]()
-                    let allAddressBookParsedPhoneNumbers = systemContacts.flatMap { contact in
-                        contact.withParsedPhoneNumbers().parsedPhoneNumbers!
-                    }
+                    let allAddressBookParsedPhoneNumbers = systemContacts
+                        .compactMap { contact in
+                            contact.withParsedPhoneNumbers().parsedPhoneNumbers
+                        }
+                        .flatMap({ $0 })
                     for serverUser in serverUsers {
                         if let linkedToSystemContactUser = serverUser as? SHRemoteUserLinkedToContact {
                             let phoneNumber = SHPhoneNumber(
