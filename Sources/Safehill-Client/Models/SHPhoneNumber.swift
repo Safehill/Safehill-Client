@@ -63,7 +63,7 @@ public struct SHPhoneNumber: Hashable {
             parsedPhoneNumbers.append(
                 SHPhoneNumber(
                     e164FormattedNumber: phoneNumberKit.format(parsedNumber, toType: .e164),
-                    label: unparsed[index].label!
+                    label: unparsed[index].label
                 )
             )
         }
