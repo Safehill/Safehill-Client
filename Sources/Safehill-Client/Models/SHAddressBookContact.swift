@@ -76,7 +76,12 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
     public let systemContact: CNContact
     
     /// This is lazy loaded as it requires the 
-    public let parsedPhoneNumbers: [SHPhoneNumber]?
+    /// 
+    internal let parsedPhoneNumbers: [SHPhoneNumber]?
+    
+    public var phoneNumbers: [SHPhoneNumber] {
+        self.parsedPhoneNumbers ?? self.withParsedPhoneNumbers().parsedPhoneNumbers!
+    }
 
     internal required init(id: String, 
                            givenName: String,
@@ -110,6 +115,10 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
         })
     }
     
+    /// Create a new array where all elements have phone numbers parsed
+    /// Phone numbers need to be parsed, then hashed in order to be looked up on the server.
+    /// This ensures resiliency to the different phone number formatting
+    /// - Returns: a copy of the immutable self with phone numbers parsed
     internal func withParsedPhoneNumbers() -> SHAddressBookContact {
         let parsedPhoneNumbers = systemContact.phoneNumbers.compactMap({
             (value: CNLabeledValue<CNPhoneNumber>) in
