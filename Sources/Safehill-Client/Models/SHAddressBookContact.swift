@@ -122,7 +122,7 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
     /// Phone numbers need to be parsed, then hashed in order to be looked up on the server.
     /// This ensures resiliency to the different phone number formatting
     /// - Returns: a copy of the immutable self with phone numbers parsed
-    internal func withParsedPhoneNumbers() -> SHAddressBookContact {
+    public func withParsedPhoneNumbers() -> SHAddressBookContact {
         let parsedPhoneNumbers = systemContact.phoneNumbers.compactMap({
             (value: CNLabeledValue<CNPhoneNumber>) in
 
