@@ -274,11 +274,13 @@ public class SHAddressBookContactHandler {
                         }
                     }
                     
-                    DispatchQueue.global(qos: .background).async { /// This can be done in the background
-                        serverProxy.removeLinkedSystemContact(from: usersWithLinksToRemove) {
-                            result in
-                            if case .failure(let failure) = result {
-                                log.error("failed to remove links to contact from user cache: \(failure.localizedDescription)")
+                    if usersWithLinksToRemove.isEmpty == false {
+                        DispatchQueue.global(qos: .background).async { /// This can be done in the background
+                            serverProxy.removeLinkedSystemContact(from: usersWithLinksToRemove) {
+                                result in
+                                if case .failure(let failure) = result {
+                                    log.error("failed to remove links to contact from user cache: \(failure.localizedDescription)")
+                                }
                             }
                         }
                     }
