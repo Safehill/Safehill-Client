@@ -51,6 +51,10 @@ public struct SHPhoneNumber: Hashable {
     public let stringValue: String
     public let label: String?
     
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(e164FormattedNumber)
+    }
+    
     public init?(_ phoneNumberString: String, label: String? = nil) {
         let phoneNumberKit = PhoneNumberKit()
         let parsedPhoneNumber: PhoneNumber

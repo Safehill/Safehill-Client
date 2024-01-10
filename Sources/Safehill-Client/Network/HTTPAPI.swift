@@ -452,6 +452,20 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
+        let parameters = [
+            "phoneNumbers": hashedPhoneNumbers
+        ] as [String : Any]
+        self.post("users/retrieve/phone_number", parameters: parameters) { (result: Result<UsersByPhoneNumberResponseDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                return completionHandler(.success(dto.result))
+            case .failure(let error):
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
     func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         let parameters = [
             "query": query,

@@ -126,7 +126,7 @@ struct LocalServer : SHServerAPI {
                     value["name"] = name
                 }
                 if let phoneNumber = phoneNumber {
-                    value["phoneNumber"] = phoneNumber.hashedPhoneNumber
+                    value["phoneNumber"] = phoneNumber.e164FormattedNumber
                 }
                 
                 userStore.set(value: value, for: key) { (postResult: Result) in

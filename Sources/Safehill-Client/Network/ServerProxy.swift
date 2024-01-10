@@ -226,8 +226,8 @@ extension SHServerProxy {
         }
     }
     
-    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
-        self.remoteServer.getUsers(withPhoneNumbers: phoneNumbers, completionHandler: completionHandler)
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
+        self.remoteServer.getUsers(withHashedPhoneNumbers: hashedPhoneNumbers, completionHandler: completionHandler)
     }
     
     public func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {

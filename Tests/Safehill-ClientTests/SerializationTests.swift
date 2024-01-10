@@ -148,7 +148,7 @@ final class Safehill_SerializationTests: XCTestCase {
         for queueItem in queueItems {
             let data = try NSKeyedArchiver.archivedData(withRootObject: queueItem, requiringSecureCoding: true)
             
-            let unarchiver: NSKeyedUnarchiver = NSKeyedUnarchiver(forReadingWith: data)
+            let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
             let deserialized = unarchiver.decodeObject(of: SHLocalFetchRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey)
             
             guard let deserialized = deserialized else {
@@ -193,9 +193,15 @@ final class Safehill_SerializationTests: XCTestCase {
         
         XCTAssertEqual(abContact.id, deserialized.id)
         XCTAssertEqual(abContact.fullName(), deserialized.fullName())
-        XCTAssertEqual(abContact.numbers.count, deserialized.numbers.count)
-        for (index, number) in abContact.numbers.enumerated() {
-            let deserializedNumber = deserialized.numbers[index]
+        
+        let originalPPNs = abContact.parsedPhoneNumbers()
+        let deserializedPPNs = deserialized.parsedPhoneNumbers()
+        
+        XCTAssertEqual(originalPPNs.count, 4)
+        XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
+        
+        for (index, number) in originalPPNs.enumerated() {
+            let deserializedNumber = deserializedPPNs[index]
             XCTAssertEqual(number.label, deserializedNumber.label)
             XCTAssertEqual(number.e164FormattedNumber, deserializedNumber.e164FormattedNumber)
         }

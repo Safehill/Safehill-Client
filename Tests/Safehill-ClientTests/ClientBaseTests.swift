@@ -20,11 +20,12 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         ]
         
         let obj = SHAddressBookContact.fromCNContact(contact: contact)
-        XCTAssert(obj.numbers.count == 4)
-        XCTAssert(obj.numbers[0].stringValue == "+14085555270")
-        XCTAssert(obj.numbers[1].stringValue == "+14085555270")
-        XCTAssert(obj.numbers[2].stringValue == "+13358765433")
-        XCTAssert(obj.numbers[3].stringValue == "+393358765433")
+        let numbers = obj.labeledPhoneNumbers()
+        XCTAssert(numbers.count == 4)
+        XCTAssert(numbers[0].stringValue == "+14085555270")
+        XCTAssert(numbers[1].stringValue == "+14085555270")
+        XCTAssert(numbers[2].stringValue == "+13358765433")
+        XCTAssert(numbers[3].stringValue == "+393358765433")
     }
     
     func testValidations() {
