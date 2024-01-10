@@ -175,7 +175,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func removeLinkedSystemContact(from user: SHRemoteUserLinkedToContact,
+    func removeLinkedSystemContact(from users: [SHRemoteUserLinkedToContact],
                                    completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         let userStore: KBKVStore
         do {
@@ -185,16 +185,22 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let value = [
-            "identifier": user.identifier,
-            "name": user.name,
-            "phoneNumber": user.phoneNumber,
-            "publicKey": user.publicKeyData,
-            "publicSignature": user.publicSignatureData
-        ] as [String : Any]
+        let writeBatch = userStore.writeBatch()
         
-        userStore.set(value: value, for: user.identifier) { (postResult: Result) in
-            switch postResult {
+        for user in users {
+            let value = [
+                "identifier": user.identifier,
+                "name": user.name,
+                "phoneNumber": user.phoneNumber,
+                "publicKey": user.publicKeyData,
+                "publicSignature": user.publicSignatureData
+            ] as [String : Any]
+            
+            writeBatch.set(value: value, for: user.identifier)
+        }
+        
+        writeBatch.write { (result: Result) in
+            switch result {
             case .success:
                 completionHandler(.success(()))
             case .failure(let err):

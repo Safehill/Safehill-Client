@@ -35,12 +35,13 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
     
     public required convenience init?(coder decoder: NSCoder) {
         guard let id = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.identifier.rawValue) as? String,
-              let givenName = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.givenName.rawValue) as? String,
-              let lastName = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.lastName.rawValue) as? String,
               let systemContact = decoder.decodeObject(of: CNContact.self, forKey: CodingKeys.systemContact.rawValue)
         else {
             return nil
         }
+        
+        let givenName = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.givenName.rawValue) as? String
+        let lastName = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.lastName.rawValue) as? String
         
         if let phoneNumberClassObjs = decoder.decodeArrayOfObjects(
             ofClass: SHPhoneNumberClass.self,
@@ -54,16 +55,16 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
             })
             self.init(
                 id: id,
-                givenName: givenName,
-                lastName: lastName,
+                givenName: givenName ?? "",
+                lastName: lastName ?? "",
                 systemContact: systemContact,
                 parsedPhoneNumbers: parsedPhoneNumbers
             )
         } else {
             self.init(
                 id: id,
-                givenName: givenName,
-                lastName: lastName,
+                givenName: givenName ?? "",
+                lastName: lastName ?? "",
                 systemContact: systemContact
             )
         }
@@ -75,8 +76,9 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
 
     public let systemContact: CNContact
     
-    /// This is lazy loaded as it requires the 
-    /// 
+    ///
+    /// This is lazy loaded as it requires the parsing of a number using the PhoneNumberKit framework
+    ///
     internal let parsedPhoneNumbers: [SHPhoneNumber]?
     
     public var phoneNumbers: [SHPhoneNumber] {

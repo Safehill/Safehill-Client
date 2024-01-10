@@ -165,7 +165,7 @@ public class SHAddressBookContactHandler {
         var error: Error? = nil
         let group = DispatchGroup()
         
-        for allSystemContactChunk in systemContacts.chunked(into: 200) {
+        for allSystemContactChunk in systemContacts.chunked(into: 500) {
             
             /// Create a new array where all elements have phone numbers parsed
             /// Phone numbers need to be parsed, then hashed in order to be looked up on the server.
@@ -249,8 +249,7 @@ public class SHAddressBookContactHandler {
         requestor: SHLocalUser,
         given systemContacts: [SHAddressBookContact]
     ) {
-        
-        DispatchQueue.global(qos: .background).async {
+        DispatchQueue.global(qos: .userInitiated).async { /// Do it fast so that `systemContacts` (which is big in memory) can be released
             ///
             /// Remove items from the cache for users that are no longer in the Contacts
             /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
@@ -259,6 +258,7 @@ public class SHAddressBookContactHandler {
             serverProxy.getAllLocalUsers { result in
                 switch result {
                 case .success(let serverUsers):
+                    var usersWithLinksToRemove = [SHRemoteUserLinkedToContact]()
                     let allAddressBookParsedPhoneNumbers = systemContacts.flatMap { contact in
                         contact.withParsedPhoneNumbers().parsedPhoneNumbers!
                     }
@@ -269,12 +269,16 @@ public class SHAddressBookContactHandler {
                                 label: nil
                             )
                             if allAddressBookParsedPhoneNumbers.contains(phoneNumber) {
-                                serverProxy.removeLinkedSystemContact(from: linkedToSystemContactUser) {
-                                    result in
-                                    if case .failure(let failure) = result {
-                                        log.error("failed to remove link to contact to user cache: \(failure.localizedDescription)")
-                                    }
-                                }
+                                usersWithLinksToRemove.append(linkedToSystemContactUser)
+                            }
+                        }
+                    }
+                    
+                    DispatchQueue.global(qos: .background).async { /// This can be done in the background
+                        serverProxy.removeLinkedSystemContact(from: usersWithLinksToRemove) {
+                            result in
+                            if case .failure(let failure) = result {
+                                log.error("failed to remove links to contact from user cache: \(failure.localizedDescription)")
                             }
                         }
                     }

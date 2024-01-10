@@ -145,9 +145,9 @@ extension SHServerProxy {
                                 completionHandler: completionHandler)
     }
     
-    internal func removeLinkedSystemContact(from user: SHRemoteUserLinkedToContact,
+    internal func removeLinkedSystemContact(from users: [SHRemoteUserLinkedToContact],
                                             completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.removeLinkedSystemContact(from: user, completionHandler: completionHandler)
+        self.localServer.removeLinkedSystemContact(from: users, completionHandler: completionHandler)
     }
     
     public func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
