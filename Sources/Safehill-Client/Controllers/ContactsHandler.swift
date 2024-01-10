@@ -160,72 +160,98 @@ public class SHAddressBookContactHandler {
         allSystemContacts: [SHAddressBookContact],
         completionHandler: @escaping (Result<[SHPhoneNumber: (SHAddressBookContact, SHServerUser)], Error>) -> Void)
     {
-        let contactsByPhoneNumber = allSystemContacts.reduce([SHPhoneNumber: SHAddressBookContact]()) { partialResult, contact in
-            var result = partialResult
-            for number in contact.numbers {
-                result[number] = contact
-            }
-            return result
-        }
+        var usersByPhoneNumber = [SHPhoneNumber: (SHAddressBookContact, SHServerUser)]()
+        var error: Error? = nil
+        let group = DispatchGroup()
         
-        let serverProxy = SHServerProxy(user: requestor)
-        serverProxy.getUsers(withPhoneNumbers: Array(contactsByPhoneNumber.keys)) { result in
-            switch result {
-            case .failure(let err):
-                completionHandler(.failure(err))
-            case .success(let usersByHashedNumber):
-                var usersByPhoneNumber = [SHPhoneNumber: (SHAddressBookContact, SHServerUser)]()
-                for (phoneNumber, contact) in contactsByPhoneNumber {
-                    if let shUserMatch = usersByHashedNumber[phoneNumber.hashedPhoneNumber] {
-                        usersByPhoneNumber[phoneNumber] = (contact, shUserMatch)
-                        
-                        DispatchQueue.global(qos: .utility).async {
-                            ///
-                            /// Cache the phone number and the system contact identifier in the user store
-                            ///
-                            if let systemContact = contact.systemContact {
-                                serverProxy.updateLocalUser(shUserMatch as! SHRemoteUser,
-                                                            phoneNumber: phoneNumber,
-                                                            linkedSystemContact: systemContact) {
-                                    result in
-                                    if case .failure(let failure) = result {
-                                        log.error("failed to add link to contact to user cache: \(failure.localizedDescription)")
-                                    }
-                                }
-                            }
-                        }
+        for allSystemContactChunk in allSystemContacts.chunked(into: 500) {
+            
+            let contactsByPhoneNumber = allSystemContactChunk
+                .reduce([SHPhoneNumber: SHAddressBookContact]()) {
+                    partialResult, contact in
+                    var result = partialResult
+                    for number in contact.numbers {
+                        result[number] = contact
                     }
+                    return result
                 }
-                
-                DispatchQueue.global(qos: .utility).async {
-                    ///
-                    /// Remove items from the cache for users that are no longer in the Contacts
-                    /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
-                    ///
-                    serverProxy.getAllLocalUsers { result in
-                        switch result {
-                        case .success(let serverUsers):
-                            for serverUser in serverUsers {
-                                if let linkedToSystemContactUser = serverUser as? SHRemoteUserLinkedToContact,
-                                   let phoneNumber = SHPhoneNumber(linkedToSystemContactUser.phoneNumber),
-                                   contactsByPhoneNumber[phoneNumber] == nil
-                                {
-                                    serverProxy.removeLinkedSystemContact(from: linkedToSystemContactUser) {
+            
+            let serverProxy = SHServerProxy(user: requestor)
+            
+            group.enter()
+            serverProxy.getUsers(withPhoneNumbers: Array(contactsByPhoneNumber.keys)) { result in
+                switch result {
+                    
+                case .failure(let err):
+                    error = err
+                    
+                case .success(let usersByHashedNumber):
+                    for (phoneNumber, contact) in contactsByPhoneNumber {
+                        if let shUserMatch = usersByHashedNumber[phoneNumber.hashedPhoneNumber] {
+                            usersByPhoneNumber[phoneNumber] = (contact, shUserMatch)
+                            
+                            if let systemContact = contact.systemContact {
+                                DispatchQueue.global(qos: .background).async {
+                                    ///
+                                    /// Cache the phone number and the system contact identifier in the user store
+                                    ///
+                                    serverProxy.updateLocalUser(
+                                        shUserMatch as! SHRemoteUser,
+                                        phoneNumber: phoneNumber,
+                                        linkedSystemContact: systemContact
+                                    ) {
                                         result in
                                         if case .failure(let failure) = result {
-                                            log.error("failed to remove link to contact to user cache: \(failure.localizedDescription)")
+                                            log.error("failed to add link to contact to user cache: \(failure.localizedDescription)")
                                         }
                                     }
                                 }
                             }
-                        case .failure(_):
-                            break
+                        }
+                    }
+                    
+                    DispatchQueue.global(qos: .background).async {
+                        ///
+                        /// Remove items from the cache for users that are no longer in the Contacts
+                        /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
+                        ///
+                        serverProxy.getAllLocalUsers { result in
+                            switch result {
+                            case .success(let serverUsers):
+                                for serverUser in serverUsers {
+                                    if let linkedToSystemContactUser = serverUser as? SHRemoteUserLinkedToContact,
+                                       let phoneNumber = SHPhoneNumber(linkedToSystemContactUser.phoneNumber),
+                                       contactsByPhoneNumber[phoneNumber] == nil
+                                    {
+                                        serverProxy.removeLinkedSystemContact(from: linkedToSystemContactUser) {
+                                            result in
+                                            if case .failure(let failure) = result {
+                                                log.error("failed to remove link to contact to user cache: \(failure.localizedDescription)")
+                                            }
+                                        }
+                                    }
+                                }
+                            case .failure(_):
+                                break
+                            }
                         }
                     }
                 }
                 
-                completionHandler(.success(usersByPhoneNumber))
+                group.leave()
+            }
+            
+            let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+            guard dispatchResult == .success else {
+                completionHandler(.failure(SHBackgroundOperationError.timedOut))
+                return
+            }
+            guard error == nil else {
+                completionHandler(.failure(error!))
+                return
             }
         }
+        
+        completionHandler(.success(usersByPhoneNumber))
     }
 }
