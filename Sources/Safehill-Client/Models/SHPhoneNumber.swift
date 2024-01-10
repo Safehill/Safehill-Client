@@ -4,7 +4,7 @@ import PhoneNumberKit
 import CoreTelephony
 #endif
 import Safehill_Crypto
-
+import Contacts
 
 public class SHPhoneNumberClass: NSObject, NSSecureCoding {
     
@@ -53,6 +53,21 @@ public struct SHPhoneNumber: Hashable {
     
     public func hash(into hasher: inout Hasher) {
         hasher.combine(e164FormattedNumber)
+    }
+    
+    public static func from(unparsed: [CNLabeledValue<CNPhoneNumber>]) -> [SHPhoneNumber] {
+        let phoneNumberKit = PhoneNumberKit()
+        let parsedPNKPhoneNumbers = phoneNumberKit.parse(unparsed.map({ $0.value.stringValue }))
+        var parsedPhoneNumbers = [SHPhoneNumber]()
+        for (index, parsedNumber) in parsedPNKPhoneNumbers.enumerated() {
+            parsedPhoneNumbers.append(
+                SHPhoneNumber(
+                    e164FormattedNumber: phoneNumberKit.format(parsedNumber, toType: .e164),
+                    label: unparsed[index].label!
+                )
+            )
+        }
+        return parsedPhoneNumbers
     }
     
     public init?(_ phoneNumberString: String, label: String? = nil) {

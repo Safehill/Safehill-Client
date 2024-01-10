@@ -1,5 +1,6 @@
 import Foundation
 import Contacts
+import PhoneNumberKit
 
 public final class SHAddressBookContact: NSObject, NSSecureCoding {
     
@@ -123,13 +124,7 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
     /// This ensures resiliency to the different phone number formatting
     /// - Returns: a copy of the immutable self with phone numbers parsed
     public func withParsedPhoneNumbers() -> SHAddressBookContact {
-        let parsedPhoneNumbers = systemContact.phoneNumbers.compactMap({
-            (value: CNLabeledValue<CNPhoneNumber>) in
-
-            let localizedLabel = CNLabeledValue<NSString>.localizedString(forLabel: value.label ?? "")
-            return SHPhoneNumber(value.value.stringValue, label: localizedLabel)
-        })
-        
+        let parsedPhoneNumbers = SHPhoneNumber.from(unparsed: systemContact.phoneNumbers)
         return SHAddressBookContact(
             id: self.id,
             givenName: self.givenName,
