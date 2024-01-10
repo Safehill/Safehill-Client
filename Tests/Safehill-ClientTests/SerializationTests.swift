@@ -3,6 +3,7 @@ import XCTest
 @testable import Safehill_Crypto
 import CryptoKit
 import KnowledgeBase
+import Contacts
 
 final class Safehill_SerializationTests: XCTestCase {
     
@@ -164,6 +165,39 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
             XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
             XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)
+        }
+    }
+    
+    func testSerializeSHAddressBookContact() throws {
+        let contact = CNMutableContact()
+        contact.givenName = "Jimmy"
+        contact.familyName = "Claus"
+        contact.phoneNumbers = [
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "(408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+1 (408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "335 8765433")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+39 3358765433")),
+        ]
+        
+        let abContact = SHAddressBookContact.fromCNContact(contact: contact)
+        
+        let data = try NSKeyedArchiver.archivedData(withRootObject: abContact, requiringSecureCoding: true)
+        
+        let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+        let deserialized = unarchiver.decodeObject(of: SHAddressBookContact.self, forKey: NSKeyedArchiveRootObjectKey)
+        
+        guard let deserialized = deserialized else {
+            XCTFail()
+            return
+        }
+        
+        XCTAssertEqual(abContact.id, deserialized.id)
+        XCTAssertEqual(abContact.fullName(), deserialized.fullName())
+        XCTAssertEqual(abContact.numbers.count, deserialized.numbers.count)
+        for (index, number) in abContact.numbers.enumerated() {
+            let deserializedNumber = deserialized.numbers[index]
+            XCTAssertEqual(number.label, deserializedNumber.label)
+            XCTAssertEqual(number.e164FormattedNumber, deserializedNumber.e164FormattedNumber)
         }
     }
 }
