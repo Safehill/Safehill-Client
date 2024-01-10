@@ -155,6 +155,11 @@ public class SHAddressBookContactHandler {
         }
     }
     
+    /// Matches the contacts in the address book with safehill users on the server based on their parsed phone numbers (hashed)
+    /// - Parameters:
+    ///   - requestor: the local user making the HTTP request to fetch safehill users
+    ///   - systemContacts: The contacts in the address book to match. If phone numbers are not parsed in this list they are not taken into account, so **ensure that you call `.withParsedPhoneNumbers()` on each member of this list before calling this method**
+    ///   - completionHandler: the callback method
     public func fetchSafehillUserMatches(
         requestor: SHLocalUser,
         given systemContacts: [SHAddressBookContact],
@@ -166,16 +171,10 @@ public class SHAddressBookContactHandler {
         let group = DispatchGroup()
         
         for allSystemContactChunk in systemContacts.chunked(into: 500) {
-            
-            /// Create a new array where all elements have phone numbers parsed
-            /// Phone numbers need to be parsed, then hashed in order to be looked up on the server.
-            /// This ensures resiliency to the different phone number formatting
-            let allSystemContactChunkWithParsedNumbers = allSystemContactChunk.map { contact in
-                return contact.withParsedPhoneNumbers()
-            }
             /// Calculate the hashed phone numbers once and key phone numbers by hash
-            let allParsedNumbersByHash = allSystemContactChunkWithParsedNumbers
-                .flatMap { $0.parsedPhoneNumbers! }
+            let allParsedNumbersByHash = allSystemContactChunk
+                .compactMap { $0.parsedPhoneNumbers }
+                .flatMap { $0 }
                 .reduce([String: SHPhoneNumber]()) {
                     (partialResult: [String: SHPhoneNumber], phoneNumber: SHPhoneNumber) in
                     var result = partialResult
@@ -193,7 +192,7 @@ public class SHAddressBookContactHandler {
                     error = err
                     
                 case .success(let usersByHashedNumber):
-                    let contactsByPhoneNumber = allSystemContactChunkWithParsedNumbers
+                    let contactsByPhoneNumber = allSystemContactChunk
                         .reduce([SHPhoneNumber: SHAddressBookContact]()) {
                             (partialResult: [SHPhoneNumber: SHAddressBookContact], contact: SHAddressBookContact) in
                             var result = partialResult

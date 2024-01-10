@@ -117,7 +117,8 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
         })
     }
     
-    /// Create a new array where all elements have phone numbers parsed
+    /// Create a new array where all elements have phone numbers parsed.
+    /// Guarantees immutabliltiy of this object.
     /// Phone numbers need to be parsed, then hashed in order to be looked up on the server.
     /// This ensures resiliency to the different phone number formatting
     /// - Returns: a copy of the immutable self with phone numbers parsed
