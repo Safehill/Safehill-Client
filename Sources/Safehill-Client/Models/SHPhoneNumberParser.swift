@@ -10,32 +10,28 @@ public struct SHPhoneNumberParser {
     
     public static var sharedInstance = SHPhoneNumberParser()
     
-    private var cache: [String: SHPhoneNumber]
+    /// Unverified, unformatted phone number string to verified, e164 format
+    private var cache: [String: String]
     
     var kvs: KBKVStore? {
         KBKnowledgeStore.store(withName: "com.safehill.cachedParsedPhoneNumbers")
     }
     
     private init() {
-        self.cache = [String: SHPhoneNumber]()
+        self.cache = [String: String]()
         do {
             let keyValues = try kvs?.dictionaryRepresentation()
-            for (unparsed, data) in keyValues ?? [:] {
-                guard let data = data as? Data,
-                      let deserialized = try NSKeyedUnarchiver.unarchivedObject(
-                        ofClass: SHPhoneNumberClass.self,
-                        from: data
-                      )
-                else {
+            var invalidKeys = [String]()
+            for (unformatted, formatted) in keyValues ?? [:] {
+                guard let formatted = formatted as? String else {
                     log.warning("invalid entry for in SHPhoneNumberParser cache KVS")
+                    invalidKeys.append(unformatted)
                     continue
                 }
-                cache[unparsed] = SHPhoneNumber(
-                    e164FormattedNumber: deserialized.e164FormattedNumber,
-                    stringValue: deserialized.stringValue,
-                    label: deserialized.label
-                )
+                cache[unformatted] = formatted
             }
+            
+            kvs?.removeValues(for: invalidKeys, completionHandler: { (result: Result<Void, Error>) in })
         } catch {
             log.error("failed to initialize SHPhoneNumberParser cache")
         }
@@ -75,21 +71,13 @@ public struct SHPhoneNumberParser {
         }))
     }
     
-    mutating public func parse(_ contact: [CNLabeledValue<CNPhoneNumber>]) -> [SHPhoneNumber?] {
+    mutating public func parse(_ contactPhoneNumbers: [CNLabeledValue<CNPhoneNumber>]) -> [SHPhoneNumber?] {
         
         var parsedPhoneNumbers = [SHPhoneNumber?]()
         let writeBatch = kvs?.writeBatch()
         
-        for item in contact {
-            if let alreadyParsed = cache[item.value.stringValue] {
-                parsedPhoneNumbers.append(alreadyParsed)
-            }
-            else if let shPhoneNum = self.parse(item, writeBatch: writeBatch) {
-                parsedPhoneNumbers.append(shPhoneNum)
-            } 
-            else {
-                parsedPhoneNumbers.append(nil)
-            }
+        for item in contactPhoneNumbers {
+            parsedPhoneNumbers.append(self.parse(item, writeBatch: writeBatch))
         }
         
         // TODO: Debounce
@@ -103,31 +91,25 @@ public struct SHPhoneNumberParser {
         writeBatch: KBKVStoreWriteBatch?
     ) -> SHPhoneNumber? {
         if let cachedValue = self.cache[contact.value.stringValue] {
-            return cachedValue
+            return SHPhoneNumber(
+                e164FormattedNumber: cachedValue,
+                stringValue: contact.value.stringValue,
+                label: contact.label
+            )
         }
         
         guard let e164String = self.parse(maybePhoneNumber: contact.value.stringValue) else {
             return nil
         }
         
-        let shPhoneNum = SHPhoneNumber(
+        self.cache[contact.value.stringValue] = e164String
+        writeBatch?.set(value: e164String, for: contact.value.stringValue)
+        
+        return SHPhoneNumber(
             e164FormattedNumber: e164String,
             stringValue: contact.value.stringValue,
             label: contact.label
         )
-        
-        self.cache[contact.value.stringValue] = shPhoneNum
-        
-        let serializablePN = SHPhoneNumberClass(
-            e164FormattedNumber: shPhoneNum.e164FormattedNumber,
-            stringValue: shPhoneNum.stringValue,
-            label: shPhoneNum.label
-        )
-        if let data = try? NSKeyedArchiver.archivedData(withRootObject: serializablePN, requiringSecureCoding: true) {
-            writeBatch?.set(value: data, for: contact.value.stringValue)
-        }
-        
-        return shPhoneNum
     }
     
     public func parse(maybePhoneNumber: String) -> String? {
