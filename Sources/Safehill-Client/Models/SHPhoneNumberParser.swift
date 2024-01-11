@@ -92,6 +92,9 @@ public struct SHPhoneNumberParser {
         writeBatch: KBKVStoreWriteBatch?
     ) -> SHPhoneNumber? {
         if let cachedValue = self.cache[contact.value.stringValue] {
+            if cachedValue == InvalidPhoneNumberPlaceholderValue {
+                return nil
+            }
             return SHPhoneNumber(
                 e164FormattedNumber: cachedValue,
                 stringValue: contact.value.stringValue,
