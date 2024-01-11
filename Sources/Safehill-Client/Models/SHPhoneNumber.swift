@@ -50,7 +50,7 @@ public struct SHPhoneNumber: Hashable {
         hasher.combine(e164FormattedNumber)
     }
     
-    internal init(e164FormattedNumber: String, stringValue: String, label: String?) {
+    public init(e164FormattedNumber: String, stringValue: String, label: String?) {
         self.e164FormattedNumber = e164FormattedNumber
         self.stringValue = stringValue
         self.label = label
