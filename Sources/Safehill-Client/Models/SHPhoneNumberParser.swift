@@ -6,6 +6,8 @@ import PhoneNumberKit
 import CoreTelephony
 #endif
 
+let InvalidPhoneNumberPlaceholderValue = "<INVALID>"
+
 public struct SHPhoneNumberParser {
     
     public static var sharedInstance = SHPhoneNumberParser()
@@ -28,7 +30,7 @@ public struct SHPhoneNumberParser {
                     invalidKeys.append(unformatted)
                     continue
                 }
-                cache[unformatted] = formatted
+                self.cache[unformatted] = formatted
             }
             
             kvs?.removeValues(for: invalidKeys, completionHandler: { (result: Result<Void, Error>) in })
@@ -98,18 +100,20 @@ public struct SHPhoneNumberParser {
             )
         }
         
-        guard let e164String = self.parse(maybePhoneNumber: contact.value.stringValue) else {
+        if let e164String = self.parse(maybePhoneNumber: contact.value.stringValue) {
+            self.cache[contact.value.stringValue] = e164String
+            writeBatch?.set(value: e164String, for: contact.value.stringValue)
+            
+            return SHPhoneNumber(
+                e164FormattedNumber: e164String,
+                stringValue: contact.value.stringValue,
+                label: contact.label
+            )
+        } else {
+            self.cache[contact.value.stringValue] = InvalidPhoneNumberPlaceholderValue
+            writeBatch?.set(value: InvalidPhoneNumberPlaceholderValue, for: contact.value.stringValue)
             return nil
         }
-        
-        self.cache[contact.value.stringValue] = e164String
-        writeBatch?.set(value: e164String, for: contact.value.stringValue)
-        
-        return SHPhoneNumber(
-            e164FormattedNumber: e164String,
-            stringValue: contact.value.stringValue,
-            label: contact.label
-        )
     }
     
     public func parse(maybePhoneNumber: String) -> String? {
