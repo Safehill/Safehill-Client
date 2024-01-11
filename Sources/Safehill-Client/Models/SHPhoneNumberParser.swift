@@ -15,11 +15,10 @@ public struct SHPhoneNumberParser {
     /// Unverified, unformatted phone number string to verified, e164 format
     private var cache: [String: String]
     
-    var kvs: KBKVStore? {
-        KBKnowledgeStore.store(withName: "com.safehill.cachedParsedPhoneNumbers")
-    }
+    let kvs: KBKnowledgeStore?
     
     private init() {
+        self.kvs = KBKnowledgeStore.store(withName: "com.safehill.cachedParsedPhoneNumbers")
         self.cache = [String: String]()
         do {
             let keyValues = try kvs?.dictionaryRepresentation()
