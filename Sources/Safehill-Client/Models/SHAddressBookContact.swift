@@ -51,6 +51,7 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
             let parsedPhoneNumbers = phoneNumberClassObjs.map({
                 SHPhoneNumber(
                     e164FormattedNumber: $0.e164FormattedNumber,
+                    stringValue: $0.stringValue,
                     label: $0.label
                 )
             })
@@ -124,13 +125,13 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
     /// This ensures resiliency to the different phone number formatting
     /// - Returns: a copy of the immutable self with phone numbers parsed
     public func withParsedPhoneNumbers() -> SHAddressBookContact {
-        let parsedPhoneNumbers = SHPhoneNumber.from(unparsed: systemContact.phoneNumbers)
+        let parsedPhoneNumbers = SHPhoneNumberParser.sharedInstance.parse(systemContact.phoneNumbers)
         return SHAddressBookContact(
             id: self.id,
             givenName: self.givenName,
             lastName: self.lastName,
             systemContact: self.systemContact,
-            parsedPhoneNumbers: parsedPhoneNumbers
+            parsedPhoneNumbers: parsedPhoneNumbers.compactMap({ $0 })
         )
     }
 }

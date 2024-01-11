@@ -267,6 +267,7 @@ public class SHAddressBookContactHandler {
                         if let linkedToSystemContactUser = serverUser as? SHRemoteUserLinkedToContact {
                             let phoneNumber = SHPhoneNumber(
                                 e164FormattedNumber: linkedToSystemContactUser.phoneNumber,
+                                stringValue: linkedToSystemContactUser.phoneNumber, // Comparison happens via e164FormattedNumber, so this value doesn't really matter
                                 label: nil
                             )
                             if allAddressBookParsedPhoneNumbers.contains(phoneNumber) {

@@ -169,6 +169,9 @@ final class Safehill_SerializationTests: XCTestCase {
     }
     
     func testSerializeSHAddressBookContact() throws {
+        
+        let expectation = expectation(description: "afterClearingCaches")
+        
         let contact = CNMutableContact()
         contact.givenName = "Jimmy"
         contact.familyName = "Claus"
@@ -181,30 +184,48 @@ final class Safehill_SerializationTests: XCTestCase {
         
         let abContact = SHAddressBookContact.fromCNContact(contact: contact)
         
-        let data = try NSKeyedArchiver.archivedData(withRootObject: abContact, requiringSecureCoding: true)
-        
-        let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
-        let deserialized = unarchiver.decodeObject(of: SHAddressBookContact.self, forKey: NSKeyedArchiveRootObjectKey)
-        
-        guard let deserialized = deserialized else {
-            XCTFail()
-            return
+        SHPhoneNumberParser.sharedInstance.invalidateCaches { result in
+            guard case .success(_) = result else {
+                XCTFail()
+                return
+            }
+            
+            for _ in 1...4 {
+                do {
+                    let data = try NSKeyedArchiver.archivedData(withRootObject: abContact, requiringSecureCoding: true)
+                    
+                    let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+                    let deserialized = unarchiver.decodeObject(of: SHAddressBookContact.self, forKey: NSKeyedArchiveRootObjectKey)
+                    
+                    guard let deserialized = deserialized else {
+                        XCTFail()
+                        return
+                    }
+                    
+                    XCTAssertEqual(abContact.id, deserialized.id)
+                    XCTAssertEqual(abContact.fullName(), deserialized.fullName())
+                    
+                    let originalPPNs = abContact.phoneNumbers
+                    let deserializedPPNs = deserialized.phoneNumbers
+                    
+                    XCTAssertEqual(originalPPNs.count, 4)
+                    XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
+                    
+                    for (index, number) in originalPPNs.enumerated() {
+                        let deserializedNumber = deserializedPPNs[index]
+                        XCTAssertEqual(number.label, deserializedNumber.label)
+                        XCTAssertEqual(number.e164FormattedNumber, deserializedNumber.e164FormattedNumber)
+                    }
+                    
+                } catch {
+                    XCTFail()
+                }
+            }
+            
+            expectation.fulfill()
         }
         
-        XCTAssertEqual(abContact.id, deserialized.id)
-        XCTAssertEqual(abContact.fullName(), deserialized.fullName())
-        
-        let originalPPNs = abContact.phoneNumbers
-        let deserializedPPNs = deserialized.phoneNumbers
-        
-        XCTAssertEqual(originalPPNs.count, 4)
-        XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
-        
-        for (index, number) in originalPPNs.enumerated() {
-            let deserializedNumber = deserializedPPNs[index]
-            XCTAssertEqual(number.label, deserializedNumber.label)
-            XCTAssertEqual(number.e164FormattedNumber, deserializedNumber.e164FormattedNumber)
-        }
+        wait(for: [expectation], timeout: 2)
     }
     
     func testSerializeSHAddressBookContactList() throws {
