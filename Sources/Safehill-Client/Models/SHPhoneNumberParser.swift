@@ -102,6 +102,10 @@ public struct SHPhoneNumberParser {
         _ contact: CNLabeledValue<CNPhoneNumber>,
         writeBatch: KBKVStoreWriteBatch?
     ) -> SHPhoneNumber? {
+        if let cachedValue = self.cache[contact.value.stringValue] {
+            return cachedValue
+        }
+        
         guard let e164String = self.parse(maybePhoneNumber: contact.value.stringValue) else {
             return nil
         }
