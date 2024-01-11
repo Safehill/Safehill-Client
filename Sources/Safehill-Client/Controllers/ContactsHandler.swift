@@ -173,8 +173,7 @@ public class SHAddressBookContactHandler {
         for allSystemContactChunk in systemContacts.chunked(into: 500) {
             /// Calculate the hashed phone numbers once and key phone numbers by hash
             let allParsedNumbersByHash = allSystemContactChunk
-                .compactMap { $0.parsedPhoneNumbers }
-                .flatMap { $0 }
+                .flatMap { $0.verifiedPhoneNumbers }
                 .reduce([String: SHPhoneNumber]()) {
                     (partialResult: [String: SHPhoneNumber], phoneNumber: SHPhoneNumber) in
                     var result = partialResult
@@ -196,7 +195,7 @@ public class SHAddressBookContactHandler {
                         .reduce([SHPhoneNumber: SHAddressBookContact]()) {
                             (partialResult: [SHPhoneNumber: SHAddressBookContact], contact: SHAddressBookContact) in
                             var result = partialResult
-                            for parsedPhoneNumber in contact.parsedPhoneNumbers ?? [] {
+                            for parsedPhoneNumber in contact.verifiedPhoneNumbers {
                                 result[parsedPhoneNumber] = contact
                             }
                             return result
@@ -258,19 +257,9 @@ public class SHAddressBookContactHandler {
                 switch result {
                 case .success(let serverUsers):
                     var usersWithLinksToRemove = [SHRemoteUserLinkedToContact]()
-                    let allAddressBookParsedPhoneNumbers = systemContacts
-                        .compactMap { contact in
-                            contact.withParsedPhoneNumbers().parsedPhoneNumbers
-                        }
-                        .flatMap({ $0 })
                     for serverUser in serverUsers {
                         if let linkedToSystemContactUser = serverUser as? SHRemoteUserLinkedToContact {
-                            let phoneNumber = SHPhoneNumber(
-                                e164FormattedNumber: linkedToSystemContactUser.phoneNumber,
-                                stringValue: linkedToSystemContactUser.phoneNumber, // Comparison happens via e164FormattedNumber, so this value doesn't really matter
-                                label: nil
-                            )
-                            if allAddressBookParsedPhoneNumbers.contains(phoneNumber) {
+                            if systemContacts.contains(where: { $0.id == linkedToSystemContactUser.linkedSystemContactId }) == false {
                                 usersWithLinksToRemove.append(linkedToSystemContactUser)
                             }
                         }
