@@ -84,18 +84,7 @@ public struct SHPhoneNumberParser {
             if let alreadyParsed = cache[item.value.stringValue] {
                 parsedPhoneNumbers.append(alreadyParsed)
             }
-            else if let shPhoneNum = self.parse(item) {
-                cache[item.value.stringValue] = shPhoneNum
-                
-                let serializablePN = SHPhoneNumberClass(
-                    e164FormattedNumber: shPhoneNum.e164FormattedNumber,
-                    stringValue: shPhoneNum.stringValue,
-                    label: shPhoneNum.label
-                )
-                if let data = try? NSKeyedArchiver.archivedData(withRootObject: serializablePN, requiringSecureCoding: true) {
-                    writeBatch?.set(value: data, for: item.value.stringValue)
-                }
-                
+            else if let shPhoneNum = self.parse(item, writeBatch: writeBatch) {
                 parsedPhoneNumbers.append(shPhoneNum)
             } 
             else {
@@ -109,14 +98,42 @@ public struct SHPhoneNumberParser {
         return parsedPhoneNumbers
     }
     
-    private func parse(_ contact: CNLabeledValue<CNPhoneNumber>) -> SHPhoneNumber? {
+    mutating private func parse(
+        _ contact: CNLabeledValue<CNPhoneNumber>,
+        writeBatch: KBKVStoreWriteBatch?
+    ) -> SHPhoneNumber? {
+        guard let e164String = self.parse(maybePhoneNumber: contact.value.stringValue) else {
+            return nil
+        }
+        
+        let shPhoneNum = SHPhoneNumber(
+            e164FormattedNumber: e164String,
+            stringValue: contact.value.stringValue,
+            label: contact.label
+        )
+        
+        self.cache[contact.value.stringValue] = shPhoneNum
+        
+        let serializablePN = SHPhoneNumberClass(
+            e164FormattedNumber: shPhoneNum.e164FormattedNumber,
+            stringValue: shPhoneNum.stringValue,
+            label: shPhoneNum.label
+        )
+        if let data = try? NSKeyedArchiver.archivedData(withRootObject: serializablePN, requiringSecureCoding: true) {
+            writeBatch?.set(value: data, for: contact.value.stringValue)
+        }
+        
+        return shPhoneNum
+    }
+    
+    public func parse(maybePhoneNumber: String) -> String? {
         let phoneNumberKit = PhoneNumberKit()
         let parsedPhoneNumber: PhoneNumber
         do {
             ///
             /// Try to parse it without a country code (or with one is one is provided)
             ///
-            parsedPhoneNumber = try phoneNumberKit.parse(contact.value.stringValue, ignoreType: true)
+            parsedPhoneNumber = try phoneNumberKit.parse(maybePhoneNumber, ignoreType: true)
         } catch {
 //            do {
 //                ///
@@ -129,7 +146,7 @@ public struct SHPhoneNumberParser {
                     ///
                     /// Add a country code just based the system locale
                     ///
-                    parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumberParser.currentCountryDialingCode(useCarrierSettings: false))\(contact.value.stringValue)",
+                    parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumberParser.currentCountryDialingCode(useCarrierSettings: false))\(maybePhoneNumber)",
                                                                  ignoreType: true)
                 } catch {
                     return nil
@@ -140,13 +157,7 @@ public struct SHPhoneNumberParser {
         ///
         /// Format it
         ///
-        let e164String = phoneNumberKit.format(parsedPhoneNumber, toType: .e164)
-        
-        return SHPhoneNumber(
-            e164FormattedNumber: e164String,
-            stringValue: contact.value.stringValue,
-            label: contact.label
-        )
+        return phoneNumberKit.format(parsedPhoneNumber, toType: .e164)
     }
     
     static func currentLocaleCountryCode() -> String {
