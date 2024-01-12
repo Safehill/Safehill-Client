@@ -318,7 +318,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {
             case .success(let user):
-                return completionHandler(.success(self.requestor))
+                return completionHandler(.success(user))
             case .failure(let error):
                 return completionHandler(.failure(error))
             }
@@ -326,7 +326,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.post("users/safe_delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+        self.post("users/safe-delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 return completionHandler(.success(()))
@@ -439,25 +439,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
-        let parameters = [
-            "phoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
-        ] as [String : Any]
-        self.post("users/retrieve/phone_number", parameters: parameters) { (result: Result<UsersByPhoneNumberResponseDTO, Error>) in
-            switch result {
-            case .success(let dto):
-                return completionHandler(.success(dto.result))
-            case .failure(let error):
-                return completionHandler(.failure(error))
-            }
-        }
-    }
-    
     func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
         let parameters = [
             "phoneNumbers": hashedPhoneNumbers
         ] as [String : Any]
-        self.post("users/retrieve/phone_number", parameters: parameters) { (result: Result<UsersByPhoneNumberResponseDTO, Error>) in
+        self.post("users/retrieve/phone-number", parameters: parameters) { (result: Result<UsersByPhoneNumberResponseDTO, Error>) in
             switch result {
             case .success(let dto):
                 return completionHandler(.success(dto.result))

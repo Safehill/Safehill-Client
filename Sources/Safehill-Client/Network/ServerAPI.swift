@@ -60,8 +60,8 @@ public protocol SHServerAPI {
     /// Used to determine who - from the user's address book - is a Safehill user
     /// - Parameters:
     ///   - phoneNumbers: the list of phone numbers
-    ///   - completionHandler: the callback method
-    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ())
+    ///   - completionHandler: the callback method 
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:

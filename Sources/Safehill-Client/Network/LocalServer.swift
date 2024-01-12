@@ -423,7 +423,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func getUsers(withPhoneNumbers phoneNumbers: [SHPhoneNumber], completionHandler: @escaping (Result<[String: SHServerUser], Error>) -> ()) {
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
