@@ -16,6 +16,7 @@ public struct SHPhoneNumberParser {
     private var cache: [String: String]
     
     let kvs: KBKnowledgeStore?
+    let phoneNumberKit = PhoneNumberKit()
     
     private init() {
         self.kvs = KBKnowledgeStore.store(withName: "com.safehill.cachedParsedPhoneNumbers")
@@ -102,7 +103,7 @@ public struct SHPhoneNumberParser {
             )
         }
         
-        if let e164String = self.parse(maybePhoneNumber: contact.value.stringValue) {
+        if let e164String = self.format(maybePhoneNumber: contact.value.stringValue) {
             self.cache[contact.value.stringValue] = e164String
             writeBatch?.set(value: e164String, for: contact.value.stringValue)
             
@@ -118,14 +119,24 @@ public struct SHPhoneNumberParser {
         }
     }
     
-    public func parse(maybePhoneNumber: String) -> String? {
-        let phoneNumberKit = PhoneNumberKit()
+    /// Takes a string and returns a e164 formatted phone number
+    /// - Parameter maybePhoneNumber: the phone number to parse and format
+    /// - Returns: the e164 format
+    public func format(maybePhoneNumber: String) -> String? {
+        if let parsedPhoneNumber = self.parse(value: maybePhoneNumber) {
+            return phoneNumberKit.format(parsedPhoneNumber, toType: .e164)
+        } else {
+            return nil
+        }
+    }
+    
+    private func parse(value: String) -> PhoneNumber? {
         let parsedPhoneNumber: PhoneNumber
         do {
             ///
             /// Try to parse it without a country code (or with one is one is provided)
             ///
-            parsedPhoneNumber = try phoneNumberKit.parse(maybePhoneNumber, ignoreType: true)
+            parsedPhoneNumber = try phoneNumberKit.parse(value, ignoreType: true)
         } catch {
 //            do {
 //                ///
@@ -138,7 +149,7 @@ public struct SHPhoneNumberParser {
                     ///
                     /// Add a country code just based the system locale
                     ///
-                    parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumberParser.currentCountryDialingCode(useCarrierSettings: false))\(maybePhoneNumber)",
+                    parsedPhoneNumber = try phoneNumberKit.parse("\(SHPhoneNumberParser.currentCountryDialingCode(useCarrierSettings: false))\(value)",
                                                                  ignoreType: true)
                 } catch {
                     return nil
@@ -146,10 +157,7 @@ public struct SHPhoneNumberParser {
 //            }
         }
         
-        ///
-        /// Format it
-        ///
-        return phoneNumberKit.format(parsedPhoneNumber, toType: .e164)
+        return parsedPhoneNumber
     }
     
     static func currentLocaleCountryCode() -> String {

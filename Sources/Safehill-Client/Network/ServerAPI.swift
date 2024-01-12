@@ -103,6 +103,17 @@ public protocol SHServerAPI {
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Result<Void, Error>) -> ())
     
+    /// Adds a link between a share group and a set of phone numbers on the server.
+    /// This makes sure that once a new user is registered with that phone number, the sender
+    /// can get notified about encrypting and sharing with that new user
+    /// - Parameters:
+    ///   - phoneNumbers: the set of phone numbers
+    ///   - groupId: the groupId of the share
+    ///   - completionHandler: the callback method
+    func add(phoneNumbers: [SHPhoneNumber],
+             to groupId: String,
+             completionHandler: @escaping (Result<Void, Error>) -> ())
+    
     /// Unshares one asset (all of its versions) with a user. If the asset or the user don't exist, or the asset is not shared with the user, it's a no-op
     /// - Parameters:
     ///   - assetId: the identifier of asset previously shared

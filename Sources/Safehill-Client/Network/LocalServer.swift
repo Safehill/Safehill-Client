@@ -1048,7 +1048,6 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let assetStore: KBKVStore
@@ -1080,6 +1079,10 @@ struct LocalServer : SHServerAPI {
         }
         
         writeBatch.write(completionHandler: completionHandler)
+    }
+    
+    func add(phoneNumbers: [SHPhoneNumber], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func unshareAll(with userIdentifiers: [UserIdentifier],
