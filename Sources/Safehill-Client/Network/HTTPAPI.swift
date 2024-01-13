@@ -642,7 +642,6 @@ struct SHServerHTTPAPI : SHServerAPI {
     func add(phoneNumbers: [SHPhoneNumber],
              to groupId: String,
              completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        
         let phoneNumberKit = PhoneNumberKit()
         let numbers = phoneNumberKit.parse(phoneNumbers.map({ $0.e164FormattedNumber }))
         
