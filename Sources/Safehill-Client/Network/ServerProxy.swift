@@ -813,9 +813,9 @@ extension SHServerProxy {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
     }
     
-    func add(phoneNumbers: [SHPhoneNumber],
-             to groupId: String,
-             completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func add(phoneNumbers: [SHPhoneNumber],
+                    to groupId: String,
+                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.add(phoneNumbers: phoneNumbers, to: groupId, completionHandler: completionHandler)
     }
     
