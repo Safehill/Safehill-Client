@@ -3,11 +3,30 @@ import XCTest
 @testable import Safehill_Crypto
 import CryptoKit
 import KnowledgeBase
+import Contacts
 
 
 let kTestStaticProtocolSalt = Data(base64Encoded: "0PT/RKOwUpk8dxYU/pJ3Vx/zespMkey8yMMgFp4ov2E=")!
 
 final class Safehill_ClientBaseUnitTests: XCTestCase {
+    
+    func _testContactPhoneParsing() {
+        let contact = CNMutableContact()
+        contact.phoneNumbers = [
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "(408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+1 (408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "335 8765433")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+39 3358765433")),
+        ]
+        
+        let obj = SHAddressBookContact.fromCNContact(contact: contact)
+        let numbers = obj.labeledPhoneNumbers()
+        XCTAssert(numbers.count == 4)
+        XCTAssert(numbers[0].stringValue == "+14085555270")
+        XCTAssert(numbers[1].stringValue == "+14085555270")
+        XCTAssert(numbers[2].stringValue == "+13358765433")
+        XCTAssert(numbers[3].stringValue == "+393358765433")
+    }
     
     func testValidations() {
         for name in [
@@ -103,6 +122,23 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         let _ = try BackgroundOperationQueue.of(type: .failedUpload)
         let _ = try BackgroundOperationQueue.of(type: .failedShare)
         let _ = try BackgroundOperationQueue.of(type: .download)
+    }
+    
+    func testBatchPhoneNumberParsing() throws {
+        let unparsed = [
+            CNLabeledValue<CNPhoneNumber>(label: "primary", value: CNPhoneNumber(stringValue: "(408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "blah blah")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+39 3358765433"))
+        ]
+        let parsed = SHPhoneNumberParser.sharedInstance.parse(unparsed)
+        XCTAssert(parsed.count == unparsed.count)
+        XCTAssert(parsed[0]!.e164FormattedNumber == "+14085555270")
+        XCTAssert(parsed[0]!.stringValue == "(408) 555-5270")
+        XCTAssert(parsed[0]!.label == "primary")
+        XCTAssertNil(parsed[1])
+        XCTAssert(parsed[2]!.e164FormattedNumber == "+393358765433")
+        XCTAssert(parsed[2]!.stringValue == "+39 3358765433")
+        XCTAssertNil(parsed[2]!.label)
     }
 }
 

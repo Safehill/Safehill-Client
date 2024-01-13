@@ -2,6 +2,7 @@ import Foundation
 import KnowledgeBase
 import Safehill_Crypto
 import CryptoKit
+import PhoneNumberKit
 
 public class SHNetwork {
     public static let shared = SHNetwork()
@@ -261,8 +262,8 @@ struct SHServerHTTPAPI : SHServerAPI {
         )
     }
     
-    func createUser(name: String,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
+    func createOrUpdateUser(name: String,
+                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         let parameters = [
             "identifier": requestor.identifier,
             "publicKey": requestor.publicKeyData.base64EncodedString(),
@@ -301,22 +302,18 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func updateUser(name: String?,
-                    phoneNumber: String? = nil,
-                    email: String? = nil,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ()) {
-        guard email != nil || name != nil || phoneNumber != nil else {
+                    phoneNumber: SHPhoneNumber? = nil,
+                    completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
         var parameters = [String : Any]()
-        if let email = email {
-            parameters["email"] = email
-        }
         if let name = name {
             parameters["name"] = name
         }
         if let phoneNumber = phoneNumber {
-            parameters["phoneNumber"] = phoneNumber
+            parameters["phoneNumber"] = phoneNumber.hashedPhoneNumber
         }
         self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {
@@ -329,7 +326,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.post("users/safe_delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+        self.post("users/safe-delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 return completionHandler(.success(()))
@@ -428,7 +425,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+    func getUsers(withIdentifiers userIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         let parameters = [
             "userIdentifiers": userIdentifiers ?? []
         ] as [String : Any]
@@ -442,7 +439,21 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
+        let parameters = [
+            "phoneNumbers": hashedPhoneNumbers
+        ] as [String : Any]
+        self.post("users/retrieve/phone-number", parameters: parameters) { (result: Result<UsersByPhoneNumberResponseDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                return completionHandler(.success(dto.result))
+            case .failure(let error):
+                return completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         let parameters = [
             "query": query,
             "page": "1",
@@ -624,6 +635,31 @@ struct SHServerHTTPAPI : SHServerAPI {
                 completionHandler(.success(()))
             case .failure(let err):
                 completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func add(phoneNumbers: [SHPhoneNumber],
+             to groupId: String,
+             completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        
+        let phoneNumberKit = PhoneNumberKit()
+        let numbers = phoneNumberKit.parse(phoneNumbers.map({ $0.e164FormattedNumber }))
+        
+        let parameters: [String: Any?] = [
+            "recipientPhoneNumbers": [
+                numbers.map({
+                    ["countryCode": Int($0.countryCode), "phoneNumber": Int($0.nationalNumber)]
+                })
+            ]
+        ]
+        
+        self.post("/groups/\(groupId)/add-phone-numbers", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
             }
         }
     }

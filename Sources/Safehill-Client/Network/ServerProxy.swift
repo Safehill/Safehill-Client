@@ -1,6 +1,6 @@
 import Foundation
 import Yams
-
+import Contacts
 
 public protocol SHServerProxyProtocol {
     init(user: SHLocalUser)
@@ -74,7 +74,7 @@ public struct SHServerProxy: SHServerProxyProtocol {
 // MARK: - Migrations
 extension SHServerProxy {
     
-    public func runLocalMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func runLocalMigrations(completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.runDataMigrations(completionHandler: completionHandler)
     }
     
@@ -85,11 +85,18 @@ extension SHServerProxy {
 extension SHServerProxy {
     
     public func createUser(name: String,
-                           completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.createUser(name: name) { result in
+                           completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        self.localServer.createOrUpdateUser(name: name) { result in
             switch result {
-            case .success(_):
-                self.remoteServer.createUser(name: name, completionHandler: completionHandler)
+            case .success(let localUser):
+                self.remoteServer.createOrUpdateUser(name: name) { result in
+                    switch result {
+                    case .success:
+                        completionHandler(.success(localUser))
+                    case .failure(let failure):
+                        completionHandler(.failure(failure))
+                    }
+                }
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -100,34 +107,93 @@ extension SHServerProxy {
                                phoneNumber: Int,
                                code: String,
                                medium: SendCodeToUserRequestDTO.Medium,
-                               completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        self.remoteServer.sendCodeToUser(countryCode: countryCode, phoneNumber: phoneNumber, code: code, medium: medium, completionHandler: completionHandler)
+                               completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.remoteServer.sendCodeToUser(
+            countryCode: countryCode,
+            phoneNumber: phoneNumber,
+            code: code,
+            medium: medium,
+            completionHandler: completionHandler
+        )
     }
     
-    public func updateUser(email: String? = nil,
-                           phoneNumber: String? = nil,
+    public func updateUser(phoneNumber: SHPhoneNumber? = nil,
                            name: String? = nil,
-                           completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.updateUser(name: name, phoneNumber: phoneNumber, email: email) { result in
+                           completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        self.remoteServer.updateUser(name: name, phoneNumber: phoneNumber) { result in
             switch result {
             case .success(_):
-                self.remoteServer.updateUser(name: name, phoneNumber: phoneNumber, email: email, completionHandler: completionHandler)
+                self.localServer.updateUser(name: name, phoneNumber: phoneNumber, completionHandler: completionHandler)
             case .failure(let err):
                 completionHandler(.failure(err))
             }
         }
     }
     
-    public func updateLocalUser(with serverUser: SHServerUser,
-                                completionHandler: @escaping (Swift.Result<SHServerUser, Error>) -> ()) {
-        self.localServer.updateUser(name: serverUser.name, completionHandler: completionHandler)
+    public func updateLocalUser(name: String,
+                                completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        self.localServer.updateUser(name: name, completionHandler: completionHandler)
     }
     
-    public func signIn(clientBuild: Int?, completionHandler: @escaping (Swift.Result<SHAuthResponse, Error>) -> ()) {
+    internal func updateLocalUser(_ user: SHRemoteUser,
+                                  phoneNumber: SHPhoneNumber,
+                                  linkedSystemContact: CNContact,
+                                  completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.update(user: user, 
+                                phoneNumber: phoneNumber,
+                                linkedSystemContact: linkedSystemContact,
+                                completionHandler: completionHandler)
+    }
+    
+    internal func removeLinkedSystemContact(from users: [SHRemoteUserLinkedToContact],
+                                            completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.removeLinkedSystemContact(from: users, completionHandler: completionHandler)
+    }
+    
+    public func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         self.remoteServer.signIn(clientBuild: clientBuild, completionHandler: completionHandler)
     }
     
-    public func getUsers(withIdentifiers userIdentifiersToFetch: [String]?, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
+    internal func getAllLocalUsers(completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
+        self.localServer.getAllLocalUsers(completionHandler: completionHandler)
+    }
+    
+    private func updateLocalUserDB(
+        remoteServerUsers serverUsers: [any SHServerUser],
+        completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
+    ) {
+        let group = DispatchGroup()
+        
+        for (i, serverUserChunk) in serverUsers.chunked(into: 5).enumerated() {
+            for serverUser in serverUserChunk {
+                group.enter()
+                self.localServer.createOrUpdateUser(
+                    identifier: serverUser.identifier,
+                    name: serverUser.name,
+                    publicKeyData: serverUser.publicKeyData,
+                    publicSignatureData: serverUser.publicSignatureData
+                ) { result in
+                    if case .failure(let failure) = result {
+                        log.error("failed to create server user in local server: \(failure.localizedDescription)")
+                    }
+                    group.leave()
+                }
+            }
+            if serverUserChunk.count > 0, i < serverUserChunk.count {
+                usleep(useconds_t(10 * 1000)) // sleep 10ms
+            }
+        }
+        
+        guard group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * serverUsers.count)) == .success else {
+            completionHandler(.success(serverUsers))
+            return
+        }
+        
+        self.localServer.getUsers(withIdentifiers: serverUsers.map({ $0.identifier }),
+                                  completionHandler: completionHandler)
+    }
+    
+    public func getUsers(withIdentifiers userIdentifiersToFetch: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         guard userIdentifiersToFetch == nil || userIdentifiersToFetch!.count > 0 else {
             return completionHandler(.success([]))
         }
@@ -135,19 +201,11 @@ extension SHServerProxy {
         self.remoteServer.getUsers(withIdentifiers: userIdentifiersToFetch) { result in
             switch result {
             case .success(let serverUsers):
-                completionHandler(.success(serverUsers))
-                for serverUser in serverUsers {
-                    self.localServer.createUser(identifier: serverUser.identifier,
-                                                name: serverUser.name,
-                                                publicKeyData: serverUser.publicKeyData,
-                                                publicSignatureData: serverUser.publicSignatureData) { result in
-                        if case .failure(let failure) = result {
-                            log.error("failed to create server user in local server: \(failure.localizedDescription)")
-                        }
-                    }
-                }
+                self.updateLocalUserDB(remoteServerUsers: serverUsers, completionHandler: completionHandler)
             case .failure(let error):
-                // If can't get from the server try to get them from the local cache
+                /// 
+                /// If can't get from the server try to get them from the local cache
+                ///
                 self.localServer.getUsers(withIdentifiers: userIdentifiersToFetch) { localResult in
                     switch localResult {
                     case .success(let serverUsers):
@@ -155,6 +213,9 @@ extension SHServerProxy {
                            serverUsers.count == userIdentifiersToFetch!.count {
                             completionHandler(localResult)
                         } else {
+                            ///
+                            /// If you can't get them all throw an error
+                            ///
                             completionHandler(.failure(error))
                         }
                     case .failure(_):
@@ -165,31 +226,39 @@ extension SHServerProxy {
         }
     }
     
-    public func searchUsers(query: String, completionHandler: @escaping (Swift.Result<[SHServerUser], Error>) -> ()) {
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
+        self.remoteServer.getUsers(withHashedPhoneNumbers: hashedPhoneNumbers, completionHandler: completionHandler)
+    }
+    
+    public func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         self.remoteServer.searchUsers(query: query, completionHandler: completionHandler)
     }
     
     /// Fetch the local user details. If fails fall back to local cache if the server is unreachable or the token is expired
     /// - Parameters:
     ///   - completionHandler: the callback method
-    public func fetchUserAccount(completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
+    public func fetchUserAccount(completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
         self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                if let serverUser = users.first {
-                    self.localServer.createUser(identifier: serverUser.identifier,
-                                                name: serverUser.name,
-                                                publicKeyData: serverUser.publicKeyData,
-                                                publicSignatureData: serverUser.publicSignatureData) { result in
-                        if case .failure(let failure) = result {
-                            log.error("failed to this user's server user in local server: \(failure.localizedDescription)")
-                        }
+                guard users.count > 0 else {
+                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                    return
+                }
+                self.updateLocalUserDB(remoteServerUsers: users) { result in
+                    switch result {
+                    case .failure(let failure):
+                        log.error("failed to store this user's server user in local server: \(failure.localizedDescription)")
+                        completionHandler(.success(users.first))
+                    case .success(let localUsers):
+                        completionHandler(.success(localUsers.first))
                     }
                 }
-                completionHandler(.success(users.first))
             case .failure(let err):
                 if err is URLError || err is SHHTTPError.TransportError {
-                    // Can't connect to the server, get details from local cache
+                    /// 
+                    /// Can't connect to the server, get details from local cache
+                    ///
                     print("Failed to get user details from server. Using local cache\n \(err)")
                     self.fetchLocalUserAccount(originalServerError: err,
                                                completionHandler: completionHandler)
@@ -200,23 +269,23 @@ extension SHServerProxy {
         }
     }
     
-    public func fetchLocalUserAccount(originalServerError: Error? = nil,
-                                      completionHandler: @escaping (Swift.Result<SHServerUser?, Error>) -> ()) {
+    private func fetchLocalUserAccount(originalServerError: Error? = nil,
+                                      completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
         self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                if users.count == 0 {
+                guard users.count > 0 else {
                     completionHandler(.failure(SHHTTPError.ClientError.notFound))
-                } else {
-                    completionHandler(.success(users.first))
+                    return
                 }
+                completionHandler(.success(users.first))
             case .failure(let err):
                 completionHandler(.failure(originalServerError ?? err))
             }
         }
     }
     
-    public func deleteAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.deleteAccount { result in
             if case .failure(let err) = result {
                 completionHandler(.failure(err))
@@ -226,7 +295,7 @@ extension SHServerProxy {
         }
     }
     
-    public func deleteAccount(name: String, password: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.deleteAccount(name: name, password: password) { result in
             if case .failure(let err) = result {
                 completionHandler(.failure(err))
@@ -236,11 +305,11 @@ extension SHServerProxy {
         }
     }
     
-    public func deleteLocalAccount(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func deleteLocalAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.deleteAccount(completionHandler: completionHandler)
     }
     
-    public func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.registerDevice(deviceName, token: token, completionHandler: completionHandler)
     }
 }
@@ -248,7 +317,7 @@ extension SHServerProxy {
 // MARK: - Assets
 extension SHServerProxy {
     
-    func getLocalAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+    func getLocalAssetDescriptors(completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
         self.localServer.getAssetDescriptors { result in
             switch result {
             case .failure(let err):
@@ -271,7 +340,7 @@ extension SHServerProxy {
     
     /// Get all visible asset descriptors to this user. Fall back to local descriptor if server is unreachable
     /// - Parameter completionHandler: the callback method
-    func getRemoteAssetDescriptors(completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
+    func getRemoteAssetDescriptors(completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
         
         self.remoteServer.getAssetDescriptors { serverResult in
             switch serverResult {
@@ -428,7 +497,7 @@ extension SHServerProxy {
     func getLocalAssets(withGlobalIdentifiers assetIdentifiers: [String],
                         versions: [SHAssetQuality],
                         cacheHiResolution: Bool,
-                        completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+                        completionHandler: @escaping (Result<[String: any SHEncryptedAsset], Error>) -> ()) {
         var versionsToRetrieve = Set(versions)
         
         ///
@@ -514,11 +583,11 @@ extension SHServerProxy {
     /// - Parameters:
     ///   - assetIdentifiers: the global asset identifiers to retrieve
     ///   - versions: filter asset version (retrieve just the low res asset or the hi res asset, for instance)
-    ///   - completionHandler: the callback, returning the SHEncryptedAsset objects keyed by asset identifier. Note that the output object might not have the same number of assets requested, as some of them might be deleted on the server
+    ///   - completionHandler: the callback, returning the `SHEncryptedAsset` objects keyed by asset identifier. Note that the output object might not have the same number of assets requested, as some of them might be deleted on the server
     ///
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality],
-                   completionHandler: @escaping (Swift.Result<[String: SHEncryptedAsset], Error>) -> ()) {
+                   completionHandler: @escaping (Result<[String: any SHEncryptedAsset], Error>) -> ()) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
             return
@@ -683,7 +752,7 @@ extension SHServerProxy {
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
                 filterVersions: [SHAssetQuality]? = nil,
-                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions) { result in
             switch result {
             case .success():
@@ -716,12 +785,12 @@ extension SHServerProxy {
         }
     }
     
-    public func deleteAllLocalAssets(completionHandler: @escaping (Swift.Result<[String], Error>) -> ()) {
+    public func deleteAllLocalAssets(completionHandler: @escaping (Result<[String], Error>) -> ()) {
         self.localServer.deleteAllAssets(completionHandler: completionHandler)
     }
     
     func shareAssetLocally(_ asset: SHShareableEncryptedAsset,
-                           completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+                           completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.share(asset: asset) {
             result in
             switch result {
@@ -734,13 +803,13 @@ extension SHServerProxy {
     }
     
     func getLocalSharingInfo(forAssetIdentifier globalIdentifier: String,
-                             for users: [SHServerUser],
-                             completionHandler: @escaping (Swift.Result<SHShareableEncryptedAsset?, Error>) -> ()) {
+                             for users: [any SHServerUser],
+                             completionHandler: @escaping (Result<SHShareableEncryptedAsset?, Error>) -> ()) {
         self.localServer.getSharingInfo(forAssetIdentifier: globalIdentifier, for: users, completionHandler: completionHandler)
     }
     
     func share(_ asset: SHShareableEncryptedAsset,
-               completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+               completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.share(asset: asset, completionHandler: completionHandler)
     }
     

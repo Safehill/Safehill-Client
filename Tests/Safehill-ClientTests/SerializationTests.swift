@@ -3,6 +3,7 @@ import XCTest
 @testable import Safehill_Crypto
 import CryptoKit
 import KnowledgeBase
+import Contacts
 
 final class Safehill_SerializationTests: XCTestCase {
     
@@ -147,7 +148,7 @@ final class Safehill_SerializationTests: XCTestCase {
         for queueItem in queueItems {
             let data = try NSKeyedArchiver.archivedData(withRootObject: queueItem, requiringSecureCoding: true)
             
-            let unarchiver: NSKeyedUnarchiver = NSKeyedUnarchiver(forReadingWith: data)
+            let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
             let deserialized = unarchiver.decodeObject(of: SHLocalFetchRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey)
             
             guard let deserialized = deserialized else {
@@ -164,6 +165,118 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
             XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
             XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)
+        }
+    }
+    
+    func testSerializeSHAddressBookContact() throws {
+        
+        let expectation = expectation(description: "afterClearingCaches")
+        
+        let contact = CNMutableContact()
+        contact.givenName = "Jimmy"
+        contact.familyName = "Claus"
+        contact.phoneNumbers = [
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "(408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+1 (408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "335 8765433")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+39 3358765433")),
+        ]
+        
+        let abContact = SHAddressBookContact.fromCNContact(contact: contact)
+        
+        SHPhoneNumberParser.sharedInstance.invalidateCaches { result in
+            guard case .success(_) = result else {
+                XCTFail()
+                return
+            }
+            
+            for _ in 1...4 {
+                do {
+                    let data = try NSKeyedArchiver.archivedData(withRootObject: abContact, requiringSecureCoding: true)
+                    
+                    let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+                    let deserialized = unarchiver.decodeObject(of: SHAddressBookContact.self, forKey: NSKeyedArchiveRootObjectKey)
+                    
+                    guard let deserialized = deserialized else {
+                        XCTFail()
+                        return
+                    }
+                    
+                    XCTAssertEqual(abContact.id, deserialized.id)
+                    XCTAssertEqual(abContact.fullName(), deserialized.fullName())
+                    
+                    let originalPPNs = abContact.phoneNumbers
+                    let deserializedPPNs = deserialized.phoneNumbers
+                    
+                    XCTAssertEqual(originalPPNs.count, 4)
+                    XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
+                    
+                    for (index, number) in originalPPNs.enumerated() {
+                        let deserializedNumber = deserializedPPNs[index]
+                        XCTAssertEqual(number.label, deserializedNumber.label)
+                        XCTAssertEqual(number.e164FormattedNumber, deserializedNumber.e164FormattedNumber)
+                    }
+                    
+                } catch {
+                    XCTFail()
+                }
+            }
+            
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 2)
+    }
+    
+    func testSerializeSHAddressBookContactList() throws {
+        let contact1 = CNMutableContact()
+        contact1.givenName = "Jimmy"
+        contact1.familyName = "Claus"
+        contact1.phoneNumbers = [
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "(408) 555-5270")),
+            CNLabeledValue<CNPhoneNumber>(label: "primary", value: CNPhoneNumber(stringValue: "335 8765433")),
+            CNLabeledValue<CNPhoneNumber>(label: nil, value: CNPhoneNumber(stringValue: "+39 3358765433")),
+        ]
+        
+        let abContact1 = SHAddressBookContact.fromCNContact(contact: contact1)
+        
+        let contact2 = CNMutableContact()
+        contact2.givenName = "Santa"
+        contact2.phoneNumbers = [
+            CNLabeledValue<CNPhoneNumber>(label: "phone", value: CNPhoneNumber(stringValue: "+39 3358765433")),
+        ]
+        
+        let abContact2 = SHAddressBookContact.fromCNContact(contact: contact2)
+        
+        let abContactList = [abContact1, abContact2]
+        let data = try NSKeyedArchiver.archivedData(withRootObject: abContactList, requiringSecureCoding: true)
+        
+        let deserializedList = try NSKeyedUnarchiver.unarchivedObject(
+            ofClasses: [NSArray.self, SHAddressBookContact.self],
+            from: data
+        )
+        
+        guard let deserializedList = deserializedList as? [SHAddressBookContact] else {
+            XCTFail()
+            return
+        }
+        
+        for (index, deserialized) in deserializedList.enumerated() {
+            let abContact = abContactList[index]
+            
+            XCTAssertEqual(abContact.id, deserialized.id)
+            XCTAssertEqual(abContact.fullName(), deserialized.fullName())
+            
+            let originalPPNs = abContact.phoneNumbers
+            let deserializedPPNs = deserialized.phoneNumbers
+            
+            XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
+            
+            for (index, number) in originalPPNs.enumerated() {
+                let deserializedNumber = deserializedPPNs[index]
+                XCTAssertEqual(number.label, deserializedNumber.label)
+                XCTAssertEqual(number.e164FormattedNumber, deserializedNumber.e164FormattedNumber)
+            }
         }
     }
 }

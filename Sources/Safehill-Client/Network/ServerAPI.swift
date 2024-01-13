@@ -10,8 +10,8 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - name  the user name
     ///   - completionHandler: the callback method
-    func createUser(name: String,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
+    func createOrUpdateUser(name: String,
+                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ())
     
     /// Send a code to a user to verify identity, via either phone or SMS
     /// - Parameters:
@@ -30,12 +30,10 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - name  the new name
     ///   - phoneNumber  the new phone number
-    ///   - email  the new email
     ///   - completionHandler: the callback method
     func updateUser(name: String?,
-                    phoneNumber: String?,
-                    email: String?,
-                    completionHandler: @escaping (Result<SHServerUser, Error>) -> ())
+                    phoneNumber: SHPhoneNumber?,
+                    completionHandler: @escaping (Result<any SHServerUser, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information
     /// - Parameters:
@@ -56,13 +54,20 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - userIdentifiers: the unique identifiers for the users. If NULL, retrieves all the connected users
     ///   - completionHandler: the callback method
-    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
+    func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
+
+    /// Get a list of verified users given a list of phone numbers.
+    /// Used to determine who - from the user's address book - is a Safehill user
+    /// - Parameters:
+    ///   - phoneNumbers: the list of phone numbers
+    ///   - completionHandler: the callback method 
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
     ///   - query: the query string
     ///   - completionHandler: the callback method
-    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ())
+    func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
     
     // MARK: Assets Fetch
     
@@ -97,6 +102,17 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Result<Void, Error>) -> ())
+    
+    /// Adds a link between a share group and a set of phone numbers on the server.
+    /// This makes sure that once a new user is registered with that phone number, the sender
+    /// can get notified about encrypting and sharing with that new user
+    /// - Parameters:
+    ///   - phoneNumbers: the set of phone numbers
+    ///   - groupId: the groupId of the share
+    ///   - completionHandler: the callback method
+    func add(phoneNumbers: [SHPhoneNumber],
+             to groupId: String,
+             completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Unshares one asset (all of its versions) with a user. If the asset or the user don't exist, or the asset is not shared with the user, it's a no-op
     /// - Parameters:
