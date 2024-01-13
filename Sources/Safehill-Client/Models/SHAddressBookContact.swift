@@ -44,7 +44,7 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
 
     public let systemContact: CNContact
     
-    public var verifiedPhoneNumbers: [SHPhoneNumber] {
+    public var formattedPhoneNumbers: [SHPhoneNumber] {
         return SHPhoneNumberParser.sharedInstance.parse(systemContact.phoneNumbers).compactMap({ $0 })
     }
 

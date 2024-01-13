@@ -2,7 +2,6 @@ import Foundation
 import KnowledgeBase
 import Safehill_Crypto
 import CryptoKit
-import PhoneNumberKit
 
 public class SHNetwork {
     public static let shared = SHNetwork()
@@ -642,15 +641,8 @@ struct SHServerHTTPAPI : SHServerAPI {
     func add(phoneNumbers: [SHPhoneNumber],
              to groupId: String,
              completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let phoneNumberKit = PhoneNumberKit()
-        let numbers = phoneNumberKit.parse(phoneNumbers.map({ $0.e164FormattedNumber }))
-        
         let parameters: [String: Any?] = [
-            "recipientPhoneNumbers": [
-                numbers.map({
-                    ["countryCode": Int($0.countryCode), "phoneNumber": Int($0.nationalNumber)]
-                })
-            ]
+            "recipientPhoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
         ]
         
         self.post("/groups/\(groupId)/add-phone-numbers", parameters: parameters) { (result: Result<NoReply, Error>) in

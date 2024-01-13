@@ -173,7 +173,7 @@ public class SHAddressBookContactHandler {
         for allSystemContactChunk in systemContacts.chunked(into: 500) {
             /// Calculate the hashed phone numbers once and key phone numbers by hash
             let allParsedNumbersByHash = allSystemContactChunk
-                .flatMap { $0.verifiedPhoneNumbers }
+                .flatMap { $0.formattedPhoneNumbers }
                 .reduce([String: SHPhoneNumber]()) {
                     (partialResult: [String: SHPhoneNumber], phoneNumber: SHPhoneNumber) in
                     var result = partialResult
@@ -195,7 +195,7 @@ public class SHAddressBookContactHandler {
                         .reduce([SHPhoneNumber: SHAddressBookContact]()) {
                             (partialResult: [SHPhoneNumber: SHAddressBookContact], contact: SHAddressBookContact) in
                             var result = partialResult
-                            for parsedPhoneNumber in contact.verifiedPhoneNumbers {
+                            for parsedPhoneNumber in contact.formattedPhoneNumbers {
                                 result[parsedPhoneNumber] = contact
                             }
                             return result
