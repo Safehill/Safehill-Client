@@ -340,9 +340,11 @@ extension SHServerProxy {
     
     /// Get all visible asset descriptors to this user. Fall back to local descriptor if server is unreachable
     /// - Parameter completionHandler: the callback method
-    func getRemoteAssetDescriptors(completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
-        
-        self.remoteServer.getAssetDescriptors { serverResult in
+    func getRemoteAssetDescriptors(
+        for globalIdentifiers: [GlobalIdentifier]? = nil,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
+        self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: globalIdentifiers) { serverResult in
             switch serverResult {
             case .failure(let serverError):
                 completionHandler(.failure(serverError))
