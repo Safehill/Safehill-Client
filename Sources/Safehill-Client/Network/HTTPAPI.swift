@@ -838,14 +838,14 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveGroupUserEncryptionDetails(
         forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.get("groups/\(groupId)/encryptionDetails", parameters: nil, requiresAuthentication: true) { (result: Result<[RecipientEncryptionDetailsDTO], Error>) in
+        self.get("groups/\(groupId)/encryptionDetails", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
             switch result {
             case .failure(let error as SHHTTPError.ClientError):
                 switch error {
-                case .unauthorized:
-                    completionHandler(.success([]))
+                case .notFound:
+                    completionHandler(.success(nil))
                 default:
                     completionHandler(.failure(error))
                 }

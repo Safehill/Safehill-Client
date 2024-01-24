@@ -52,16 +52,12 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func retrieveSelfGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
         self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { result in
             switch result {
-            case .success(let array):
-                completionHandler(.success(array.first))
+            case .success(let details):
+                completionHandler(.success(details))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
         }
-    }
-    
-    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
-        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
     
     func deleteGroup(groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {

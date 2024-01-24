@@ -186,7 +186,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func retrieveGroupUserEncryptionDetails(
         forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
     /// Adds reactions to a share (group)

@@ -46,11 +46,6 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
-    func retrieveGroupUserEncryptionDetails(
-        forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
-    )
-    
     func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
@@ -824,13 +819,14 @@ extension SHServerProxy {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        /// Save the encryption details for this user
+        /// Save the encryption details for this user on local
         self.localServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails
         ) { localResult in
             switch localResult {
             case .success(_):
+                /// Save the encryption details for all users on server
                 self.remoteServer.setGroupEncryptionDetails(
                     groupId: groupId,
                     recipientsEncryptionDetails: recipientsEncryptionDetails,
@@ -862,18 +858,24 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
         self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
-            if case .success(let details) = localE2EEResult, details.count > 0 {
-                completionHandler(.success(details.first))
+            if case .success(let localSelfDetails) = localE2EEResult, let localSelfDetails {
+                completionHandler(.success(localSelfDetails))
             } else {
                 if case .failure(let error) = localE2EEResult {
                     log.warning("failed to retrieve <SELF> E2EE details for group \(groupId) from local: \(error.localizedDescription)")
                 }
                 self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
                     switch remoteE2EEResult {
-                    case .success(let details):
-                        self.localServer.setGroupEncryptionDetails(groupId: groupId, recipientsEncryptionDetails: details) { _ in }
-                        let response = details.first(where: { $0.userIdentifier == self.localServer.requestor.identifier })
-                        completionHandler(.success(response))
+                    case .success(let remoteSelfDetails):
+                        if let remoteSelfDetails {
+                            self.localServer.setGroupEncryptionDetails(
+                                groupId: groupId,
+                                recipientsEncryptionDetails: [remoteSelfDetails]
+                            ) { _ in
+                                completionHandler(.success(remoteSelfDetails))
+                            }
+                        }
+                        completionHandler(.success(nil))
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }
@@ -884,7 +886,7 @@ extension SHServerProxy {
     
     public func retrieveGroupUserEncryptionDetails(
         forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
         // TODO: Cache these results and always serve from the cache
         

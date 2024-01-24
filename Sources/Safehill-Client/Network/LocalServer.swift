@@ -1326,6 +1326,12 @@ struct LocalServer : SHServerAPI {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        guard let selfEncryptionDetails = recipientsEncryptionDetails.first(where: { $0.userIdentifier == self.requestor.identifier })
+        else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("encryption details don't match the requestor")))
+            return
+        }
+        
         let assetStore: KBKVStore
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
@@ -1336,15 +1342,9 @@ struct LocalServer : SHServerAPI {
         
         let writeBatch = assetStore.writeBatch()
         
-        for recipientsEncryptionDetail in recipientsEncryptionDetails {
-            guard recipientsEncryptionDetail.userIdentifier == self.requestor.identifier else {
-                continue
-            }
-            
-            writeBatch.set(value: recipientsEncryptionDetail.encryptedSecret, for: "\(groupId)::encryptedSecret")
-            writeBatch.set(value: recipientsEncryptionDetail.ephemeralPublicKey, for: "\(groupId)::ephemeralPublicKey")
-            writeBatch.set(value: recipientsEncryptionDetail.secretPublicSignature, for: "\(groupId)::secretPublicSignature")
-        }
+        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(groupId)::encryptedSecret")
+        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(groupId)::ephemeralPublicKey")
+        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(groupId)::secretPublicSignature")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -1388,7 +1388,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()) {
+    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
         let assetStore: KBKVStore
         do {
             assetStore = try SHDBManager.sharedInstance.assetStore()
@@ -1411,7 +1411,7 @@ struct LocalServer : SHServerAPI {
             switch result {
             case .success(let keyValues):
                 guard keyValues.count > 0 else {
-                    completionHandler(.success([]))
+                    completionHandler(.success(nil))
                     return
                 }
                 
@@ -1439,7 +1439,7 @@ struct LocalServer : SHServerAPI {
                     completionHandler(.failure(KBError.unexpectedData(keyValues)))
                     return
                 }
-                completionHandler(.success([encryptionDetails]))
+                completionHandler(.success(encryptionDetails))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -1615,7 +1615,7 @@ struct LocalServer : SHServerAPI {
             case .failure(let err):
                 completionHandler(.failure(err))
             case .success(let e2eeResult):
-                guard let encryptionDetails = e2eeResult.first else {
+                guard let encryptionDetails = e2eeResult else {
                     completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(groupId)))
                     return
                 }
