@@ -1,9 +1,9 @@
 import Foundation
 
 public struct ConversationThreadOutputDTO: Codable {
-    let threadId: String
-    let name: String?
-    let membersPublicIdentifier: [String]
-    let lastUpdatedAt: Date?
-    let encryptionDetails: RecipientEncryptionDetailsDTO // for the user making the request
+    public let threadId: String
+    public let name: String?
+    public let membersPublicIdentifier: [String]
+    public let lastUpdatedAt: Date?
+    public let encryptionDetails: RecipientEncryptionDetailsDTO // for the user making the request
 }
