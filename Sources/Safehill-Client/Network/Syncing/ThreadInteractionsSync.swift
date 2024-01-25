@@ -29,8 +29,8 @@ extension SHSyncOperation {
             dispatchGroup.leave()
         }
         
-        var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
+        let dispatchResult1 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult1 == .success else {
             log.error("[sync] timeout while getting all threads")
             completionHandler(.failure(SHBackgroundOperationError.timedOut))
             return
@@ -40,6 +40,8 @@ extension SHSyncOperation {
             completionHandler(.failure(error!))
             return
         }
+        
+        self.delegates.forEach({ $0.didUpdateThreadsList(allThreads) })
         
         ///
         /// For each thread …
@@ -95,8 +97,8 @@ extension SHSyncOperation {
                 dispatchGroup.leave()
             }
             
-            var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-            guard dispatchResult == .success else {
+            let dispatchResult2 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+            guard dispatchResult2 == .success else {
                 completionHandler(.failure(SHBackgroundOperationError.timedOut))
                 return
             }
@@ -114,13 +116,6 @@ extension SHSyncOperation {
             ///
             
             if shouldCreateE2EEDetailsLocally {
-                let recipientEncryptionDetails = RecipientEncryptionDetailsDTO(
-                    userIdentifier: self.user.identifier,
-                    ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
-                    encryptedSecret: remoteInteractions.encryptedSecret,
-                    secretPublicSignature: remoteInteractions.secretPublicSignature
-                )
-                
                 dispatchGroup.enter()
                 serverProxy.localServer.createThread(
                     threadId: thread.threadId,
@@ -137,8 +132,8 @@ extension SHSyncOperation {
                 }
             }
             
-            dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            if dispatchResult != .success {
+            let dispatchResult3 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+            if dispatchResult3 != .success {
                 log.warning("timeout while setting E2EE details for thread \(thread.threadId)")
             }
             
