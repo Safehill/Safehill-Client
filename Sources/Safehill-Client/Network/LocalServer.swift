@@ -1323,6 +1323,7 @@ struct LocalServer : SHServerAPI {
     
     func createThread(
         name: String?,
+        lastUpdatedAt: Date,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
@@ -1332,6 +1333,7 @@ struct LocalServer : SHServerAPI {
     func createThread(
         threadId: String,
         name: String?,
+        lastUpdatedAt: Date,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
@@ -1355,6 +1357,11 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
         writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature")
         
+        if let name {
+            writeBatch.set(value: name, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::name")
+        }
+        writeBatch.set(value: lastUpdatedAt.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt")
+        
         writeBatch.write { result in
             if case .failure(let error) = result {
                 completionHandler(.failure(error))
@@ -1365,6 +1372,7 @@ struct LocalServer : SHServerAPI {
                 threadId: threadId,
                 name: name,
                 membersPublicIdentifier: recipientsEncryptionDetails.map({ $0.userIdentifier }),
+                lastUpdatedAt: Date(),
                 encryptionDetails: RecipientEncryptionDetailsDTO(
                     userIdentifier: selfEncryptionDetails.userIdentifier,
                     ephemeralPublicKey: selfEncryptionDetails.ephemeralPublicKey,
@@ -1409,6 +1417,7 @@ struct LocalServer : SHServerAPI {
             
             let threadId = components[1]
             var name: String? = nil
+            var lastUpdatedAt: Date? = nil
             var encryptedSecret: String? = nil
             var ephemeralPublicKey: String? = nil
             var secretPublicSignature: String? = nil
@@ -1422,6 +1431,10 @@ struct LocalServer : SHServerAPI {
                 secretPublicSignature = value as? String
             case "name":
                 name = value as? String
+            case "lastUpdatedAt":
+                if let lastUpdatedInterval = value as? Double {
+                    lastUpdatedAt = Date(timeIntervalSince1970: lastUpdatedInterval)
+                }
             default:
                 break
             }
@@ -1432,6 +1445,7 @@ struct LocalServer : SHServerAPI {
                     threadId: threadId,
                     name: name,
                     membersPublicIdentifier: [],
+                    lastUpdatedAt: lastUpdatedAt,
                     encryptionDetails: RecipientEncryptionDetailsDTO(
                         userIdentifier: self.requestor.identifier,
                         ephemeralPublicKey: ephemeralPublicKey,
@@ -1480,9 +1494,9 @@ struct LocalServer : SHServerAPI {
         groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        let assetStore: KBKVStore
+        let userStore: KBKVStore
         do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
+            userStore = try SHDBManager.sharedInstance.userStore()
         } catch {
             completionHandler(.failure(error))
             return
@@ -1505,8 +1519,8 @@ struct LocalServer : SHServerAPI {
         }
         
         do {
-            let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
-            let _ = try assetStore.removeValues(forKeysMatching: condition)
+            let condition = KBGenericCondition(.beginsWith, value: "\(InteractionAnchor.group.rawValue)::\(groupId)::")
+            let _ = try userStore.removeValues(forKeysMatching: condition)
             let _ = try reactionStore.removeValues(forKeysMatching: condition)
             let _ = try messagesStore.removeValues(forKeysMatching: condition)
             completionHandler(.success(()))
@@ -1526,15 +1540,45 @@ struct LocalServer : SHServerAPI {
         )
     }
     
-    func retrieveUserEncryptionDetails(
-        forThread threadId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         self.retrieveUserEncryptionDetails(
             anchorType: .thread,
-            anchorId: threadId,
-            completionHandler: completionHandler
-        )
+            anchorId: threadId
+        ) { e2eeResult in
+            switch e2eeResult {
+            case .failure(let err):
+                completionHandler(.failure(err))
+            case .success(let encryptionDetails):
+                guard let encryptionDetails else {
+                    completionHandler(.success(nil))
+                    return
+                }
+                
+                let userStore: KBKVStore
+                do {
+                    userStore = try SHDBManager.sharedInstance.userStore()
+                    
+                    let threadName = try userStore.value(for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::name") as? String
+                    let threadLastUpdated = try userStore.value(for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt") as? Double
+                    let lastUpdatedAt = threadLastUpdated == nil ? Date() : Date(timeIntervalSince1970: threadLastUpdated!)
+                    let thread = ConversationThreadOutputDTO(
+                        threadId: threadId,
+                        name: threadName,
+                        membersPublicIdentifier: [],
+                        lastUpdatedAt: lastUpdatedAt,
+                        encryptionDetails: encryptionDetails
+                    )
+                    
+                    completionHandler(.success(thread))
+                } catch {
+                    completionHandler(.failure(error))
+                    return
+                }
+            }
+        }
     }
     
     private func retrieveUserEncryptionDetails(
@@ -1542,9 +1586,9 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        let assetStore: KBKVStore
+        let userStore: KBKVStore
         do {
-            assetStore = try SHDBManager.sharedInstance.userStore()
+            userStore = try SHDBManager.sharedInstance.userStore()
         } catch {
             completionHandler(.failure(error))
             return
@@ -1560,7 +1604,7 @@ struct LocalServer : SHServerAPI {
             condition = condition.or(KBGenericCondition(.equal, value: key))
         }
         
-        assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Result<KBKVPairs, Error>) in
+        userStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Result<KBKVPairs, Error>) in
             switch result {
             case .success(let keyValues):
                 guard keyValues.count > 0 else {
@@ -1746,7 +1790,7 @@ struct LocalServer : SHServerAPI {
         
         var counts: InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]](), messages: 0)
         
-        let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+        let condition = KBGenericCondition(.beginsWith, value: "\(InteractionAnchor.group.rawValue)::\(groupId)::")
         reactionStore.dictionaryRepresentation(forKeysMatching: condition) { reactionsResult in
             switch reactionsResult {
             case .success(let reactionsKeysAndValues):

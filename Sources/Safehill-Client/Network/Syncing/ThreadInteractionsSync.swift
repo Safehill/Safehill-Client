@@ -120,6 +120,7 @@ extension SHSyncOperation {
                 serverProxy.localServer.createThread(
                     threadId: thread.threadId,
                     name: thread.name,
+                    lastUpdatedAt: thread.lastUpdatedAt!,
                     recipientsEncryptionDetails: [thread.encryptionDetails]
                 ) { threadCreateResult in
                     switch threadCreateResult {

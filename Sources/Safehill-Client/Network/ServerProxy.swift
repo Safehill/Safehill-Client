@@ -856,11 +856,13 @@ extension SHServerProxy {
     
     public func createThread(
         name: String?,
+        lastUpdatedAt: Date,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         self.remoteServer.createThread(
             name: name,
+            lastUpdatedAt: lastUpdatedAt,
             recipientsEncryptionDetails: recipientsEncryptionDetails
         ) {
             remoteResult in
@@ -869,6 +871,7 @@ extension SHServerProxy {
                 self.localServer.createThread(
                     threadId: thread.threadId,
                     name: thread.name,
+                    lastUpdatedAt: lastUpdatedAt,
                     recipientsEncryptionDetails: recipientsEncryptionDetails,
                     completionHandler: completionHandler
                 )
@@ -928,22 +931,28 @@ extension SHServerProxy {
         forThread threadId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.localServer.retrieveUserEncryptionDetails(forThread: threadId) { localE2EEResult in
-            if case .success(let localSelfDetails) = localE2EEResult, let localSelfDetails {
-                completionHandler(.success(localSelfDetails))
+        self.localServer.getThread(withId: threadId) { localResult in
+            if case .success(let localThread) = localResult, let localThread {
+                completionHandler(.success(localThread.encryptionDetails))
             } else {
-                if case .failure(let error) = localE2EEResult {
+                if case .failure(let error) = localResult {
                     log.warning("failed to retrieve <SELF> E2EE details for thread \(threadId) from local: \(error.localizedDescription)")
                 }
-                self.remoteServer.retrieveUserEncryptionDetails(forThread: threadId) { remoteE2EEResult in
-                    switch remoteE2EEResult {
-                    case .success(let remoteSelfDetails):
-                        if let remoteSelfDetails {
-                            self.localServer.createThread(threadId: threadId, name: nil, recipientsEncryptionDetails: [remoteSelfDetails]) { _ in
-                                completionHandler(.success(remoteSelfDetails))
+                self.remoteServer.getThread(withId: threadId) { remoteResult in
+                    switch remoteResult {
+                    case .success(let remoteThread):
+                        if let remoteThread {
+                            self.localServer.createThread(
+                                threadId: threadId,
+                                name: remoteThread.name,
+                                lastUpdatedAt: remoteThread.lastUpdatedAt!,
+                                recipientsEncryptionDetails: [remoteThread.encryptionDetails]
+                            ) { _ in
+                                completionHandler(.success(remoteThread.encryptionDetails))
                             }
+                        } else {
+                            completionHandler(.success(nil))
                         }
-                        completionHandler(.success(nil))
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }

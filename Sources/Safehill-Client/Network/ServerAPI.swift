@@ -177,6 +177,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method, with the threadId
     func createThread(
         name: String?,
+        lastUpdatedAt: Date,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
@@ -217,13 +218,13 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
-    /// Retrieved the E2EE details for a thread, if one exists
+    /// Retrieved the thread details, including the E2EE details, if one exists
     /// - Parameters:
-    ///   - groupId: the group identifier
+    ///   - threadId: the thread identifier
     ///   - completionHandler: the callback method
-    func retrieveUserEncryptionDetails(
-        forThread threadId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     
     /// Adds reactions to a share (group)

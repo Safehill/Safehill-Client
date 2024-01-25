@@ -795,8 +795,16 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    /// Creates a new thread
+    /// - Parameters:
+    ///   - name: the thread name, if any is provided. To update, `createThread` should be called again with a new value for name. 
+    ///
+    ///   - lastUpdatedAt: IGNORED: on the server this is calculated based on the interactions on the thread. This parameter is needed on the ServerAPI protocol because on the local server (local DB) the field needs to be stored
+    ///   - recipientsEncryptionDetails: the encryption details for all users in the thread. Locally we only store the ones for the local user
+    ///   - completionHandler: the callback, returning the value from the server
     func createThread(
         name: String?,
+        lastUpdatedAt: Date,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
@@ -892,9 +900,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func retrieveUserEncryptionDetails(
-        forThread threadId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         self.get("threads/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<ConversationThreadOutputDTO, Error>) in
             switch result {
@@ -908,7 +916,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             case .failure(let error):
                 completionHandler(.failure(error))
             case .success(let threadOutput):
-                completionHandler(.success(threadOutput.encryptionDetails))
+                completionHandler(.success(threadOutput))
             }
         }
     }
