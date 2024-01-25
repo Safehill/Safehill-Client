@@ -795,6 +795,41 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func createThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        var parameters = [
+            "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
+                return [
+                    "encryptedSecret": encryptionDetails.encryptedSecret,
+                    "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
+                    "secretPublicSignature": encryptionDetails.secretPublicSignature,
+                    "userIdentifier": encryptionDetails.userIdentifier
+                ]
+            })
+        ] as [String: Any]
+        
+        if let name {
+            parameters["name"] = name
+        }
+        
+        self.post("threads",
+                  parameters: parameters,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
+    }
+    
+    func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
+        self.get("threads",
+                 parameters: nil, 
+                 requiresAuthentication: true,
+                 completionHandler: completionHandler)
+    }
+    
     func setGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -836,7 +871,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func retrieveGroupUserEncryptionDetails(
+    func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
@@ -857,9 +892,47 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func retrieveUserEncryptionDetails(
+        forThread threadId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    ) {
+        self.get("threads/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<ConversationThreadOutputDTO, Error>) in
+            switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let threadOutput):
+                completionHandler(.success(threadOutput.encryptionDetails))
+            }
+        }
+    }
+    
     func addReactions(
         _ reactions: [ReactionInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.addReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.addReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func addReactions(
+        _ reactions: [ReactionInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         guard reactions.count == 1,
@@ -878,7 +951,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("interactions/reactions/\(groupId)",
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)/reactions",
                     parameters: parameters) { (result: Result<ReactionOutputDTO, Error>) in
             switch result {
             case .failure(let error):
@@ -891,7 +964,24 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func removeReactions(
         _ reactions: [ReactionInput],
-        fromGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.removeReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func removeReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.removeReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func removeReactions(
+        _ reactions: [ReactionInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard reactions.count == 1, let reaction = reactions.first else {
@@ -910,7 +1000,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = aGid
         }
         
-        self.delete("interactions/reactions/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.delete("interactions/\(anchorType.rawValue)/\(anchorId)/reactions", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -922,16 +1012,56 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        let parameters = [
+        self.retrieveInteractions(
+            anchorType: .group,
+            anchorId: groupId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveInteractions(
+            anchorType: .thread,
+            anchorId: threadId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func retrieveInteractions(
+        anchorType: InteractionAnchor,
+        anchorId: String,
+        underMessage refMessageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        var parameters = [
             "per": per,
             "page": page
         ] as [String: Any]
         
-        self.post("interactions/\(groupId)", 
+        if let refMessageId {
+            parameters["referencedInteractionId"] = refMessageId
+        }
+        
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)", 
                   parameters: parameters,
                   requiresAuthentication: true,
                   completionHandler: completionHandler)
@@ -939,7 +1069,24 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.addMessages(messages, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.addMessages(messages, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         guard messages.count == 1, let message = messages.first else {
@@ -959,7 +1106,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("interactions/messages/\(groupId)",
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)/messages",
                   parameters: parameters) { (result: Result<MessageOutputDTO, Error>) in
             switch result {
             case .failure(let error):

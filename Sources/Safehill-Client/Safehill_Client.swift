@@ -40,11 +40,14 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
     case missingAssetInLocalServer(String)
     case missingUnauthorizedDownloadIndexForUserId(String)
     case missingE2EEDetailsForGroup(String)
+    case missingE2EEDetailsForThread(String)
     
     public var description: String {
         switch self {
         case .missingE2EEDetailsForGroup(let groupId):
             return "no encryption details available for group \(groupId)"
+        case .missingE2EEDetailsForThread(let threadId):
+            return "no encryption details available for thread \(threadId)"
         case .missingUnauthorizedDownloadIndexForUserId(let userId):
             return "no unauthorized downloads indexed for user \(userId)"
         case .missingAssetInLocalServer(let globalIdentifier):

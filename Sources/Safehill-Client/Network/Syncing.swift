@@ -516,7 +516,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         if reactionsToUpdate.count > 0 {
             dispatchGroup.enter()
             serverProxy.localServer.addReactions(reactionsToUpdate,
-                                                 toGroupId: groupId) { addReactionsResult in
+                                                 inGroup: groupId) { addReactionsResult in
                 if case .failure(let failure) = addReactionsResult {
                     self.log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
                 } else {
@@ -528,7 +528,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         if reactionsToRemove.count > 0 {
             dispatchGroup.enter()
             serverProxy.localServer.removeReactions(reactionsToRemove,
-                                                    fromGroupId: groupId) { removeReactionsResult in
+                                                    inGroup: groupId) { removeReactionsResult in
                 if case .failure(let failure) = removeReactionsResult {
                     self.log.warning("failed to remove reactions from local. \(failure.localizedDescription)")
                 } else {
@@ -568,7 +568,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         if messagesToUpdate.count > 0 {
             dispatchGroup.enter()
             serverProxy.localServer.addMessages(messagesToUpdate,
-                                                toGroupId: groupId) { addMessagesResult in
+                                                inGroup: groupId) { addMessagesResult in
                 if case .failure(let failure) = addMessagesResult {
                     self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
                 } else {
@@ -642,6 +642,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             dispatchGroup.enter()
             self.serverProxy.retrieveRemoteInteractions(
                 inGroup: groupId,
+                underMessage: nil,
                 per: 1000, page: 1
             ) { result in
                 switch result {
@@ -664,6 +665,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             dispatchGroup.enter()
             serverProxy.retrieveInteractions(
                 inGroup: groupId,
+                underMessage: nil,
                 per: 10000, page: 1
             ) { localResult in
                 switch localResult {

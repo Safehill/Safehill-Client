@@ -1321,6 +1321,133 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(Array(removedGlobalIdentifiers)))
     }
     
+    func createThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ClientError.badRequest("Call the sister method and provide a thread identifier when storing a thread to local. This method should not be called.")))
+    }
+    
+    func createThread(
+        threadId: String,
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        guard let selfEncryptionDetails = recipientsEncryptionDetails.first(where: { $0.userIdentifier == self.requestor.identifier })
+        else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("encryption details don't match the requestor")))
+            return
+        }
+        
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let writeBatch = userStore.writeBatch()
+        
+        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret")
+        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
+        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature")
+        
+        writeBatch.write { result in
+            if case .failure(let error) = result {
+                completionHandler(.failure(error))
+                return
+            }
+            
+            let output = ConversationThreadOutputDTO(
+                threadId: threadId,
+                name: name,
+                membersPublicIdentifier: recipientsEncryptionDetails.map({ $0.userIdentifier }),
+                encryptionDetails: RecipientEncryptionDetailsDTO(
+                    userIdentifier: selfEncryptionDetails.userIdentifier,
+                    ephemeralPublicKey: selfEncryptionDetails.ephemeralPublicKey,
+                    encryptedSecret: selfEncryptionDetails.encryptedSecret,
+                    secretPublicSignature: selfEncryptionDetails.secretPublicSignature
+                )
+            )
+            completionHandler(.success(output))
+        }
+    }
+    
+    func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
+        let userStore: KBKVStore
+        do {
+            userStore = try SHDBManager.sharedInstance.userStore()
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let condition = KBGenericCondition(.beginsWith, value: "\(InteractionAnchor.thread.rawValue)::")
+        
+        let kvPairs: KBKVPairs
+        do {
+            kvPairs = try userStore
+                .dictionaryRepresentation(forKeysMatching: condition)
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let list = kvPairs.reduce([String: ConversationThreadOutputDTO](), { (partialResult, pair) in
+            let (key, value) = pair
+            
+            let components = key.components(separatedBy: "::")
+            guard components.count == 3 else {
+                log.warning("invalid key in local DB for thread: \(String(describing: key))")
+                return partialResult
+            }
+            
+            let threadId = components[1]
+            var name: String? = nil
+            var encryptedSecret: String? = nil
+            var ephemeralPublicKey: String? = nil
+            var secretPublicSignature: String? = nil
+            
+            switch components[2] {
+            case "encryptedSecret":
+                encryptedSecret = value as? String
+            case "ephemeralPublicKey":
+                ephemeralPublicKey = value as? String
+            case "secretPublicSignature":
+                secretPublicSignature = value as? String
+            case "name":
+                name = value as? String
+            default:
+                break
+            }
+            
+            var result = partialResult
+            if let encryptedSecret, let ephemeralPublicKey, let secretPublicSignature {
+                result[threadId] = ConversationThreadOutputDTO(
+                    threadId: threadId,
+                    name: name,
+                    membersPublicIdentifier: [],
+                    encryptionDetails: RecipientEncryptionDetailsDTO(
+                        userIdentifier: self.requestor.identifier,
+                        ephemeralPublicKey: ephemeralPublicKey,
+                        encryptedSecret: encryptedSecret,
+                        secretPublicSignature: secretPublicSignature
+                    )
+                )
+            }
+            
+            return result
+        })
+            .values
+        
+        completionHandler(.success(Array(list)))
+    }
+    
     func setGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -1332,19 +1459,19 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let assetStore: KBKVStore
+        let userStore: KBKVStore
         do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
+            userStore = try SHDBManager.sharedInstance.userStore()
         } catch {
             completionHandler(.failure(error))
             return
         }
         
-        let writeBatch = assetStore.writeBatch()
-        
-        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(groupId)::encryptedSecret")
-        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(groupId)::ephemeralPublicKey")
-        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(groupId)::secretPublicSignature")
+        let writeBatch = userStore.writeBatch()
+
+        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret")
+        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey")
+        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -1388,19 +1515,45 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func retrieveGroupUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
+    func retrieveUserEncryptionDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    ) {
+        self.retrieveUserEncryptionDetails(
+            anchorType: .group,
+            anchorId: groupId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func retrieveUserEncryptionDetails(
+        forThread threadId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    ) {
+        self.retrieveUserEncryptionDetails(
+            anchorType: .thread,
+            anchorId: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func retrieveUserEncryptionDetails(
+        anchorType: InteractionAnchor,
+        anchorId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    ) {
         let assetStore: KBKVStore
         do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
+            assetStore = try SHDBManager.sharedInstance.userStore()
         } catch {
             completionHandler(.failure(error))
             return
         }
         
         let keysToRetrieve = [
-            "\(groupId)::encryptedSecret",
-            "\(groupId)::ephemeralPublicKey",
-            "\(groupId)::secretPublicSignature"
+            "\(anchorType.rawValue)::\(anchorId)::encryptedSecret",
+            "\(anchorType.rawValue)::\(anchorId)::ephemeralPublicKey",
+            "\(anchorType.rawValue)::\(anchorId)::secretPublicSignature"
         ]
         var condition = KBGenericCondition(value: false)
         for key in keysToRetrieve {
@@ -1448,7 +1601,24 @@ struct LocalServer : SHServerAPI {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.addReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.addReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func addReactions(
+        _ reactions: [ReactionInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         let reactionStore: KBKVStore
@@ -1462,17 +1632,22 @@ struct LocalServer : SHServerAPI {
         let writeBatch = reactionStore.writeBatch()
         
         for reaction in reactions {
-            var key = "\(groupId)::\(reaction.senderUserIdentifier!)"
-            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
-                key += "::\(assetGid)"
-            } else {
-                key += "::"
+            guard let interactionId = reaction.interactionId else {
+                log.warning("can not save interaction to local store without an interaction identifier from server")
+                continue
             }
+            var key = "\(anchorType.rawValue)::\(anchorId)::\(interactionId)"
             if let interactionId = reaction.inReplyToInteractionId {
                 key += "::\(interactionId)"
             } else {
                 key += "::"
             }
+            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
+                key += "::\(assetGid)"
+            } else {
+                key += "::"
+            }
+            key += "::\(reaction.senderUserIdentifier!)"
             writeBatch.set(value: reaction.reactionType.rawValue, for: key)
         }
         
@@ -1490,7 +1665,24 @@ struct LocalServer : SHServerAPI {
     
     func removeReactions(
         _ reactions: [ReactionInput],
-        fromGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.removeReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func removeReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.removeReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func removeReactions(
+        _ reactions: [ReactionInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         let reactionStore: KBKVStore
@@ -1503,19 +1695,23 @@ struct LocalServer : SHServerAPI {
         
         var condition = KBGenericCondition(value: false)
         for reaction in reactions {
-            var key = "\(groupId)::\(reaction.senderUserIdentifier!)"
-            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
-                key += "::\(assetGid)"
-            } else {
-                key += "::"
-            }
+            var keyStart = "\(anchorType.rawValue)::\(anchorId)"
+            var keyEnd = ""
             if let interactionId = reaction.inReplyToInteractionId {
-                key += "::\(interactionId)"
+                keyEnd += "::\(interactionId)"
             } else {
-                key += "::"
+                keyEnd += "::"
             }
+            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
+                keyEnd += "::\(assetGid)"
+            } else {
+                keyEnd += "::"
+            }
+            keyEnd += "::\(reaction.senderUserIdentifier!)"
             
-            condition = condition.or(KBGenericCondition(.equal, value: key))
+            let thisCondition = KBGenericCondition(.beginsWith, value: keyStart).and(KBGenericCondition(.endsWith, value: keyEnd))
+            
+            condition = condition.or(thisCondition)
         }
         
         reactionStore.removeValues(forKeysMatching: condition) { result in
@@ -1590,6 +1786,42 @@ struct LocalServer : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveInteractions(
+            anchorType: .group,
+            anchorId: groupId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveInteractions(
+            anchorType: .thread,
+            anchorId: threadId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func retrieveInteractions(
+        anchorType: InteractionAnchor,
+        anchorId: String,
+        underMessage refMessageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
@@ -1610,17 +1842,38 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        self.retrieveGroupUserEncryptionDetails(forGroup: groupId) { encryptionDetailsResult in
+        self.retrieveUserEncryptionDetails(anchorType: anchorType, anchorId: anchorId) {
+            encryptionDetailsResult in
             switch encryptionDetailsResult {
             case .failure(let err):
                 completionHandler(.failure(err))
             case .success(let e2eeResult):
                 guard let encryptionDetails = e2eeResult else {
-                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(groupId)))
+                    switch anchorType {
+                    case .group:
+                        completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(anchorId)))
+                    case .thread:
+                        completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(anchorId)))
+                    }
                     return
                 }
                 
-                let condition = KBGenericCondition(.beginsWith, value: "\(groupId)::")
+                ///
+                /// KEY FORMAT:
+                /// `{anchor_type}::{anchor_id}::{interaction_id}::{ref_interaction_id}::{ref_asset_id}::{sender_id}`
+                /// - `anchor_type`: either "thread' or "group", for threads and shares, respectively
+                /// - `anchor_id`: either the `threadId` or the `groupId`, to identify a thread or a share, respectively
+                /// - `interaction_id`: the unique interaction identifier as provided by the server
+                /// - `ref_interaction_id`: a pointer to the interaction this interaction references (for replies to messages the origin message id)
+                /// - `ref_asset_id`: a pointer to the global asset identifer this interaction references
+                /// - `sender_id`: the user public identifier, author of the interaction
+                ///
+                
+                var conditionStr = "\(anchorType)::\(anchorId)::"
+                if let refMessageId {
+                    conditionStr += refMessageId
+                }
+                let condition = KBGenericCondition(.beginsWith, value: conditionStr)
                 reactionStore.keyValuesAndTimestamps(forKeysMatching: condition) { reactionsResult in
                     switch reactionsResult {
                     case .success(let reactionKvts):
@@ -1633,20 +1886,18 @@ struct LocalServer : SHServerAPI {
                             var inReplyToInteractionGid: String? = nil
                             
                             let keyComponents = key.components(separatedBy: "::")
-                            guard keyComponents.count > 3 else {
+                            guard keyComponents.count > 5 else {
                                 log.warning("unexpected key format in reactions DB: \(key)")
                                 return
                             }
-                            senderId = keyComponents[1]
+                            guard let reactionTypeInt = $0.value as? Int,
+                                  let reactionType = ReactionType(rawValue: reactionTypeInt) else {
+                                log.warning("unexpected value in reactions DB: \(String(describing: $0.value))")
+                                return
+                            }
+                            
+                            senderId = keyComponents[5]
                             interactionId = keyComponents[2]
-                            if keyComponents.count > 4,
-                                !keyComponents[3].isEmpty {
-                                inReplyToAssetGid = keyComponents[3]
-                            }
-                            if keyComponents.count > 5,
-                                !keyComponents[4].isEmpty {
-                                inReplyToInteractionGid = keyComponents[4]
-                            }
                             
                             guard let senderId = senderId,
                                   let interactionId = interactionId else {
@@ -1654,10 +1905,11 @@ struct LocalServer : SHServerAPI {
                                 return
                             }
                             
-                            guard let reactionTypeInt = $0.value as? Int,
-                                  let reactionType = ReactionType(rawValue: reactionTypeInt) else {
-                                log.warning("unexpected value in reactions DB: \(String(describing: $0.value))")
-                                return
+                            if !keyComponents[3].isEmpty {
+                                inReplyToInteractionGid = keyComponents[3]
+                            }
+                            if !keyComponents[4].isEmpty {
+                                inReplyToAssetGid = keyComponents[4]
                             }
                             
                             let output = ReactionOutputDTO(
@@ -1733,7 +1985,24 @@ struct LocalServer : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.addMessages(messages, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.addMessages(messages, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func addMessages(
+        _ messages: [MessageInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         let messagesStore: KBQueueStore
@@ -1748,8 +2017,13 @@ struct LocalServer : SHServerAPI {
         var firstError: Error? = nil
         
         for message in messages {
+            guard let interactionId = message.interactionId else {
+                log.warning("can not save message to local store because without an interaction identifier from server")
+                continue
+            }
+            
             let messageOutput = MessageOutputDTO(
-                interactionId: message.interactionId!,
+                interactionId: interactionId,
                 senderUserIdentifier: message.senderUserIdentifier!,
                 inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
                 inReplyToInteractionId: message.inReplyToInteractionId,
@@ -1758,17 +2032,18 @@ struct LocalServer : SHServerAPI {
             )
             
             do {
-                var key = "\(groupId)::\(message.senderUserIdentifier!)::\(message.interactionId!)"
-                if let assetGid = message.inReplyToAssetGlobalIdentifier {
-                    key += "::\(assetGid)"
-                } else {
-                    key += "::"
-                }
+                var key = "\(anchorType)::\(anchorId)::\(interactionId)"
                 if let interactionId = message.inReplyToInteractionId {
                     key += "::\(interactionId)"
                 } else {
                     key += "::"
                 }
+                if let assetGid = message.inReplyToAssetGlobalIdentifier {
+                    key += "::\(assetGid)"
+                } else {
+                    key += "::"
+                }
+                key += "::\(message.senderUserIdentifier!)"
                 let value = DBSecureSerializableUserMessage(
                     interactionId: message.interactionId!,
                     senderUserIdentifier: message.senderUserIdentifier!,
@@ -1793,7 +2068,12 @@ struct LocalServer : SHServerAPI {
                 if firstError == nil {
                     firstError = error
                 }
-                log.error("failed to locally add message with id \(message.interactionId!) to groupId \(groupId)")
+                switch anchorType {
+                case .group:
+                    log.error("failed to locally add message with id \(message.interactionId!) to group \(anchorId)")
+                case .thread:
+                    log.error("failed to locally add message with id \(message.interactionId!) to thread \(anchorId)")
+                }
             }
             
             if result.isEmpty {

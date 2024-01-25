@@ -96,6 +96,8 @@ public protocol SHServerAPI {
                 filterVersions: [SHAssetQuality]?,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ())
     
+    // MARK: Assets Sharing
+    
     /// Shares one or more assets with a set of users
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
@@ -123,6 +125,8 @@ public protocol SHServerAPI {
                  with userPublicIdentifier: String,
                  completionHandler: @escaping (Result<Void, Error>) -> ())
     
+    // MARK: Assets Uploading
+    
     /// Upload encrypted asset versions data to the CDN.
     func upload(serverAsset: SHServerAsset,
                 asset: any SHEncryptedAsset,
@@ -140,11 +144,15 @@ public protocol SHServerAPI {
                    as: SHAssetDescriptorUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ())
     
+    // MARK: Assets Removal
+    
     /// Removes assets from the CDN
     /// - Parameters:
     ///   - withGlobalIdentifiers: the global identifier
     ///   - completionHandler: the callback method. Returns the list of global identifiers removed
     func deleteAssets(withGlobalIdentifiers: [String], completionHandler: @escaping (Result<[String], Error>) -> ())
+    
+    // MARK: Subscriptions
     
     /// Validates an AppStore transaction (with receipt)
     /// - Parameters:
@@ -157,6 +165,26 @@ public protocol SHServerAPI {
         receipt: String,
         productId: String,
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
+    )
+    
+    // MARK: Interactions
+    
+    /// Creates a thread and provides the encryption details for the users in it for E2EE.
+    /// This method needs to be called every time both a thread is created or a  so that reactions and comments can be added to it.
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - recipientsEncryptionDetails: the encryption details for each reciepient
+    ///   - completionHandler: the callback method, with the threadId
+    func createThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    )
+    
+    /// List all the threads visibile to the requestor
+    /// - Parameter completionHandler: the callback method
+    func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     )
     
     /// Creates a group and provides the encryption details for users in the group for E2EE.
@@ -184,8 +212,17 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - groupId: the group identifier
     ///   - completionHandler: the callback method
-    func retrieveGroupUserEncryptionDetails(
+    func retrieveUserEncryptionDetails(
         forGroup groupId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    )
+    
+    /// Retrieved the E2EE details for a thread, if one exists
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func retrieveUserEncryptionDetails(
+        forThread threadId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
@@ -196,18 +233,41 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func addReactions(
         _: [ReactionInput],
-        toGroupId: String,
+        inGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
-    /// Removes a reaction to an asset or a message
+    /// Adds reactions to a message in a thread
+    /// - Parameters:
+    ///   - reactions: the reactions details
+    ///   - messageId: the message the reaction refers to
+    ///   - threadId: the thread identifier
+    ///   - completionHandler: the callback method
+    func addReactions(
+        _: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    )
+    
+    /// Removes reactions to an asset or a message in a share (group)
+    /// - Parameters:
+    ///   - reaction: the reaction type and references to remove
+    ///   - groupId: the group the reaction belongs to
+    ///   - completionHandler: the callback method
+    func removeReactions(
+        _ reactions: [ReactionInput],
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Removes a set of reactions to a message
     /// - Parameters:
     ///   - reaction: the reaction type and references to remove
     ///   - fromGroupId: the group the reaction belongs to
     ///   - completionHandler: the callback method
     func removeReactions(
         _ reactions: [ReactionInput],
-        fromGroupId groupId: String,
+        inThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
@@ -219,19 +279,48 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inGroup groupId: String,
+        underMessage refMessageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
-    /// Adds a messages to a share (group)
+    /// Retrieves all the messages and reactions in a thread. Results are paginated and returned in reverse cronological order.
+    /// Optionally specify the anchor message, if this is a reply to another message (sub-thread)
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - per: the number of items to retrieve
+    ///   - page: the page number, because results are paginated
+    ///   - completionHandler: the callback method
+    func retrieveInteractions(
+        inThread threadId: String,
+        underMessage refMessageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    /// Adds messages to a share (group)
     /// - Parameters:
     ///   - messages: the message details
     ///   - groupId: the group identifier
     ///   - completionHandler: the callback method
     func addMessages(
         _ messages: [MessageInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    )
+    
+    
+    /// Adds messages to a thread.
+    /// Optionally specify the anchor message, if this is a reply to another message (sub-thread)
+    /// - Parameters:
+    ///   - messages: the message details
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func addMessages(
+        _ messages: [MessageInput],
+        inThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
 }

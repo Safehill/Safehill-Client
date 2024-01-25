@@ -141,12 +141,14 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
     
     public func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String? = nil,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<SHUserGroupInteractions, Error>) -> ()
     ) {
         self.serverProxy.retrieveInteractions(
             inGroup: groupId,
+            underMessage: messageId,
             per: per,
             page: page
         ) { result in
@@ -231,7 +233,7 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
                 encryptedMessage: encryptedData.encryptedData.base64EncodedString(),
                 senderPublicSignature: self.user.publicSignatureData.base64EncodedString()
             )
-            serverProxy.addMessage(messageInput, toGroupId: groupId, completionHandler: completionHandler)
+            serverProxy.addMessage(messageInput, inGroup: groupId, completionHandler: completionHandler)
         } catch {
             completionHandler(.failure(error))
         }
@@ -249,7 +251,7 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
             inReplyToInteractionId: inReplyToInteractionId,
             reactionType: reactionType
         )
-        serverProxy.addReactions([reactionInput], toGroupId: groupId, completionHandler: completionHandler)
+        serverProxy.addReactions([reactionInput], inGroup: groupId, completionHandler: completionHandler)
     }
     
     public func removeReaction(
@@ -259,7 +261,7 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
     ) {
         serverProxy.removeReaction(
             reaction,
-            fromGroupId: groupId,
+            inGroup: groupId,
             completionHandler: completionHandler
         )
     }
@@ -273,7 +275,7 @@ extension SHUserInteractionController {
         var encryptionDetails: RecipientEncryptionDetailsDTO? = nil
         var error: Error? = nil
         
-        serverProxy.retrieveSelfGroupUserEncryptionDetails(forGroup: groupId) { result in
+        serverProxy.retrieveUserEncryptionDetails(forGroup: groupId) { result in
             switch result {
             case .success(let e):
                 encryptionDetails = e
