@@ -17,10 +17,10 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
     func reactionsDidChange(inGroup groupId: String)
-    func didReceiveMessage(inGroup groupId: String)
+    func didReceiveMessages(_ messages: [MessageOutputDTO], inGroup groupId: String)
     
     func reactionsDidChange(inThread threadId: String)
-    func didReceiveMessage(inThread threadId: String)
+    func didReceiveMessages(_ messages: [MessageOutputDTO], inThread threadId: String)
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {

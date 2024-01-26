@@ -22,14 +22,15 @@ extension SHSyncOperation {
         
         if messagesToUpdate.count > 0 {
             let callback = { (addMessagesResult: Result<[MessageOutputDTO], Error>) in
-                if case .failure(let failure) = addMessagesResult {
+                switch addMessagesResult {
+                case .failure(let failure):
                     self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
-                } else {
+                case .success(let messages):
                     switch anchor {
                     case .group:
-                        self.delegates.forEach({ $0.didReceiveMessage(inGroup: anchorId) })
+                        self.delegates.forEach({ $0.didReceiveMessages(messages, inGroup: anchorId) })
                     case .thread:
-                        self.delegates.forEach({ $0.didReceiveMessage(inThread: anchorId) })
+                        self.delegates.forEach({ $0.didReceiveMessages(messages, inThread: anchorId) })
                     }
                 }
                 dispatchGroup.leave()
