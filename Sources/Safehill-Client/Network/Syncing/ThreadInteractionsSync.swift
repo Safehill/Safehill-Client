@@ -117,11 +117,8 @@ extension SHSyncOperation {
             
             if shouldCreateE2EEDetailsLocally {
                 dispatchGroup.enter()
-                serverProxy.localServer.createThread(
-                    threadId: thread.threadId,
-                    name: thread.name,
-                    lastUpdatedAt: thread.lastUpdatedAt!,
-                    recipientsEncryptionDetails: [thread.encryptionDetails]
+                serverProxy.localServer.createOrUpdateThread(
+                    serverThread: thread
                 ) { threadCreateResult in
                     switch threadCreateResult {
                     case .success(_):

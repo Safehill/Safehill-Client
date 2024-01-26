@@ -172,13 +172,12 @@ public protocol SHServerAPI {
     /// Creates a thread and provides the encryption details for the users in it for E2EE.
     /// This method needs to be called every time both a thread is created or a  so that reactions and comments can be added to it.
     /// - Parameters:
-    ///   - groupId: the group identifier
-    ///   - recipientsEncryptionDetails: the encryption details for each reciepient
+    ///   - name: the optional name of the thread
+    ///   - recipientsEncryptionDetails: the encryption details for each reciepient. `nil` if this method is called to update the thread name
     ///   - completionHandler: the callback method, with the threadId
-    func createThread(
+    func createOrUpdateThread(
         name: String?,
-        lastUpdatedAt: Date,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
     

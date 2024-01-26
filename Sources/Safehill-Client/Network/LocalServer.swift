@@ -1321,23 +1321,24 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(Array(removedGlobalIdentifiers)))
     }
     
-    func createThread(
+    @available(*, deprecated, renamed: "createOrUpdateThread(threadId:name:lastUpdatedAt:recipientEncryptionDetails:completionHandler:)", message: "Do not use the protocol method when storing a thread locally. Information from server should be provided.")
+    func createOrUpdateThread(
         name: String?,
-        lastUpdatedAt: Date,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ClientError.badRequest("Call the sister method and provide a thread identifier when storing a thread to local. This method should not be called.")))
     }
     
-    func createThread(
-        threadId: String,
-        name: String?,
-        lastUpdatedAt: Date,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+    /// Creates a new thread on the local database
+    /// - Parameters:
+    ///   - serverThread: the thread retrieved from the server to store locally
+    ///   - completionHandler: the callback, returning
+    func createOrUpdateThread(
+        serverThread: ConversationThreadOutputDTO,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
-        guard let selfEncryptionDetails = recipientsEncryptionDetails.first(where: { $0.userIdentifier == self.requestor.identifier })
+        guard serverThread.encryptionDetails.userIdentifier == self.requestor.identifier
         else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("encryption details don't match the requestor")))
             return
@@ -1353,34 +1354,20 @@ struct LocalServer : SHServerAPI {
         
         let writeBatch = userStore.writeBatch()
         
-        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret")
-        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
-        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature")
+        writeBatch.set(value: serverThread.encryptionDetails.encryptedSecret, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::encryptedSecret")
+        writeBatch.set(value: serverThread.encryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::ephemeralPublicKey")
+        writeBatch.set(value: serverThread.encryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::secretPublicSignature")
         
-        if let name {
-            writeBatch.set(value: name, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::name")
-        }
-        writeBatch.set(value: lastUpdatedAt.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt")
+        writeBatch.set(value: serverThread.name, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::name")
+        writeBatch.set(value: serverThread.lastUpdatedAt?.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
         
         writeBatch.write { result in
-            if case .failure(let error) = result {
+            switch result {
+            case .failure(let error):
                 completionHandler(.failure(error))
-                return
+            case .success:
+                completionHandler(.success(serverThread))
             }
-            
-            let output = ConversationThreadOutputDTO(
-                threadId: threadId,
-                name: name,
-                membersPublicIdentifier: recipientsEncryptionDetails.map({ $0.userIdentifier }),
-                lastUpdatedAt: Date(),
-                encryptionDetails: RecipientEncryptionDetailsDTO(
-                    userIdentifier: selfEncryptionDetails.userIdentifier,
-                    ephemeralPublicKey: selfEncryptionDetails.ephemeralPublicKey,
-                    encryptedSecret: selfEncryptionDetails.encryptedSecret,
-                    secretPublicSignature: selfEncryptionDetails.secretPublicSignature
-                )
-            )
-            completionHandler(.success(output))
         }
     }
     
@@ -1739,7 +1726,7 @@ struct LocalServer : SHServerAPI {
         
         var condition = KBGenericCondition(value: false)
         for reaction in reactions {
-            var keyStart = "\(anchorType.rawValue)::\(anchorId)"
+            let keyStart = "\(anchorType.rawValue)::\(anchorId)"
             var keyEnd = ""
             if let interactionId = reaction.inReplyToInteractionId {
                 keyEnd += "::\(interactionId)"

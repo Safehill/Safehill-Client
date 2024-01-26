@@ -798,18 +798,17 @@ struct SHServerHTTPAPI : SHServerAPI {
     /// Creates a new thread
     /// - Parameters:
     ///   - name: the thread name, if any is provided. To update, `createThread` should be called again with a new value for name. 
-    ///
-    ///   - lastUpdatedAt: IGNORED: on the server this is calculated based on the interactions on the thread. This parameter is needed on the ServerAPI protocol because on the local server (local DB) the field needs to be stored
     ///   - recipientsEncryptionDetails: the encryption details for all users in the thread. Locally we only store the ones for the local user
     ///   - completionHandler: the callback, returning the value from the server
-    func createThread(
+    func createOrUpdateThread(
         name: String?,
-        lastUpdatedAt: Date,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
-        var parameters = [
-            "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
+        var parameters = [String: Any]()
+        
+        if let recipientsEncryptionDetails {
+            parameters["recipients"] = recipientsEncryptionDetails.map({ encryptionDetails in
                 return [
                     "encryptedSecret": encryptionDetails.encryptedSecret,
                     "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
@@ -817,7 +816,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                     "userIdentifier": encryptionDetails.userIdentifier
                 ]
             })
-        ] as [String: Any]
+        }
         
         if let name {
             parameters["name"] = name

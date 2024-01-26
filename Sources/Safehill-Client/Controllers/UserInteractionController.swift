@@ -27,6 +27,30 @@ public struct SHUserInteractionController {
         SymmetricKey(size: .bits256)
     }
     
+    public func createThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        self.serverProxy.createOrUpdateThread(
+            name: name,
+            recipientsEncryptionDetails: recipientsEncryptionDetails,
+            completionHandler: completionHandler
+        )
+    }
+    
+    public func updateThread(
+        name: String? = nil,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]? = nil,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        self.serverProxy.createOrUpdateThread(
+            name: name,
+            recipientsEncryptionDetails: recipientsEncryptionDetails,
+            completionHandler: completionHandler
+        )
+    }
+    
     /// Creates the E2EE details for the group for all users involved, or updates such details if they already exist with the information for the missing users.
     /// - Parameters:
     ///   - groupId: the share group identifier

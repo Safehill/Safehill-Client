@@ -5,6 +5,12 @@ import Contacts
 public protocol SHServerProxyProtocol {
     init(user: SHLocalUser)
     
+    func createOrUpdateThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    )
+    
     func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -854,29 +860,24 @@ extension SHServerProxy {
         }
     }
     
-    public func createThread(
+    public func createOrUpdateThread(
         name: String?,
-        lastUpdatedAt: Date,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
-        self.remoteServer.createThread(
+        self.remoteServer.createOrUpdateThread(
             name: name,
-            lastUpdatedAt: lastUpdatedAt,
             recipientsEncryptionDetails: recipientsEncryptionDetails
         ) {
             remoteResult in
             switch remoteResult {
             case .success(let thread):
-                self.localServer.createThread(
-                    threadId: thread.threadId,
-                    name: thread.name,
-                    lastUpdatedAt: lastUpdatedAt,
-                    recipientsEncryptionDetails: recipientsEncryptionDetails,
+                self.localServer.createOrUpdateThread(
+                    serverThread: thread,
                     completionHandler: completionHandler
                 )
             case .failure(let error):
-                log.error("failed to create thread with encryption details locally")
+                log.error("failed to create or update thread with encryption details: \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -942,11 +943,8 @@ extension SHServerProxy {
                     switch remoteResult {
                     case .success(let remoteThread):
                         if let remoteThread {
-                            self.localServer.createThread(
-                                threadId: threadId,
-                                name: remoteThread.name,
-                                lastUpdatedAt: remoteThread.lastUpdatedAt!,
-                                recipientsEncryptionDetails: [remoteThread.encryptionDetails]
+                            self.localServer.createOrUpdateThread(
+                                serverThread: remoteThread
                             ) { _ in
                                 completionHandler(.success(remoteThread.encryptionDetails))
                             }
