@@ -27,6 +27,12 @@ public struct SHUserInteractionController {
         SymmetricKey(size: .bits256)
     }
     
+    public func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
+    ) {
+        self.serverProxy.listThreads(completionHandler: completionHandler)
+    }
+    
     public func setupThread(
         with users: [SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void

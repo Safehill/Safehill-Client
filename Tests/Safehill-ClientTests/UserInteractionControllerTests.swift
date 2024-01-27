@@ -102,6 +102,26 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
+    func listThreads(completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
+        do {
+            let threads: [ConversationThreadOutputDTO] = try self.state.threads?.map { mockThread in
+                guard let selfEncryptionDetails = mockThread.selfEncryptionDetails else {
+                    throw SHHTTPError.ClientError.badRequest("thread encryption details were not set up for some threads yet on the mock server")
+                }
+                return ConversationThreadOutputDTO(
+                    threadId: mockThread.threadId,
+                    name: mockThread.name,
+                    membersPublicIdentifier: mockThread.userIds,
+                    lastUpdatedAt: Date(),
+                    encryptionDetails: selfEncryptionDetails
+                )
+            } ?? []
+            completionHandler(.success(threads))
+        } catch {
+            completionHandler(.failure(error))
+        }
+    }
+    
     func createOrUpdateThread(name: String?, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()) {
         if let recipientsEncryptionDetails {
             let threadMembersId = recipientsEncryptionDetails.map({ $0.userIdentifier })

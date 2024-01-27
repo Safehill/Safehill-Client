@@ -5,6 +5,10 @@ import Contacts
 public protocol SHServerProxyProtocol {
     init(user: SHLocalUser)
     
+    func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    )
+    
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
