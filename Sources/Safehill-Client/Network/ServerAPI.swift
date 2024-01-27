@@ -69,7 +69,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
     
-    // MARK: Assets Fetch
+    // MARK: Assets Management
     
     func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]?,
                              completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ())
@@ -82,8 +82,6 @@ public protocol SHServerAPI {
     func getAssets(withGlobalIdentifiers: [String],
                    versions: [SHAssetQuality]?,
                    completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ())
-    
-    // MARK: Assets Write
     
     /// Create encrypted assets and their versions on the server, and retrieves the presigned URL for the client to upload.
     /// - Parameters:
@@ -167,7 +165,7 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
     )
     
-    // MARK: Interactions
+    // MARK: Threads
     
     /// Creates a thread and provides the encryption details for the users in it for E2EE.
     /// This method needs to be called every time both a thread is created or a  so that reactions and comments can be added to it.
@@ -186,6 +184,35 @@ public protocol SHServerAPI {
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     )
+    
+    /// Retrieved the thread details, including the E2EE details, if one exists
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - completionHandler: the callback method
+    func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    )
+    
+    /// Deletes a thread given its identifier
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - completionHandler: the callback method
+    func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Retrieve the thread with the specified users, if one exists
+    /// - Parameters:
+    ///   - users: the users to match
+    ///   - completionHandler: the callback method
+    func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    )
+    
+    // MARK: Groups
     
     /// Creates a group and provides the encryption details for users in the group for E2EE.
     /// This method needs to be called every time a share (group) is created so that reactions and comments can be added to it.
@@ -217,14 +244,7 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
-    /// Retrieved the thread details, including the E2EE details, if one exists
-    /// - Parameters:
-    ///   - threadId: the thread identifier
-    ///   - completionHandler: the callback method
-    func getThread(
-        withId threadId: String,
-        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
-    )
+    // MARK: Interactions
     
     /// Adds reactions to a share (group)
     /// - Parameters:

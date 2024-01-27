@@ -14,6 +14,7 @@ extension SHSyncOperation {
         let dispatchGroup = DispatchGroup()
         var error: Error? = nil
         var allThreads = [ConversationThreadOutputDTO]()
+        var localThreads = [ConversationThreadOutputDTO]()
         
         ///
         /// Pull all threads
@@ -23,6 +24,17 @@ extension SHSyncOperation {
             switch result {
             case .success(let threadList):
                 allThreads = threadList
+            case .failure(let err):
+                error = err
+            }
+            dispatchGroup.leave()
+        }
+        
+        dispatchGroup.enter()
+        self.serverProxy.localServer.listThreads { result in
+            switch result {
+            case .success(let threadList):
+                localThreads = threadList
             case .failure(let err):
                 error = err
             }
@@ -42,6 +54,33 @@ extension SHSyncOperation {
         }
         
         self.delegates.forEach({ $0.didUpdateThreadsList(allThreads) })
+        
+        /// 
+        /// Remove extra threads locally
+        ///
+        var threadIdsToRemoveLocally = [String]()
+        for localThread in localThreads {
+            if allThreads.contains(where: { $0.threadId == localThread.threadId }) == false {
+                threadIdsToRemoveLocally.append(localThread.threadId)
+            }
+        }
+        
+        if threadIdsToRemoveLocally.isEmpty == false {
+            var removedCount = 0
+            let removalDispatchGroup = DispatchGroup()
+            for threadIdToRemoveLocally in threadIdsToRemoveLocally {
+                removalDispatchGroup.enter()
+                self.serverProxy.localServer.deleteThread(withId: threadIdToRemoveLocally) { result in
+                    if case .success = result {
+                        removedCount += 1
+                    }
+                    removalDispatchGroup.leave()
+                }
+            }
+            removalDispatchGroup.notify(queue: .global(qos: .background)) {
+                self.log.info("threads to remove: \(threadIdsToRemoveLocally.count), removed: \(removedCount)")
+            }
+        }
         
         ///
         /// For each thread …

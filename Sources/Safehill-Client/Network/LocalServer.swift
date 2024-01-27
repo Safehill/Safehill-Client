@@ -1481,6 +1481,14 @@ struct LocalServer : SHServerAPI {
         groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        self.delete(anchor: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    private func delete(
+        anchor: InteractionAnchor,
+        anchorId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
         let userStore: KBKVStore
         do {
             userStore = try SHDBManager.sharedInstance.userStore()
@@ -1506,7 +1514,7 @@ struct LocalServer : SHServerAPI {
         }
         
         do {
-            let condition = KBGenericCondition(.beginsWith, value: "\(InteractionAnchor.group.rawValue)::\(groupId)::")
+            let condition = KBGenericCondition(.beginsWith, value: "\(anchor.rawValue)::\(anchorId)::")
             let _ = try userStore.removeValues(forKeysMatching: condition)
             let _ = try reactionStore.removeValues(forKeysMatching: condition)
             let _ = try messagesStore.removeValues(forKeysMatching: condition)
@@ -1566,6 +1574,14 @@ struct LocalServer : SHServerAPI {
                 }
             }
         }
+    }
+    
+    @available(*, deprecated, message: "Local database doesn't store thread members information, only keys and name for local threads")
+    func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     private func retrieveUserEncryptionDetails(
@@ -1628,6 +1644,10 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(err))
             }
         }
+    }
+    
+    func deleteThread(withId threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.delete(anchor: .thread, anchorId: threadId, completionHandler: completionHandler)
     }
     
     func addReactions(

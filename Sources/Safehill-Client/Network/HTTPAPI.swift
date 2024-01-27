@@ -71,6 +71,25 @@ struct SHServerHTTPAPI : SHServerAPI {
         return components.url!
     }
     
+    func requestURL(route: String, urlArrayParameters: [String: [String]]) -> URL {
+        var components = SafehillServerURLComponents
+        
+        components.path = "/\(route)"
+        var queryItems = [URLQueryItem]()
+        
+        // URL parameters
+        for (paramKey, paramValue) in urlArrayParameters {
+            for index in 0...paramValue.count-1 {
+                queryItems.append(URLQueryItem(name: "\(paramKey)[\(index)]", value: paramValue[index]))
+            }
+        }
+        components.queryItems = queryItems
+        
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        
+        return components.url!
+    }
+    
     static func makeRequest<T: Decodable>(request: URLRequest,
                                           decodingResponseAs type: T.Type,
                                           completionHandler: @escaping (Result<T, Error>) -> Void) {
@@ -186,10 +205,23 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func get<T: Decodable>(_ route: String,
-                           parameters: [String: String]?,
+                           parameters: [String: Any]?,
                            requiresAuthentication: Bool = true,
                            completionHandler: @escaping (Result<T, Error>) -> Void) {
-        let url = requestURL(route: route, urlParameters: parameters)
+        let url: URL
+        if parameters == nil {
+            url = requestURL(route: route, urlParameters: nil)
+        }
+        else if let simpleDict = parameters as? [String: String] {
+            url = requestURL(route: route, urlParameters: simpleDict)
+        }
+        else if let arrayDict = parameters as? [String: [String]] {
+            url = requestURL(route: route, urlArrayParameters: arrayDict)
+        }
+        else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("invalid GET parameters \(parameters!)")))
+            return
+        }
         
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "GET"
@@ -822,7 +854,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["name"] = name
         }
         
-        self.post("threads",
+        self.post("threads/upsert",
                   parameters: parameters,
                   requiresAuthentication: true,
                   completionHandler: completionHandler)
@@ -831,8 +863,8 @@ struct SHServerHTTPAPI : SHServerAPI {
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
-        self.get("threads",
-                 parameters: nil, 
+        self.get("threads/retrieve",
+                 parameters: nil,
                  requiresAuthentication: true,
                  completionHandler: completionHandler)
     }
@@ -903,7 +935,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.get("threads/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<ConversationThreadOutputDTO, Error>) in
+        self.post("threads/retrieve/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<ConversationThreadOutputDTO, Error>) in
             switch result {
             case .failure(let error as SHHTTPError.ClientError):
                 switch error {
@@ -916,6 +948,34 @@ struct SHServerHTTPAPI : SHServerAPI {
                 completionHandler(.failure(error))
             case .success(let threadOutput):
                 completionHandler(.success(threadOutput))
+            }
+        }
+    }
+    
+    func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        let parameters = [
+            "byUsersPublicIdentifiers": users.map({ $0.identifier }),
+        ] as [String: Any]
+        
+        self.post("threads/retrieve",
+                  parameters: parameters,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
+    }
+    
+    func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.delete("threads/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
             }
         }
     }

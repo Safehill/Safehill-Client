@@ -11,6 +11,11 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
     
+    func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -40,8 +45,22 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     )
     
+    func addMessage(
+        _ message: MessageInputDTO,
+        inThread threadId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    )
+    
     func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveInteractions(
+        inThread threadId: String,
         underMessage messageId: String?,
         per: Int,
         page: Int,
@@ -53,9 +72,19 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
+    func retrieveUserEncryptionDetails(
+        forThread threadId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
+    )
+    
     func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    )
+    
+    func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
 }
 
@@ -893,6 +922,32 @@ extension SHServerProxy {
             case .failure(let error):
                 log.warning("failed to fetch threads from server. Returning local version. \(error.localizedDescription)")
                 self.localServer.listThreads(completionHandler: completionHandler)
+            }
+        }
+    }
+    
+    public func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+    }
+    
+    public func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.deleteThread(withId: threadId) { remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.deleteThread(withId: threadId, completionHandler: { res in
+                    if case .failure(let failure) = res {
+                        log.warning("thread \(threadId) was deleted on the server but not locally. Thread syncing will attempt this again. \(failure.localizedDescription)")
+                    }
+                })
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
         }
     }

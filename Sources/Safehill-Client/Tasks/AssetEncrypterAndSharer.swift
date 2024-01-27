@@ -306,12 +306,14 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             if shareRequest.isBackground == false {
                 var errorInitializingGroup: Error? = nil
-                let semaphore = DispatchSemaphore(value: 0)
+                var errorInitializingThread: Error? = nil
+                let dispatchGroup = DispatchGroup()
                 
                 let interactionsController = SHUserInteractionController(
                     user: self.user,
                     protocolSalt: self.user.encryptionProtocolSalt!
                 )
+                dispatchGroup.enter()
                 interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
                     with: shareRequest.sharedWith,
@@ -321,16 +323,30 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                             errorInitializingGroup = error
                         default: break
                         }
-                        semaphore.signal()
+                        dispatchGroup.leave()
                     }
                 )
                 
-                let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+                dispatchGroup.enter()
+                interactionsController.setupThread(
+                    with: shareRequest.sharedWith
+                ) { 
+                    setupThreadResult in
+                    switch setupThreadResult {
+                    case .failure(let error):
+                        errorInitializingThread = error
+                    default: break
+                    }
+                    dispatchGroup.leave()
+                }
+                
+                let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
                 guard dispatchResult == .success else {
                     // Retry (by not dequeueing) on timeout
                     throw SHBackgroundOperationError.timedOut
                 }
-                guard errorInitializingGroup == nil else {
+                guard errorInitializingGroup == nil,
+                      errorInitializingThread == nil else {
                     // Mark as failed on any other error
                     throw errorInitializingGroup!
                 }

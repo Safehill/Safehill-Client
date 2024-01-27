@@ -27,26 +27,70 @@ public struct SHUserInteractionController {
         SymmetricKey(size: .bits256)
     }
     
-    public func createThread(
-        name: String?,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    public func setupThread(
+        with users: [SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void
     ) {
-        self.serverProxy.createOrUpdateThread(
-            name: name,
-            recipientsEncryptionDetails: recipientsEncryptionDetails,
-            completionHandler: completionHandler
-        )
+        self.serverProxy.getThread(withUsers: users) { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let conversationThread):
+                let symmetricKey: SymmetricKey
+                
+                if let conversationThread {
+                    do {
+                        let encryptionDetails = conversationThread.encryptionDetails
+                        let shareablePayload = SHShareablePayload(
+                            ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
+                            cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
+                            signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
+                        )
+                        let decryptedSecret = try SHCypher.decrypt(
+                            shareablePayload,
+                            encryptionKeyData: user.shUser.privateKeyData,
+                            protocolSalt: protocolSalt,
+                            from: user.publicSignatureData
+                        )
+                        symmetricKey = SymmetricKey(data: decryptedSecret)
+                    } catch {
+                        log.critical("""
+failed to initialize E2EE details for new users in thread \(conversationThread.threadId). error=\(error.localizedDescription)
+""")
+                        completionHandler(.failure(error))
+                        return
+                    }
+                } else {
+                    symmetricKey = createNewSecret()
+                }
+                
+                var usersAndSelf = users
+                if users.contains(where: { $0.identifier == user.identifier }) == false {
+                    usersAndSelf.append(user)
+                }
+                
+                do {
+                    self.serverProxy.createOrUpdateThread(
+                        name: nil,
+                        recipientsEncryptionDetails: try recipientEncryptionDetails(from: symmetricKey, for: usersAndSelf),
+                        completionHandler: completionHandler
+                    )
+                } catch {
+                    log.critical("""
+failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "<NEW>"). error=\(error.localizedDescription)
+""")
+                    completionHandler(.failure(error))
+                    return
+                }
+            }
+        }
     }
     
-    public func updateThread(
-        name: String? = nil,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]? = nil,
-        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    public func updateThreadName(_ name: String, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         self.serverProxy.createOrUpdateThread(
             name: name,
-            recipientsEncryptionDetails: recipientsEncryptionDetails,
+            recipientsEncryptionDetails: nil,
             completionHandler: completionHandler
         )
     }
@@ -62,7 +106,7 @@ public struct SHUserInteractionController {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         do {
-            let symmetricKey = try self.fetchSymmetricKey(forGroup: groupId)
+            let symmetricKey = try self.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
             
             if let symmetricKey {
                 do {
@@ -109,7 +153,9 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
     ) throws {
         let secret: SymmetricKey = createNewSecret()
         var usersAndSelf = users
-        usersAndSelf.append(user)
+        if users.contains(where: { $0.identifier == user.identifier }) == false {
+            usersAndSelf.append(user)
+        }
         
         try self.userGroupEncryptionSetup(
             groupId: groupId,
@@ -119,12 +165,10 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         )
     }
     
-    private func userGroupEncryptionSetup(
-        groupId: String,
-        secret: SymmetricKey,
-        users: [SHServerUser],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) throws {
+    private func recipientEncryptionDetails(
+        from secret: SymmetricKey, 
+        for users: [any SHServerUser]
+    ) throws -> [RecipientEncryptionDetailsDTO] {
         var recipientEncryptionDetails = [RecipientEncryptionDetailsDTO]()
         
         for user in users {
@@ -142,9 +186,18 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
             recipientEncryptionDetails.append(recipientEncryptionForUser)
         }
         
+        return recipientEncryptionDetails
+    }
+    
+    private func userGroupEncryptionSetup(
+        groupId: String,
+        secret: SymmetricKey,
+        users: [SHServerUser],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) throws {
         serverProxy.setupGroupEncryptionDetails(
             groupId: groupId,
-            recipientsEncryptionDetails: recipientEncryptionDetails,
+            recipientsEncryptionDetails: try self.recipientEncryptionDetails(from: secret, for: users),
             completionHandler: completionHandler
         )
     }
@@ -231,9 +284,78 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         }
     }
     
-    public func send(
+    public func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String? = nil,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
+    ) {
+        self.serverProxy.retrieveInteractions(
+            inThread: threadId,
+            underMessage: messageId,
+            per: per,
+            page: page
+        ) { result in
+            switch result {
+            case .success(let interactionsGroup):
+                let shareablePayload = SHShareablePayload(
+                    ephemeralPublicKeyData: Data(base64Encoded: interactionsGroup.ephemeralPublicKey)!,
+                    cyphertext: Data(base64Encoded: interactionsGroup.encryptedSecret)!,
+                    signature: Data(base64Encoded: interactionsGroup.secretPublicSignature)!
+                )
+                
+                do {
+                    let messages: [SHDecryptedMessage] = try self.decryptMessages(in: interactionsGroup, using: shareablePayload)
+                    
+                    let usersController = SHUsersController(localUser: self.user)
+                    let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
+                    let usersDict: [UserIdentifier: SHServerUser] = try usersController
+                        .getUsers(withIdentifiers: userIds)
+                        .reduce([:], { partialResult, user in
+                            var result = partialResult
+                            result[user.identifier] = user
+                            return result
+                        })
+                    
+                    let reactions: [SHReaction] = interactionsGroup.reactions.compactMap({
+                        reaction in
+                        guard let sender = usersDict[reaction.senderUserIdentifier!] else {
+                            return nil
+                        }
+                        
+                        return SHReaction(
+                            interactionId: reaction.interactionId!,
+                            sender: sender,
+                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                            inReplyToInteractionId: reaction.inReplyToInteractionId,
+                            reactionType: reaction.reactionType,
+                            addedAt: reaction.addedAt!.iso8601withFractionalSeconds!
+                        )
+                    })
+                    
+                    completionHandler(.success(
+                        SHConversationThreadInteractions(
+                            threadId: threadId,
+                            messages: messages,
+                            reactions: reactions
+                        )
+                    ))
+                } catch {
+                    log.error("failed to retrive messages or reactions in thread \(threadId)")
+                    completionHandler(.failure(error))
+                }
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    private func send(
         message: String,
-        inGroup groupId: String,
+        inAnchor anchor: InteractionAnchor,
+        anchorId: String,
         inReplyToAssetGlobalIdentifier: String? = nil,
         inReplyToInteractionId: String? = nil,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
@@ -244,9 +366,14 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         }
         
         do {
-            guard let symmetricKey = try self.fetchSymmetricKey(forGroup: groupId)
+            guard let symmetricKey = try self.fetchSymmetricKey(forAnchor: anchor, anchorId: anchorId)
             else {
-                completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(groupId)))
+                switch anchor {
+                case .thread:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(anchorId)))
+                case .group:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(anchorId)))
+                }
                 return
             }
             
@@ -257,10 +384,36 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
                 encryptedMessage: encryptedData.encryptedData.base64EncodedString(),
                 senderPublicSignature: self.user.publicSignatureData.base64EncodedString()
             )
-            serverProxy.addMessage(messageInput, inGroup: groupId, completionHandler: completionHandler)
+            
+            switch anchor {
+            case .thread:
+                serverProxy.addMessage(messageInput, inThread: anchorId, completionHandler: completionHandler)
+            case .group:
+                serverProxy.addMessage(messageInput, inGroup: anchorId, completionHandler: completionHandler)
+            }
         } catch {
             completionHandler(.failure(error))
         }
+    }
+    
+    public func send(
+        message: String,
+        inGroup groupId: String,
+        inReplyToAssetGlobalIdentifier: String? = nil,
+        inReplyToInteractionId: String? = nil,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
+        self.send(message: message, inAnchor: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    public func send(
+        message: String,
+        inThread threadId: String,
+        inReplyToAssetGlobalIdentifier: String? = nil,
+        inReplyToInteractionId: String? = nil,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
+        self.send(message: message, inAnchor: .thread, anchorId: threadId, completionHandler: completionHandler)
     }
     
     public func addReaction(
@@ -293,20 +446,33 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
 
 extension SHUserInteractionController {
     
-    func fetchSelfEncryptionDetails(forGroup groupId: String) throws -> RecipientEncryptionDetailsDTO? {
+    func fetchSelfEncryptionDetails(forAnchor anchor: InteractionAnchor, anchorId: String) throws -> RecipientEncryptionDetailsDTO? {
         let semaphore = DispatchSemaphore(value: 0)
         
         var encryptionDetails: RecipientEncryptionDetailsDTO? = nil
         var error: Error? = nil
         
-        serverProxy.retrieveUserEncryptionDetails(forGroup: groupId) { result in
-            switch result {
-            case .success(let e):
-                encryptionDetails = e
-            case .failure(let err):
-                error = err
+        switch anchor {
+        case .group:
+            serverProxy.retrieveUserEncryptionDetails(forGroup: anchorId) { result in
+                switch result {
+                case .success(let e):
+                    encryptionDetails = e
+                case .failure(let err):
+                    error = err
+                }
+                semaphore.signal()
             }
-            semaphore.signal()
+        case .thread:
+            serverProxy.retrieveUserEncryptionDetails(forThread: anchorId) { result in
+                switch result {
+                case .success(let e):
+                    encryptionDetails = e
+                case .failure(let err):
+                    error = err
+                }
+                semaphore.signal()
+            }
         }
         
         let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
@@ -320,13 +486,13 @@ extension SHUserInteractionController {
         return encryptionDetails
     }
     
-    func fetchSymmetricKey(forGroup groupId: String) throws -> SymmetricKey? {
+    func fetchSymmetricKey(forAnchor anchor: InteractionAnchor, anchorId: String) throws -> SymmetricKey? {
         let encryptionDetails: RecipientEncryptionDetailsDTO?
         
         do {
-            encryptionDetails = try self.fetchSelfEncryptionDetails(forGroup: groupId)
+            encryptionDetails = try self.fetchSelfEncryptionDetails(forAnchor: anchor, anchorId: anchorId)
         } catch {
-            throw SHBackgroundOperationError.fatalError("trying to decrypt a symmetric key for non-existent E2EE details for group \(groupId)")
+            throw SHBackgroundOperationError.fatalError("trying to decrypt a symmetric key for non-existent E2EE details for \(anchor.rawValue) \(anchorId)")
         }
         
         guard let encryptionDetails else {
