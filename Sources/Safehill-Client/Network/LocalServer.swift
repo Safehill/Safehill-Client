@@ -1359,7 +1359,7 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: serverThread.encryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::secretPublicSignature")
         
         writeBatch.set(value: serverThread.name, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::name")
-        writeBatch.set(value: serverThread.lastUpdatedAt?.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
+        writeBatch.set(value: serverThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
         
         writeBatch.write { result in
             switch result {
@@ -1432,7 +1432,7 @@ struct LocalServer : SHServerAPI {
                     threadId: threadId,
                     name: name,
                     membersPublicIdentifier: [],
-                    lastUpdatedAt: lastUpdatedAt,
+                    lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds,
                     encryptionDetails: RecipientEncryptionDetailsDTO(
                         userIdentifier: self.requestor.identifier,
                         ephemeralPublicKey: ephemeralPublicKey,
@@ -1563,7 +1563,7 @@ struct LocalServer : SHServerAPI {
                         threadId: threadId,
                         name: threadName,
                         membersPublicIdentifier: [],
-                        lastUpdatedAt: lastUpdatedAt,
+                        lastUpdatedAt: lastUpdatedAt.iso8601withFractionalSeconds,
                         encryptionDetails: encryptionDetails
                     )
                     
