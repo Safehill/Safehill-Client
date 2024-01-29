@@ -134,7 +134,7 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         do {
             serverProxy.setupGroupEncryptionDetails(
                 groupId: groupId,
-                recipientsEncryptionDetails: try self.recipientEncryptionDetails(from: symmetricKey!, for: users),
+                recipientsEncryptionDetails: try self.recipientEncryptionDetails(from: symmetricKey!, for: usersAndSelf),
                 completionHandler: completionHandler
             )
         } catch {
