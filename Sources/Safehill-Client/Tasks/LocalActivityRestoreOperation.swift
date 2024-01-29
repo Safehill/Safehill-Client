@@ -9,7 +9,8 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     @available(*, unavailable)
     public override init(user: SHLocalUser,
                          downloaderDelegates: [SHAssetDownloaderDelegate],
-                         syncDelegates: [SHAssetSyncingDelegate],
+                         assetsSyncDelegates: [SHAssetSyncingDelegate],
+                         threadsSyncDelegates: [SHThreadSyncingDelegate],
                          restorationDelegate: SHAssetActivityRestorationDelegate,
                          limitPerRun limit: Int? = nil,
                          photoIndexer: SHPhotosIndexer? = nil) {
@@ -19,10 +20,13 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     public init(user: SHLocalUser,
                 delegates: [SHAssetDownloaderDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate) {
-        super.init(user: user, 
-                   downloaderDelegates: delegates,
-                   syncDelegates: [],
-                   restorationDelegate: restorationDelegate)
+        super.init(
+            user: user,
+            downloaderDelegates: delegates,
+            assetsSyncDelegates: [],
+            threadsSyncDelegates: [],
+            restorationDelegate: restorationDelegate
+        )
     }
     
     /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch

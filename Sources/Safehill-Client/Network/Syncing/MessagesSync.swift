@@ -28,9 +28,9 @@ extension SHSyncOperation {
                 case .success(let messages):
                     switch anchor {
                     case .group:
-                        self.delegates.forEach({ $0.didReceiveMessages(messages, inGroup: anchorId) })
+                        self.threadsDelegates.forEach({ $0.didReceiveMessages(messages, inGroup: anchorId) })
                     case .thread:
-                        self.delegates.forEach({ $0.didReceiveMessages(messages, inThread: anchorId) })
+                        self.threadsDelegates.forEach({ $0.didReceiveMessages(messages, inThread: anchorId) })
                     }
                 }
                 dispatchGroup.leave()

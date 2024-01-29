@@ -95,9 +95,9 @@ extension SHSyncOperation {
         if anyChanged {
             switch anchor {
             case .thread:
-                self.delegates.forEach({ $0.reactionsDidChange(inThread: anchorId) })
+                self.threadsDelegates.forEach({ $0.reactionsDidChange(inThread: anchorId) })
             case .group:
-                self.delegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
+                self.threadsDelegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
             }
         }
         

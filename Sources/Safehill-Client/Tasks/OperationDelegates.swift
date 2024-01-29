@@ -13,18 +13,10 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
     func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
-    
-    func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
-    
-    func reactionsDidChange(inGroup groupId: String)
-    func didReceiveMessages(_ messages: [MessageOutputDTO], inGroup groupId: String)
-    
-    func reactionsDidChange(inThread threadId: String)
-    func didReceiveMessages(_ messages: [MessageOutputDTO], inThread threadId: String)
 }
 
 public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {
-    func threadsWereUpdated(_: [ConversationThreadOutputDTO])
+    func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
     func reactionsDidChange(inGroup groupId: String)
     func didReceiveMessages(_ messages: [MessageOutputDTO], inGroup groupId: String)

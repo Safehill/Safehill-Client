@@ -53,7 +53,7 @@ extension SHSyncOperation {
             return
         }
         
-        self.delegates.forEach({ $0.didUpdateThreadsList(allThreads) })
+        self.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
         
         /// 
         /// Remove extra threads locally

@@ -335,7 +335,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     setupThreadResult in
                     switch setupThreadResult {
                     case .success(let serverThread):
-                        self.threadsDelegates.forEach({ $0.threadsWereUpdated([serverThread])} )
+                        self.threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
                     case .failure(let error):
                         errorInitializingThread = error
                     default: break

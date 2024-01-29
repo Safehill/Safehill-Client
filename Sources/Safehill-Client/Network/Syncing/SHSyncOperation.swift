@@ -51,19 +51,29 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     let user: SHLocalUser
     
-    let delegates: [SHAssetSyncingDelegate]
+    let assetsDelegates: [SHAssetSyncingDelegate]
+    let threadsDelegates: [SHThreadSyncingDelegate]
     
     var serverProxy: SHServerProxy {
         SHServerProxy(user: self.user)
     }
     
-    public init(user: SHLocalUser, delegates: [SHAssetSyncingDelegate]) {
+    public init(
+        user: SHLocalUser,
+        assetsDelegates: [SHAssetSyncingDelegate],
+        threadsDelegates: [SHThreadSyncingDelegate]
+    ) {
         self.user = user
-        self.delegates = delegates
+        self.assetsDelegates = assetsDelegates
+        self.threadsDelegates = threadsDelegates
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
-        SHSyncOperation(user: self.user, delegates: self.delegates)
+        SHSyncOperation(
+            user: self.user,
+            assetsDelegates: self.assetsDelegates,
+            threadsDelegates: self.threadsDelegates
+        )
     }
     
     private func syncDescriptors(
@@ -181,7 +191,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 result[descriptor.globalIdentifier] = userIdList.compactMap({ remoteUsersById[$0] })
                 return result
             }
-        self.delegates.forEach({
+        self.assetsDelegates.forEach({
             $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
         })
         
@@ -252,13 +262,13 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         if queueDiff.changed.count > 0 {
             self.log.debug("[sync] notifying queue items changed \(queueDiff.changed)")
-            self.delegates.forEach({
+            self.assetsDelegates.forEach({
                 $0.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
             })
         }
         if queueDiff.removed.count > 0 {
             self.log.debug("[sync] notifying queue items removed \(queueDiff.removed)")
-            self.delegates.forEach({
+            self.assetsDelegates.forEach({
                 $0.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
             })
         }
@@ -285,7 +295,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     ) { result in
                         switch result {
                         case .success():
-                            self.delegates.forEach {
+                            self.assetsDelegates.forEach {
                                 $0.usersWereAddedToShare(of: globalIdentifier, groupIdByRecipientId: shareDiff.groupIdByRecipientId)
                             }
                         case .failure(let err):
@@ -341,7 +351,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     ) { result in
                         switch result {
                         case .success():
-                            self.delegates.forEach {
+                            self.assetsDelegates.forEach {
                                 $0.usersWereRemovedFromShare(of: globalIdentifier,
                                                              groupIdByRecipientId: shareDiff.groupIdByRecipientId)
                             }
@@ -411,7 +421,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     }
                     
                     self.log.debug("[sync] notifying delegates about deleted assets \(diff.assetsRemovedOnServer)")
-                    self.delegates.forEach({
+                    self.assetsDelegates.forEach({
                         $0.assetsWereDeleted(diff.assetsRemovedOnServer)
                     })
                 }
