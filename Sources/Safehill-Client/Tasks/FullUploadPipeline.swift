@@ -14,19 +14,22 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     }
     
     public let user: SHLocalUser
-    public var delegates: [SHOutboundAssetOperationDelegate]
+    public var assetsDelegates: [SHOutboundAssetOperationDelegate]
+    public var threadsDelegates: [SHThreadSyncingDelegate]
     var imageManager: PHCachingImageManager
     var photoIndexer: SHPhotosIndexer?
     
     let parallelization: ParallelizationOption
     
     public init(user: SHLocalUser,
-                delegates: [SHOutboundAssetOperationDelegate],
+                assetsDelegates: [SHOutboundAssetOperationDelegate],
+                threadsDelegates: [SHThreadSyncingDelegate],
                 parallelization: ParallelizationOption = .conservative,
                 imageManager: PHCachingImageManager? = nil,
                 photoIndexer: SHPhotosIndexer? = nil) {
         self.user = user
-        self.delegates = delegates
+        self.assetsDelegates = assetsDelegates
+        self.threadsDelegates = threadsDelegates
         self.parallelization = parallelization
         self.imageManager = imageManager ?? PHCachingImageManager()
         self.photoIndexer = photoIndexer
@@ -35,7 +38,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     public func clone() -> SHBackgroundOperationProtocol {
         SHFullUploadPipelineOperation(
             user: self.user,
-            delegates: self.delegates,
+            assetsDelegates: self.assetsDelegates,
+            threadsDelegates: self.threadsDelegates,
             imageManager: self.imageManager,
             photoIndexer: self.photoIndexer
         )
@@ -54,7 +58,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         
         let fetchOperation = SHLocalFetchOperation(
-            delegates: delegates,
+            delegates: assetsDelegates,
             limitPerRun: 0,
             imageManager: imageManager,
             photoIndexer: photoIndexer
@@ -63,7 +67,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let encryptOperation = SHEncryptionOperation(
             user: user,
-            delegates: delegates,
+            assetsDelegates: assetsDelegates,
+            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
@@ -71,7 +76,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let uploadOperation = SHUploadOperation(
             user: user,
-            delegates: delegates,
+            delegates: assetsDelegates,
             limitPerRun: 0
         )
         try uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
@@ -80,7 +85,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let shareOperation = SHEncryptAndShareOperation(
             user: user,
-            delegates: delegates,
+            assetsDelegates: assetsDelegates,
+            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
@@ -124,7 +130,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         }
         
         let fetchOperation = SHLocalFetchOperation(
-            delegates: delegates,
+            delegates: assetsDelegates,
             limitPerRun: 0,
             imageManager: imageManager,
             photoIndexer: photoIndexer
@@ -146,7 +152,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let encryptOperation = SHEncryptionOperation(
             user: user,
-            delegates: delegates,
+            assetsDelegates: assetsDelegates,
+            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
@@ -167,7 +174,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let uploadOperation = SHUploadOperation(
             user: user,
-            delegates: delegates,
+            delegates: assetsDelegates,
             limitPerRun: 0
         )
         try uploadOperation.runOnce(maxItems: limit)
@@ -187,7 +194,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let shareOperation = SHEncryptAndShareOperation(
             user: user,
-            delegates: delegates,
+            assetsDelegates: assetsDelegates,
+            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )

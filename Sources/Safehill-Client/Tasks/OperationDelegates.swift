@@ -23,6 +23,16 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func didReceiveMessages(_ messages: [MessageOutputDTO], inThread threadId: String)
 }
 
+public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {
+    func threadsWereUpdated(_: [ConversationThreadOutputDTO])
+    
+    func reactionsDidChange(inGroup groupId: String)
+    func didReceiveMessages(_ messages: [MessageOutputDTO], inGroup groupId: String)
+    
+    func reactionsDidChange(inThread threadId: String)
+    func didReceiveMessages(_ messages: [MessageOutputDTO], inThread threadId: String)
+}
+
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     
     /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)

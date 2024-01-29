@@ -134,17 +134,20 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     
     public let limit: Int
     public let user: SHLocalUser
-    public var delegates: [SHOutboundAssetOperationDelegate]
+    public var assetDelegates: [SHOutboundAssetOperationDelegate]
+    public var threadsDelegates: [SHThreadSyncingDelegate]
     
     var imageManager: PHCachingImageManager
     
     public init(user: SHLocalUser,
-                delegates: [SHOutboundAssetOperationDelegate],
+                assetsDelegates: [SHOutboundAssetOperationDelegate],
+                threadsDelegates: [SHThreadSyncingDelegate],
                 limitPerRun limit: Int,
                 imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.limit = limit
-        self.delegates = delegates
+        self.assetDelegates = assetsDelegates
+        self.threadsDelegates = threadsDelegates
         self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
@@ -155,7 +158,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     public func clone() -> SHBackgroundOperationProtocol {
         SHEncryptionOperation(
             user: self.user,
-            delegates: self.delegates,
+            assetsDelegates: self.assetDelegates,
+            threadsDelegates: self.threadsDelegates,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -335,7 +339,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
         
         /// Notify the delegates
-        for delegate in delegates {
+        for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
                 delegate.didFailEncryption(queueItemIdentifier: request.identifier)
             }
@@ -400,7 +404,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             return
         }
         /// Notify the delegates
-        for delegate in delegates {
+        for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
                 delegate.didCompleteEncryption(queueItemIdentifier: uploadRequest.identifier)
             }
@@ -437,7 +441,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             let encryptedAsset: any SHEncryptedAsset
             
             if encryptionRequest.isBackground == false {
-                for delegate in delegates {
+                for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
                         delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
                     }

@@ -12,7 +12,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func clone() -> SHBackgroundOperationProtocol {
         SHEncryptAndShareOperation(
             user: self.user,
-            delegates: self.delegates,
+            assetsDelegates: self.assetDelegates,
+            threadsDelegates: self.threadsDelegates,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -93,7 +94,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         /// Notify the delegates
-        for delegate in delegates {
+        for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
                 delegate.didFailSharing(queueItemIdentifier: failedShare.identifier)
             }
@@ -150,7 +151,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         /// Notify the delegates
-        for delegate in delegates {
+        for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
                 delegate.didCompleteSharing(queueItemIdentifier: successfulShare.identifier)
             }
@@ -265,7 +266,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
             
             if shareRequest.isBackground == false {
-                for delegate in delegates {
+                for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
                         delegate.didStartSharing(queueItemIdentifier: shareRequest.identifier)
                     }
@@ -333,6 +334,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 ) { 
                     setupThreadResult in
                     switch setupThreadResult {
+                    case .success(let serverThread):
+                        self.threadsDelegates.forEach({ $0.threadsWereUpdated([serverThread])} )
                     case .failure(let error):
                         errorInitializingThread = error
                     default: break
