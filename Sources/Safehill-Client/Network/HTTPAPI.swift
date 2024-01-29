@@ -914,7 +914,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.get("groups/\(groupId)/encryptionDetails", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
+        self.post("groups/\(groupId)/retrieve", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
             switch result {
             case .failure(let error as SHHTTPError.ClientError):
                 switch error {
