@@ -677,7 +677,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "recipientPhoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
         ]
         
-        self.post("/groups/\(groupId)/add-phone-numbers", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.post("/groups/add-phone-numbers/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .failure(let error):
                 completionHandler(.failure(error))
@@ -886,7 +886,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "overwrite": false
         ] as [String: Any]
         
-        self.post("groups/\(groupId)/setup", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+        self.post("groups/setup/\(groupId)", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -914,7 +914,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.post("groups/\(groupId)/retrieve", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
+        self.post("groups/retrieve/\(groupId)", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
             switch result {
             case .failure(let error as SHHTTPError.ClientError):
                 switch error {
