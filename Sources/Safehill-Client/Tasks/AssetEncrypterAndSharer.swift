@@ -348,7 +348,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 guard errorInitializingGroup == nil,
                       errorInitializingThread == nil else {
                     // Mark as failed on any other error
-                    throw errorInitializingGroup!
+                    throw errorInitializingGroup ?? errorInitializingThread!
                 }
                 
                 // Ingest into the graph
