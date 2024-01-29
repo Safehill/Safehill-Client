@@ -111,64 +111,39 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         with users: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        var symmetricKey: SymmetricKey?
+        
         do {
-            let symmetricKey = try self.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
-            
-            if let symmetricKey {
-                do {
-                    try self.userGroupEncryptionSetup(
-                        groupId: groupId,
-                        secret: symmetricKey,
-                        users: users,
-                        completionHandler: completionHandler
-                    )
-                } catch {
-                    log.critical("""
-failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identifier })). error=\(error.localizedDescription)
-""")
-                    completionHandler(.failure(error))
-                    return
-                }
-            } else {
-                do {
-                    try self.createNewGroupEncryptionDetails(
-                        groupId: groupId,
-                        with: users,
-                        completionHandler: completionHandler
-                    )
-                } catch {
-                    log.critical("""
-failed to initialize E2EE details for group \(groupId). error=\(error.localizedDescription)
-""")
-                    completionHandler(.failure(error))
-                    return
-                }
-            }
+            symmetricKey = try self.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
         } catch {
             log.critical("""
 failed to fetch symmetric key for self user for existing group \(groupId): \(error.localizedDescription)
 """)
             completionHandler(.failure(error))
+            return
         }
-    }
-    
-    public func createNewGroupEncryptionDetails(
-        groupId: String,
-        with users: [SHServerUser],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) throws {
-        let secret: SymmetricKey = createNewSecret()
+        
+        if symmetricKey == nil {
+            symmetricKey = createNewSecret()
+        }
+        
         var usersAndSelf = users
         if users.contains(where: { $0.identifier == user.identifier }) == false {
             usersAndSelf.append(user)
         }
-        
-        try self.userGroupEncryptionSetup(
-            groupId: groupId,
-            secret: secret,
-            users: usersAndSelf,
-            completionHandler: completionHandler
-        )
+        do {
+            serverProxy.setupGroupEncryptionDetails(
+                groupId: groupId,
+                recipientsEncryptionDetails: try self.recipientEncryptionDetails(from: symmetricKey!, for: users),
+                completionHandler: completionHandler
+            )
+        } catch {
+            log.critical("""
+failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identifier })). error=\(error.localizedDescription)
+""")
+            completionHandler(.failure(error))
+            return
+        }
     }
     
     private func recipientEncryptionDetails(
@@ -193,19 +168,6 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         }
         
         return recipientEncryptionDetails
-    }
-    
-    private func userGroupEncryptionSetup(
-        groupId: String,
-        secret: SymmetricKey,
-        users: [SHServerUser],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) throws {
-        serverProxy.setupGroupEncryptionDetails(
-            groupId: groupId,
-            recipientsEncryptionDetails: try self.recipientEncryptionDetails(from: secret, for: users),
-            completionHandler: completionHandler
-        )
     }
     
     public func deleteGroup(groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
