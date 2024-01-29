@@ -960,10 +960,15 @@ struct SHServerHTTPAPI : SHServerAPI {
             "byUsersPublicIdentifiers": users.map({ $0.identifier }),
         ] as [String: Any]
         
-        self.post("threads/retrieve",
-                  parameters: parameters,
-                  requiresAuthentication: true,
-                  completionHandler: completionHandler)
+        self.post("threads/retrieve", parameters: parameters, requiresAuthentication: true) {
+            (result: Result<[ConversationThreadOutputDTO], Error>) in
+            switch result {
+            case .success(let listOfThreads):
+                completionHandler(.success(listOfThreads.first))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
     }
     
     func deleteThread(
