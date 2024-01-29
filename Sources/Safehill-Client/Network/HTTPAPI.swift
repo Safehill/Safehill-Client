@@ -863,10 +863,10 @@ struct SHServerHTTPAPI : SHServerAPI {
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
-        self.get("threads/retrieve",
-                 parameters: nil,
-                 requiresAuthentication: true,
-                 completionHandler: completionHandler)
+        self.post("threads/retrieve",
+                  parameters: nil,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
     }
     
     func setGroupEncryptionDetails(
