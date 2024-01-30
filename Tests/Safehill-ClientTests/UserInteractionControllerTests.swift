@@ -214,6 +214,108 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let _ = try SHDBManager.sharedInstance.messageQueue().removeAll()
     }
     
+    func testKeyStability() throws {
+        ServerUserCache.shared.cache(
+            users: [
+                SHRemoteUser(identifier: myUser.identifier,
+                             name: "myUser",
+                             publicKeyData: myUser.publicKeyData,
+                             publicSignatureData: myUser.publicSignatureData)
+            ]
+        )
+        
+        let groupId = "testGroupId"
+        let recipient1 = SHLocalCryptoUser()
+        
+        ServerUserCache.shared.cache(
+            users: [
+                SHRemoteUser(identifier: recipient1.identifier,
+                             name: "recipient1",
+                             publicKeyData: recipient1.publicKeyData,
+                             publicSignatureData: recipient1.publicSignatureData)
+            ]
+        )
+        
+        let serverProxy = SHMockServerProxy(user: myUser)
+        
+        let controller = SHUserInteractionController(
+            user: myUser,
+            protocolSalt: kTestStaticProtocolSalt,
+            serverProxy: serverProxy
+        )
+        
+        var expectation = XCTestExpectation(description: "initialize the group")
+        controller.setupGroupEncryptionDetails(
+            groupId: groupId,
+            with: [
+                SHRemoteUser(
+                    identifier: recipient1.identifier,
+                    name: "recipient1",
+                    publicKeyData: recipient1.publicKeyData,
+                    publicSignatureData: recipient1.publicSignatureData
+                )
+            ]
+        ) { result in
+            if case .failure(let err) = result {
+                XCTFail(err.localizedDescription)
+            }
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 5.0)
+        
+        let symmetricKey = try controller.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
+        let recipientEncryptionDetails = try controller.fetchSelfEncryptionDetails(forAnchor: .group, anchorId: groupId)
+        XCTAssertNotNil(recipientEncryptionDetails)
+        guard let recipientEncryptionDetails else {
+            XCTFail() ; return
+        }
+        
+        let userStore = try SHDBManager.sharedInstance.userStore()
+        let kvs = try userStore.dictionaryRepresentation()
+        XCTAssertEqual(kvs.count, 3)
+        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"] as! String, recipientEncryptionDetails.ephemeralPublicKey)
+        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature"] as! String, recipientEncryptionDetails.secretPublicSignature)
+        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails.encryptedSecret)
+     
+        expectation = XCTestExpectation(description: "initialize the group")
+        controller.setupGroupEncryptionDetails(
+            groupId: groupId,
+            with: [
+                SHRemoteUser(
+                    identifier: recipient1.identifier,
+                    name: "recipient1",
+                    publicKeyData: recipient1.publicKeyData,
+                    publicSignatureData: recipient1.publicSignatureData
+                )
+            ]
+        ) { result in
+            if case .failure(let err) = result {
+                XCTFail(err.localizedDescription)
+            }
+            expectation.fulfill()
+        }
+        
+        let symmetricKey2 = try controller.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
+        let recipientEncryptionDetails2 = try controller.fetchSelfEncryptionDetails(forAnchor: .group, anchorId: groupId)
+        XCTAssertNotNil(recipientEncryptionDetails2)
+        guard let recipientEncryptionDetails2 else {
+            XCTFail() ; return
+        }
+        
+        let kvs2 = try userStore.dictionaryRepresentation()
+        XCTAssertEqual(kvs2.count, 3)
+        XCTAssertEqual(kvs2["\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"] as! String, recipientEncryptionDetails2.ephemeralPublicKey)
+        XCTAssertEqual(kvs2["\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature"] as! String, recipientEncryptionDetails2.secretPublicSignature)
+        XCTAssertEqual(kvs2["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails2.encryptedSecret)
+        
+        XCTAssertNotEqual(recipientEncryptionDetails.ephemeralPublicKey, recipientEncryptionDetails2.ephemeralPublicKey)
+        XCTAssertNotEqual(recipientEncryptionDetails.ephemeralPublicKey, recipientEncryptionDetails2.secretPublicSignature)
+        XCTAssertNotEqual(recipientEncryptionDetails.ephemeralPublicKey, recipientEncryptionDetails2.encryptedSecret)
+        
+        XCTAssertEqual(symmetricKey, symmetricKey2)
+    }
+    
     func testSendMessageE2EEInGroup() throws {
         ServerUserCache.shared.cache(
             users: [
@@ -264,18 +366,12 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         wait(for: [expectation], timeout: 5.0)
         
-        let recipientEncryptionDetails = try controller.fetchSelfEncryptionDetails(forAnchor: .group, anchorId: groupId)
-        XCTAssertNotNil(recipientEncryptionDetails)
-        guard let recipientEncryptionDetails else {
-            XCTFail() ; return
-        }
-        
         let userStore = try SHDBManager.sharedInstance.userStore()
         let kvs = try userStore.dictionaryRepresentation()
         XCTAssertEqual(kvs.count, 3)
-        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"] as! String, recipientEncryptionDetails.ephemeralPublicKey)
-        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature"] as! String, recipientEncryptionDetails.secretPublicSignature)
-        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails.encryptedSecret)
+        XCTAssertNotNil(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"])
+        XCTAssertNotNil(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature"])
+        XCTAssertNotNil(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"])
 
         let messageText = "This is my first message"
         
