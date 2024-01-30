@@ -315,7 +315,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     protocolSalt: self.user.encryptionProtocolSalt!
                 )
                 
-                log.debug("creating or updating encryption details in group \(shareRequest.groupId)")
+                log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+                Thread.callStackSymbols.forEach{log.debug("[TRACE_ENCRYPT_AND_SHARE] \($0)")}
                 dispatchGroup.enter()
                 interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
