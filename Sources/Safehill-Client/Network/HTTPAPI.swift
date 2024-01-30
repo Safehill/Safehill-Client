@@ -505,7 +505,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "deviceId": deviceName,
             "token": token
         ]
-        self.post("/users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.post("users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -677,7 +677,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "recipientPhoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
         ]
         
-        self.post("/groups/add-phone-numbers/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.post("groups/add-phone-numbers/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .failure(let error):
                 completionHandler(.failure(error))
