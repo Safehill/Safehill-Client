@@ -137,17 +137,24 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     public var assetDelegates: [SHOutboundAssetOperationDelegate]
     public var threadsDelegates: [SHThreadSyncingDelegate]
     
+    internal let interactionsController: SHUserInteractionController
+    
     var imageManager: PHCachingImageManager
     
     public init(user: SHLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
                 threadsDelegates: [SHThreadSyncingDelegate],
+                interactionsController: SHUserInteractionController? = nil,
                 limitPerRun limit: Int,
                 imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.limit = limit
         self.assetDelegates = assetsDelegates
         self.threadsDelegates = threadsDelegates
+        self.interactionsController = interactionsController ?? SHUserInteractionController(
+            user: self.user,
+            protocolSalt: self.user.encryptionProtocolSalt!
+        )
         self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
@@ -160,6 +167,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             user: self.user,
             assetsDelegates: self.assetDelegates,
             threadsDelegates: self.threadsDelegates,
+            interactionsController: self.interactionsController,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )

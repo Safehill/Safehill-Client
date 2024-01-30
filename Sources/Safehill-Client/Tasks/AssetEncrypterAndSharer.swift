@@ -14,6 +14,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             user: self.user,
             assetsDelegates: self.assetDelegates,
             threadsDelegates: self.threadsDelegates,
+            interactionsController: self.interactionsController,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -310,14 +311,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 var errorInitializingThread: Error? = nil
                 let dispatchGroup = DispatchGroup()
                 
-                let interactionsController = SHUserInteractionController(
-                    user: self.user,
-                    protocolSalt: self.user.encryptionProtocolSalt!
-                )
-                
                 log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
                 dispatchGroup.enter()
-                interactionsController.setupGroupEncryptionDetails(
+                self.interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
                     with: shareRequest.sharedWith,
                     completionHandler: { initializeGroupResult in
@@ -332,7 +328,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 
                 log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
                 dispatchGroup.enter()
-                interactionsController.setupThread(
+                self.interactionsController.setupThread(
                     with: shareRequest.sharedWith
                 ) { 
                     setupThreadResult in
