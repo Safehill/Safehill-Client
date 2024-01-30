@@ -977,8 +977,9 @@ extension SHServerProxy {
                             ) { _ in
                                 completionHandler(.success(remoteSelfDetails))
                             }
+                        } else {
+                            completionHandler(.success(nil))
                         }
-                        completionHandler(.success(nil))
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }
