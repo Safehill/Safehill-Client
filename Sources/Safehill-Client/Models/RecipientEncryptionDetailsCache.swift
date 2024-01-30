@@ -65,7 +65,7 @@ internal class RecipientEncryptionDetailsCache {
     
     func details(for anchor: InteractionAnchor, anchorId: String, userIdentifier: String) -> RecipientEncryptionDetailsDTO? {
         if let cacheObj = cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) {
-            log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId)")
+            log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId) : \(cacheObj)")
             if let details = cacheObj[userIdentifier] as? EncryptionDetailsClass {
                 log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId)::\(userIdentifier)")
                 return RecipientEncryptionDetailsDTO(
