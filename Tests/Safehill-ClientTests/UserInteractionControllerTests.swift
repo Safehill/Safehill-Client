@@ -112,7 +112,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
                     threadId: mockThread.threadId,
                     name: mockThread.name,
                     membersPublicIdentifier: mockThread.userIds,
-                    lastUpdatedAt: Date(),
+                    lastUpdatedAt: Date().iso8601withFractionalSeconds,
                     encryptionDetails: selfEncryptionDetails
                 )
             } ?? []
@@ -147,7 +147,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
                 threadId: matchingThread.threadId,
                 name: name,
                 membersPublicIdentifier: recipientsEncryptionDetails.map({ $0.userIdentifier }),
-                lastUpdatedAt: Date(),
+                lastUpdatedAt: Date().iso8601withFractionalSeconds,
                 encryptionDetails: self.state.threads![matchingThreadIdx].selfEncryptionDetails!
             )
             
@@ -191,7 +191,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             threadId: matchingThread.threadId,
             name: matchingThread.name,
             membersPublicIdentifier: matchingThread.userIds,
-            lastUpdatedAt: Date(),
+            lastUpdatedAt: Date().iso8601withFractionalSeconds,
             encryptionDetails: selfEncryptionDetails
         )
         completionHandler(.success(serverThread))
@@ -264,12 +264,18 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         wait(for: [expectation], timeout: 5.0)
         
+        let recipientEncryptionDetails = try controller.fetchSelfEncryptionDetails(forAnchor: .group, anchorId: groupId)
+        XCTAssertNotNil(recipientEncryptionDetails)
+        guard let recipientEncryptionDetails else {
+            XCTFail() ; return
+        }
+        
         let userStore = try SHDBManager.sharedInstance.userStore()
         let kvs = try userStore.dictionaryRepresentation()
         XCTAssertEqual(kvs.count, 3)
-        XCTAssertNotNil(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"])
-        XCTAssertNotNil(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature"])
-        XCTAssertNotNil(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"])
+        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"] as! String, recipientEncryptionDetails.ephemeralPublicKey)
+        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature"] as! String, recipientEncryptionDetails.secretPublicSignature)
+        XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails.encryptedSecret)
 
         let messageText = "This is my first message"
         

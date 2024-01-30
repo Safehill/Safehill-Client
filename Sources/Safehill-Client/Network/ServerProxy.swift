@@ -859,13 +859,16 @@ extension SHServerProxy {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        log.trace("saving encryption details for group \(groupId) to local server")
+        log.debug("[setupGroup] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
         /// Save the encryption details for this user on local
         self.localServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails
         ) { localResult in
             switch localResult {
-            case .success(_):
+            case .success:
+                log.trace("encryption details for group \(groupId) saved to local server. Uploading them to the server")
                 /// Save the encryption details for all users on server
                 self.remoteServer.setGroupEncryptionDetails(
                     groupId: groupId,
@@ -873,7 +876,7 @@ extension SHServerProxy {
                     completionHandler: completionHandler
                 )
             case .failure(let error):
-                log.error("failed to create group with encryption details locally")
+                log.error("failed to create group with encryption details locally: \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -898,6 +901,10 @@ extension SHServerProxy {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
+        if let recipientsEncryptionDetails {
+            log.trace("creating or updating thread with with users with ids \(recipientsEncryptionDetails.map({ $0.userIdentifier }))")
+            log.debug("[setupThread] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
+        }
         self.remoteServer.createOrUpdateThread(
             name: name,
             recipientsEncryptionDetails: recipientsEncryptionDetails
