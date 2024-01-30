@@ -316,7 +316,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 )
                 
                 log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
-                Thread.callStackSymbols.forEach{log.debug("[TRACE_ENCRYPT_AND_SHARE] \($0)")}
                 dispatchGroup.enter()
                 interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
@@ -331,7 +330,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     }
                 )
                 
-                log.debug("creating or updating encryption details in thread with \(shareRequest.sharedWith.map({ $0.identifier }))")
+                log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
                 dispatchGroup.enter()
                 interactionsController.setupThread(
                     with: shareRequest.sharedWith

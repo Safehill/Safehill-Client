@@ -10,6 +10,8 @@ public struct SHUserInteractionController {
     let protocolSalt: Data
     private var _serverProxy: SHServerProxyProtocol? = nil
     
+    private let encryptionDetailsCache = RecipientEncryptionDetailsCache()
+    
     public init(user: SHLocalUser, protocolSalt: Data, serverProxy: SHServerProxyProtocol? = nil) {
         self.user = user
         self.protocolSalt = protocolSalt
@@ -79,7 +81,12 @@ failed to initialize E2EE details for new users in thread \(conversationThread.t
                 do {
                     self.serverProxy.createOrUpdateThread(
                         name: nil,
-                        recipientsEncryptionDetails: try recipientEncryptionDetails(from: symmetricKey, for: usersAndSelf),
+                        recipientsEncryptionDetails: try recipientEncryptionDetails(
+                            from: symmetricKey,
+                            for: usersAndSelf,
+                            anchor: .thread,
+                            anchorId: conversationThread?.threadId
+                        ),
                         completionHandler: completionHandler
                     )
                 } catch {
@@ -100,6 +107,11 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
             recipientsEncryptionDetails: nil,
             completionHandler: completionHandler
         )
+    }
+    
+    public func deleteThread(threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        encryptionDetailsCache.evict(anchor: .thread, anchorId: threadId)
+        serverProxy.deleteThread(withId: threadId, completionHandler: completionHandler)
     }
     
     /// Creates the E2EE details for the group for all users involved, or updates such details if they already exist with the information for the missing users.
@@ -136,7 +148,12 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         do {
             serverProxy.setupGroupEncryptionDetails(
                 groupId: groupId,
-                recipientsEncryptionDetails: try self.recipientEncryptionDetails(from: symmetricKey!, for: usersAndSelf),
+                recipientsEncryptionDetails: try self.recipientEncryptionDetails(
+                    from: symmetricKey!,
+                    for: usersAndSelf,
+                    anchor: .group,
+                    anchorId: groupId
+                ),
                 completionHandler: completionHandler
             )
         } catch {
@@ -150,29 +167,46 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     private func recipientEncryptionDetails(
         from secret: SymmetricKey, 
-        for users: [any SHServerUser]
+        for users: [any SHServerUser],
+        anchor: InteractionAnchor,
+        anchorId: String?
     ) throws -> [RecipientEncryptionDetailsDTO] {
         var recipientEncryptionDetails = [RecipientEncryptionDetailsDTO]()
         
         for user in users {
-            let encryptedSecretForOther = try SHUserContext(user: self.user.shUser).shareable(
-                data: secret.rawRepresentation,
-                protocolSalt: protocolSalt,
-                with: user
-            )
-            let recipientEncryptionForUser = RecipientEncryptionDetailsDTO(
-                userIdentifier: user.identifier,
-                ephemeralPublicKey: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
-                encryptedSecret: encryptedSecretForOther.cyphertext.base64EncodedString(),
-                secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString()
-            )
-            recipientEncryptionDetails.append(recipientEncryptionForUser)
+            if let anchorId,
+               let cached = encryptionDetailsCache.details(for: anchor, anchorId: anchorId, userIdentifier: user.identifier) {
+                recipientEncryptionDetails.append(cached)
+            } else {
+                let encryptedSecretForOther = try SHUserContext(user: self.user.shUser).shareable(
+                    data: secret.rawRepresentation,
+                    protocolSalt: protocolSalt,
+                    with: user
+                )
+                let recipientEncryptionForUser = RecipientEncryptionDetailsDTO(
+                    userIdentifier: user.identifier,
+                    ephemeralPublicKey: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
+                    encryptedSecret: encryptedSecretForOther.cyphertext.base64EncodedString(),
+                    secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString()
+                )
+                recipientEncryptionDetails.append(recipientEncryptionForUser)
+                
+                if let anchorId {
+                    encryptionDetailsCache.cacheDetails(
+                        recipientEncryptionForUser,
+                        for: user.identifier,
+                        in: anchor,
+                        anchorId: anchorId
+                    )
+                }
+            }
         }
         
         return recipientEncryptionDetails
     }
     
     public func deleteGroup(groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        encryptionDetailsCache.evict(anchor: .group, anchorId: groupId)
         serverProxy.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
