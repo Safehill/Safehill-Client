@@ -65,7 +65,9 @@ internal class RecipientEncryptionDetailsCache {
     
     func details(for anchor: InteractionAnchor, anchorId: String, userIdentifier: String) -> RecipientEncryptionDetailsDTO? {
         if let cacheObj = cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) {
+            log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId)")
             if let details = cacheObj[userIdentifier] as? EncryptionDetailsClass {
+                log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId)::\(userIdentifier)")
                 return RecipientEncryptionDetailsDTO(
                     userIdentifier: userIdentifier,
                     ephemeralPublicKey: details.ephemeralPublicKey,
@@ -74,6 +76,7 @@ internal class RecipientEncryptionDetailsCache {
                 )
             }
         }
+        log.debug("[RecipientEncryptionDetailsCache] cache miss \(anchor.rawValue)::\(anchorId)::\(userIdentifier)")
         return nil
     }
     
@@ -84,6 +87,7 @@ internal class RecipientEncryptionDetailsCache {
             secretPublicSignature: details.secretPublicSignature
         )
         
+        log.debug("[RecipientEncryptionDetailsCache] caching \(anchor.rawValue)::\(anchorId)::\(userIdentifier)")
         if let existing = cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) {
             let new = existing.mutableCopy() as! NSMutableDictionary
             new[userIdentifier] = cacheObject
@@ -92,6 +96,7 @@ internal class RecipientEncryptionDetailsCache {
             self.cache.setObject(NSDictionary(object: cacheObject, forKey: NSString(string: userIdentifier)),
                                  forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)"))
         }
+        log.debug("[RecipientEncryptionDetailsCache] new cache value \(self.cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) ?? [:])")
     }
     
     func evict(anchor: InteractionAnchor, anchorId: String) {
