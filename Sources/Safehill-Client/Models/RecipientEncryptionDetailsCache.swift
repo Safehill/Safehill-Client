@@ -85,7 +85,8 @@ internal class RecipientEncryptionDetailsCache {
         )
         
         if let existing = cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) {
-            existing.setValue(cacheObject, forKey: userIdentifier)
+            let new = existing.mutableCopy() as! NSMutableDictionary
+            new[userIdentifier] = cacheObject
             self.cache.setObject(existing, forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)"))
         } else {
             self.cache.setObject(NSDictionary(object: cacheObject, forKey: NSString(string: userIdentifier)),
