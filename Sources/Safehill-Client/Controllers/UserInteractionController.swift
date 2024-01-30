@@ -67,6 +67,7 @@ failed to initialize E2EE details for new users in thread \(conversationThread.t
                         return
                     }
                 } else {
+                    log.debug("generating a new secret for thread with users \(users.map({ $0.identifier }))")
                     symmetricKey = createNewSecret()
                 }
                 
@@ -124,6 +125,7 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         }
         
         if symmetricKey == nil {
+            log.debug("generating a new secret for group with id \(groupId)")
             symmetricKey = createNewSecret()
         }
         
