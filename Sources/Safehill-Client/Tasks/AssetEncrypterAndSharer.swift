@@ -314,6 +314,8 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     user: self.user,
                     protocolSalt: self.user.encryptionProtocolSalt!
                 )
+                
+                log.debug("creating or updating encryption details in group \(shareRequest.groupId)")
                 dispatchGroup.enter()
                 interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
@@ -328,6 +330,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                     }
                 )
                 
+                log.debug("creating or updating encryption details in thread with \(shareRequest.sharedWith.map({ $0.identifier }))")
                 dispatchGroup.enter()
                 interactionsController.setupThread(
                     with: shareRequest.sharedWith
@@ -338,7 +341,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                         self.threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
                     case .failure(let error):
                         errorInitializingThread = error
-                    default: break
                     }
                     dispatchGroup.leave()
                 }
@@ -350,6 +352,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
                 guard errorInitializingGroup == nil,
                       errorInitializingThread == nil else {
+                    log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
                     // Mark as failed on any other error
                     throw errorInitializingGroup ?? errorInitializingThread!
                 }
