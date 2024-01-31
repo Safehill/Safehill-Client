@@ -1927,7 +1927,7 @@ struct LocalServer : SHServerAPI {
                 let condition = KBGenericCondition(.beginsWith, value: conditionStr)
                 reactionStore.keyValuesAndTimestamps(
                     forKeysMatching: condition,
-                    paginate: KBPaginationOptions(page: page, per: per),
+                    paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
                     sort: .descending
                 ) { reactionsResult in
                     switch reactionsResult {
@@ -1980,7 +1980,7 @@ struct LocalServer : SHServerAPI {
                         
                         messagesStore.keyValuesAndTimestamps(
                             forKeysMatching: condition,
-                            paginate: KBPaginationOptions(page: page, per: per),
+                            paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
                             sort: .descending
                         ) { messagesResult in
                             switch messagesResult {
