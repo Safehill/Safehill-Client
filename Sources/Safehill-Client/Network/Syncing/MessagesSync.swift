@@ -33,24 +33,26 @@ extension SHSyncOperation {
                         self.threadsDelegates.forEach({ $0.didReceiveMessages(messages, inThread: anchorId) })
                     }
                 }
-                dispatchGroup.leave()
             }
             
             dispatchGroup.enter()
-            
             switch anchor {
             case .group:
                 serverProxy.localServer.addMessages(
                     messagesToUpdate,
-                    inGroup: anchorId,
-                    completionHandler: callback
-                )
+                    inGroup: anchorId
+                ) {
+                    callback($0)
+                    dispatchGroup.leave()
+                }
             case .thread:
                 serverProxy.localServer.addMessages(
                     messagesToUpdate,
-                    inThread: anchorId,
-                    completionHandler: callback
-                )
+                    inThread: anchorId
+                ) {
+                    callback($0)
+                    dispatchGroup.leave()
+                }
             }
         }
         
