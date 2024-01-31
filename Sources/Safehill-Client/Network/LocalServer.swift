@@ -1925,7 +1925,11 @@ struct LocalServer : SHServerAPI {
                     conditionStr += refMessageId
                 }
                 let condition = KBGenericCondition(.beginsWith, value: conditionStr)
-                reactionStore.keyValuesAndTimestamps(forKeysMatching: condition) { reactionsResult in
+                reactionStore.keyValuesAndTimestamps(
+                    forKeysMatching: condition,
+                    paginate: KBPaginationOptions(page: page, per: per),
+                    sort: .descending
+                ) { reactionsResult in
                     switch reactionsResult {
                     case .success(let reactionKvts):
                         var reactions = [ReactionOutputDTO]()
@@ -1974,7 +1978,11 @@ struct LocalServer : SHServerAPI {
                             reactions.append(output)
                         })
                         
-                        messagesStore.keyValuesAndTimestamps(forKeysMatching: condition) { messagesResult in
+                        messagesStore.keyValuesAndTimestamps(
+                            forKeysMatching: condition,
+                            paginate: KBPaginationOptions(page: page, per: per),
+                            sort: .descending
+                        ) { messagesResult in
                             switch messagesResult {
                             case .success(let messageKvts):
                                 var messages = [MessageOutputDTO]()
