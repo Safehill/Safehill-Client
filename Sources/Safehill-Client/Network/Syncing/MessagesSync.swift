@@ -18,6 +18,7 @@ extension SHSyncOperation {
             }
         }
         
+        log.debug("[sync] syncing messages in \(anchor.rawValue) \(anchorId). toUpdate=\(messagesToUpdate.count)")
         let dispatchGroup = DispatchGroup()
         
         if messagesToUpdate.count > 0 {
@@ -42,6 +43,7 @@ extension SHSyncOperation {
                     messagesToUpdate,
                     inGroup: anchorId
                 ) {
+                    self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
                     callback($0)
                     dispatchGroup.leave()
                 }
@@ -50,6 +52,7 @@ extension SHSyncOperation {
                     messagesToUpdate,
                     inThread: anchorId
                 ) {
+                    self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
                     callback($0)
                     dispatchGroup.leave()
                 }
