@@ -2121,17 +2121,14 @@ struct LocalServer : SHServerAPI {
                 
                 result.append(messageOutput)
             } catch {
-                if messages.count == 1 {
-                    completionHandler(.failure(error))
-                }
                 if firstError == nil {
                     firstError = error
                 }
                 switch anchorType {
                 case .group:
-                    log.error("failed to locally add message with id \(message.interactionId!) to group \(anchorId)")
+                    log.error("failed to locally add message with id \(message.interactionId!) to group \(anchorId): \(error)")
                 case .thread:
-                    log.error("failed to locally add message with id \(message.interactionId!) to thread \(anchorId)")
+                    log.error("failed to locally add message with id \(message.interactionId!) to thread \(anchorId): \(error)")
                 }
             }
             
