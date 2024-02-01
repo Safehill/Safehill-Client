@@ -104,7 +104,7 @@ struct ValidateReceiptResponse: Codable {
             log.error("unable to parse pendingRenewalInfo: \(error)")
             pendingRenewalInfo = []
         }
-        log.debug(pendingRenewalInfo)
+        print(pendingRenewalInfo)
     }
 }
 
