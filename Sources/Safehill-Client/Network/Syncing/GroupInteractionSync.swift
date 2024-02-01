@@ -105,11 +105,11 @@ extension SHSyncOperation {
                 return
             }
             guard error == nil else {
-                log.error("error syncing interactions for group \(groupId). \(error!.localizedDescription)")
+                log.warning("error syncing interactions for group \(groupId). \(error!.localizedDescription)")
                 continue
             }
             guard let remoteInteractions = remoteInteractions else {
-                log.error("error retrieving remote interactions for group \(groupId)")
+                log.warning("error retrieving remote interactions for group \(groupId)")
                 continue
             }
             

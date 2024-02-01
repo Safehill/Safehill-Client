@@ -558,7 +558,7 @@ struct LocalServer : SHServerAPI {
                             err = KBError.fatalError("No sender information for asset")
                         }
                     } catch {
-                        print("failed to retrieve sender information for asset \(globalIdentifier): \(error)")
+                        log.error("failed to retrieve sender information for asset \(globalIdentifier): \(error)")
                         err = error
                     }
                     
@@ -583,7 +583,7 @@ struct LocalServer : SHServerAPI {
                         if keysAndValues.count > 0 {
                             for (key, value) in keysAndValues {
                                 guard let value = value as? [String: String] else {
-                                    print("failed to retrieve sharing information for asset \(globalIdentifier). Type is not a dictionary")
+                                    log.error("failed to retrieve sharing information for asset \(globalIdentifier). Type is not a dictionary")
                                     continue
                                 }
                                 let components = key.components(separatedBy: "::")
@@ -596,7 +596,7 @@ struct LocalServer : SHServerAPI {
                                 if components.count == 4, let groupId = value["groupId"] {
                                     sharedWithUsersInGroup[components[1]] = groupId
                                 } else {
-                                    print("failed to retrieve sharing information for asset \(globalIdentifier). Invalid formal")
+                                    log.error("failed to retrieve sharing information for asset \(globalIdentifier). Invalid format")
                                 }
                                 
                                 if let groupId = value["groupId"], let groupCreationDate = value["groupCreationDate"] {
@@ -604,10 +604,10 @@ struct LocalServer : SHServerAPI {
                                 }
                             }
                         } else {
-                            print("failed to retrieve sharing information for asset \(globalIdentifier). No data")
+                            log.error("failed to retrieve sharing information for asset \(globalIdentifier). No data")
                         }
                     } catch {
-                        print("failed to retrieve sharing information for asset \(globalIdentifier): \(error)")
+                        log.error("failed to retrieve sharing information for asset \(globalIdentifier): \(error)")
                     }
                     
                     let sharingInfo = SHGenericDescriptorSharingInfo(

@@ -294,7 +294,7 @@ extension SHServerProxy {
                     /// 
                     /// Can't connect to the server, get details from local cache
                     ///
-                    print("Failed to get user details from server. Using local cache\n \(err)")
+                    log.warning("Failed to get user details from server. Using local cache\n \(err)")
                     self.fetchLocalUserAccount(originalServerError: err,
                                                completionHandler: completionHandler)
                 } else {
