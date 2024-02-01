@@ -540,12 +540,19 @@ extension SHUserInteractionController {
                 continue
             }
             
-            let decryptedData = try SHUserContext(user: self.user.shUser).decrypt(
-                Data(base64Encoded: encryptedMessageContainer.encryptedMessage)!,
-                usingEncryptedSecret: shareablePayload,
-                protocolSalt: protocolSalt,
-                receivedFrom: sender
-            )
+            let decryptedData: Data
+            
+            do {
+                decryptedData = try SHUserContext(user: self.user.shUser).decrypt(
+                    Data(base64Encoded: encryptedMessageContainer.encryptedMessage)!,
+                    usingEncryptedSecret: shareablePayload,
+                    protocolSalt: protocolSalt,
+                    signedWith: Data(base64Encoded: interactionsGroup.senderPublicSignature)!
+                )
+            } catch {
+                log.error("failed to decrypt message \(encryptedMessageContainer.interactionId!) from \(encryptedMessageContainer.senderUserIdentifier!)")
+                continue
+            }
             guard let decryptedMessage = String(data: decryptedData, encoding: .utf8) else {
                 log.warning("decoding of message with interactionId=\(encryptedMessageContainer.interactionId!) failed")
                 continue

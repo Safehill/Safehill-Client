@@ -46,7 +46,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func addMessage(_ message: MessageInputDTO, inGroup groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
-            interactionId: "interactionId",
+            interactionId: UUID().uuidString,
             senderUserIdentifier: self.localServer.requestor.identifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
@@ -65,7 +65,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func addMessage(_ message: MessageInputDTO, inThread threadId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
-            interactionId: "interactionId",
+            interactionId: UUID().uuidString,
             senderUserIdentifier: self.localServer.requestor.identifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
@@ -248,7 +248,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             serverProxy: serverProxy
         )
         
-        var expectation = XCTestExpectation(description: "initialize the group")
+        let expectation1 = XCTestExpectation(description: "initialize the group")
         controller.setupGroupEncryptionDetails(
             groupId: groupId,
             with: [
@@ -263,10 +263,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation1.fulfill()
         }
         
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation1], timeout: 5.0)
         
         let symmetricKey = try controller.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
         let recipientEncryptionDetails = try controller.fetchSelfEncryptionDetails(forAnchor: .group, anchorId: groupId)
@@ -283,7 +283,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::senderPublicSignature"] as! String, recipientEncryptionDetails.senderPublicSignature)
         XCTAssertEqual(kvs["\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails.encryptedSecret)
      
-        expectation = XCTestExpectation(description: "initialize the group")
+        let expectation2 = XCTestExpectation(description: "initialize the group")
         controller.setupGroupEncryptionDetails(
             groupId: groupId,
             with: [
@@ -298,8 +298,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation2.fulfill()
         }
+        
+        wait(for: [expectation2], timeout: 5.0)
         
         let symmetricKey2 = try controller.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
         let recipientEncryptionDetails2 = try controller.fetchSelfEncryptionDetails(forAnchor: .group, anchorId: groupId)
@@ -353,7 +355,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             serverProxy: serverProxy
         )
         
-        var expectation = XCTestExpectation(description: "initialize the group")
+        let expectation1 = XCTestExpectation(description: "initialize the group")
         controller.setupGroupEncryptionDetails(
             groupId: groupId,
             with: [
@@ -368,10 +370,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation1.fulfill()
         }
         
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation1], timeout: 5.0)
         
         let userStore = try SHDBManager.sharedInstance.userStore()
         let kvs = try userStore.dictionaryRepresentation()
@@ -383,7 +385,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
 
         let messageText = "This is my first message"
         
-        expectation = XCTestExpectation(description: "send a message in the group")
+        let expectation2 = XCTestExpectation(description: "send a message in the group")
         controller.send(
             message: messageText,
             inGroup: groupId
@@ -391,12 +393,12 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation2.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation2], timeout: 5.0)
         
-        expectation = XCTestExpectation(description: "retrieve group interactions")
+        let expectation3 = XCTestExpectation(description: "retrieve group interactions")
         controller.retrieveInteractions(inGroup: groupId, per: 10, page: 1) {
             result in
             switch result {
@@ -417,10 +419,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 XCTAssertEqual(message.inReplyToInteractionId, nil)
                 XCTAssertEqual(message.message, messageText)
             }
-            expectation.fulfill()
+            expectation3.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation3], timeout: 5.0)
 
     }
     
@@ -452,6 +454,11 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 ]
             )
         
+        XCTAssertEqual(ServerUserCache.shared.user(with: myUser.identifier)?.publicSignatureData,
+                       myUser.publicSignatureData)
+        XCTAssertEqual(ServerUserCache.shared.user(with: recipient1.identifier)?.publicSignatureData,
+                       recipient1.publicSignatureData)
+        
         /// Create the thread in the mock server for `myUser`, with no encryption details for now
         
         let serverThreadDetails = [
@@ -464,7 +471,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         ]
         let serverProxy = SHMockServerProxy(user: myUser, threads: serverThreadDetails)
         
-        let controller = SHUserInteractionController(
+        let controller1 = SHUserInteractionController(
             user: myUser,
             protocolSalt: kTestStaticProtocolSalt,
             serverProxy: serverProxy
@@ -473,8 +480,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         /// Ask the mock server for `myUser` to create a new thread with `recipient1`
         /// This will set up the encryption details in the mock server for the thread for both users
         
-        var expectation = XCTestExpectation(description: "initialize the thread")
-        controller.setupThread(
+        let expectation1 = XCTestExpectation(description: "initialize the thread")
+        controller1.setupThread(
             with: [
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -488,10 +495,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation1.fulfill()
         }
         
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation1], timeout: 5.0)
         
         /// Ensure the encryption details for `myUser` are now present in the local server
         
@@ -527,25 +534,25 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let messageText = "This is my first message"
         
-        expectation = XCTestExpectation(description: "send a message in the thread")
-        controller.send(
+        let expectation2 = XCTestExpectation(description: "send a message in the thread")
+        controller1.send(
             message: messageText,
             inThread: threadId
         ) { result in
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation2.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation2], timeout: 5.0)
         
         ///
         /// Ensure that message can be read from `myUser`
         ///
         
-        expectation = XCTestExpectation(description: "retrieve thread interactions")
-        controller.retrieveInteractions(inThread: threadId, per: 10, page: 1) {
+        let expectation3 = XCTestExpectation(description: "retrieve thread interactions")
+        controller1.retrieveInteractions(inThread: threadId, per: 10, page: 1) {
             result in
             switch result {
             case .failure(let err):
@@ -556,6 +563,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 
                 guard let message = threadInteractions.messages.first else {
                     XCTFail()
+                    expectation3.fulfill()
                     return
                 }
                 
@@ -565,10 +573,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 XCTAssertEqual(message.inReplyToInteractionId, nil)
                 XCTAssertEqual(message.message, messageText)
             }
-            expectation.fulfill()
+            expectation3.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation3], timeout: 5.0)
         
         ///
         /// Ensure that message can be read from `recipient1`
@@ -597,9 +605,9 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         writeBatch.set(value: mockServerRecipient1EncryptionDetails.senderPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature")
         try writeBatch.write()
         
-        expectation = XCTestExpectation(description: "retrieve thread interactions on the other side")
+        let expectation4 = XCTestExpectation(description: "retrieve thread interactions on the other side")
 
-        let serverProxy2 = SHMockServerProxy(user: myUser, threads: [mockServerThread])
+        let serverProxy2 = SHMockServerProxy(user: recipient1, threads: [mockServerThread])
         let controller2 = SHUserInteractionController(
             user: recipient1,
             protocolSalt: kTestStaticProtocolSalt,
@@ -616,6 +624,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 
                 guard let message = threadInteractions.messages.first else {
                     XCTFail()
+                    expectation4.fulfill()
                     return
                 }
                 
@@ -625,10 +634,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 XCTAssertEqual(message.inReplyToInteractionId, nil)
                 XCTAssertEqual(message.message, messageText)
             }
-            expectation.fulfill()
+            expectation4.fulfill()
         }
         
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation4], timeout: 5.0)
         
         ///
         /// Now, send a message response from `recipient1` back to `myUser`
@@ -636,7 +645,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let messageReplyText = "This is the reply to your first message"
         
-        expectation = XCTestExpectation(description: "send a reply in the thread")
+        let expectation5 = XCTestExpectation(description: "send a reply in the thread")
         controller2.send(
             message: messageReplyText,
             inThread: threadId
@@ -644,9 +653,162 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
             }
-            expectation.fulfill()
+            expectation5.fulfill()
         }
 
-        wait(for: [expectation], timeout: 5.0)
+        wait(for: [expectation5], timeout: 5.0)
+        
+        let expectation6 = XCTestExpectation(description: "retrieve interactions in thread from recipient1")
+        
+        controller2.retrieveInteractions(inThread: threadId, per: 10, page: 1) {
+            result in
+            switch result {
+            case .failure(let err):
+                XCTFail(err.localizedDescription)
+            case .success(let threadInteractions):
+                XCTAssertEqual(threadInteractions.threadId, threadId)
+                XCTAssertEqual(threadInteractions.messages.count, 2)
+                
+                guard let lastMessage = threadInteractions.messages.last else {
+                    XCTFail()
+                    expectation6.fulfill()
+                    return
+                }
+                
+                XCTAssertNotNil(lastMessage.interactionId)
+                XCTAssertEqual(lastMessage.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(lastMessage.inReplyToAssetGlobalIdentifier, nil)
+                XCTAssertEqual(lastMessage.inReplyToInteractionId, nil)
+                XCTAssertEqual(lastMessage.message, messageText)
+                
+                guard let firstMessage = threadInteractions.messages.first else {
+                    XCTFail()
+                    expectation6.fulfill()
+                    return
+                }
+                
+                XCTAssertNotNil(firstMessage.interactionId)
+                XCTAssertEqual(firstMessage.sender.identifier, recipient1.identifier)
+                XCTAssertEqual(firstMessage.inReplyToAssetGlobalIdentifier, nil)
+                XCTAssertEqual(firstMessage.inReplyToInteractionId, nil)
+                XCTAssertEqual(firstMessage.message, messageReplyText)
+            }
+            expectation6.fulfill()
+        }
+        
+        wait(for: [expectation6], timeout: 5.0)
+        
+        let expectation7 = XCTestExpectation(description: "retrieve interactions with limit")
+        let expectation8 = XCTestExpectation(description: "retrieve interactions with offset")
+        let expectation9 = XCTestExpectation(description: "retrieve interactions with limit and offset")
+        
+        controller2.retrieveInteractions(inThread: threadId, per: 1, page: 1) {
+            result in
+            switch result {
+            case .failure(let err):
+                XCTFail(err.localizedDescription)
+            case .success(let threadInteractions):
+                XCTAssertEqual(threadInteractions.threadId, threadId)
+                XCTAssertEqual(threadInteractions.messages.count, 1)
+                
+                guard let firstMessage = threadInteractions.messages.first else {
+                    XCTFail()
+                    expectation7.fulfill()
+                    return
+                }
+                
+                XCTAssertNotNil(firstMessage.interactionId)
+                XCTAssertEqual(firstMessage.sender.identifier, recipient1.identifier)
+                XCTAssertEqual(firstMessage.inReplyToAssetGlobalIdentifier, nil)
+                XCTAssertEqual(firstMessage.inReplyToInteractionId, nil)
+                XCTAssertEqual(firstMessage.message, messageReplyText)
+            }
+            expectation7.fulfill()
+        }
+        
+        controller2.retrieveInteractions(inThread: threadId, per: 1, page: 2) {
+            result in
+            switch result {
+            case .failure(let err):
+                XCTFail(err.localizedDescription)
+            case .success(let threadInteractions):
+                XCTAssertEqual(threadInteractions.threadId, threadId)
+                XCTAssertEqual(threadInteractions.messages.count, 1)
+                
+                guard let lastMessage = threadInteractions.messages.last else {
+                    XCTFail()
+                    expectation8.fulfill()
+                    return
+                }
+                
+                XCTAssertNotNil(lastMessage.interactionId)
+                XCTAssertEqual(lastMessage.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(lastMessage.inReplyToAssetGlobalIdentifier, nil)
+                XCTAssertEqual(lastMessage.inReplyToInteractionId, nil)
+                XCTAssertEqual(lastMessage.message, messageText)
+            }
+            expectation8.fulfill()
+        }
+        
+        controller2.retrieveInteractions(inThread: threadId, per: 2, page: 2) {
+            result in
+            switch result {
+            case .failure(let err):
+                XCTFail(err.localizedDescription)
+            case .success(let threadInteractions):
+                XCTAssertEqual(threadInteractions.threadId, threadId)
+                XCTAssertEqual(threadInteractions.messages.count, 0)
+            }
+            expectation9.fulfill()
+        }
+        
+        wait(for: [expectation7, expectation8, expectation9], timeout: 5.0)
+//        
+        let expectation10 = XCTestExpectation(description: "retrieve interactions from myUser")
+        
+        let writeBatchMyUser = userStore.writeBatch()
+        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
+        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.encryptedSecret, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret")
+        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature")
+        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.senderPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature")
+        try writeBatchMyUser.write()
+        
+        controller1.retrieveInteractions(inThread: threadId, per: 3, page: 1) {
+            result in
+            switch result {
+            case .failure(let err):
+                XCTFail(err.localizedDescription)
+            case .success(let threadInteractions):
+                XCTAssertEqual(threadInteractions.threadId, threadId)
+                XCTAssertEqual(threadInteractions.messages.count, 2)
+                
+                guard let firstMessage = threadInteractions.messages.first else {
+                    XCTFail()
+                    expectation10.fulfill()
+                    return
+                }
+                
+                XCTAssertNotNil(firstMessage.interactionId)
+                XCTAssertEqual(firstMessage.sender.identifier, recipient1.identifier)
+                XCTAssertEqual(firstMessage.inReplyToAssetGlobalIdentifier, nil)
+                XCTAssertEqual(firstMessage.inReplyToInteractionId, nil)
+                XCTAssertEqual(firstMessage.message, messageReplyText)
+                
+                guard let lastMessage = threadInteractions.messages.last else {
+                    XCTFail()
+                    expectation10.fulfill()
+                    return
+                }
+                
+                XCTAssertNotNil(lastMessage.interactionId)
+                XCTAssertEqual(lastMessage.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(lastMessage.inReplyToAssetGlobalIdentifier, nil)
+                XCTAssertEqual(lastMessage.inReplyToInteractionId, nil)
+                XCTAssertEqual(lastMessage.message, messageText)
+            }
+            expectation10.fulfill()
+        }
+        
+        wait(for: [expectation10], timeout: 5.0)
     }
 }
