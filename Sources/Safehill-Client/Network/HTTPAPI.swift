@@ -845,7 +845,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                     "encryptedSecret": encryptionDetails.encryptedSecret,
                     "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
                     "secretPublicSignature": encryptionDetails.secretPublicSignature,
-                    "userIdentifier": encryptionDetails.userIdentifier
+                    "senderPublicSignature": encryptionDetails.senderPublicSignature,
+                    "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
                 ]
             })
         }
@@ -880,7 +881,8 @@ struct SHServerHTTPAPI : SHServerAPI {
                     "encryptedSecret": encryptionDetails.encryptedSecret,
                     "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
                     "secretPublicSignature": encryptionDetails.secretPublicSignature,
-                    "userIdentifier": encryptionDetails.userIdentifier
+                    "senderPublicSignature": encryptionDetails.senderPublicSignature,
+                    "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
                 ]
             }),
             "overwrite": false

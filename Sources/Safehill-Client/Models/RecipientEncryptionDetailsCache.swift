@@ -6,30 +6,38 @@ public class EncryptionDetailsClass: NSObject, NSSecureCoding {
     
     var ephemeralPublicKey: String // base64EncodedData with the ephemeral public part of the key used for the encryption
     var encryptedSecret: String // base64EncodedData with the secret to decrypt the encrypted content in this group for this user
-    var secretPublicSignature: String // base64EncodedData with the public signature of the user sending it
+    var secretPublicSignature: String // base64EncodedData with the public signature used for the encryption of the secret
+    var senderPublicSignature: String // base64EncodedData with the public signature of the user sending it
     
     enum CodingKeys: String, CodingKey {
         case ephemeralPublicKey
         case encryptedSecret
         case secretPublicSignature
+        case senderPublicSignature
     }
     
     public func encode(with coder: NSCoder) {
         coder.encode(self.ephemeralPublicKey, forKey: CodingKeys.ephemeralPublicKey.rawValue)
         coder.encode(self.encryptedSecret, forKey: CodingKeys.encryptedSecret.rawValue)
         coder.encode(self.secretPublicSignature, forKey: CodingKeys.secretPublicSignature.rawValue)
+        coder.encode(self.senderPublicSignature, forKey: CodingKeys.senderPublicSignature.rawValue)
     }
     
-    public init(ephemeralPublicKey: String, encryptedSecret: String, secretPublicSignature: String) {
+    public init(ephemeralPublicKey: String, 
+                encryptedSecret: String,
+                secretPublicSignature: String,
+                senderPublicSignature: String) {
         self.ephemeralPublicKey = ephemeralPublicKey
         self.encryptedSecret = encryptedSecret
         self.secretPublicSignature = secretPublicSignature
+        self.senderPublicSignature = senderPublicSignature
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         let ephemeralPublicKey = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.ephemeralPublicKey.rawValue)
         let encryptedSecret = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.encryptedSecret.rawValue)
         let secretPublicSignature = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.secretPublicSignature.rawValue)
+        let senderPublicSignature = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderPublicSignature.rawValue)
         
         guard let ephemeralPublicKey = ephemeralPublicKey as? String else {
             log.error("unexpected value for ephemeralPublicKey when decoding EncryptionDetailsClass object")
@@ -43,8 +51,15 @@ public class EncryptionDetailsClass: NSObject, NSSecureCoding {
             log.error("unexpected value for secretPublicSignature when decoding EncryptionDetailsClass object")
             return nil
         }
+        guard let senderPublicSignature = secretPublicSignature as? String else {
+            log.error("unexpected value for secretPublicSignature when decoding EncryptionDetailsClass object")
+            return nil
+        }
         
-        self.init(ephemeralPublicKey: ephemeralPublicKey, encryptedSecret: encryptedSecret, secretPublicSignature: secretPublicSignature)
+        self.init(ephemeralPublicKey: ephemeralPublicKey, 
+                  encryptedSecret: encryptedSecret,
+                  secretPublicSignature: secretPublicSignature,
+                  senderPublicSignature: senderPublicSignature)
     }
 }
 
@@ -69,10 +84,11 @@ internal class RecipientEncryptionDetailsCache {
             if let details = cacheObj[userIdentifier] as? EncryptionDetailsClass {
                 log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId)::\(userIdentifier)")
                 return RecipientEncryptionDetailsDTO(
-                    userIdentifier: userIdentifier,
+                    recipientUserIdentifier: userIdentifier,
                     ephemeralPublicKey: details.ephemeralPublicKey,
                     encryptedSecret: details.encryptedSecret,
-                    secretPublicSignature: details.secretPublicSignature
+                    secretPublicSignature: details.secretPublicSignature,
+                    senderPublicSignature: details.senderPublicSignature
                 )
             }
         }
@@ -84,7 +100,8 @@ internal class RecipientEncryptionDetailsCache {
         let cacheObject = EncryptionDetailsClass(
             ephemeralPublicKey: details.ephemeralPublicKey,
             encryptedSecret: details.encryptedSecret,
-            secretPublicSignature: details.secretPublicSignature
+            secretPublicSignature: details.secretPublicSignature,
+            senderPublicSignature: details.senderPublicSignature
         )
         
         log.debug("[RecipientEncryptionDetailsCache] caching \(anchor.rawValue)::\(anchorId)::\(userIdentifier)")

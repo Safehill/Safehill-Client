@@ -1338,7 +1338,7 @@ struct LocalServer : SHServerAPI {
         serverThread: ConversationThreadOutputDTO,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
-        guard serverThread.encryptionDetails.userIdentifier == self.requestor.identifier
+        guard serverThread.encryptionDetails.recipientUserIdentifier == self.requestor.identifier
         else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("encryption details don't match the requestor")))
             return
@@ -1357,6 +1357,7 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: serverThread.encryptionDetails.encryptedSecret, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::encryptedSecret")
         writeBatch.set(value: serverThread.encryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::ephemeralPublicKey")
         writeBatch.set(value: serverThread.encryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::secretPublicSignature")
+        writeBatch.set(value: serverThread.encryptionDetails.senderPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::senderPublicSignature")
         
         writeBatch.set(value: serverThread.name, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::name")
         writeBatch.set(value: serverThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
@@ -1408,6 +1409,7 @@ struct LocalServer : SHServerAPI {
             var encryptedSecret: String? = nil
             var ephemeralPublicKey: String? = nil
             var secretPublicSignature: String? = nil
+            var senderPublicSignature: String? = nil
             
             switch components[2] {
             case "encryptedSecret":
@@ -1416,6 +1418,8 @@ struct LocalServer : SHServerAPI {
                 ephemeralPublicKey = value as? String
             case "secretPublicSignature":
                 secretPublicSignature = value as? String
+            case "senderPublicSignature":
+                senderPublicSignature = value as? String
             case "name":
                 name = value as? String
             case "lastUpdatedAt":
@@ -1427,17 +1431,22 @@ struct LocalServer : SHServerAPI {
             }
             
             var result = partialResult
-            if let encryptedSecret, let ephemeralPublicKey, let secretPublicSignature {
+            if let encryptedSecret,
+               let ephemeralPublicKey,
+               let secretPublicSignature,
+               let senderPublicSignature
+            {
                 result[threadId] = ConversationThreadOutputDTO(
                     threadId: threadId,
                     name: name,
                     membersPublicIdentifier: [],
                     lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds,
                     encryptionDetails: RecipientEncryptionDetailsDTO(
-                        userIdentifier: self.requestor.identifier,
+                        recipientUserIdentifier: self.requestor.identifier,
                         ephemeralPublicKey: ephemeralPublicKey,
                         encryptedSecret: encryptedSecret,
-                        secretPublicSignature: secretPublicSignature
+                        secretPublicSignature: secretPublicSignature,
+                        senderPublicSignature: senderPublicSignature
                     )
                 )
             }
@@ -1454,7 +1463,7 @@ struct LocalServer : SHServerAPI {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        guard let selfEncryptionDetails = recipientsEncryptionDetails.first(where: { $0.userIdentifier == self.requestor.identifier })
+        guard let selfEncryptionDetails = recipientsEncryptionDetails.first(where: { $0.recipientUserIdentifier == self.requestor.identifier })
         else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("encryption details don't match the requestor")))
             return
@@ -1473,6 +1482,7 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret")
         writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey")
         writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature")
+        writeBatch.set(value: selfEncryptionDetails.senderPublicSignature, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::senderPublicSignature")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -1600,7 +1610,8 @@ struct LocalServer : SHServerAPI {
         let keysToRetrieve = [
             "\(anchorType.rawValue)::\(anchorId)::encryptedSecret",
             "\(anchorType.rawValue)::\(anchorId)::ephemeralPublicKey",
-            "\(anchorType.rawValue)::\(anchorId)::secretPublicSignature"
+            "\(anchorType.rawValue)::\(anchorId)::secretPublicSignature",
+            "\(anchorType.rawValue)::\(anchorId)::senderPublicSignature"
         ]
         var condition = KBGenericCondition(value: false)
         for key in keysToRetrieve {
@@ -1615,30 +1626,41 @@ struct LocalServer : SHServerAPI {
                     return
                 }
                 
-                var encryptionDetails = RecipientEncryptionDetailsDTO(
-                    userIdentifier: requestor.identifier,
-                    ephemeralPublicKey: "",
-                    encryptedSecret: "",
-                    secretPublicSignature: ""
-                )
+                let recipientUserIdentifier = requestor.identifier
+                var ephemeralPublicKey = ""
+                var encryptedSecret = ""
+                var secretPublicSignature = ""
+                var senderPublicSignature = ""
+                
                 for (k, v) in keyValues {
                     switch k {
                     case let str where str.contains("encryptedSecret"):
-                        encryptionDetails.encryptedSecret = v as? String ?? encryptionDetails.encryptedSecret
+                        encryptedSecret = v as? String ?? encryptedSecret
                     case let str where str.contains("ephemeralPublicKey"):
-                        encryptionDetails.ephemeralPublicKey = v as? String ?? encryptionDetails.ephemeralPublicKey
+                        ephemeralPublicKey = v as? String ?? ephemeralPublicKey
                     case let str where str.contains("secretPublicSignature"):
-                        encryptionDetails.secretPublicSignature = v as? String ?? encryptionDetails.secretPublicSignature
+                        secretPublicSignature = v as? String ?? secretPublicSignature
+                    case let str where str.contains("senderPublicSignature"):
+                        senderPublicSignature = v as? String ?? senderPublicSignature
                     default:
                         break
                     }
                 }
-                guard !encryptionDetails.encryptedSecret.isEmpty,
-                      !encryptionDetails.encryptedSecret.isEmpty,
-                      !encryptionDetails.encryptedSecret.isEmpty else {
+                guard !encryptedSecret.isEmpty,
+                      !ephemeralPublicKey.isEmpty,
+                      !secretPublicSignature.isEmpty,
+                      !senderPublicSignature.isEmpty
+                else {
                     completionHandler(.failure(KBError.unexpectedData(keyValues)))
                     return
                 }
+                let encryptionDetails = RecipientEncryptionDetailsDTO(
+                    recipientUserIdentifier: recipientUserIdentifier,
+                    ephemeralPublicKey: ephemeralPublicKey,
+                    encryptedSecret: encryptedSecret,
+                    secretPublicSignature: secretPublicSignature,
+                    senderPublicSignature: senderPublicSignature
+                )
                 completionHandler(.success(encryptionDetails))
             case .failure(let err):
                 completionHandler(.failure(err))
@@ -2027,7 +2049,8 @@ struct LocalServer : SHServerAPI {
                                     reactions: reactions,
                                     ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
                                     encryptedSecret: encryptionDetails.encryptedSecret,
-                                    secretPublicSignature: encryptionDetails.secretPublicSignature
+                                    secretPublicSignature: encryptionDetails.secretPublicSignature,
+                                    senderPublicSignature: encryptionDetails.senderPublicSignature
                                 )
                                 completionHandler(.success(result))
                             case .failure(let err):

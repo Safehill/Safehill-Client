@@ -902,8 +902,8 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         if let recipientsEncryptionDetails {
-            log.trace("creating or updating thread with with users with ids \(recipientsEncryptionDetails.map({ $0.userIdentifier }))")
-            log.debug("[setupThread] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
+            log.trace("creating or updating thread with with users with ids \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier }))")
+            log.debug("[setupThread] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature, $0.senderPublicSignature) }))")
         }
         self.remoteServer.createOrUpdateThread(
             name: name,

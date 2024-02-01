@@ -81,7 +81,7 @@ failed to initialize E2EE details for new users in thread \(conversationThread.t
                 do {
                     self.serverProxy.createOrUpdateThread(
                         name: nil,
-                        recipientsEncryptionDetails: try recipientEncryptionDetails(
+                        recipientsEncryptionDetails: try newRecipientEncryptionDetails(
                             from: symmetricKey,
                             for: usersAndSelf,
                             anchor: .thread,
@@ -148,7 +148,7 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
         do {
             serverProxy.setupGroupEncryptionDetails(
                 groupId: groupId,
-                recipientsEncryptionDetails: try self.recipientEncryptionDetails(
+                recipientsEncryptionDetails: try self.newRecipientEncryptionDetails(
                     from: symmetricKey!,
                     for: usersAndSelf,
                     anchor: .group,
@@ -165,8 +165,8 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         }
     }
     
-    private func recipientEncryptionDetails(
-        from secret: SymmetricKey, 
+    private func newRecipientEncryptionDetails(
+        from secret: SymmetricKey,
         for users: [any SHServerUser],
         anchor: InteractionAnchor,
         anchorId: String?
@@ -184,10 +184,11 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                     with: user
                 )
                 let recipientEncryptionForUser = RecipientEncryptionDetailsDTO(
-                    userIdentifier: user.identifier,
+                    recipientUserIdentifier: user.identifier,
                     ephemeralPublicKey: encryptedSecretForOther.ephemeralPublicKeyData.base64EncodedString(),
                     encryptedSecret: encryptedSecretForOther.cyphertext.base64EncodedString(),
-                    secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString()
+                    secretPublicSignature: encryptedSecretForOther.signature.base64EncodedString(),
+                    senderPublicSignature: self.user.publicSignatureData.base64EncodedString()
                 )
                 recipientEncryptionDetails.append(recipientEncryptionForUser)
                 
@@ -278,7 +279,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                         )
                     ))
                 } catch {
-                    log.error("failed to retrive messages or reactions in group \(groupId)")
+                    log.error("failed to retrive messages or reactions in group \(groupId, privacy: .public)")
                     completionHandler(.failure(error))
                 }
                 
@@ -346,7 +347,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                         )
                     ))
                 } catch {
-                    log.error("failed to retrive messages or reactions in thread \(threadId)")
+                    log.error("failed to retrive messages or reactions in thread \(threadId, privacy: .public)")
                     completionHandler(.failure(error))
                 }
                 
@@ -512,7 +513,7 @@ extension SHUserInteractionController {
             shareablePayload,
             encryptionKeyData: user.shUser.privateKeyData,
             protocolSalt: protocolSalt,
-            from: user.publicSignatureData
+            from: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
         )
         return SymmetricKey(data: decryptedSecret)
     }
@@ -523,7 +524,7 @@ extension SHUserInteractionController {
         
         let usersWithMessages = try SHUsersController(localUser: self.user).getUsers(
             withIdentifiers: interactionsGroup.messages.map({ $0.senderUserIdentifier! })
-        ).reduce([UserIdentifier: SHServerUser]()) { partialResult, serverUser in
+        ).reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
             var result = partialResult
             result[serverUser.identifier] = serverUser
             return result

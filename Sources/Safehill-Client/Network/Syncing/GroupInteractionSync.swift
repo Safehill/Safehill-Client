@@ -119,10 +119,11 @@ extension SHSyncOperation {
             
             if shouldCreateE2EEDetailsLocally {
                 let recipientEncryptionDetails = RecipientEncryptionDetailsDTO(
-                    userIdentifier: self.user.identifier,
+                    recipientUserIdentifier: self.user.identifier,
                     ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
                     encryptedSecret: remoteInteractions.encryptedSecret,
-                    secretPublicSignature: remoteInteractions.secretPublicSignature
+                    secretPublicSignature: remoteInteractions.secretPublicSignature,
+                    senderPublicSignature: remoteInteractions.senderPublicSignature
                 )
                 
                 dispatchGroup.enter()
