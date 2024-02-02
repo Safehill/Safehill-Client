@@ -912,6 +912,7 @@ extension SHServerProxy {
             remoteResult in
             switch remoteResult {
             case .success(let thread):
+                log.debug("thread created on server. Server returned encryptionDetails R=\(thread.encryptionDetails.recipientUserIdentifier) ES=\(thread.encryptionDetails.encryptedSecret), EPK=\(thread.encryptionDetails.ephemeralPublicKey) SSig=\(thread.encryptionDetails.secretPublicSignature) USig=\(thread.encryptionDetails.senderPublicSignature)")
                 self.localServer.createOrUpdateThread(
                     serverThread: thread,
                     completionHandler: completionHandler

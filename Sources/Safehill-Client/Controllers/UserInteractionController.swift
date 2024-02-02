@@ -42,11 +42,13 @@ public struct SHUserInteractionController {
         self.serverProxy.getThread(withUsers: users) { result in
             switch result {
             case .failure(let error):
+                log.error("failed to fetch thread with users \(users.map({ $0.identifier })) from remote server")
                 completionHandler(.failure(error))
             case .success(let conversationThread):
                 let symmetricKey: SymmetricKey
                 
                 if let conversationThread {
+                    log.info("found thread with users \(users.map({ $0.identifier })) from remote")
                     do {
                         let encryptionDetails = conversationThread.encryptionDetails
                         let shareablePayload = SHShareablePayload(
@@ -69,7 +71,7 @@ failed to initialize E2EE details for new users in thread \(conversationThread.t
                         return
                     }
                 } else {
-                    log.debug("generating a new secret for thread with users \(users.map({ $0.identifier }))")
+                    log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier }))")
                     symmetricKey = createNewSecret()
                 }
                 
@@ -79,14 +81,17 @@ failed to initialize E2EE details for new users in thread \(conversationThread.t
                 }
                 
                 do {
+                    let recipientsEncryptionDetails = try newRecipientEncryptionDetails(
+                        from: symmetricKey,
+                        for: usersAndSelf,
+                        anchor: .thread,
+                        anchorId: conversationThread?.threadId
+                    )
+                    log.debug("generated recipients encryptionDetails \(recipientsEncryptionDetails.map({ "R=\($0.recipientUserIdentifier) ES=\($0.encryptedSecret), EPK=\($0.ephemeralPublicKey) SSig=\($0.secretPublicSignature) USig=\($0.senderPublicSignature)" }))")
+                    log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier }))")
                     self.serverProxy.createOrUpdateThread(
                         name: nil,
-                        recipientsEncryptionDetails: try newRecipientEncryptionDetails(
-                            from: symmetricKey,
-                            for: usersAndSelf,
-                            anchor: .thread,
-                            anchorId: conversationThread?.threadId
-                        ),
+                        recipientsEncryptionDetails: recipientsEncryptionDetails,
                         completionHandler: completionHandler
                     )
                 } catch {
