@@ -2154,12 +2154,12 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to locally add message with id \(message.interactionId!) to thread \(anchorId): \(error)")
                 }
             }
-            
-            if result.isEmpty {
-                completionHandler(.failure(firstError!))
-            } else {
-                completionHandler(.success(result))
-            }
+        }
+        
+        if result.isEmpty {
+            completionHandler(.failure(firstError!))
+        } else {
+            completionHandler(.success(result))
         }
     }
     
