@@ -6,7 +6,8 @@ extension SHSyncOperation {
         anchor: InteractionAnchor,
         anchorId: String,
         localMessages: [MessageOutputDTO],
-        remoteMessages: [MessageOutputDTO]
+        remoteMessages: [MessageOutputDTO],
+        encryptionDetails: EncryptionDetailsClass
     ) throws {
         var messagesToUpdate = [MessageOutputDTO]()
         for remoteMessage in remoteMessages {
@@ -29,9 +30,21 @@ extension SHSyncOperation {
                 case .success(let messages):
                     switch anchor {
                     case .group:
-                        self.threadsDelegates.forEach({ $0.didReceiveMessages(messages, inGroup: anchorId) })
+                        self.threadsDelegates.forEach({
+                            $0.didReceiveMessages(
+                                messages,
+                                inGroup: anchorId,
+                                encryptionDetails: encryptionDetails
+                            )
+                        })
                     case .thread:
-                        self.threadsDelegates.forEach({ $0.didReceiveMessages(messages, inThread: anchorId) })
+                        self.threadsDelegates.forEach({
+                            $0.didReceiveMessages(
+                                messages,
+                                inThread: anchorId,
+                                encryptionDetails: encryptionDetails
+                            )
+                        })
                     }
                 }
             }

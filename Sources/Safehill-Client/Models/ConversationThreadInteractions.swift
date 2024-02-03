@@ -1,7 +1,9 @@
 import Foundation
 
-public struct SHConversationThreadInteractions {
+public struct SHConversationThreadInteractions : SHInteractionsCollectionProtocol {
     public let threadId: String
     public let messages: [SHDecryptedMessage]
     public let reactions: [SHReaction]
+    
+    var collectionId: String { threadId }
 }

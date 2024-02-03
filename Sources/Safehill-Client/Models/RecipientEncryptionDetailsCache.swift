@@ -51,7 +51,7 @@ public class EncryptionDetailsClass: NSObject, NSSecureCoding {
             log.error("unexpected value for secretPublicSignature when decoding EncryptionDetailsClass object")
             return nil
         }
-        guard let senderPublicSignature = secretPublicSignature as? String else {
+        guard let senderPublicSignature = senderPublicSignature as? String else {
             log.error("unexpected value for secretPublicSignature when decoding EncryptionDetailsClass object")
             return nil
         }

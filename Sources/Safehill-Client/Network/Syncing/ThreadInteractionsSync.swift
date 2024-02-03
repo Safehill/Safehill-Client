@@ -191,12 +191,19 @@ extension SHSyncOperation {
                 /// Sync (create, update and delete) messages
                 ///
                 
+                let encryptionDetails = EncryptionDetailsClass(
+                    ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
+                    encryptedSecret: remoteInteractions.encryptedSecret,
+                    secretPublicSignature: remoteInteractions.secretPublicSignature,
+                    senderPublicSignature: remoteInteractions.senderPublicSignature
+                )
                 let remoteMessages = remoteInteractions.messages
                 try self.syncMessages(
                     anchor: .thread,
                     anchorId: thread.threadId,
                     localMessages: localMessages,
-                    remoteMessages: remoteMessages
+                    remoteMessages: remoteMessages,
+                    encryptionDetails: encryptionDetails
                 )
             } catch {
                 log.warning("error while syncing messages and reactions retrieved from server on local")

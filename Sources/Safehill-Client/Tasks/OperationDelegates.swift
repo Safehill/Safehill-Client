@@ -19,10 +19,14 @@ public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {
     func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
     func reactionsDidChange(inGroup groupId: String)
-    func didReceiveMessages(_ messages: [MessageOutputDTO], inGroup groupId: String)
+    func didReceiveMessages(_ messages: [MessageOutputDTO], 
+                            inGroup groupId: String,
+                            encryptionDetails: EncryptionDetailsClass)
     
     func reactionsDidChange(inThread threadId: String)
-    func didReceiveMessages(_ messages: [MessageOutputDTO], inThread threadId: String)
+    func didReceiveMessages(_ messages: [MessageOutputDTO], 
+                            inThread threadId: String,
+                            encryptionDetails: EncryptionDetailsClass)
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
