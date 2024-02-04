@@ -1830,11 +1830,11 @@ struct LocalServer : SHServerAPI {
                         continue
                     }
                     let components = k.components(separatedBy: "::")
-                    guard components.count >= 2 else {
-                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k))")
+                    guard components.count == 6 else {
+                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k)). Expected `assets-groups::<groupId>::<interactionId>::<inReplyToInteractionId>::<inReplyToAssetId>::<senderId>")
                         continue
                     }
-                    let senderIdentifier = components[1]
+                    let senderIdentifier = components[5]
                     if reactionsCountDict[reactionType] != nil {
                         reactionsCountDict[reactionType]!.append(senderIdentifier)
                     } else {
@@ -1963,8 +1963,8 @@ struct LocalServer : SHServerAPI {
                             var inReplyToInteractionGid: String? = nil
                             
                             let keyComponents = key.components(separatedBy: "::")
-                            guard keyComponents.count > 5 else {
-                                log.warning("unexpected key format in reactions DB: \(key)")
+                            guard keyComponents.count == 6 else {
+                                log.warning("invalid reaction key in local DB: \(key). Expected `<anchorType>::<anchorId>::<interactionId>::<inReplyToInteractionId>::<inReplyToAssetId>::<senderId>")
                                 return
                             }
                             guard let reactionTypeInt = $0.value as? Int,
