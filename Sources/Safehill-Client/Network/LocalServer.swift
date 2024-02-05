@@ -1702,36 +1702,50 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let writeBatch = reactionStore.writeBatch()
-        
+        var deleteCondition = KBGenericCondition(value: false)
         for reaction in reactions {
-            guard let interactionId = reaction.interactionId else {
-                log.warning("can not save interaction to local store without an interaction identifier from server")
-                continue
-            }
-            var key = "\(anchorType.rawValue)::\(anchorId)::\(interactionId)"
-            if let interactionId = reaction.inReplyToInteractionId {
-                key += "::\(interactionId)"
-            } else {
-                key += "::"
-            }
-            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
-                key += "::\(assetGid)"
-            } else {
-                key += "::"
-            }
-            key += "::\(reaction.senderUserIdentifier!)"
-            writeBatch.set(value: reaction.reactionType.rawValue, for: key)
+            deleteCondition = deleteCondition
+                .or(
+                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderUserIdentifier!)")
+                )
         }
-        
-        writeBatch.write { result in
-            switch result {
-            case .failure(let error):
+        reactionStore.removeValues(forKeysMatching: deleteCondition) { result in
+            if case .failure(let error) = result {
                 completionHandler(.failure(error))
-            case .success():
-                completionHandler(.success(reactions.map({
-                    $0 as! ReactionOutputDTO
-                })))
+                return
+            }
+            
+            let writeBatch = reactionStore.writeBatch()
+            
+            for reaction in reactions {
+                guard let interactionId = reaction.interactionId else {
+                    log.warning("can not save interaction to local store without an interaction identifier from server")
+                    continue
+                }
+                var key = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderUserIdentifier!)"
+                if let interactionId = reaction.inReplyToInteractionId {
+                    key += "::\(interactionId)"
+                } else {
+                    key += "::"
+                }
+                if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
+                    key += "::\(assetGid)"
+                } else {
+                    key += "::"
+                }
+                key += "::\(interactionId)"
+                writeBatch.set(value: reaction.reactionType.rawValue, for: key)
+            }
+            
+            writeBatch.write { result in
+                switch result {
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                case .success():
+                    completionHandler(.success(reactions.map({
+                        $0 as! ReactionOutputDTO
+                    })))
+                }
             }
         }
     }
@@ -1758,6 +1772,11 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        guard reactions.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
         let reactionStore: KBKVStore
         do {
             reactionStore = try SHDBManager.sharedInstance.reactionStore()
@@ -1768,22 +1787,19 @@ struct LocalServer : SHServerAPI {
         
         var condition = KBGenericCondition(value: false)
         for reaction in reactions {
-            let keyStart = "\(anchorType.rawValue)::\(anchorId)"
-            var keyEnd = ""
+            var keyStart = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderUserIdentifier!)"
             if let interactionId = reaction.inReplyToInteractionId {
-                keyEnd += "::\(interactionId)"
+                keyStart += "::\(interactionId)"
             } else {
-                keyEnd += "::"
+                keyStart += "::"
             }
             if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
-                keyEnd += "::\(assetGid)"
+                keyStart += "::\(assetGid)"
             } else {
-                keyEnd += "::"
+                keyStart += "::"
             }
-            keyEnd += "::\(reaction.senderUserIdentifier!)"
             
-            let thisCondition = KBGenericCondition(.beginsWith, value: keyStart).and(KBGenericCondition(.endsWith, value: keyEnd))
-            
+            let thisCondition = KBGenericCondition(.beginsWith, value: keyStart)
             condition = condition.or(thisCondition)
         }
         
@@ -1831,10 +1847,10 @@ struct LocalServer : SHServerAPI {
                     }
                     let components = k.components(separatedBy: "::")
                     guard components.count == 6 else {
-                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k)). Expected `assets-groups::<groupId>::<interactionId>::<inReplyToInteractionId>::<inReplyToAssetId>::<senderId>")
+                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k)). Expected `assets-groups::<groupId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
                         continue
                     }
-                    let senderIdentifier = components[5]
+                    let senderIdentifier = components[2]
                     if reactionsCountDict[reactionType] != nil {
                         reactionsCountDict[reactionType]!.append(senderIdentifier)
                     } else {
@@ -1933,20 +1949,22 @@ struct LocalServer : SHServerAPI {
                 
                 ///
                 /// KEY FORMAT:
-                /// `{anchor_type}::{anchor_id}::{interaction_id}::{ref_interaction_id}::{ref_asset_id}::{sender_id}`
+                /// `{anchor_type}::{anchor_id}::{sender_id}::{ref_interaction_id}::{ref_asset_id}::{interaction_id}`
                 /// - `anchor_type`: either "thread' or "group", for threads and shares, respectively
                 /// - `anchor_id`: either the `threadId` or the `groupId`, to identify a thread or a share, respectively
-                /// - `interaction_id`: the unique interaction identifier as provided by the server
+                /// - `sender_id`: the user public identifier, author of the interaction
                 /// - `ref_interaction_id`: a pointer to the interaction this interaction references (for replies to messages the origin message id)
                 /// - `ref_asset_id`: a pointer to the global asset identifer this interaction references
-                /// - `sender_id`: the user public identifier, author of the interaction
+                /// - `interaction_id`: the unique interaction identifier as provided by the server
                 ///
                 
-                var conditionStr = "\(anchorType)::\(anchorId)::"
+                var condition = KBGenericCondition(.beginsWith, value: "\(anchorType)::\(anchorId)::")
                 if let refMessageId {
-                    conditionStr += refMessageId
+                    condition.and(
+                        KBGenericCondition(.contains, value: "::\(refMessageId)::")
+                            .and(KBGenericCondition(.endsWith, value: "::\(refMessageId)", negated: true))
+                    )
                 }
-                let condition = KBGenericCondition(.beginsWith, value: conditionStr)
                 reactionStore.keyValuesAndTimestamps(
                     forKeysMatching: condition,
                     paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
@@ -1964,7 +1982,7 @@ struct LocalServer : SHServerAPI {
                             
                             let keyComponents = key.components(separatedBy: "::")
                             guard keyComponents.count == 6 else {
-                                log.warning("invalid reaction key in local DB: \(key). Expected `<anchorType>::<anchorId>::<interactionId>::<inReplyToInteractionId>::<inReplyToAssetId>::<senderId>")
+                                log.warning("invalid reaction key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
                                 return
                             }
                             guard let reactionTypeInt = $0.value as? Int,
@@ -1973,8 +1991,8 @@ struct LocalServer : SHServerAPI {
                                 return
                             }
                             
-                            senderId = keyComponents[5]
-                            interactionId = keyComponents[2]
+                            senderId = keyComponents[2]
+                            interactionId = keyComponents[5]
                             
                             guard let senderId = senderId,
                                   let interactionId = interactionId else {
@@ -2114,7 +2132,7 @@ struct LocalServer : SHServerAPI {
             )
             
             do {
-                var key = "\(anchorType)::\(anchorId)::\(interactionId)"
+                var key = "\(anchorType)::\(anchorId)::\(message.senderUserIdentifier!)"
                 if let interactionId = message.inReplyToInteractionId {
                     key += "::\(interactionId)"
                 } else {
@@ -2125,7 +2143,7 @@ struct LocalServer : SHServerAPI {
                 } else {
                     key += "::"
                 }
-                key += "::\(message.senderUserIdentifier!)"
+                key += "::\(message.interactionId)"
                 let value = DBSecureSerializableUserMessage(
                     interactionId: message.interactionId!,
                     senderUserIdentifier: message.senderUserIdentifier!,
