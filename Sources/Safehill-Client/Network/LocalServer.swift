@@ -1958,9 +1958,9 @@ struct LocalServer : SHServerAPI {
                 /// - `interaction_id`: the unique interaction identifier as provided by the server
                 ///
                 
-                var condition = KBGenericCondition(.beginsWith, value: "\(anchorType)::\(anchorId)::")
+                var condition = KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::")
                 if let refMessageId {
-                    condition.and(
+                    condition = condition.and(
                         KBGenericCondition(.contains, value: "::\(refMessageId)::")
                             .and(KBGenericCondition(.endsWith, value: "::\(refMessageId)", negated: true))
                     )
@@ -2132,7 +2132,7 @@ struct LocalServer : SHServerAPI {
             )
             
             do {
-                var key = "\(anchorType)::\(anchorId)::\(message.senderUserIdentifier!)"
+                var key = "\(anchorType.rawValue)::\(anchorId)::\(message.senderUserIdentifier!)"
                 if let interactionId = message.inReplyToInteractionId {
                     key += "::\(interactionId)"
                 } else {
@@ -2143,7 +2143,7 @@ struct LocalServer : SHServerAPI {
                 } else {
                     key += "::"
                 }
-                key += "::\(message.interactionId)"
+                key += "::\(interactionId)"
                 let value = DBSecureSerializableUserMessage(
                     interactionId: message.interactionId!,
                     senderUserIdentifier: message.senderUserIdentifier!,
