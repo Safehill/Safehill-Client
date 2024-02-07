@@ -1,17 +1,19 @@
 import Foundation
+import Safehill_Crypto
 
 public typealias LocalIdentifier = String
 
 
 public struct SHLocalAssetStoreController {
-    public let user: SHLocalUser
     
-    public init(user: SHLocalUser) {
+    private let user: SHLocalUserProtocol
+    
+    public init(user: SHLocalUserProtocol) {
         self.user = user
     }
     
     private var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
+        self.user.serverProxy
     }
     
     public func globalIdentifiers() -> [GlobalIdentifier] {
@@ -124,7 +126,7 @@ public struct SHLocalAssetStoreController {
         if d == nil {
             var dd: (any SHAssetDescriptor)? = nil
             let semaphore = DispatchSemaphore(value: 0)
-            serverProxy.getLocalAssetDescriptors { result in
+            self.serverProxy.getLocalAssetDescriptors { result in
                 if case .success(let descriptors) = result {
                     dd = descriptors.first(
                         where: { $0.globalIdentifier == encryptedAsset.globalIdentifier }
@@ -167,7 +169,7 @@ public struct SHLocalAssetStoreController {
         var availableVersions = [SHAssetQuality]()
         let semaphore = DispatchSemaphore(value: 0)
         
-        serverProxy.getLocalAssetDescriptors { descResult in
+        self.serverProxy.getLocalAssetDescriptors { descResult in
             if case .success(let descs) = descResult {
                 if let descriptor = descs.first(where: {
                     descriptor in descriptor.localIdentifier == localIdentifier
@@ -197,7 +199,7 @@ public struct SHLocalAssetStoreController {
         var availableVersions = [String: [SHAssetQuality]]()
         let semaphore = DispatchSemaphore(value: 0)
         
-        serverProxy.getLocalAssets(
+        self.serverProxy.getLocalAssets(
             withGlobalIdentifiers: globalIdentifiers,
             versions: SHAssetQuality.all,
             cacheHiResolution: false
@@ -219,3 +221,49 @@ public struct SHLocalAssetStoreController {
     }
 }
 
+
+extension SHLocalAssetStoreController {
+    ///
+    /// Get the private secret for the asset.
+    /// The same secret should be used when encrypting for sharing with other users.
+    /// Encrypting that secret again with the recipient's public key guarantees the privacy of that secret.
+    ///
+    /// By the time this method is called, the encrypted secret should be present in the local server,
+    /// as the asset was previously encrypted on this device by the SHEncryptionOperation.
+    ///
+    /// Note that secrets are encrypted at rest, wheres the in-memory data is its decrypted (clear) version.
+    ///
+    /// - Returns: the decrypted shared secret for this asset
+    /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
+    ///
+    func retrieveCommonEncryptionKey(for globalIdentifier: String) throws -> Data {
+        guard let encryptionProtocolSalt = self.user.maybeEncryptionProtocolSalt else {
+            throw SHLocalUserError.missingProtocolSalt
+        }
+        
+        let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions. Any SHAssetQuality will return the same value
+        
+        let encryptedAsset = try self.encryptedAsset(
+            with: globalIdentifier,
+            versions: [quality],
+            cacheHiResolution: false
+        )
+        
+        guard let version = encryptedAsset.encryptedVersions[quality] else {
+            log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
+            throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
+        }
+        
+        let encryptedSecret = SHShareablePayload(
+            ephemeralPublicKeyData: version.publicKeyData,
+            cyphertext: version.encryptedSecret,
+            signature: version.publicSignatureData
+        )
+        return try SHCypher.decrypt(
+            encryptedSecret,
+            encryptionKeyData: self.user.shUser.privateKeyData,
+            protocolSalt: encryptionProtocolSalt,
+            from: self.user.publicSignatureData
+        )
+    }
+}

@@ -79,7 +79,7 @@ public struct SHUploadPipeline {
         localIdentifier: String,
         globalIdentifier: String?,
         groupId: String,
-        sender: SHLocalUser,
+        sender: SHAuthenticatedLocalUser,
         recipients: [SHServerUser],
         forceUpload: Bool
     ) throws {

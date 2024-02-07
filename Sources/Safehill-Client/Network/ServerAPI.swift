@@ -2,8 +2,6 @@ import Foundation
 
 public protocol SHServerAPI {
     
-    var requestor: SHLocalUser { get }
-    
     // MARK: User Management
     
     /// Creates a new user given their credentials, their public key and public signature (store in the `requestor` object)

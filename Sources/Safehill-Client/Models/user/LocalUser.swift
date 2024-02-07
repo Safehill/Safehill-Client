@@ -1,95 +1,25 @@
 import Foundation
 import Safehill_Crypto
 
+
 public enum SHLocalUserError: Error, LocalizedError {
     case invalidKeychainEntry
     case missingProtocolSalt
+    case notAuthenticated
 }
 
-public protocol SHServerUser : SHCryptoUser {
-    var identifier: String { get }
-    var name: String { get }
-}
-
-public struct SHRemoteUser : SHServerUser, Codable {
-    public let identifier: String
-    public let name: String
-    public let publicKeyData: Data
-    public let publicSignatureData: Data
-    
-    enum CodingKeys: String, CodingKey {
-        case identifier
-        case name
-        case publicKeyData = "publicKey"
-        case publicSignatureData = "publicSignature"
-    }
-    
-    init(identifier: String,
-         name: String,
-         publicKeyData: Data,
-         publicSignatureData: Data) {
-        self.identifier = identifier
-        self.publicKeyData = publicKeyData
-        self.publicSignatureData = publicSignatureData
-        self.name = name
-    }
-    
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        identifier = try container.decode(String.self, forKey: .identifier)
-        name = try container.decode(String.self, forKey: .name)
-        let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
-        publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
-        let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
-        publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
-    }
-}
-
-public struct SHRemoteUserLinkedToContact: SHServerUser, Codable {
-    public let identifier: String
-    public let name: String
-    public let publicKeyData: Data
-    public let publicSignatureData: Data
-    
-    public let phoneNumber: String
-    public let linkedSystemContactId: String
-    
-    init(identifier: String, 
-         name: String,
-         publicKeyData: Data,
-         publicSignatureData: Data,
-         phoneNumber: String,
-         linkedSystemContactId: String) {
-        self.identifier = identifier
-        self.name = name
-        self.publicKeyData = publicKeyData
-        self.publicSignatureData = publicSignatureData
-        self.phoneNumber = phoneNumber
-        self.linkedSystemContactId = linkedSystemContactId
-    }
-    
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.identifier = try container.decode(String.self, forKey: .identifier)
-        self.name = try container.decode(String.self, forKey: .name)
-        let publicKeyDataBase64 = try container.decode(String.self, forKey: .publicKeyData)
-        self.publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
-        let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
-        self.publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
-        self.phoneNumber = try container.decode(String.self, forKey: .phoneNumber)
-        self.linkedSystemContactId = try container.decode(String.self, forKey: .linkedSystemContactId)
-    }
-}
 
 /// Manage encryption key pairs in the keychain, credentials (like SSO), and holds user details for the local user (name).
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
-public struct SHLocalUser: SHServerUser {
+public struct SHLocalUser: SHLocalUserProtocol {
+    
+    public var shUser: SHLocalCryptoUser
     
     public var identifier: String {
         self.shUser.identifier
     }
     
-    var shUser: SHLocalCryptoUser
+    public var name: String = "" // Empty means unknown
     
     public var publicKeyData: Data {
         self.shUser.publicKeyData
@@ -97,16 +27,18 @@ public struct SHLocalUser: SHServerUser {
     public var publicSignatureData: Data {
         self.shUser.publicSignatureData
     }
-        
-    public var name: String = "" // Empty means unknown
+    
+    public var serverProxy: SHServerProxy {
+        // TODO: Should we create a new one every time?
+        SHServerProxy(user: self)
+    }
     
     private var _ssoIdentifier: String?
     private var _authToken: String?
     private var _encryptionProtocolSalt: Data?
-    
     public var ssoIdentifier: String? { get { _ssoIdentifier } }
     public var authToken: String? { get { _authToken } }
-    public var encryptionProtocolSalt: Data? { get { _encryptionProtocolSalt } }
+    public var maybeEncryptionProtocolSalt: Data? { get { _encryptionProtocolSalt } }
     
     private let keychainPrefix: String
     
@@ -129,6 +61,10 @@ public struct SHLocalUser: SHServerUser {
     }
     public var saltKeychainLabel: String {
         "\(authKeychainLabel).salt"
+    }
+    
+    public var authenticatedUser: SHAuthenticatedLocalUser? {
+        SHAuthenticatedLocalUser(localUser: self)
     }
     
     static func == (lhs: SHLocalUser, rhs: SHLocalUser) -> Bool {
@@ -206,7 +142,7 @@ public struct SHLocalUser: SHServerUser {
         bearerToken: String,
         encryptionProtocolSalt: Data,
         ssoIdentifier: String?
-    ) throws {
+    ) throws -> SHAuthenticatedLocalUser {
         self.updateUserDetails(given: user)
         self._ssoIdentifier = ssoIdentifier
         self._authToken = bearerToken
@@ -230,6 +166,8 @@ public struct SHLocalUser: SHServerUser {
             try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
             try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         }
+        
+        return SHAuthenticatedLocalUser(localUser: self)!
     }
     
     public mutating func deauthenticate() {
@@ -242,24 +180,6 @@ public struct SHLocalUser: SHServerUser {
             log.fault("auth and identity token could not be removed from the keychain")
             return
         }
-    }
-    
-    public func createShareablePayload(from data: Data, toShareWith user: SHCryptoUser) throws -> SHShareablePayload {
-        guard let salt = self.encryptionProtocolSalt else {
-            throw SHLocalUserError.missingProtocolSalt
-        }
-        return try SHUserContext(user: self.shUser)
-            .shareable(data: data, protocolSalt: salt, with: user)
-    }
-    
-    public func decrypt(data: Data,
-                        encryptedSecret: SHShareablePayload,
-                        receivedFrom user: SHCryptoUser) throws -> Data {
-        guard let salt = self.encryptionProtocolSalt else {
-            throw SHLocalUserError.missingProtocolSalt
-        }
-        return try SHUserContext(user: self.shUser)
-            .decrypt(data, usingEncryptedSecret: encryptedSecret, protocolSalt: salt, receivedFrom: user)
     }
 }
 
@@ -292,68 +212,5 @@ extension SHLocalUser: Codable {
     public func shareableLocalUser() throws -> Data {
         let encoder = JSONEncoder()
         return try encoder.encode(self)
-    }
-}
-
-// MARK: Initialize SHUserContext from SHLocalUser
-
-public extension SHUserContext {
-    init(localUser: SHLocalUser) {
-        self.init(user: localUser.shUser)
-    }
-}
-
-// MARK: Store auth token in the keychaing
-
-extension SHKeychain {
-    static func retrieveValue(from account: String) throws -> String? {
-        // Seek a generic password with the given account.
-        let query = [kSecClass: kSecClassGenericPassword,
-                     kSecAttrAccount: account,
-                     kSecUseDataProtectionKeychain: true,
-                     kSecReturnData: true] as [String: Any]
-
-        // Find and cast the result as data.
-        var item: CFTypeRef?
-        switch SecItemCopyMatching(query as CFDictionary, &item) {
-        case errSecSuccess:
-            guard let data = item as? Data else { return nil }
-            return String(data: data, encoding: .utf8)
-        case errSecItemNotFound: return nil
-        case let status: throw SHKeychain.Error.unexpectedStatus(status)
-        }
-    }
-    
-    static func storeValue(_ token: String, account: String) throws {
-        guard let tokenData = token.data(using: .utf8) else {
-            throw SHKeychain.Error.generic("Unable to convert string to data.")
-        }
-        
-        // Treat the key data as a generic password.
-        let query = [kSecClass: kSecClassGenericPassword,
-                     kSecAttrAccount: account,
-                     kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked,
-                     kSecUseDataProtectionKeychain: true,
-                     kSecValueData: tokenData] as [String: Any]
-
-        // Add the key data.
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw SHKeychain.Error.unexpectedStatus(status)
-        }
-        
-        log.debug("Successfully saved value \(token, privacy: .private) in account \(account)")
-    }
-    
-    static func deleteValue(account: String) throws {
-        let query = [kSecClass: kSecClassGenericPassword,
-                     kSecAttrAccount: account] as [String: Any]
-        
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw SHKeychain.Error.unexpectedStatus(status) }
-        
-#if DEBUG
-        log.info("Successfully deleted account \(account)")
-#endif
     }
 }

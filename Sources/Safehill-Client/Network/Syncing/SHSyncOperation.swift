@@ -3,63 +3,21 @@ import KnowledgeBase
 import os
 
 
-extension SHServerProxy {
-    
-    public func getUsers(inAssetDescriptors descriptors: [any SHAssetDescriptor]) throws -> [any SHServerUser] {
-        let group = DispatchGroup()
-        var response = [any SHServerUser]()
-        var error: Error? = nil
-        
-        var userIdsSet = Set<String>()
-        for descriptor in descriptors {
-            userIdsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsSet.insert($0) })
-        }
-        userIdsSet.remove(self.remoteServer.requestor.identifier)
-        let userIds = Array(userIdsSet)
-
-        group.enter()
-        self.remoteServer.getUsers(withIdentifiers: userIds) { result in
-            switch result {
-            case .success(let serverUsers):
-                response = serverUsers
-            case .failure(let err):
-                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        return response
-    }
-    
-}
-
 // MARK: - Sync Operation
 
 public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-SYNC")
     
-    let user: SHLocalUser
+    let user: SHAuthenticatedLocalUser
     
     let assetsDelegates: [SHAssetSyncingDelegate]
     let threadsDelegates: [SHThreadSyncingDelegate]
     
-    var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
-    }
+    var serverProxy: SHServerProxy { user.serverProxy }
     
     public init(
-        user: SHLocalUser,
+        user: SHAuthenticatedLocalUser,
         assetsDelegates: [SHAssetSyncingDelegate],
         threadsDelegates: [SHThreadSyncingDelegate]
     ) {
@@ -82,8 +40,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     ) {
         var localDescriptors = [any SHAssetDescriptor]()
         var localError: Error? = nil
-        var remoteUsersById = [UserIdentifier: SHServerUser]()
-        var remoteUsersError: Error? = nil
+        let remoteUsersById: [UserIdentifier: SHServerUser]
         var dispatchResult: DispatchTimeoutResult? = nil
         
         ///
@@ -134,29 +91,16 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         /// Get the `SHServerUser` for each of the users mentioned in the remote descriptors
         ///
-        group.enter()
-        self.serverProxy.remoteServer.getUsers(withIdentifiers: userIdsInRemoteDescriptors) { result in
-            switch result {
-            case .success(let serverUsers):
-                remoteUsersById = serverUsers.reduce([:], { partialResult, serverUser in
+        do {
+            remoteUsersById = try SHUsersController(localUser: self.user).getUsers(
+                withIdentifiers: userIdsInRemoteDescriptors)
+                .reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
                     var result = partialResult
                     result[serverUser.identifier] = serverUser
                     return result
-                })
-            case .failure(let err):
-                self.log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
-                remoteUsersError = err
-            }
-            group.leave()
-        }
-        
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHBackgroundOperationError.timedOut))
-            return
-        }
-        guard remoteUsersError == nil else {
-            completionHandler(.failure(remoteUsersError!))
+                }
+        } catch {
+            completionHandler(.failure(error))
             return
         }
         

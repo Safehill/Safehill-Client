@@ -13,7 +13,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         Logger(subsystem: "com.gf.safehill", category: "BG")
     }
     
-    public let user: SHLocalUser
+    public let user: SHAuthenticatedLocalUser
     public var assetsDelegates: [SHOutboundAssetOperationDelegate]
     public var threadsDelegates: [SHThreadSyncingDelegate]
     var imageManager: PHCachingImageManager
@@ -21,7 +21,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     
     let parallelization: ParallelizationOption
     
-    public init(user: SHLocalUser,
+    public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
                 threadsDelegates: [SHThreadSyncingDelegate],
                 parallelization: ParallelizationOption = .conservative,
@@ -66,7 +66,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         try fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
         
         let encryptOperation = SHEncryptionOperation(
-            user: user,
+            user: self.user,
             assetsDelegates: assetsDelegates,
             threadsDelegates: threadsDelegates,
             limitPerRun: 0,
@@ -75,7 +75,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         try encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
         
         let uploadOperation = SHUploadOperation(
-            user: user,
+            user: self.user,
+            localAssetStoreController: SHLocalAssetStoreController(user: self.user),
             delegates: assetsDelegates,
             limitPerRun: 0
         )
@@ -84,7 +85,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         try fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
         
         let shareOperation = SHEncryptAndShareOperation(
-            user: user,
+            user: self.user,
             assetsDelegates: assetsDelegates,
             threadsDelegates: threadsDelegates,
             limitPerRun: 0,
@@ -93,7 +94,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         try shareOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
     }
     
-    public func runOnce() {
+    public func runOnce() throws {
+        
         state = .executing
         
         let step: ((() throws -> Void, String) -> Void) = { throwingMethod, methodIdentifier in
@@ -151,7 +153,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         }
         
         let encryptOperation = SHEncryptionOperation(
-            user: user,
+            user: self.user,
             assetsDelegates: assetsDelegates,
             threadsDelegates: threadsDelegates,
             limitPerRun: 0,
@@ -173,7 +175,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         }
         
         let uploadOperation = SHUploadOperation(
-            user: user,
+            user: self.user,
+            localAssetStoreController: SHLocalAssetStoreController(user: self.user),
             delegates: assetsDelegates,
             limitPerRun: 0
         )
@@ -193,7 +196,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         }
         
         let shareOperation = SHEncryptAndShareOperation(
-            user: user,
+            user: self.user,
             assetsDelegates: assetsDelegates,
             threadsDelegates: threadsDelegates,
             limitPerRun: 0,
@@ -210,7 +213,11 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         state = .executing
         
-        self.runOnce()
+        do {
+            try self.runOnce()
+        } catch {
+            log.error("failed to run full upload pipeline. \(error.localizedDescription)")
+        }
         
         state = .finished
     }

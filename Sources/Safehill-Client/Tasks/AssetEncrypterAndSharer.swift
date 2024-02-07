@@ -3,7 +3,7 @@ import os
 import KnowledgeBase
 
 
-open class SHEncryptAndShareOperation: SHEncryptionOperation {
+internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     public override var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
@@ -14,7 +14,6 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             user: self.user,
             assetsDelegates: self.assetDelegates,
             threadsDelegates: self.threadsDelegates,
-            interactionsController: self.interactionsController,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -163,12 +162,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         request: SHEncryptionForSharingRequestQueueItem,
         globalIdentifier: String
     ) throws {
-        let asset = request.asset
-        
-        let shareableEncryptedAsset = try asset.shareableEncryptedAsset(
+        let shareableEncryptedAsset = try self.user.shareableEncryptedAsset(
             globalIdentifier: globalIdentifier,
             versions: request.versions,
-            sender: self.user,
             recipients: request.sharedWith,
             groupId: request.groupId
         )
@@ -502,7 +498,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     }
 }
 
-public class SHAssetEncryptAndShareQueueProcessor : SHBackgroundOperationProcessor<SHEncryptAndShareOperation> {
+internal class SHAssetEncryptAndShareQueueProcessor : SHBackgroundOperationProcessor<SHEncryptAndShareOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetEncryptAndShareQueueProcessor(
         delayedStartInSeconds: 5,

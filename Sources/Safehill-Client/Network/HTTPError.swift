@@ -80,4 +80,8 @@ public enum SHHTTPError {
         case generic(Error)
         case timedOut
     }
+    
+    public enum AuthenticationError: Error {
+        case missingAuthToken
+    }
 }
