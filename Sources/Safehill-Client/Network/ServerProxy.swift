@@ -5,6 +5,21 @@ import Contacts
 public protocol SHServerProxyProtocol {
     init(user: SHLocalUser)
     
+    func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    )
+    
+    func createOrUpdateThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    )
+    
+    func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -18,42 +33,62 @@ public protocol SHServerProxyProtocol {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
     func removeReaction(
         _: ReactionInput,
-        fromGroupId groupId: String,
+        inGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
     func addMessage(
         _ message: MessageInputDTO,
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    )
+    
+    func addMessage(
+        _ message: MessageInputDTO,
+        inThread threadId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     )
     
     func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
-    func retrieveSelfGroupUserEncryptionDetails(
+    func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
-    func retrieveGroupUserEncryptionDetails(
-        forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+    func retrieveUserEncryptionDetails(
+        forThread threadId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
     func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    )
+    
+    func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
 }
 
@@ -259,7 +294,7 @@ extension SHServerProxy {
                     /// 
                     /// Can't connect to the server, get details from local cache
                     ///
-                    print("Failed to get user details from server. Using local cache\n \(err)")
+                    log.warning("Failed to get user details from server. Using local cache\n \(err)")
                     self.fetchLocalUserAccount(originalServerError: err,
                                                completionHandler: completionHandler)
                 } else {
@@ -824,20 +859,24 @@ extension SHServerProxy {
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        /// Save the encryption details for this user
+        log.trace("saving encryption details for group \(groupId) to local server")
+        log.debug("[setupGroup] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
+        /// Save the encryption details for this user on local
         self.localServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails
         ) { localResult in
             switch localResult {
-            case .success(_):
+            case .success:
+                log.trace("encryption details for group \(groupId) saved to local server. Uploading them to the server")
+                /// Save the encryption details for all users on server
                 self.remoteServer.setGroupEncryptionDetails(
                     groupId: groupId,
                     recipientsEncryptionDetails: recipientsEncryptionDetails,
                     completionHandler: completionHandler
                 )
             case .failure(let error):
-                log.error("failed to create group with encryption details locally")
+                log.error("failed to create group with encryption details locally: \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -857,23 +896,98 @@ extension SHServerProxy {
         }
     }
     
-    public func retrieveSelfGroupUserEncryptionDetails(
+    public func createOrUpdateThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        if let recipientsEncryptionDetails {
+            log.trace("creating or updating thread with with users with ids \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier }))")
+            log.debug("[setupThread] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature, $0.senderPublicSignature) }))")
+        }
+        self.remoteServer.createOrUpdateThread(
+            name: name,
+            recipientsEncryptionDetails: recipientsEncryptionDetails
+        ) {
+            remoteResult in
+            switch remoteResult {
+            case .success(let thread):
+                log.debug("thread created on server. Server returned encryptionDetails R=\(thread.encryptionDetails.recipientUserIdentifier) ES=\(thread.encryptionDetails.encryptedSecret), EPK=\(thread.encryptionDetails.ephemeralPublicKey) SSig=\(thread.encryptionDetails.secretPublicSignature) USig=\(thread.encryptionDetails.senderPublicSignature)")
+                self.localServer.createOrUpdateThread(
+                    serverThread: thread,
+                    completionHandler: completionHandler
+                )
+            case .failure(let error):
+                log.error("failed to create or update thread with encryption details: \(error.localizedDescription)")
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    public func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.listThreads { remoteResult in
+            switch remoteResult {
+            case .success:
+                completionHandler(remoteResult)
+            case .failure(let error):
+                log.warning("failed to fetch threads from server. Returning local version. \(error.localizedDescription)")
+                self.localServer.listThreads(completionHandler: completionHandler)
+            }
+        }
+    }
+    
+    public func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+    }
+    
+    public func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.deleteThread(withId: threadId) { remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.deleteThread(withId: threadId, completionHandler: { res in
+                    if case .failure(let failure) = res {
+                        log.warning("thread \(threadId) was deleted on the server but not locally. Thread syncing will attempt this again. \(failure.localizedDescription)")
+                    }
+                })
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    public func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
-            if case .success(let details) = localE2EEResult, details.count > 0 {
-                completionHandler(.success(details.first))
+        self.localServer.retrieveUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
+            if case .success(let localSelfDetails) = localE2EEResult, let localSelfDetails {
+                completionHandler(.success(localSelfDetails))
             } else {
                 if case .failure(let error) = localE2EEResult {
                     log.warning("failed to retrieve <SELF> E2EE details for group \(groupId) from local: \(error.localizedDescription)")
                 }
-                self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
+                self.remoteServer.retrieveUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
                     switch remoteE2EEResult {
-                    case .success(let details):
-                        self.localServer.setGroupEncryptionDetails(groupId: groupId, recipientsEncryptionDetails: details) { _ in }
-                        let response = details.first(where: { $0.userIdentifier == self.localServer.requestor.identifier })
-                        completionHandler(.success(response))
+                    case .success(let remoteSelfDetails):
+                        if let remoteSelfDetails {
+                            self.localServer.setGroupEncryptionDetails(
+                                groupId: groupId,
+                                recipientsEncryptionDetails: [remoteSelfDetails]
+                            ) { _ in
+                                completionHandler(.success(remoteSelfDetails))
+                            }
+                        } else {
+                            completionHandler(.success(nil))
+                        }
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }
@@ -882,29 +996,43 @@ extension SHServerProxy {
         }
     }
     
-    public func retrieveGroupUserEncryptionDetails(
-        forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+    public func retrieveUserEncryptionDetails(
+        forThread threadId: String,
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        // TODO: Cache these results and always serve from the cache
-        
-        self.remoteServer.retrieveGroupUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
-            switch remoteE2EEResult {
-            case .failure(let error):
-                log.warning("failed to retrieve E2EE details for group \(groupId) from remote: \(error.localizedDescription)")
-                self.localServer.retrieveGroupUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
-            case .success(let detailsForUsers):
-                completionHandler(.success(detailsForUsers))
+        self.localServer.getThread(withId: threadId) { localResult in
+            if case .success(let localThread) = localResult, let localThread {
+                completionHandler(.success(localThread.encryptionDetails))
+            } else {
+                if case .failure(let error) = localResult {
+                    log.warning("failed to retrieve <SELF> E2EE details for thread \(threadId) from local: \(error.localizedDescription)")
+                }
+                self.remoteServer.getThread(withId: threadId) { remoteResult in
+                    switch remoteResult {
+                    case .success(let remoteThread):
+                        if let remoteThread {
+                            self.localServer.createOrUpdateThread(
+                                serverThread: remoteThread
+                            ) { _ in
+                                completionHandler(.success(remoteThread.encryptionDetails))
+                            }
+                        } else {
+                            completionHandler(.success(nil))
+                        }
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
             }
         }
     }
     
     public func addReactions(
         _ reactions: [ReactionInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
-        self.remoteServer.addReactions(reactions, toGroupId: groupId) { remoteResult in
+        self.remoteServer.addReactions(reactions, inGroup: groupId) { remoteResult in
             switch remoteResult {
             case .success(let reactionsOutput):
                 ///
@@ -912,7 +1040,32 @@ extension SHServerProxy {
                 /// The output (rather than the input) is required, as an interaction identifier needs to be stored
                 ///
                 self.localServer.addReactions(reactionsOutput,
-                                              toGroupId: groupId) { localResult in
+                                              inGroup: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(reactionsOutput))
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func addReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.addReactions(reactions, inThread: threadId) { remoteResult in
+            switch remoteResult {
+            case .success(let reactionsOutput):
+                ///
+                /// Pass the output of the reaction creation on the server to the local server
+                /// The output (rather than the input) is required, as an interaction identifier needs to be stored
+                ///
+                self.localServer.addReactions(reactionsOutput,
+                                              inThread: threadId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -926,13 +1079,33 @@ extension SHServerProxy {
     
     public func removeReaction(
         _ reaction: ReactionInput,
-        fromGroupId groupId: String,
+        inGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.remoteServer.removeReactions([reaction], fromGroupId: groupId) { remoteResult in
+        self.remoteServer.removeReactions([reaction], inGroup: groupId) { remoteResult in
             switch remoteResult {
             case .success():
-                self.localServer.removeReactions([reaction], fromGroupId: groupId) { localResult in
+                self.localServer.removeReactions([reaction], inGroup: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(()))
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func removeReaction(
+        _ reaction: ReactionInput,
+        inThread threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.removeReactions([reaction], inThread: threadId) { remoteResult in
+            switch remoteResult {
+            case .success():
+                self.localServer.removeReactions([reaction], inThread: threadId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -946,10 +1119,10 @@ extension SHServerProxy {
     
     public func addMessage(
         _ message: MessageInputDTO,
-        toGroupId groupId: String,
+        inGroup groupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     ) {
-        self.remoteServer.addMessages([message], toGroupId: groupId) { remoteResult in
+        self.remoteServer.addMessages([message], inGroup: groupId) { remoteResult in
             switch remoteResult {
             case .success(let messageOutputs):
                 guard let messageOutput = messageOutputs.first else {
@@ -957,7 +1130,31 @@ extension SHServerProxy {
                     return
                 }
                 completionHandler(.success(messageOutput))
-                self.localServer.addMessages([messageOutput], toGroupId: groupId) { localResult in
+                self.localServer.addMessages([messageOutput], inGroup: groupId) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
+                    }
+                }
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func addMessage(
+        _ message: MessageInputDTO,
+        inThread threadId: String,
+        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.addMessages([message], inThread: threadId) { remoteResult in
+            switch remoteResult {
+            case .success(let messageOutputs):
+                guard let messageOutput = messageOutputs.first else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("empty result")))
+                    return
+                }
+                completionHandler(.success(messageOutput))
+                self.localServer.addMessages([messageOutput], inThread: threadId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -977,12 +1174,30 @@ extension SHServerProxy {
     
     public func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.localServer.retrieveInteractions(
             inGroup: groupId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    public func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveInteractions(
+            inThread: threadId,
+            underMessage: messageId,
             per: per,
             page: page,
             completionHandler: completionHandler
@@ -991,11 +1206,39 @@ extension SHServerProxy {
     
     public func retrieveRemoteInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        self.remoteServer.retrieveInteractions(inGroup: groupId, per: per, page: page) { remoteResult in
+        self.remoteServer.retrieveInteractions(
+            inGroup: groupId,
+            underMessage: messageId,
+            per: per,
+            page: page
+        ) { remoteResult in
+            switch remoteResult {
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func retrieveRemoteInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveInteractions(
+            inThread: threadId,
+            underMessage: messageId,
+            per: per,
+            page: page
+        ) { remoteResult in
             switch remoteResult {
             case .success(let remoteInteractions):
                 completionHandler(.success(remoteInteractions))

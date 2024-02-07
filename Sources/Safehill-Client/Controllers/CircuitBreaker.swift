@@ -102,7 +102,6 @@ class CircuitBreaker {
     private func retryAfterDelay() {
         let timeBR = timeBetweenRetries > 1 ? timeBetweenRetries : (1 + timeBetweenRetries)
         let delay = exponentialBackoff ? pow(timeBR, Double(failureCount)) : timeBetweenRetries
-        print("delay = \(delay)")
         startTimer(delay: delay, selector: #selector(shouldRetry(timer:)))
     }
     

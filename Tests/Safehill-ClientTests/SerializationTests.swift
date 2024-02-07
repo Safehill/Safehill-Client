@@ -205,10 +205,9 @@ final class Safehill_SerializationTests: XCTestCase {
                     XCTAssertEqual(abContact.id, deserialized.id)
                     XCTAssertEqual(abContact.fullName(), deserialized.fullName())
                     
-                    let originalPPNs = abContact.phoneNumbers
-                    let deserializedPPNs = deserialized.phoneNumbers
+                    let originalPPNs = abContact.formattedPhoneNumbers
+                    let deserializedPPNs = deserialized.formattedPhoneNumbers
                     
-                    XCTAssertEqual(originalPPNs.count, 4)
                     XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
                     
                     for (index, number) in originalPPNs.enumerated() {
@@ -267,8 +266,8 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssertEqual(abContact.id, deserialized.id)
             XCTAssertEqual(abContact.fullName(), deserialized.fullName())
             
-            let originalPPNs = abContact.phoneNumbers
-            let deserializedPPNs = deserialized.phoneNumbers
+            let originalPPNs = abContact.formattedPhoneNumbers
+            let deserializedPPNs = deserialized.formattedPhoneNumbers
             
             XCTAssertEqual(originalPPNs.count, deserializedPPNs.count)
             

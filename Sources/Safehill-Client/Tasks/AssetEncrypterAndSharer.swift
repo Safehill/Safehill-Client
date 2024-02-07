@@ -12,7 +12,9 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func clone() -> SHBackgroundOperationProtocol {
         SHEncryptAndShareOperation(
             user: self.user,
-            delegates: self.delegates,
+            assetsDelegates: self.assetDelegates,
+            threadsDelegates: self.threadsDelegates,
+            interactionsController: self.interactionsController,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -93,7 +95,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         /// Notify the delegates
-        for delegate in delegates {
+        for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
                 delegate.didFailSharing(queueItemIdentifier: failedShare.identifier)
             }
@@ -150,7 +152,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
         
         /// Notify the delegates
-        for delegate in delegates {
+        for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
                 delegate.didCompleteSharing(queueItemIdentifier: successfulShare.identifier)
             }
@@ -265,7 +267,7 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
             
             if shareRequest.isBackground == false {
-                for delegate in delegates {
+                for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
                         delegate.didStartSharing(queueItemIdentifier: shareRequest.identifier)
                     }
@@ -306,13 +308,12 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             if shareRequest.isBackground == false {
                 var errorInitializingGroup: Error? = nil
-                let semaphore = DispatchSemaphore(value: 0)
+                var errorInitializingThread: Error? = nil
+                let dispatchGroup = DispatchGroup()
                 
-                let interactionsController = SHUserInteractionController(
-                    user: self.user,
-                    protocolSalt: self.user.encryptionProtocolSalt!
-                )
-                interactionsController.setupGroupEncryptionDetails(
+                log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+                dispatchGroup.enter()
+                self.interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
                     with: shareRequest.sharedWith,
                     completionHandler: { initializeGroupResult in
@@ -321,18 +322,35 @@ open class SHEncryptAndShareOperation: SHEncryptionOperation {
                             errorInitializingGroup = error
                         default: break
                         }
-                        semaphore.signal()
+                        dispatchGroup.leave()
                     }
                 )
                 
-                let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+                log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+                dispatchGroup.enter()
+                self.interactionsController.setupThread(
+                    with: shareRequest.sharedWith
+                ) { 
+                    setupThreadResult in
+                    switch setupThreadResult {
+                    case .success(let serverThread):
+                        self.threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
+                    case .failure(let error):
+                        errorInitializingThread = error
+                    }
+                    dispatchGroup.leave()
+                }
+                
+                let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
                 guard dispatchResult == .success else {
                     // Retry (by not dequeueing) on timeout
                     throw SHBackgroundOperationError.timedOut
                 }
-                guard errorInitializingGroup == nil else {
+                guard errorInitializingGroup == nil,
+                      errorInitializingThread == nil else {
+                    log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
                     // Mark as failed on any other error
-                    throw errorInitializingGroup!
+                    throw errorInitializingGroup ?? errorInitializingThread!
                 }
                 
                 // Ingest into the graph

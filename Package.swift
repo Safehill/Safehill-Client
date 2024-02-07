@@ -15,8 +15,8 @@ let package = Package(
             targets: ["Safehill-Client"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Safehill/Safehill-Crypto", from: "1.1.15"),
-        .package(url: "https://github.com/gennarinoos/KnowledgeBase.git", from: "0.9.13"),
+        .package(url: "https://github.com/Safehill/Safehill-Crypto", from: "1.1.17"),
+        .package(url: "https://github.com/gennarinoos/KnowledgeBase.git", from: "0.9.16"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.5"),
         .package(url: "https://github.com/marmelroy/PhoneNumberKit", .upToNextMajor(from: "3.4.5"))
     ],

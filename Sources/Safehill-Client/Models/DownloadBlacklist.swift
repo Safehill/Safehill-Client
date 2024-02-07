@@ -69,7 +69,7 @@ struct DownloadBlacklist {
     mutating func blacklist(userIdentifier: String) {
         readWriteQueue.sync(flags: .barrier) {
             var blUsers = blacklistedUsers
-            guard isBlacklisted(userIdentifier: userIdentifier) == false else {
+            guard blacklistedUsers.contains(userIdentifier) == false else {
                 return
             }
             

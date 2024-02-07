@@ -26,10 +26,10 @@ extension ISO8601DateFormatter {
 extension Formatter {
     static let iso8601withFractionalSeconds = ISO8601DateFormatter([.withInternetDateTime, .withFractionalSeconds])
 }
-extension Date {
+public extension Date {
     var iso8601withFractionalSeconds: String { return Formatter.iso8601withFractionalSeconds.string(from: self) }
 }
-extension String {
+public extension String {
     var iso8601withFractionalSeconds: Date? { return Formatter.iso8601withFractionalSeconds.date(from: self) }
 }
 
@@ -62,6 +62,25 @@ struct SHServerHTTPAPI : SHServerAPI {
         if let keysAndValues = urlParameters {
             for (paramKey, paramValue) in keysAndValues {
                 queryItems.append(URLQueryItem(name: paramKey, value: paramValue))
+            }
+        }
+        components.queryItems = queryItems
+        
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        
+        return components.url!
+    }
+    
+    func requestURL(route: String, urlArrayParameters: [String: [String]]) -> URL {
+        var components = SafehillServerURLComponents
+        
+        components.path = "/\(route)"
+        var queryItems = [URLQueryItem]()
+        
+        // URL parameters
+        for (paramKey, paramValue) in urlArrayParameters {
+            for index in 0...paramValue.count-1 {
+                queryItems.append(URLQueryItem(name: "\(paramKey)[\(index)]", value: paramValue[index]))
             }
         }
         components.queryItems = queryItems
@@ -186,10 +205,23 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func get<T: Decodable>(_ route: String,
-                           parameters: [String: String]?,
+                           parameters: [String: Any]?,
                            requiresAuthentication: Bool = true,
                            completionHandler: @escaping (Result<T, Error>) -> Void) {
-        let url = requestURL(route: route, urlParameters: parameters)
+        let url: URL
+        if parameters == nil {
+            url = requestURL(route: route, urlParameters: nil)
+        }
+        else if let simpleDict = parameters as? [String: String] {
+            url = requestURL(route: route, urlParameters: simpleDict)
+        }
+        else if let arrayDict = parameters as? [String: [String]] {
+            url = requestURL(route: route, urlArrayParameters: arrayDict)
+        }
+        else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("invalid GET parameters \(parameters!)")))
+            return
+        }
         
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "GET"
@@ -473,7 +505,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "deviceId": deviceName,
             "token": token
         ]
-        self.post("/users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.post("users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -645,7 +677,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "recipientPhoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
         ]
         
-        self.post("/groups/\(groupId)/add-phone-numbers", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.post("groups/add-phone-numbers/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .failure(let error):
                 completionHandler(.failure(error))
@@ -795,6 +827,49 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    /// Creates a new thread
+    /// - Parameters:
+    ///   - name: the thread name, if any is provided. To update, `createThread` should be called again with a new value for name. 
+    ///   - recipientsEncryptionDetails: the encryption details for all users in the thread. Locally we only store the ones for the local user
+    ///   - completionHandler: the callback, returning the value from the server
+    func createOrUpdateThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
+        var parameters = [String: Any]()
+        
+        if let recipientsEncryptionDetails {
+            parameters["recipients"] = recipientsEncryptionDetails.map({ encryptionDetails in
+                return [
+                    "encryptedSecret": encryptionDetails.encryptedSecret,
+                    "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
+                    "secretPublicSignature": encryptionDetails.secretPublicSignature,
+                    "senderPublicSignature": encryptionDetails.senderPublicSignature,
+                    "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
+                ]
+            })
+        }
+        
+        if let name {
+            parameters["name"] = name
+        }
+        
+        self.post("threads/upsert",
+                  parameters: parameters,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
+    }
+    
+    func listThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
+        self.post("threads/retrieve",
+                  parameters: nil,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
+    }
+    
     func setGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -806,13 +881,14 @@ struct SHServerHTTPAPI : SHServerAPI {
                     "encryptedSecret": encryptionDetails.encryptedSecret,
                     "ephemeralPublicKey": encryptionDetails.ephemeralPublicKey,
                     "secretPublicSignature": encryptionDetails.secretPublicSignature,
-                    "userIdentifier": encryptionDetails.userIdentifier
+                    "senderPublicSignature": encryptionDetails.senderPublicSignature,
+                    "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
                 ]
             }),
             "overwrite": false
         ] as [String: Any]
         
-        self.post("groups/\(groupId)/setup", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+        self.post("groups/setup/\(groupId)", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -836,16 +912,16 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func retrieveGroupUserEncryptionDetails(
+    func retrieveUserEncryptionDetails(
         forGroup groupId: String,
-        completionHandler: @escaping (Result<[RecipientEncryptionDetailsDTO], Error>) -> ()
+        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.get("groups/\(groupId)/encryptionDetails", parameters: nil, requiresAuthentication: true) { (result: Result<[RecipientEncryptionDetailsDTO], Error>) in
+        self.post("groups/retrieve/\(groupId)", parameters: nil, requiresAuthentication: true) { (result: Result<RecipientEncryptionDetailsDTO, Error>) in
             switch result {
             case .failure(let error as SHHTTPError.ClientError):
                 switch error {
-                case .unauthorized:
-                    completionHandler(.success([]))
+                case .notFound:
+                    completionHandler(.success(nil))
                 default:
                     completionHandler(.failure(error))
                 }
@@ -857,9 +933,80 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        self.post("threads/retrieve/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<ConversationThreadOutputDTO, Error>) in
+            switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let threadOutput):
+                completionHandler(.success(threadOutput))
+            }
+        }
+    }
+    
+    func getThread(
+        withUsers users: [any SHServerUser],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        let parameters = [
+            "byUsersPublicIdentifiers": users.map({ $0.identifier }),
+        ] as [String: Any]
+        
+        self.post("threads/retrieve", parameters: parameters, requiresAuthentication: true) {
+            (result: Result<[ConversationThreadOutputDTO], Error>) in
+            switch result {
+            case .success(let listOfThreads):
+                completionHandler(.success(listOfThreads.first))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    func deleteThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.delete("threads/\(threadId)", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     func addReactions(
         _ reactions: [ReactionInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.addReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func addReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.addReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func addReactions(
+        _ reactions: [ReactionInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         guard reactions.count == 1,
@@ -878,7 +1025,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("interactions/reactions/\(groupId)",
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)/reactions",
                     parameters: parameters) { (result: Result<ReactionOutputDTO, Error>) in
             switch result {
             case .failure(let error):
@@ -891,7 +1038,24 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func removeReactions(
         _ reactions: [ReactionInput],
-        fromGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.removeReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func removeReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.removeReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    private func removeReactions(
+        _ reactions: [ReactionInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard reactions.count == 1, let reaction = reactions.first else {
@@ -910,7 +1074,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = aGid
         }
         
-        self.delete("interactions/reactions/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+        self.delete("interactions/\(anchorType.rawValue)/\(anchorId)/reactions", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -922,16 +1086,56 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
+        underMessage messageId: String?,
         per: Int,
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        let parameters = [
+        self.retrieveInteractions(
+            anchorType: .group,
+            anchorId: groupId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveInteractions(
+            anchorType: .thread,
+            anchorId: threadId,
+            underMessage: messageId,
+            per: per,
+            page: page,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func retrieveInteractions(
+        anchorType: InteractionAnchor,
+        anchorId: String,
+        underMessage refMessageId: String?,
+        per: Int,
+        page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        var parameters = [
             "per": per,
             "page": page
         ] as [String: Any]
         
-        self.post("interactions/\(groupId)", 
+        if let refMessageId {
+            parameters["referencedInteractionId"] = refMessageId
+        }
+        
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)", 
                   parameters: parameters,
                   requiresAuthentication: true,
                   completionHandler: completionHandler)
@@ -939,7 +1143,24 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        toGroupId groupId: String,
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.addMessages(messages, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.addMessages(messages, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+    }
+    
+    func addMessages(
+        _ messages: [MessageInput],
+        anchorType: InteractionAnchor,
+        anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         guard messages.count == 1, let message = messages.first else {
@@ -959,7 +1180,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["inReplyToAssetGlobalIdentifier"] = iId
         }
         
-        self.post("interactions/messages/\(groupId)",
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)/messages",
                   parameters: parameters) { (result: Result<MessageOutputDTO, Error>) in
             switch result {
             case .failure(let error):

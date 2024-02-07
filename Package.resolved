@@ -6,8 +6,8 @@
         "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase.git",
         "state": {
           "branch": null,
-          "revision": "c3ba3e398cce976e3605049300743815c29653e8",
-          "version": "0.9.13"
+          "revision": "aa9c5b1a7c40800e4637c63b89687b3d78ea356f",
+          "version": "0.9.16"
         }
       },
       {
@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/Safehill/Safehill-Crypto",
         "state": {
           "branch": null,
-          "revision": "ce9f1e77a09feab4fff040c00f024042d2ca9e41",
-          "version": "1.1.15"
+          "revision": "3899fa4a599589dfd7e0e84525c21412560069e2",
+          "version": "1.1.17"
         }
       },
       {

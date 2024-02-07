@@ -15,21 +15,24 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     let user: SHLocalUser
     
     let downloaderDelegates: [SHAssetDownloaderDelegate]
-    let syncDelegates: [SHAssetSyncingDelegate]
+    let assetsSyncDelegates: [SHAssetSyncingDelegate]
+    let threadsSyncDelegates: [SHThreadSyncingDelegate]
     let restorationDelegate: SHAssetActivityRestorationDelegate
     
     let photoIndexer: SHPhotosIndexer
     
     public init(user: SHLocalUser,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
-                syncDelegates: [SHAssetSyncingDelegate],
+                assetsSyncDelegates: [SHAssetSyncingDelegate],
+                threadsSyncDelegates: [SHThreadSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
                 limitPerRun limit: Int? = nil,
                 photoIndexer: SHPhotosIndexer? = nil) {
         self.user = user
         self.limit = limit
         self.downloaderDelegates = downloaderDelegates
-        self.syncDelegates = syncDelegates
+        self.assetsSyncDelegates = assetsSyncDelegates
+        self.threadsSyncDelegates = threadsSyncDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
     }
@@ -42,7 +45,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         SHDownloadOperation(
             user: self.user,
             downloaderDelegates: self.downloaderDelegates,
-            syncDelegates: self.syncDelegates,
+            assetsSyncDelegates: self.assetsSyncDelegates,
+            threadsSyncDelegates: self.threadsSyncDelegates,
             restorationDelegate: self.restorationDelegate,
             limitPerRun: self.limit,
             photoIndexer: self.photoIndexer
@@ -942,7 +946,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             ///
             /// Given these descriptors, sync local and remote state (REMOVALS and UPDATES)
             ///
-            let syncOperation = SHSyncOperation(user: self.user, delegates: self.syncDelegates)
+            let syncOperation = SHSyncOperation(
+                user: self.user,
+                assetsDelegates: self.assetsSyncDelegates,
+                threadsDelegates: self.threadsSyncDelegates
+            )
             group.enter()
             syncOperation.sync(remoteDescriptors: descriptors) { syncResult in
                 group.leave()
