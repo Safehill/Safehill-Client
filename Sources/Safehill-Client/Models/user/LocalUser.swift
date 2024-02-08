@@ -38,14 +38,6 @@ public struct SHLocalUser: SHLocalUserProtocol {
     public let maybeEncryptionProtocolSalt: Data?
     
     public let keychainPrefix: String
-    
-    public static func keysKeychainLabel(keychainPrefix: String) -> String {
-        "\(keychainPrefix).keys"
-    }
-    
-    public var keysKeychainLabel: String {
-        SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
-    }
 
     public static func saltKeychainLabel(keychainPrefix: String) -> String {
         "\(SHLocalUser.authKeychainLabel(keychainPrefix: keychainPrefix)).salt"
@@ -105,10 +97,6 @@ public struct SHLocalUser: SHLocalUserProtocol {
     
     public func saveKeysToKeychain(withLabel label: String, force: Bool = false) throws {
         try self.shUser.saveKeysToKeychain(withLabel: label, force: force)
-    }
-    
-    public func deleteKeysFromKeychain() throws {
-        try shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
     }
     
     public func authenticate(

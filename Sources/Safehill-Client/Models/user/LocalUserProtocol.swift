@@ -12,6 +12,8 @@ public protocol SHLocalUserProtocol : SHServerUser {
     static func identityTokenKeychainLabel(keychainPrefix: String) -> String
     static func authTokenKeychainLabel(keychainPrefix: String) -> String
     
+    func deleteKeysFromKeychain() throws
+    
     func createShareablePayload(
         from data: Data,
         toShareWith user: SHCryptoUser
@@ -21,6 +23,28 @@ public protocol SHLocalUserProtocol : SHServerUser {
                  encryptedSecret: SHShareablePayload,
                  receivedFrom user: SHCryptoUser
     ) throws -> Data
+}
+
+extension SHLocalUserProtocol {
+    
+    public static func keysKeychainLabel(keychainPrefix: String) -> String {
+        "\(keychainPrefix).keys"
+    }
+    
+    public static func authKeychainLabel(keychainPrefix: String) -> String {
+        "\(keychainPrefix).auth"
+    }
+    public static func identityTokenKeychainLabel(keychainPrefix: String) -> String {
+        "\(authKeychainLabel(keychainPrefix: keychainPrefix)).identityToken"
+    }
+    public static func authTokenKeychainLabel(keychainPrefix: String) -> String {
+        "\(authKeychainLabel(keychainPrefix: keychainPrefix)).token"
+    }
+    
+    public func deleteKeysFromKeychain() throws {
+        let keysKeychainLabel = Self.keysKeychainLabel(keychainPrefix: keychainPrefix)
+        try shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
+    }
 }
 
 extension SHLocalUserProtocol {
@@ -49,16 +73,6 @@ extension SHLocalUserProtocol {
                      protocolSalt: salt,
                      receivedFrom: user
             )
-    }
-    
-    public static func authKeychainLabel(keychainPrefix: String) -> String {
-        "\(keychainPrefix).auth"
-    }
-    public static func identityTokenKeychainLabel(keychainPrefix: String) -> String {
-        "\(authKeychainLabel(keychainPrefix: keychainPrefix)).identityToken"
-    }
-    public static func authTokenKeychainLabel(keychainPrefix: String) -> String {
-        "\(authKeychainLabel(keychainPrefix: keychainPrefix)).token"
     }
 }
 
