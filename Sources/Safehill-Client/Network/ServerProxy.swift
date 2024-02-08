@@ -898,13 +898,13 @@ extension SHServerProxy {
         log.trace("saving encryption details for group \(groupId) to local server")
         log.debug("[setupGroup] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
         /// Save the encryption details for this user on local
-        self.localServer.setGroupEncryptionDetails(
+        self.remoteServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails
-        ) { localResult in
-            switch localResult {
+        ) { remoteResult in
+            switch remoteResult {
             case .success:
-                log.trace("encryption details for group \(groupId) saved to local server. Uploading them to the server")
+                log.trace("encryption details for group \(groupId) saved to remote server. Updating local server")
                 /// Save the encryption details for all users on server
                 self.remoteServer.setGroupEncryptionDetails(
                     groupId: groupId,

@@ -7,12 +7,12 @@ public typealias InteractionsCounts = (reactions: [ReactionType: [UserIdentifier
 
 public struct SHUserInteractionController {
     
-    let user: SHAuthenticatedLocalUser
+    let user: SHLocalUserProtocol
     private var serverProxy: SHServerProxyProtocol
     
     private static let encryptionDetailsCache = RecipientEncryptionDetailsCache()
     
-    public init(user: SHAuthenticatedLocalUser,
+    public init(user: SHLocalUserProtocol,
                 serverProxy: SHServerProxyProtocol? = nil) {
         self.user = user
         self.serverProxy = serverProxy ?? user.serverProxy
@@ -32,6 +32,11 @@ public struct SHUserInteractionController {
         with users: [SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void
     ) {
+        guard let authedUser = self.user as? SHAuthenticatedLocalUser else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
         self.serverProxy.getThread(withUsers: users) { result in
             switch result {
             case .failure(let error):
@@ -51,9 +56,9 @@ public struct SHUserInteractionController {
                         )
                         let decryptedSecret = try SHCypher.decrypt(
                             shareablePayload,
-                            encryptionKeyData: user.shUser.privateKeyData,
-                            protocolSalt: self.user.encryptionProtocolSalt,
-                            from: self.user.publicSignatureData
+                            encryptionKeyData: authedUser.shUser.privateKeyData,
+                            protocolSalt: authedUser.encryptionProtocolSalt,
+                            from: authedUser.publicSignatureData
                         )
                         symmetricKey = SymmetricKey(data: decryptedSecret)
                     } catch {
@@ -69,8 +74,8 @@ failed to initialize E2EE details for new users in thread \(conversationThread.t
                 }
                 
                 var usersAndSelf = users
-                if users.contains(where: { $0.identifier == user.identifier }) == false {
-                    usersAndSelf.append(user)
+                if users.contains(where: { $0.identifier == authedUser.identifier }) == false {
+                    usersAndSelf.append(authedUser)
                 }
                 
                 do {
@@ -100,6 +105,11 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
     
     public func updateThreadName(_ name: String, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
         self.serverProxy.createOrUpdateThread(
             name: name,
             recipientsEncryptionDetails: nil,
@@ -108,6 +118,11 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
     }
     
     public func deleteThread(threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
         SHUserInteractionController.encryptionDetailsCache.evict(anchor: .thread, anchorId: threadId)
         self.serverProxy.deleteThread(withId: threadId, completionHandler: completionHandler)
     }
@@ -122,6 +137,11 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         with users: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
         var symmetricKey: SymmetricKey?
         
         do {
@@ -204,6 +224,11 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     }
     
     public func deleteGroup(groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
         SHUserInteractionController.encryptionDetailsCache.evict(anchor: .group, anchorId: groupId)
         self.serverProxy.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
@@ -375,6 +400,11 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inReplyToInteractionId: String? = nil,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     ) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
         guard let messageData = message.data(using: .utf8) else {
             completionHandler(.failure(SHBackgroundOperationError.unexpectedData(message)))
             return
@@ -502,6 +532,10 @@ extension SHUserInteractionController {
     }
     
     func fetchSymmetricKey(forAnchor anchor: InteractionAnchor, anchorId: String) throws -> SymmetricKey? {
+        guard let salt = self.user.maybeEncryptionProtocolSalt else {
+            throw SHLocalUserError.missingProtocolSalt
+        }
+        
         let encryptionDetails: RecipientEncryptionDetailsDTO?
         
         do {
@@ -521,8 +555,8 @@ extension SHUserInteractionController {
         )
         let decryptedSecret = try SHCypher.decrypt(
             shareablePayload,
-            encryptionKeyData: user.shUser.privateKeyData,
-            protocolSalt: self.user.encryptionProtocolSalt,
+            encryptionKeyData: self.user.shUser.privateKeyData,
+            protocolSalt: salt,
             from: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
         )
         return SymmetricKey(data: decryptedSecret)
@@ -532,6 +566,10 @@ extension SHUserInteractionController {
         _ encryptedMessages: [MessageOutputDTO],
         usingEncryptionDetails encryptionDetails: EncryptionDetailsClass
     ) throws -> [SHDecryptedMessage] {
+        guard let salt = self.user.maybeEncryptionProtocolSalt else {
+            throw SHLocalUserError.missingProtocolSalt
+        }
+        
         var decryptedMessages = [SHDecryptedMessage]()
         
         let shareablePayload = SHShareablePayload(
@@ -564,7 +602,7 @@ extension SHUserInteractionController {
                 decryptedData = try SHUserContext(user: self.user.shUser).decrypt(
                     Data(base64Encoded: encryptedMessage.encryptedMessage)!,
                     usingEncryptedSecret: shareablePayload,
-                    protocolSalt: self.user.encryptionProtocolSalt,
+                    protocolSalt: salt,
                     signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
                 )
             } catch {
