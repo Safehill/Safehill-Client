@@ -8,7 +8,7 @@ public enum SHLocalUserError: Error, LocalizedError {
     case missingProtocolSalt
     case notAuthenticated
     
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidKeychainEntry:
             "invalid entry in the keychain"
