@@ -7,6 +7,19 @@ public enum SHLocalUserError: Error, LocalizedError {
     case failedToRemoveKeychainEntry
     case missingProtocolSalt
     case notAuthenticated
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidKeychainEntry:
+            "invalid entry in the keychain"
+        case .failedToRemoveKeychainEntry:
+            "failed to remove keychain entry"
+        case .missingProtocolSalt:
+            "protocol salt was never retrieved from server"
+        case .notAuthenticated:
+            "you need to be authenticated to perform this operation"
+        }
+    }
 }
 
 
