@@ -57,17 +57,7 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
     }
     
     public func deauthenticate() throws -> SHLocalUser {
-        
-        let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
-        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
-        
-        guard (try? SHKeychain.deleteValue(account: identityTokenLabel)) != nil,
-              (try? SHKeychain.deleteValue(account: authTokenLabel)) != nil
-        else {
-            log.fault("auth and identity token could not be removed from the keychain")
-            throw SHLocalUserError.failedToRemoveKeychainEntry
-        }
-        
+        try self.deleteAuthFromKeychain()
         return SHLocalUser(keychainPrefix: self.keychainPrefix)
     }
 }
