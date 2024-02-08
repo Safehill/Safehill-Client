@@ -55,11 +55,6 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
         
         self.serverProxy = SHServerProxy(user: localUser)
     }
-    
-    public func deauthenticate() throws -> SHLocalUser {
-        try self.deleteAuthFromKeychain()
-        return SHLocalUser(keychainPrefix: self.keychainPrefix)
-    }
 }
 
 extension SHAuthenticatedLocalUser {

@@ -95,10 +95,6 @@ public struct SHLocalUser: SHLocalUserProtocol {
         }
     }
     
-    public func saveKeysToKeychain(withLabel label: String, force: Bool = false) throws {
-        try self.shUser.saveKeysToKeychain(withLabel: label, force: force)
-    }
-    
     public func authenticate(
         _ user: SHServerUser,
         bearerToken: String,

@@ -12,8 +12,8 @@ public protocol SHLocalUserProtocol : SHServerUser {
     static func identityTokenKeychainLabel(keychainPrefix: String) -> String
     static func authTokenKeychainLabel(keychainPrefix: String) -> String
     
-    func deleteAuthFromKeychain() throws
-    func deleteKeysFromKeychain() throws
+    func deauthenticate() throws -> SHLocalUser
+    func destroy() throws -> SHLocalUser
     
     func createShareablePayload(
         from data: Data,
@@ -42,7 +42,7 @@ extension SHLocalUserProtocol {
         "\(authKeychainLabel(keychainPrefix: keychainPrefix)).token"
     }
     
-    public func deleteAuthFromKeychain() throws {
+    public func deauthenticate() throws -> SHLocalUser {
         let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
         let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
         
@@ -52,11 +52,15 @@ extension SHLocalUserProtocol {
             log.fault("auth and identity token could not be removed from the keychain")
             throw SHLocalUserError.failedToRemoveKeychainEntry
         }
+        
+        return SHLocalUser(keychainPrefix: self.keychainPrefix)
     }
     
-    public func deleteKeysFromKeychain() throws {
+    public func destroy() throws -> SHLocalUser {
+        let _ = try self.deauthenticate()
         let keysKeychainLabel = Self.keysKeychainLabel(keychainPrefix: keychainPrefix)
         try self.shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
+        return SHLocalUser(keychainPrefix: self.keychainPrefix)
     }
 }
 
