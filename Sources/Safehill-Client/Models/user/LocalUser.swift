@@ -43,7 +43,6 @@ public struct SHLocalUser: SHLocalUserProtocol {
     }
     
     public var serverProxy: SHServerProxy {
-        // TODO: Should we create a new one every time?
         SHServerProxy(user: self)
     }
     

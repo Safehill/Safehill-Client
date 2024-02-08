@@ -15,7 +15,9 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
     let encryptionProtocolSalt: Data
     public let shUser: SHLocalCryptoUser
     
-    public let serverProxy: SHServerProxy
+    public var serverProxy: SHServerProxy {
+        SHServerProxy(user: self)
+    }
     
     public var identifier: String { self.shUser.identifier }
     public var name: String
@@ -37,8 +39,6 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
         self.shUser = localUser.shUser
         self.name = name
         self.keychainPrefix = localUser.keychainPrefix
-        
-        self.serverProxy = SHServerProxy(user: localUser)
     }
     
     internal init(
@@ -52,8 +52,6 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
         self.encryptionProtocolSalt = encryptionProtocolSalt
         self.shUser = localUser.shUser
         self.name = name
-        
-        self.serverProxy = SHServerProxy(user: localUser)
     }
 }
 

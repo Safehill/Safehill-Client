@@ -3,7 +3,7 @@ import Yams
 import Contacts
 
 public protocol SHServerProxyProtocol {
-    init(user: SHLocalUser)
+    init(user: SHLocalUserProtocol)
     
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
@@ -98,7 +98,7 @@ public struct SHServerProxy: SHServerProxyProtocol {
     let localServer: LocalServer
     let remoteServer: SHServerHTTPAPI
     
-    public init(user: SHLocalUser) {
+    public init(user: SHLocalUserProtocol) {
         self.localServer = LocalServer(requestor: user)
         self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
