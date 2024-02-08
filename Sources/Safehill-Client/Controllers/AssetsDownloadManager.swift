@@ -15,7 +15,7 @@ public struct SHAssetsDownloadManager {
     }
     
     /// Invoked during local cleanup (when the local user is removed or a new login happens, for instance)
-    public func deepClean() throws {
+    public static func deepClean() throws {
         let userStore = try SHDBManager.sharedInstance.userStore()
         let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
         
@@ -26,7 +26,7 @@ public struct SHAssetsDownloadManager {
     
     /// - Parameter userId: the user identifier
     /// - Returns: the asset identifiers that require authorization from the user
-    public func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
+    public static func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
         let userStore = try SHDBManager.sharedInstance.userStore()
         let key = "auth-" + userId
         
@@ -44,7 +44,7 @@ public struct SHAssetsDownloadManager {
     ///   - completionHandler: the callback method
     public func authorizeDownloads(from userId: String,
                                    completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void) {
-        self.removeUsersFromBlacklist(with: [userId])
+        SHAssetsDownloadManager.removeUsersFromBlacklist(with: [userId])
         
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
             log.error("Unable to connect to local queue or database")
@@ -53,7 +53,7 @@ public struct SHAssetsDownloadManager {
         }
         
         do {
-            let assetGIdList = try self.unauthorizedDownloads(for: userId)
+            let assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
             guard assetGIdList.count > 0 else {
                 let response = SHAssetDownloadAuthorizationResponse(
                     descriptors: [],
@@ -63,8 +63,10 @@ public struct SHAssetsDownloadManager {
                 return
             }
             
-            let descriptors = try self.dequeue(from: unauthorizedQueue,
-                                               itemsWithIdentifiers: assetGIdList)
+            let descriptors = try SHAssetsDownloadManager.dequeue(
+                from: unauthorizedQueue,
+                itemsWithIdentifiers: assetGIdList
+            )
             
             let userStore = try SHDBManager.sharedInstance.userStore()
             let key = "auth-" + userId
@@ -165,7 +167,7 @@ public struct SHAssetsDownloadManager {
     
     func stopDownload(ofAssetsWith globalIdentifiers: [GlobalIdentifier]) throws {
         try SHKGQuery.removeAssets(with: globalIdentifiers)
-        try self.dequeueEntries(for: globalIdentifiers)
+        try SHAssetsDownloadManager.dequeueEntries(for: globalIdentifiers)
     }
 }
 
@@ -203,7 +205,7 @@ private extension SHAssetsDownloadManager {
         }
     }
     
-    private func dequeue(from queue: KBQueueStore, itemsWithIdentifiers identifiers: [GlobalIdentifier]) throws -> [any SHAssetDescriptor] {
+    private static func dequeue(from queue: KBQueueStore, itemsWithIdentifiers identifiers: [GlobalIdentifier]) throws -> [any SHAssetDescriptor] {
         let group = DispatchGroup()
         var dequeuedDescriptors = [any SHAssetDescriptor]()
         var errors = [String: any Error]()
@@ -301,7 +303,7 @@ internal extension SHAssetsDownloadManager {
     /// - Parameters:
     ///   - allSharedAssetIds: the full list of asset identifiers that are shared with this user
     ///   - allUserIds: all user ids that this user is connected to
-    func cleanEntriesNotIn(allSharedAssetIds: [GlobalIdentifier], allUserIds: [String]) throws {
+    static func cleanEntriesNotIn(allSharedAssetIds: [GlobalIdentifier], allUserIds: [String]) throws {
         let userStore = try SHDBManager.sharedInstance.userStore()
         var condition = KBGenericCondition(value: false)
         
@@ -330,7 +332,7 @@ internal extension SHAssetsDownloadManager {
         try writeBatch.write()
         
         /// Remove queue item indentifiers in the download queues
-        try self.dequeueEntries(for: removedAssetGIds)
+        try SHAssetsDownloadManager.dequeueEntries(for: removedAssetGIds)
     }
     
     func cleanEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
@@ -338,7 +340,7 @@ internal extension SHAssetsDownloadManager {
             return
         }
         
-        try self.dequeueEntries(for: assetIdentifiers)
+        try SHAssetsDownloadManager.dequeueEntries(for: assetIdentifiers)
         
         let userStore = try SHDBManager.sharedInstance.userStore()
         let key = "auth-" + self.user.identifier
@@ -348,7 +350,7 @@ internal extension SHAssetsDownloadManager {
         }
     }
     
-    private func dequeueEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
+    private static func dequeueEntries(for assetIdentifiers: [GlobalIdentifier]) throws {
         guard assetIdentifiers.count > 0 else {
             return
         }
@@ -360,7 +362,7 @@ internal extension SHAssetsDownloadManager {
                 throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
             }
             
-            let _ = try self.dequeue(from: queue, itemsWithIdentifiers: assetIdentifiers)
+            let _ = try SHAssetsDownloadManager.dequeue(from: queue, itemsWithIdentifiers: assetIdentifiers)
         }
     }
 }

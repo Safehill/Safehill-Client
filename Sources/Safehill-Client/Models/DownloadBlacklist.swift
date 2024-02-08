@@ -114,15 +114,15 @@ struct DownloadBlacklist {
 // - MARK: User black/white listing
 
 public extension SHAssetsDownloadManager {
-    var blacklistedUsers: [String] {
+    static var blacklistedUsers: [String] {
         DownloadBlacklist.shared.blacklistedUsers
     }
     
-    func blacklistUser(with userId: String) {
+    static func blacklistUser(with userId: String) {
         DownloadBlacklist.shared.blacklist(userIdentifier: userId)
     }
     
-    func removeUsersFromBlacklist(with userIds: [String]) {
+    static func removeUsersFromBlacklist(with userIds: [String]) {
         DownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: userIds)
     }
 }
