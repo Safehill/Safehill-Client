@@ -376,10 +376,6 @@ extension SHServerProxy {
         }
     }
     
-    public func deleteLocalAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.deleteAccount(completionHandler: completionHandler)
-    }
-    
     public func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.registerDevice(deviceName, token: token, completionHandler: completionHandler)
     }
