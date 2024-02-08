@@ -4,6 +4,7 @@ import Safehill_Crypto
 
 public enum SHLocalUserError: Error, LocalizedError {
     case invalidKeychainEntry
+    case failedToRemoveKeychainEntry
     case missingProtocolSalt
     case notAuthenticated
 }
@@ -13,13 +14,13 @@ public enum SHLocalUserError: Error, LocalizedError {
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHLocalUserProtocol {
     
-    public var shUser: SHLocalCryptoUser
+    public var name: String { "" }
+    
+    public let shUser: SHLocalCryptoUser
     
     public var identifier: String {
         self.shUser.identifier
     }
-    
-    public var name: String = "" // Empty means unknown
     
     public var publicKeyData: Data {
         self.shUser.publicKeyData
@@ -33,38 +34,21 @@ public struct SHLocalUser: SHLocalUserProtocol {
         SHServerProxy(user: self)
     }
     
-    private var _ssoIdentifier: String?
-    private var _authToken: String?
-    private var _encryptionProtocolSalt: Data?
-    public var ssoIdentifier: String? { get { _ssoIdentifier } }
-    public var authToken: String? { get { _authToken } }
-    public var maybeEncryptionProtocolSalt: Data? { get { _encryptionProtocolSalt } }
+    public let authToken: String?
+    public let maybeEncryptionProtocolSalt: Data?
     
-    private let keychainPrefix: String
+    public let keychainPrefix: String
     
-    public static func keysKeychainLabel(withPrefix prefix: String) -> String {
-        "\(prefix).keys"
+    public static func keysKeychainLabel(keychainPrefix: String) -> String {
+        "\(keychainPrefix).keys"
     }
     
     public var keysKeychainLabel: String {
-        SHLocalUser.keysKeychainLabel(withPrefix: keychainPrefix)
+        SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
     }
-    public var authKeychainLabel: String {
-        "\(keychainPrefix).auth"
-    }
-    
-    public var identityTokenKeychainLabel: String {
-        "\(authKeychainLabel).identityToken"
-    }
-    public var authTokenKeychainLabel: String {
-        "\(authKeychainLabel).token"
-    }
-    public var saltKeychainLabel: String {
-        "\(authKeychainLabel).salt"
-    }
-    
-    public var authenticatedUser: SHAuthenticatedLocalUser? {
-        SHAuthenticatedLocalUser(localUser: self)
+
+    public static func saltKeychainLabel(keychainPrefix: String) -> String {
+        "\(SHLocalUser.authKeychainLabel(keychainPrefix: keychainPrefix)).salt"
     }
     
     static func == (lhs: SHLocalUser, rhs: SHLocalUser) -> Bool {
@@ -77,47 +61,45 @@ public struct SHLocalUser: SHLocalUserProtocol {
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
     /// - Parameter keychainPrefix:the keychain prefix
     public init(keychainPrefix: String) {
-        
         // Asymmetric keys
         self.keychainPrefix = keychainPrefix
-        let keysKeychainLabel = SHLocalUser.keysKeychainLabel(withPrefix: keychainPrefix)
+        
+        let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
+        let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
+        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
+        let saltKeychainLabel = SHLocalUser.saltKeychainLabel(keychainPrefix: keychainPrefix)
+        
         if let shUser = try? SHLocalCryptoUser(usingKeychainEntryWithLabel: keysKeychainLabel) {
             self.shUser = shUser
             
-            // SSO identifier (if any)
-            do {
-                self._ssoIdentifier = try SHKeychain.retrieveValue(from: identityTokenKeychainLabel)
-            } catch {
-                try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
-                self._ssoIdentifier = nil
-            }
-            
             // Bearer token
             do {
-                self._authToken = try SHKeychain.retrieveValue(from: authTokenKeychainLabel)
+                self.authToken = try SHKeychain.retrieveValue(from: authTokenLabel)
             } catch {
-                self._authToken = nil
+                self.authToken = nil
             }
         } else {
             self.shUser = SHLocalCryptoUser()
-            self._ssoIdentifier = nil
-            self._authToken = nil
+            self.authToken = nil
             
-            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
-            try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+            
+            try? SHKeychain.deleteValue(account: identityTokenLabel)
+            try? SHKeychain.deleteValue(account: authTokenLabel)
         }
         
         // Protocol SALT used for encryption
         do {
             if let base64Salt = try SHKeychain.retrieveValue(from: saltKeychainLabel) {
                 if let salt = Data(base64Encoded: base64Salt) {
-                    self._encryptionProtocolSalt = salt
+                    self.maybeEncryptionProtocolSalt = salt
                 } else {
                     throw SHLocalUserError.invalidKeychainEntry
                 }
+            } else {
+                self.maybeEncryptionProtocolSalt = nil
             }
         } catch {
-            self._encryptionProtocolSalt = nil
+            self.maybeEncryptionProtocolSalt = nil
         }
     }
     
@@ -129,57 +111,42 @@ public struct SHLocalUser: SHLocalUserProtocol {
         try shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
     }
     
-    public mutating func updateUserDetails(given user: SHServerUser?) {
-        if let user = user {
-            self.name = user.name
-        } else {
-            self.name = ""
-        }
-    }
-    
-    public mutating func authenticate(
+    public func authenticate(
         _ user: SHServerUser,
         bearerToken: String,
         encryptionProtocolSalt: Data,
         ssoIdentifier: String?
     ) throws -> SHAuthenticatedLocalUser {
-        self.updateUserDetails(given: user)
-        self._ssoIdentifier = ssoIdentifier
-        self._authToken = bearerToken
-        self._encryptionProtocolSalt = encryptionProtocolSalt
+        
+        let saltKeychainLabel = SHLocalUser.saltKeychainLabel(keychainPrefix: keychainPrefix)
+        let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
+        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
         
         do {
             if let ssoIdentifier = ssoIdentifier {
-                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
+                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenLabel)
             }
-            try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
+            try SHKeychain.storeValue(bearerToken, account: authTokenLabel)
             try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         } catch {
             // Re-try after deleting items in the keychain
-            try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)
-            try? SHKeychain.deleteValue(account: authTokenKeychainLabel)
+            try? SHKeychain.deleteValue(account: identityTokenLabel)
+            try? SHKeychain.deleteValue(account: authTokenLabel)
             try? SHKeychain.deleteValue(account: saltKeychainLabel)
             
             if let ssoIdentifier = ssoIdentifier {
-                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenKeychainLabel)
+                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenLabel)
             }
-            try SHKeychain.storeValue(bearerToken, account: authTokenKeychainLabel)
+            try SHKeychain.storeValue(bearerToken, account: authTokenLabel)
             try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         }
         
-        return SHAuthenticatedLocalUser(localUser: self)!
-    }
-    
-    public mutating func deauthenticate() {
-        self._ssoIdentifier = nil
-        self._authToken = nil
-        
-        guard (try? SHKeychain.deleteValue(account: identityTokenKeychainLabel)) != nil,
-              (try? SHKeychain.deleteValue(account: authTokenKeychainLabel)) != nil
-        else {
-            log.fault("auth and identity token could not be removed from the keychain")
-            return
-        }
+        return SHAuthenticatedLocalUser(
+            localUser: self,
+            name: user.name,
+            encryptionProtocolSalt: encryptionProtocolSalt,
+            authToken: bearerToken
+        )
     }
 }
 
@@ -187,25 +154,21 @@ extension SHLocalUser: Codable {
     
     enum CodingKeys: String, CodingKey {
         case shUser
-        case name
         case keychainPrefix
     }
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
-        self.name = try container.decode(String.self, forKey: .name)
         self.shUser = try container.decode(SHLocalCryptoUser.self, forKey: .shUser)
         self.keychainPrefix = try container.decode(String.self, forKey: .keychainPrefix)
-        
-        self._ssoIdentifier = nil
-        self._authToken = nil
+        self.authToken = nil
+        self.maybeEncryptionProtocolSalt = nil
     }
     
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(self.shUser, forKey: .shUser)
-        try container.encode(self.name, forKey: .name)
         try container.encode(self.keychainPrefix, forKey: .keychainPrefix)
     }
     

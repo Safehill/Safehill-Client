@@ -23,10 +23,11 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
     public var publicKeyData: Data { self.shUser.publicKeyData }
     public var publicSignatureData: Data { self.shUser.publicSignatureData }
     
-    public init?(localUser: SHLocalUser) {
+    public let keychainPrefix: String
+    
+    public init?(localUser: SHLocalUser, name: String) {
         guard let encryptionProtocolSalt = localUser.maybeEncryptionProtocolSalt,
-              let authToken = localUser.authToken,
-              localUser.name.isEmpty == false
+              let authToken = localUser.authToken
         else {
             return nil
         }
@@ -34,18 +35,40 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
         self.authToken = authToken
         self.encryptionProtocolSalt = encryptionProtocolSalt
         self.shUser = localUser.shUser
-        self.name = localUser.name
+        self.name = name
+        self.keychainPrefix = localUser.keychainPrefix
         
         self.serverProxy = SHServerProxy(user: localUser)
     }
     
-    internal init(localUser: SHLocalUser, encryptionProtocolSalt: Data, authToken: String) {
+    internal init(
+        localUser: SHLocalUser,
+        name: String,
+        encryptionProtocolSalt: Data,
+        authToken: String
+    ) {
+        self.keychainPrefix = localUser.keychainPrefix
         self.authToken = authToken
         self.encryptionProtocolSalt = encryptionProtocolSalt
         self.shUser = localUser.shUser
-        self.name = localUser.name
+        self.name = name
         
         self.serverProxy = SHServerProxy(user: localUser)
+    }
+    
+    public func deauthenticate() throws -> SHLocalUser {
+        
+        let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
+        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
+        
+        guard (try? SHKeychain.deleteValue(account: identityTokenLabel)) != nil,
+              (try? SHKeychain.deleteValue(account: authTokenLabel)) != nil
+        else {
+            log.fault("auth and identity token could not be removed from the keychain")
+            throw SHLocalUserError.failedToRemoveKeychainEntry
+        }
+        
+        return SHLocalUser(keychainPrefix: self.keychainPrefix)
     }
 }
 

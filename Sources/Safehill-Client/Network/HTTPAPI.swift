@@ -227,11 +227,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         request.httpMethod = "GET"
         
         if requiresAuthentication {
-            guard let authedUser = SHAuthenticatedLocalUser(localUser: self.requestor) else {
-                completionHandler(.failure(SHHTTPError.AuthenticationError.missingAuthToken))
+            guard let authToken = self.requestor.authToken else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
                 return
             }
-            request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
+            request.addValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
@@ -249,11 +249,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         if requiresAuthentication {
-            guard let authedUser = SHAuthenticatedLocalUser(localUser: self.requestor) else {
-                completionHandler(.failure(SHHTTPError.AuthenticationError.missingAuthToken))
+            guard let authToken = self.requestor.authToken else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
                 return
             }
-            request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
+            request.addValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
         
         if let parameters = parameters {
