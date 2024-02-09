@@ -12,101 +12,6 @@ import AppKit
 
 
 extension SHApplePhotoAsset {
-    
-    /// Generate a shareable version of the asset, namely a structure that can be used by the sender
-    /// to securely share an asset with the specified recipients.
-    ///
-    /// - Parameters:
-    ///   - globalIdentifier: the asset global identifier
-    ///   - versions: the versions to share (resulting in `SHShareableEncryptedAssetVersion` in the `SHShareableEncryptedAsset` returned)
-    ///   - sender: the user wanting to share the asset
-    ///   - recipients: the list of users the asset should be made shareable to
-    ///   - groupId: the unique identifier of the share request
-    /// - Returns: the `SHShareableEncryptedAsset`
-    func shareableEncryptedAsset(globalIdentifier: String,
-                                 versions: [SHAssetQuality],
-                                 sender: SHLocalUser,
-                                 recipients: [any SHServerUser],
-                                 groupId: String) throws -> any SHShareableEncryptedAsset {
-        let privateSecret = try self.retrieveCommonEncryptionKey(sender: sender, globalIdentifier: globalIdentifier)
-        var shareableVersions = [SHShareableEncryptedAssetVersion]()
-        
-        for recipient in recipients {
-            ///
-            /// Encrypt the secret using the recipient's public key
-            /// so that it can be stored securely on the server
-            ///
-            let encryptedAssetSecret = try sender.createShareablePayload(
-                from: privateSecret,
-                toShareWith: recipient
-            )
-            
-            for quality in versions {
-                let shareableVersion = SHGenericShareableEncryptedAssetVersion(
-                    quality: quality,
-                    userPublicIdentifier: recipient.identifier,
-                    encryptedSecret: encryptedAssetSecret.cyphertext,
-                    ephemeralPublicKey: encryptedAssetSecret.ephemeralPublicKeyData,
-                    publicSignature: encryptedAssetSecret.signature
-                )
-                shareableVersions.append(shareableVersion)
-            }
-        }
-        
-        return SHGenericShareableEncryptedAsset(
-            globalIdentifier: globalIdentifier,
-            sharedVersions: shareableVersions,
-            groupId: groupId
-        )
-    }
-    
-    ///
-    /// Get the private secret for the asset.
-    /// The same secret should be used when encrypting for sharing with other users.
-    /// Encrypting that secret again with the recipient's public key guarantees the privacy of that secret.
-    ///
-    /// By the time this method is called, the encrypted secret should be present in the local server,
-    /// as the asset was previously encrypted on this device by the SHEncryptionOperation.
-    ///
-    /// Note that secrets are encrypted at rest, wheres the in-memory data is its decrypted (clear) version.
-    ///
-    /// - Returns: the decrypted shared secret for this asset
-    /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
-    ///
-    fileprivate func retrieveCommonEncryptionKey(
-        sender user: SHLocalUser,
-        globalIdentifier: String
-    ) throws -> Data {
-        let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions. Any SHAssetQuality will return the same value
-        
-        let encryptedAsset = try SHLocalAssetStoreController(user: user)
-            .encryptedAsset(
-                with: globalIdentifier,
-                versions: [quality],
-                cacheHiResolution: false
-            )
-        guard let version = encryptedAsset.encryptedVersions[quality] else {
-            log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
-            throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
-        }
-        guard let salt = user.encryptionProtocolSalt else {
-            log.error("No protocol salt set from server")
-            throw SHBackgroundOperationError.fatalError("No protocol salt set from server")
-        }
-        
-        let encryptedSecret = SHShareablePayload(
-            ephemeralPublicKeyData: version.publicKeyData,
-            cyphertext: version.encryptedSecret,
-            signature: version.publicSignatureData
-        )
-        return try SHCypher.decrypt(
-            encryptedSecret,
-            encryptionKeyData: user.shUser.privateKeyData,
-            protocolSalt: salt,
-            from: user.publicSignatureData
-        )
-    }
-    
     func data(for versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
         var dict = [SHAssetQuality: Result<Data, Error>]()
         
@@ -126,40 +31,37 @@ extension SHApplePhotoAsset {
     }
 }
 
-open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-ENCRYPT")
     }
     
     public let limit: Int
-    public let user: SHLocalUser
+    public let user: SHAuthenticatedLocalUser
     public var assetDelegates: [SHOutboundAssetOperationDelegate]
     public var threadsDelegates: [SHThreadSyncingDelegate]
     
-    internal let interactionsController: SHUserInteractionController
+    internal var interactionsController: SHUserInteractionController {
+        SHUserInteractionController(user: self.user)
+    }
     
     var imageManager: PHCachingImageManager
     
-    public init(user: SHLocalUser,
+    public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
                 threadsDelegates: [SHThreadSyncingDelegate],
-                interactionsController: SHUserInteractionController? = nil,
                 limitPerRun limit: Int,
                 imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.limit = limit
         self.assetDelegates = assetsDelegates
         self.threadsDelegates = threadsDelegates
-        self.interactionsController = interactionsController ?? SHUserInteractionController(
-            user: self.user,
-            protocolSalt: self.user.encryptionProtocolSalt!
-        )
         self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
     var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
+        self.user.serverProxy
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
@@ -167,7 +69,6 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             user: self.user,
             assetsDelegates: self.assetDelegates,
             threadsDelegates: self.threadsDelegates,
-            interactionsController: self.interactionsController,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -485,10 +386,8 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             ///
             let privateSecret: SymmetricKey
             do {
-                let privateSecretData = try asset.retrieveCommonEncryptionKey(
-                    sender: self.user,
-                    globalIdentifier: globalIdentifier!
-                )
+                let privateSecretData = try SHLocalAssetStoreController(user: self.user)
+                    .retrieveCommonEncryptionKey(for: globalIdentifier!)
                 privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
             } catch SHBackgroundOperationError.missingAssetInLocalServer(_) {
                 privateSecret = SymmetricKey(size: .bits256)
@@ -668,7 +567,7 @@ open class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBac
     }
 }
 
-public class SHAssetsEncrypterQueueProcessor : SHBackgroundOperationProcessor<SHEncryptionOperation> {
+internal class SHAssetsEncrypterQueueProcessor : SHBackgroundOperationProcessor<SHEncryptionOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsEncrypterQueueProcessor(
         delayedStartInSeconds: 3,

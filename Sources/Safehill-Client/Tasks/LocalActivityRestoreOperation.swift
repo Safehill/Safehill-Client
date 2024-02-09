@@ -7,7 +7,7 @@ import os
 public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     
     @available(*, unavailable)
-    public override init(user: SHLocalUser,
+    public override init(user: SHLocalUserProtocol,
                          downloaderDelegates: [SHAssetDownloaderDelegate],
                          assetsSyncDelegates: [SHAssetSyncingDelegate],
                          threadsSyncDelegates: [SHThreadSyncingDelegate],
@@ -17,7 +17,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         fatalError("Not supported")
     }
     
-    public init(user: SHLocalUser,
+    public init(user: SHLocalUserProtocol,
                 delegates: [SHAssetDownloaderDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate) {
         super.init(

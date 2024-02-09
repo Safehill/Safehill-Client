@@ -6,9 +6,9 @@ public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
 
 struct LocalServer : SHServerAPI {
     
-    let requestor: SHLocalUser
+    let requestor: SHLocalUserProtocol
     
-    init(requestor: SHLocalUser) {
+    init(requestor: SHLocalUserProtocol) {
         self.requestor = requestor
     }
     

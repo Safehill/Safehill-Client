@@ -45,7 +45,7 @@ struct AssetDescriptorsDiff {
                               local localDescriptors: [any SHAssetDescriptor],
                               serverUserIds: [String],
                               localUserIds: [String],
-                              for user: SHLocalUser) -> AssetDescriptorsDiff {
+                              for user: SHAuthenticatedLocalUser) -> AssetDescriptorsDiff {
         var onlyLocalAssets = localDescriptors
             .map({
                 d in SHRemoteAssetIdentifier(globalIdentifier: d.globalIdentifier,

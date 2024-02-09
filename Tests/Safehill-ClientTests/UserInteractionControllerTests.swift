@@ -22,7 +22,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     let localServer: LocalServer
     let state: SHMockServerProxyState
     
-    init(user: SHLocalUser) {
+    init(user: SHLocalUserProtocol) {
         self.localServer = LocalServer(requestor: user)
         self.state = SHMockServerProxyState()
     }
@@ -242,9 +242,15 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let serverProxy = SHMockServerProxy(user: myUser)
         
+        let authenticatedUser = SHAuthenticatedLocalUser(
+            localUser: myUser, 
+            name: "myUser",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: ""
+        )
+        
         let controller = SHUserInteractionController(
-            user: myUser,
-            protocolSalt: kTestStaticProtocolSalt,
+            user: authenticatedUser,
             serverProxy: serverProxy
         )
         
@@ -349,9 +355,15 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let serverProxy = SHMockServerProxy(user: myUser)
         
+        let authenticatedUser = SHAuthenticatedLocalUser(
+            localUser: myUser, 
+            name: "myUser",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: ""
+        )
+        
         let controller = SHUserInteractionController(
-            user: myUser,
-            protocolSalt: kTestStaticProtocolSalt,
+            user: authenticatedUser,
             serverProxy: serverProxy
         )
         
@@ -471,9 +483,15 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         ]
         let serverProxy = SHMockServerProxy(user: myUser, threads: serverThreadDetails)
         
+        let authenticatedUser1 = SHAuthenticatedLocalUser(
+            localUser: myUser,
+            name: "myUser",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: ""
+        )
+        
         let controller1 = SHUserInteractionController(
-            user: myUser,
-            protocolSalt: kTestStaticProtocolSalt,
+            user: authenticatedUser1,
             serverProxy: serverProxy
         )
         
@@ -608,9 +626,16 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let expectation4 = XCTestExpectation(description: "retrieve thread interactions on the other side")
 
         let serverProxy2 = SHMockServerProxy(user: recipient1, threads: [mockServerThread])
+        
+        let authenticatedUser2 = SHAuthenticatedLocalUser(
+            localUser: recipient1,
+            name: "recipient1",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: ""
+        )
+        
         let controller2 = SHUserInteractionController(
-            user: recipient1,
-            protocolSalt: kTestStaticProtocolSalt,
+            user: authenticatedUser2,
             serverProxy: serverProxy2
         )
         controller2.retrieveInteractions(inThread: threadId, per: 10, page: 1) {

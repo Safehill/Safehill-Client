@@ -12,7 +12,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
     public let limit: Int?
-    let user: SHLocalUser
+    let user: SHLocalUserProtocol
     
     let downloaderDelegates: [SHAssetDownloaderDelegate]
     let assetsSyncDelegates: [SHAssetSyncingDelegate]
@@ -21,7 +21,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     let photoIndexer: SHPhotosIndexer
     
-    public init(user: SHLocalUser,
+    public init(user: SHLocalUserProtocol,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
                 assetsSyncDelegates: [SHAssetSyncingDelegate],
                 threadsSyncDelegates: [SHThreadSyncingDelegate],
@@ -37,9 +37,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
     }
     
-    var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
-    }
+    var serverProxy: SHServerProxy { self.user.serverProxy }
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHDownloadOperation(
@@ -335,7 +333,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         self.log.info("found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
-        let downloadsManager = SHAssetsDownloadManager(user: self.user)
+        guard self.user is SHAuthenticatedLocalUser else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        let downloadsManager = SHAssetsDownloadManager(user: self.user as! SHAuthenticatedLocalUser)
         
         if unauthorizedDownloadDescriptors.count > 0 {
             ///
@@ -508,7 +510,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        let myUser = self.serverProxy.localServer.requestor
+        let myUser = self.user
         let otherUsersById: [String: any SHServerUser] = usersReferenced.reduce([:]) { partialResult, user in
             var result = partialResult
             result[user.identifier] = user
@@ -706,7 +708,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             /// (2)
             let globalIdentifiersNotOnLocalSharedBySelfNotInApplePhotoLibrary = nonApplePhotoLibrarySharedBySelfGlobalIdentifiers.subtract(remoteGlobalIdentifiersAlsoOnLocalServer)
-            let downloadsManager = SHAssetsDownloadManager(user: self.user)
+            
+            guard self.user is SHAuthenticatedLocalUser else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
+                return
+            }
+            let downloadsManager = SHAssetsDownloadManager(user: self.user as! SHAuthenticatedLocalUser)
+            
             downloadsManager.startDownload(
                 of: globalIdentifiersNotOnLocalSharedBySelfNotInApplePhotoLibrary.compactMap({ descriptorsByGlobalIdentifier[$0] })
             ) { result in
@@ -789,8 +797,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
                     
                     do {
-                        try SHAssetsDownloadManager(user: self.user)
-                            .stopDownload(ofAssetsWith: [globalIdentifier])
+                        guard self.user is SHAuthenticatedLocalUser else {
+                            throw SHLocalUserError.notAuthenticated
+                        }
+                        let downloadsManager = SHAssetsDownloadManager(user: self.user as! SHAuthenticatedLocalUser)
+                        try downloadsManager.stopDownload(ofAssetsWith: [globalIdentifier])
                     } catch {
                         log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
                     }
@@ -894,6 +905,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     private func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        guard self.user is SHAuthenticatedLocalUser else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
         
         DispatchQueue.global(qos: .background).async {
             let group = DispatchGroup()
@@ -947,7 +962,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// Given these descriptors, sync local and remote state (REMOVALS and UPDATES)
             ///
             let syncOperation = SHSyncOperation(
-                user: self.user,
+                user: self.user as! SHAuthenticatedLocalUser,
                 assetsDelegates: self.assetsSyncDelegates,
                 threadsDelegates: self.threadsSyncDelegates
             )

@@ -66,7 +66,7 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
     }
 
     public func fullName() -> String {
-        return "\(self.givenName) \(self.lastName)"
+        CNContactFormatter.string(from: systemContact, style: .fullName) ?? "\(self.givenName) \(self.lastName)"
     }
     
     public func labeledPhoneNumbers() -> [(label: String, stringValue: String)] {

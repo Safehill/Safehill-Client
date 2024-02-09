@@ -3,7 +3,7 @@ import Yams
 import Contacts
 
 public protocol SHServerProxyProtocol {
-    init(user: SHLocalUser)
+    init(user: SHLocalUserProtocol)
     
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
@@ -98,7 +98,7 @@ public struct SHServerProxy: SHServerProxyProtocol {
     let localServer: LocalServer
     let remoteServer: SHServerHTTPAPI
     
-    public init(user: SHLocalUser) {
+    public init(user: SHLocalUserProtocol) {
         self.localServer = LocalServer(requestor: user)
         self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
@@ -265,6 +265,42 @@ extension SHServerProxy {
         self.remoteServer.getUsers(withHashedPhoneNumbers: hashedPhoneNumbers, completionHandler: completionHandler)
     }
     
+    func getUsers(inAssetDescriptors descriptors: [any SHAssetDescriptor]) throws -> [any SHServerUser] {
+        let group = DispatchGroup()
+        var response = [any SHServerUser]()
+        var error: Error? = nil
+        
+        var userIdsSet = Set<String>()
+        for descriptor in descriptors {
+            userIdsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
+            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsSet.insert($0) })
+        }
+        userIdsSet.remove(self.remoteServer.requestor.identifier)
+        let userIds = Array(userIdsSet)
+
+        group.enter()
+        self.remoteServer.getUsers(withIdentifiers: userIds) { result in
+            switch result {
+            case .success(let serverUsers):
+                response = serverUsers
+            case .failure(let err):
+                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
+                error = err
+            }
+            group.leave()
+        }
+        
+        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            throw SHBackgroundOperationError.timedOut
+        }
+        guard error == nil else {
+            throw error!
+        }
+        
+        return response
+    }
+    
     public func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
         self.remoteServer.searchUsers(query: query, completionHandler: completionHandler)
     }
@@ -338,10 +374,6 @@ extension SHServerProxy {
             }
             self.localServer.deleteAccount(completionHandler: completionHandler)
         }
-    }
-    
-    public func deleteLocalAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.deleteAccount(completionHandler: completionHandler)
     }
     
     public func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
@@ -862,13 +894,13 @@ extension SHServerProxy {
         log.trace("saving encryption details for group \(groupId) to local server")
         log.debug("[setupGroup] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
         /// Save the encryption details for this user on local
-        self.localServer.setGroupEncryptionDetails(
+        self.remoteServer.setGroupEncryptionDetails(
             groupId: groupId,
             recipientsEncryptionDetails: recipientsEncryptionDetails
-        ) { localResult in
-            switch localResult {
+        ) { remoteResult in
+            switch remoteResult {
             case .success:
-                log.trace("encryption details for group \(groupId) saved to local server. Uploading them to the server")
+                log.trace("encryption details for group \(groupId) saved to remote server. Updating local server")
                 /// Save the encryption details for all users on server
                 self.remoteServer.setGroupEncryptionDetails(
                     groupId: groupId,

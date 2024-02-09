@@ -4,7 +4,7 @@ import KnowledgeBase
 import Photos
 import os
 
-open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-FETCH")
@@ -444,7 +444,7 @@ open class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
 }
 
-public class SHAssetsFetcherQueueProcessor : SHBackgroundOperationProcessor<SHLocalFetchOperation> {
+internal class SHAssetsFetcherQueueProcessor : SHBackgroundOperationProcessor<SHLocalFetchOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsFetcherQueueProcessor(
         delayedStartInSeconds: 1,

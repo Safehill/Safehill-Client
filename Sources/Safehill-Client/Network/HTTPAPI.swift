@@ -46,9 +46,9 @@ struct GenericFailureResponse: Decodable {
 
 struct SHServerHTTPAPI : SHServerAPI {
     
-    let requestor: SHLocalUser
+    let requestor: SHLocalUserProtocol
     
-    init(requestor: SHLocalUser) {
+    init(requestor: SHLocalUserProtocol) {
         self.requestor = requestor
     }
     
@@ -227,11 +227,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         request.httpMethod = "GET"
         
         if requiresAuthentication {
-            guard let bearerToken = self.requestor.authToken else {
-                completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+            guard let authedUser = self.requestor as? SHAuthenticatedLocalUser else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
                 return
             }
-            request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+            request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         }
         
         SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
@@ -249,11 +249,11 @@ struct SHServerHTTPAPI : SHServerAPI {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         if requiresAuthentication {
-            guard let bearerToken = self.requestor.authToken else {
-                completionHandler(.failure(SHHTTPError.ClientError.unauthorized))
+            guard let authedUser = self.requestor as? SHAuthenticatedLocalUser else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
                 return
             }
-            request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+            request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         }
         
         if let parameters = parameters {
@@ -759,7 +759,7 @@ struct SHServerHTTPAPI : SHServerAPI {
                 encryptedAssetVersion.encryptedData,
                 usingPresignedURL: url,
                 sessionIdentifier: [
-                    self.requestor.shUser.identifier,
+                    self.requestor.identifier,
                     serverAsset.globalIdentifier,
                     serverAssetVersion.versionName
                 ].joined(separator: "::")

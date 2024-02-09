@@ -62,25 +62,29 @@ internal class ServerUserCache {
 
 public class SHUsersController {
     
-    public let localUser: SHLocalUser
+    public let localUser: SHLocalUserProtocol
     
-    public init(localUser: SHLocalUser) {
+    public init(localUser: SHLocalUserProtocol) {
         self.localUser = localUser
     }
     
     private var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.localUser)
+        self.localUser.serverProxy
     }
     
     public func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws -> [SHServerUser] {
         var users = [any SHServerUser]()
+        var foundUserIds = [String]()
         var missingUserIds = [String]()
         
         for userIdentifier in userIdentifiers {
-            if let user = ServerUserCache.shared.user(with: userIdentifier) {
-                users.append(user)
-            } else {
-                missingUserIds.append(userIdentifier)
+            if foundUserIds.contains(userIdentifier) == false {
+                if let user = ServerUserCache.shared.user(with: userIdentifier) {
+                    users.append(user)
+                    foundUserIds.append(userIdentifier)
+                } else if missingUserIds.contains(userIdentifier) == false {
+                    missingUserIds.append(userIdentifier)
+                }
             }
         }
         

@@ -3,28 +3,32 @@ import os
 import KnowledgeBase
 
 
-open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
     
-    public let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
+    let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
     
-    public let limit: Int
-    public let user: SHLocalUser
-    public var delegates: [SHOutboundAssetOperationDelegate]
+    let limit: Int
+    let user: SHAuthenticatedLocalUser
+    let localAssetStoreController: SHLocalAssetStoreController
+    let delegates: [SHOutboundAssetOperationDelegate]
     
-    public init(user: SHLocalUser,
+    var serverProxy: SHServerProxy {
+        return self.user.serverProxy
+    }
+    
+    public init(user: SHAuthenticatedLocalUser,
+                localAssetStoreController: SHLocalAssetStoreController,
                 delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int) {
         self.user = user
+        self.localAssetStoreController = localAssetStoreController
         self.limit = limit
         self.delegates = delegates
     }
     
-    internal var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
-    }
-    
     public func clone() -> SHBackgroundOperationProtocol {
         SHUploadOperation(user: self.user,
+                          localAssetStoreController: self.localAssetStoreController,
                           delegates: self.delegates,
                           limitPerRun: self.limit)
     }
@@ -255,7 +259,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
             log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
             let encryptedAsset: any SHEncryptedAsset
             do {
-                encryptedAsset = try SHLocalAssetStoreController(user: self.user)
+                encryptedAsset = try self.localAssetStoreController
                     .encryptedAsset(
                         with: globalIdentifier,
                         versions: versions,
@@ -437,7 +441,7 @@ open class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgro
     }
 }
 
-public class SHAssetsUploaderQueueProcessor : SHBackgroundOperationProcessor<SHUploadOperation> {
+internal class SHAssetsUploaderQueueProcessor : SHBackgroundOperationProcessor<SHUploadOperation> {
     /// Singleton (with private initializer)
     public static var shared = SHAssetsUploaderQueueProcessor(
         delayedStartInSeconds: 4,

@@ -161,7 +161,7 @@ public class SHAddressBookContactHandler {
     ///   - systemContacts: The contacts in the address book to match. If phone numbers are not parsed in this list they are not taken into account, so **ensure that you call `.withParsedPhoneNumbers()` on each member of this list before calling this method**
     ///   - completionHandler: the callback method
     public func fetchSafehillUserMatches(
-        requestor: SHLocalUser,
+        requestor: SHAuthenticatedLocalUser,
         given systemContacts: [SHAddressBookContact],
         completionHandler: @escaping (Result<[SHPhoneNumber: (SHAddressBookContact, SHServerUser)], Error>) -> Void)
     {
@@ -183,8 +183,7 @@ public class SHAddressBookContactHandler {
             
             group.enter()
             
-            let serverProxy = SHServerProxy(user: requestor)
-            serverProxy.getUsers(withHashedPhoneNumbers: Array(allParsedNumbersByHash.keys)) { result in
+            requestor.serverProxy.getUsers(withHashedPhoneNumbers: Array(allParsedNumbersByHash.keys)) { result in
                 switch result {
                     
                 case .failure(let err):
@@ -211,7 +210,7 @@ public class SHAddressBookContactHandler {
                                 ///
                                 /// Cache the phone number and the system contact identifier in the user store
                                 ///
-                                serverProxy.updateLocalUser(
+                                requestor.serverProxy.updateLocalUser(
                                     safehillUser as! SHRemoteUser,
                                     phoneNumber: phoneNumber,
                                     linkedSystemContact: contact.systemContact
@@ -244,7 +243,7 @@ public class SHAddressBookContactHandler {
     }
     
     public func syncContactsAndLocalServerUsers(
-        requestor: SHLocalUser,
+        requestor: SHAuthenticatedLocalUser,
         given systemContacts: [SHAddressBookContact]
     ) {
         DispatchQueue.global(qos: .userInitiated).async { /// Do it fast so that `systemContacts` (which is big in memory) can be released
@@ -252,8 +251,7 @@ public class SHAddressBookContactHandler {
             /// Remove items from the cache for users that are no longer in the Contacts
             /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
             ///
-            let serverProxy = SHServerProxy(user: requestor)
-            serverProxy.getAllLocalUsers { result in
+            requestor.serverProxy.getAllLocalUsers { result in
                 switch result {
                 case .success(let serverUsers):
                     var usersWithLinksToRemove = [SHRemoteUserLinkedToContact]()
@@ -267,7 +265,7 @@ public class SHAddressBookContactHandler {
                     
                     if usersWithLinksToRemove.isEmpty == false {
                         DispatchQueue.global(qos: .background).async { /// This can be done in the background
-                            serverProxy.removeLinkedSystemContact(from: usersWithLinksToRemove) {
+                            requestor.serverProxy.removeLinkedSystemContact(from: usersWithLinksToRemove) {
                                 result in
                                 if case .failure(let failure) = result {
                                     log.error("failed to remove links to contact from user cache: \(failure.localizedDescription)")

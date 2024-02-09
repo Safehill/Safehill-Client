@@ -25,11 +25,7 @@ public enum SHAssetStoreError: Error, LocalizedError {
 
 struct SHAssetStoreController {
     
-    public let user: SHLocalUser
-    
-    private var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
-    }
+    public let user: SHAuthenticatedLocalUser
     
     func upload(asset encryptedAsset: any SHEncryptedAsset,
                 with groupId: String,
@@ -70,10 +66,11 @@ extension SHAssetStoreController {
         let group = DispatchGroup()
         
         group.enter()
-        self.serverProxy.remoteServer.create(assets: [asset],
-                                             groupId: groupId,
-                                             filterVersions: filterVersions)
-        { result in
+        self.user.serverProxy.remoteServer.create(
+            assets: [asset],
+            groupId: groupId,
+            filterVersions: filterVersions
+        ) { result in
             switch result {
             case .success(let serverAssets):
                 if serverAssets.count == 1 {
@@ -104,7 +101,9 @@ extension SHAssetStoreController {
         
         let group = DispatchGroup()
         group.enter()
-        self.serverProxy.remoteServer.deleteAssets(withGlobalIdentifiers: [globalIdentifier]) { result in
+        self.user.serverProxy.remoteServer.deleteAssets(
+            withGlobalIdentifiers: [globalIdentifier]
+        ) { result in
             if case .failure(let err) = result {
                 log.info("failed to remove asset \(globalIdentifier) from server: \(err.localizedDescription)")
             }
@@ -127,7 +126,11 @@ extension SHAssetStoreController {
         
         let group = DispatchGroup()
         group.enter()
-        self.serverProxy.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions) { result in
+        self.user.serverProxy.upload(
+            serverAsset: serverAsset,
+            asset: asset,
+            filterVersions: filterVersions
+        ) { result in
             if case .failure(let err) = result {
                 error = err
             }
