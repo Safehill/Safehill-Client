@@ -356,9 +356,9 @@ extension SHServerProxy {
         }
     }
     
-    public func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func deleteAccount(force: Bool = false, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.deleteAccount { result in
-            if case .failure(let err) = result {
+            if force == false, case .failure(let err) = result {
                 completionHandler(.failure(err))
                 return
             }
