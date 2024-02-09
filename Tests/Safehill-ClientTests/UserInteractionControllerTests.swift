@@ -22,7 +22,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     let localServer: LocalServer
     let state: SHMockServerProxyState
     
-    init(user: SHLocalUser) {
+    init(user: SHLocalUserProtocol) {
         self.localServer = LocalServer(requestor: user)
         self.state = SHMockServerProxyState()
     }
@@ -243,7 +243,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let serverProxy = SHMockServerProxy(user: myUser)
         
         let authenticatedUser = SHAuthenticatedLocalUser(
-            localUser: myUser,
+            localUser: myUser, 
+            name: "myUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -355,7 +356,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let serverProxy = SHMockServerProxy(user: myUser)
         
         let authenticatedUser = SHAuthenticatedLocalUser(
-            localUser: myUser,
+            localUser: myUser, 
+            name: "myUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -483,6 +485,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let authenticatedUser1 = SHAuthenticatedLocalUser(
             localUser: myUser,
+            name: "myUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -626,6 +629,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let authenticatedUser2 = SHAuthenticatedLocalUser(
             localUser: recipient1,
+            name: "recipient1",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
