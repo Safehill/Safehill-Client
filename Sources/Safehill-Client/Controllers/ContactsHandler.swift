@@ -243,7 +243,7 @@ public class SHAddressBookContactHandler {
     }
     
     public func syncContactsAndLocalServerUsers(
-        requestor: SHAuthenticatedLocalUser,
+        requestor: SHLocalUserProtocol,
         given systemContacts: [SHAddressBookContact]
     ) {
         DispatchQueue.global(qos: .userInitiated).async { /// Do it fast so that `systemContacts` (which is big in memory) can be released
