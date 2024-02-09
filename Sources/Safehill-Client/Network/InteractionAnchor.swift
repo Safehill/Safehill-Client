@@ -1,5 +1,5 @@
 import Foundation
 
-enum InteractionAnchor : String {
+public enum SHInteractionAnchor : String {
     case thread = "user-threads", group = "assets-groups"
 }

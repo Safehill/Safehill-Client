@@ -78,7 +78,7 @@ internal class RecipientEncryptionDetailsCache {
     
     private var cache = NSCache<NSString, NSDictionary>()
     
-    func details(for anchor: InteractionAnchor, anchorId: String, userIdentifier: String) -> RecipientEncryptionDetailsDTO? {
+    func details(for anchor: SHInteractionAnchor, anchorId: String, userIdentifier: String) -> RecipientEncryptionDetailsDTO? {
         if let cacheObj = cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) {
             log.debug("[RecipientEncryptionDetailsCache] cache hit \(anchor.rawValue)::\(anchorId) : \(cacheObj)")
             if let details = cacheObj[userIdentifier] as? EncryptionDetailsClass {
@@ -96,7 +96,7 @@ internal class RecipientEncryptionDetailsCache {
         return nil
     }
     
-    func cacheDetails(_ details: RecipientEncryptionDetailsDTO, for userIdentifier: String, in anchor: InteractionAnchor, anchorId: String) {
+    func cacheDetails(_ details: RecipientEncryptionDetailsDTO, for userIdentifier: String, in anchor: SHInteractionAnchor, anchorId: String) {
         let cacheObject = EncryptionDetailsClass(
             ephemeralPublicKey: details.ephemeralPublicKey,
             encryptedSecret: details.encryptedSecret,
@@ -116,7 +116,7 @@ internal class RecipientEncryptionDetailsCache {
         log.debug("[RecipientEncryptionDetailsCache] new cache value \(self.cache.object(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)")) ?? [:])")
     }
     
-    func evict(anchor: InteractionAnchor, anchorId: String) {
+    func evict(anchor: SHInteractionAnchor, anchorId: String) {
         self.cache.removeObject(forKey: NSString(string: "\(anchor.rawValue)::\(anchorId)"))
     }
 }

@@ -1354,13 +1354,13 @@ struct LocalServer : SHServerAPI {
         
         let writeBatch = userStore.writeBatch()
         
-        writeBatch.set(value: serverThread.encryptionDetails.encryptedSecret, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::encryptedSecret")
-        writeBatch.set(value: serverThread.encryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::ephemeralPublicKey")
-        writeBatch.set(value: serverThread.encryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::secretPublicSignature")
-        writeBatch.set(value: serverThread.encryptionDetails.senderPublicSignature, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::senderPublicSignature")
+        writeBatch.set(value: serverThread.encryptionDetails.encryptedSecret, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::encryptedSecret")
+        writeBatch.set(value: serverThread.encryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::ephemeralPublicKey")
+        writeBatch.set(value: serverThread.encryptionDetails.secretPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::secretPublicSignature")
+        writeBatch.set(value: serverThread.encryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::senderPublicSignature")
         
-        writeBatch.set(value: serverThread.name, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::name")
-        writeBatch.set(value: serverThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(InteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
+        writeBatch.set(value: serverThread.name, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::name")
+        writeBatch.set(value: serverThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
         
         writeBatch.write { result in
             switch result {
@@ -1383,7 +1383,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let condition = KBGenericCondition(.beginsWith, value: "\(InteractionAnchor.thread.rawValue)::")
+        let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
         
         let kvPairs: KBKVPairs
         do {
@@ -1479,10 +1479,10 @@ struct LocalServer : SHServerAPI {
         
         let writeBatch = userStore.writeBatch()
 
-        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret")
-        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey")
-        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature")
-        writeBatch.set(value: selfEncryptionDetails.senderPublicSignature, for: "\(InteractionAnchor.group.rawValue)::\(groupId)::senderPublicSignature")
+        writeBatch.set(value: selfEncryptionDetails.encryptedSecret, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret")
+        writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey")
+        writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature")
+        writeBatch.set(value: selfEncryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::senderPublicSignature")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -1495,7 +1495,7 @@ struct LocalServer : SHServerAPI {
     }
     
     private func delete(
-        anchor: InteractionAnchor,
+        anchor: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -1566,8 +1566,8 @@ struct LocalServer : SHServerAPI {
                 do {
                     userStore = try SHDBManager.sharedInstance.userStore()
                     
-                    let threadName = try userStore.value(for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::name") as? String
-                    let threadLastUpdated = try userStore.value(for: "\(InteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt") as? Double
+                    let threadName = try userStore.value(for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::name") as? String
+                    let threadLastUpdated = try userStore.value(for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt") as? Double
                     let lastUpdatedAt = threadLastUpdated == nil ? Date() : Date(timeIntervalSince1970: threadLastUpdated!)
                     let thread = ConversationThreadOutputDTO(
                         threadId: threadId,
@@ -1595,7 +1595,7 @@ struct LocalServer : SHServerAPI {
     }
     
     private func retrieveUserEncryptionDetails(
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
@@ -1690,7 +1690,7 @@ struct LocalServer : SHServerAPI {
     
     private func addReactions(
         _ reactions: [ReactionInput],
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
@@ -1768,7 +1768,7 @@ struct LocalServer : SHServerAPI {
     
     private func removeReactions(
         _ reactions: [ReactionInput],
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -1835,7 +1835,7 @@ struct LocalServer : SHServerAPI {
         
         var counts: InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]](), messages: 0)
         
-        let condition = KBGenericCondition(.beginsWith, value: "\(InteractionAnchor.group.rawValue)::\(groupId)::")
+        let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::")
         reactionStore.dictionaryRepresentation(forKeysMatching: condition) { reactionsResult in
             switch reactionsResult {
             case .success(let reactionsKeysAndValues):
@@ -1908,7 +1908,7 @@ struct LocalServer : SHServerAPI {
     }
     
     private func retrieveInteractions(
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         underMessage refMessageId: String?,
         per: Int,
@@ -2101,7 +2101,7 @@ struct LocalServer : SHServerAPI {
     
     private func addMessages(
         _ messages: [MessageInput],
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {

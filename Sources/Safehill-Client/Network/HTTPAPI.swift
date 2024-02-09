@@ -1005,7 +1005,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     private func addReactions(
         _ reactions: [ReactionInput],
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
@@ -1054,7 +1054,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     private func removeReactions(
         _ reactions: [ReactionInput],
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -1119,7 +1119,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     private func retrieveInteractions(
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         underMessage refMessageId: String?,
         per: Int,
@@ -1159,7 +1159,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        anchorType: InteractionAnchor,
+        anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {

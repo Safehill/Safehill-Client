@@ -3,7 +3,7 @@ import Foundation
 extension SHSyncOperation {
     
     func syncReactions(
-        anchor: InteractionAnchor,
+        anchor: SHInteractionAnchor,
         anchorId: String,
         localReactions: [ReactionOutputDTO],
         remoteReactions: [ReactionOutputDTO]

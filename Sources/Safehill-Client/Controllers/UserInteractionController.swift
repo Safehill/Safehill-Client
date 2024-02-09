@@ -186,7 +186,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     private func newRecipientEncryptionDetails(
         from secret: SymmetricKey,
         for users: [any SHServerUser],
-        anchor: InteractionAnchor,
+        anchor: SHInteractionAnchor,
         anchorId: String?
     ) throws -> [RecipientEncryptionDetailsDTO] {
         var recipientEncryptionDetails = [RecipientEncryptionDetailsDTO]()
@@ -288,7 +288,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     }
     
     func retrieveInteractions(
-        inAnchor anchor: InteractionAnchor,
+        inAnchor anchor: SHInteractionAnchor,
         anchorId: String,
         underMessage messageId: String? = nil,
         per: Int,
@@ -394,7 +394,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     private func send(
         message: String,
-        inAnchor anchor: InteractionAnchor,
+        inAnchor anchor: SHInteractionAnchor,
         anchorId: String,
         inReplyToAssetGlobalIdentifier: String? = nil,
         inReplyToInteractionId: String? = nil,
@@ -491,7 +491,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
 
 extension SHUserInteractionController {
     
-    func fetchSelfEncryptionDetails(forAnchor anchor: InteractionAnchor, anchorId: String) throws -> RecipientEncryptionDetailsDTO? {
+    func fetchSelfEncryptionDetails(forAnchor anchor: SHInteractionAnchor, anchorId: String) throws -> RecipientEncryptionDetailsDTO? {
         let semaphore = DispatchSemaphore(value: 0)
         
         var encryptionDetails: RecipientEncryptionDetailsDTO? = nil
@@ -531,7 +531,7 @@ extension SHUserInteractionController {
         return encryptionDetails
     }
     
-    func fetchSymmetricKey(forAnchor anchor: InteractionAnchor, anchorId: String) throws -> SymmetricKey? {
+    func fetchSymmetricKey(forAnchor anchor: SHInteractionAnchor, anchorId: String) throws -> SymmetricKey? {
         guard let salt = self.user.maybeEncryptionProtocolSalt else {
             throw SHLocalUserError.missingProtocolSalt
         }

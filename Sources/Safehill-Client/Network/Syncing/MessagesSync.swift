@@ -3,7 +3,7 @@ import Foundation
 extension SHSyncOperation {
     
     func syncMessages(
-        anchor: InteractionAnchor,
+        anchor: SHInteractionAnchor,
         anchorId: String,
         localMessages: [MessageOutputDTO],
         remoteMessages: [MessageOutputDTO],
