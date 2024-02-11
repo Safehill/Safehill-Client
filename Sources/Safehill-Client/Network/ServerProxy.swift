@@ -973,6 +973,13 @@ extension SHServerProxy {
     }
     
     public func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        self.remoteServer.getThread(withId: threadId, completionHandler: completionHandler)
+    }
+    
+    public func getThread(
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {

@@ -41,8 +41,8 @@ extension SHSyncOperation {
             dispatchGroup.leave()
         }
         
-        let dispatchResult1 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult1 == .success else {
+        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
             log.error("[sync] timeout while getting all threads")
             completionHandler(.failure(SHBackgroundOperationError.timedOut))
             return
@@ -85,131 +85,149 @@ extension SHSyncOperation {
         ///
         /// For each thread …
         ///
-        
         for thread in allThreads {
-            
-            var remoteInteractions: InteractionsGroupDTO? = nil
-            
-            ///
-            /// Retrieve the REMOTE interactions
-            ///
-            
             dispatchGroup.enter()
-            self.serverProxy.retrieveRemoteInteractions(
-                inThread: thread.threadId,
-                underMessage: nil,
-                per: 1000, page: 1
-            ) { result in
-                switch result {
-                case .failure(let err):
-                    error = err
-                case .success(let interactions):
-                    remoteInteractions = interactions
+            self.syncThreadInteractions(thread: thread) { result in
+                if case .failure(let err) = result {
+                    self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                 }
                 dispatchGroup.leave()
-            }
-            
-            ///
-            /// Retrieve the LOCAL interactions
-            ///
-            
-            var shouldCreateE2EEDetailsLocally = false
-            var localMessages = [MessageOutputDTO]()
-            var localReactions = [ReactionOutputDTO]()
-            
-            dispatchGroup.enter()
-            serverProxy.retrieveInteractions(
-                inThread: thread.threadId,
-                underMessage: nil,
-                per: 10000, page: 1
-            ) { localResult in
-                switch localResult {
-                case .failure(let err):
-                    if case SHBackgroundOperationError.missingE2EEDetailsForThread(_) = err {
-                        shouldCreateE2EEDetailsLocally = true
-                    }
-                    self.log.error("failed to retrieve local interactions for thread \(thread.threadId)")
-                case .success(let localInteractions):
-                    localMessages = localInteractions.messages
-                    localReactions = localInteractions.reactions
-                }
-                dispatchGroup.leave()
-            }
-            
-            let dispatchResult2 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-            guard dispatchResult2 == .success else {
-                completionHandler(.failure(SHBackgroundOperationError.timedOut))
-                return
-            }
-            guard error == nil else {
-                log.error("error syncing interactions for thread \(thread.threadId). \(error!.localizedDescription)")
-                continue
-            }
-            guard let remoteInteractions = remoteInteractions else {
-                log.error("error retrieving remote interactions for thread \(thread.threadId)")
-                continue
-            }
-            
-            ///
-            /// Add the E2EE encryption details for the group locally if missing
-            ///
-            
-            if shouldCreateE2EEDetailsLocally {
-                dispatchGroup.enter()
-                serverProxy.localServer.createOrUpdateThread(
-                    serverThread: thread
-                ) { threadCreateResult in
-                    switch threadCreateResult {
-                    case .success(_):
-                        break
-                    case .failure(let err):
-                        self.log.error("Cache interactions for thread \(thread.threadId) won't be readable because setting the E2EE details for such thread failed: \(err.localizedDescription)")
-                    }
-                    dispatchGroup.leave()
-                }
-            }
-            
-            let dispatchResult3 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            if dispatchResult3 != .success {
-                log.warning("timeout while setting E2EE details for thread \(thread.threadId)")
-            }
-            
-            do {
-                ///
-                /// Sync (create, update and delete) reactions
-                ///
-                
-                let remoteReactions = remoteInteractions.reactions
-                try self.syncReactions(
-                    anchor: .thread,
-                    anchorId: thread.threadId,
-                    localReactions: localReactions,
-                    remoteReactions: remoteReactions
-                )
-                
-                ///
-                /// Sync (create, update and delete) messages
-                ///
-                
-                let encryptionDetails = EncryptionDetailsClass(
-                    ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
-                    encryptedSecret: remoteInteractions.encryptedSecret,
-                    secretPublicSignature: remoteInteractions.secretPublicSignature,
-                    senderPublicSignature: remoteInteractions.senderPublicSignature
-                )
-                let remoteMessages = remoteInteractions.messages
-                try self.syncMessages(
-                    anchor: .thread,
-                    anchorId: thread.threadId,
-                    localMessages: localMessages,
-                    remoteMessages: remoteMessages,
-                    encryptionDetails: encryptionDetails
-                )
-            } catch {
-                log.warning("error while syncing messages and reactions retrieved from server on local")
             }
         }
         
-        completionHandler(.success(()))
+        dispatchGroup.notify(queue: .global()) {
+            completionHandler(.success(()))
+        }
+    }
+    
+    func syncThreadInteractions(
+        thread: ConversationThreadOutputDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let threadId = thread.threadId
+        
+        let dispatchGroup = DispatchGroup()
+        var error: Error? = nil
+        
+        ///
+        /// Retrieve the REMOTE interactions
+        ///
+        var remoteInteractions: InteractionsGroupDTO? = nil
+        dispatchGroup.enter()
+        self.serverProxy.retrieveRemoteInteractions(
+            inThread: threadId,
+            underMessage: nil,
+            per: 1000, page: 1
+        ) { result in
+            switch result {
+            case .failure(let err):
+                error = err
+            case .success(let interactions):
+                remoteInteractions = interactions
+            }
+            dispatchGroup.leave()
+        }
+        
+        ///
+        /// Retrieve the LOCAL interactions
+        ///
+        
+        var shouldCreateE2EEDetailsLocally = false
+        var localMessages = [MessageOutputDTO]()
+        var localReactions = [ReactionOutputDTO]()
+        
+        dispatchGroup.enter()
+        serverProxy.retrieveInteractions(
+            inThread: threadId,
+            underMessage: nil,
+            per: 10000, page: 1
+        ) { localResult in
+            switch localResult {
+            case .failure(let err):
+                if case SHBackgroundOperationError.missingE2EEDetailsForThread(_) = err {
+                    shouldCreateE2EEDetailsLocally = true
+                }
+                self.log.error("failed to retrieve local interactions for thread \(threadId)")
+            case .success(let localInteractions):
+                localMessages = localInteractions.messages
+                localReactions = localInteractions.reactions
+            }
+            dispatchGroup.leave()
+        }
+        
+        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            completionHandler(.failure(SHBackgroundOperationError.timedOut))
+            return
+        }
+        guard error == nil else {
+            log.error("error syncing interactions for thread \(threadId). \(error!.localizedDescription)")
+            completionHandler(.failure(error!))
+            return
+        }
+        guard let remoteInteractions = remoteInteractions else {
+            log.error("error retrieving remote interactions for thread \(threadId)")
+            completionHandler(.failure(SHBackgroundOperationError.fatalError("error retrieving interactions for thread \(threadId)")))
+            return
+        }
+        
+        ///
+        /// Add the E2EE encryption details for the group locally if missing
+        ///
+        
+        if shouldCreateE2EEDetailsLocally {
+            dispatchGroup.enter()
+            serverProxy.localServer.createOrUpdateThread(
+                serverThread: thread
+            ) { threadCreateResult in
+                switch threadCreateResult {
+                case .success(_):
+                    break
+                case .failure(let err):
+                    self.log.error("Cache interactions for thread \(threadId) won't be readable because setting the E2EE details for such thread failed: \(err.localizedDescription)")
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        let dispatchResult2 = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        if dispatchResult2 != .success {
+            log.warning("timeout while setting E2EE details for thread \(threadId)")
+        }
+        
+        do {
+            ///
+            /// Sync (create, update and delete) reactions
+            ///
+            
+            let remoteReactions = remoteInteractions.reactions
+            try self.syncReactions(
+                anchor: .thread,
+                anchorId: threadId,
+                localReactions: localReactions,
+                remoteReactions: remoteReactions
+            )
+            
+            ///
+            /// Sync (create, update and delete) messages
+            ///
+            
+            let encryptionDetails = EncryptionDetailsClass(
+                ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
+                encryptedSecret: remoteInteractions.encryptedSecret,
+                secretPublicSignature: remoteInteractions.secretPublicSignature,
+                senderPublicSignature: remoteInteractions.senderPublicSignature
+            )
+            let remoteMessages = remoteInteractions.messages
+            try self.syncMessages(
+                anchor: .thread,
+                anchorId: threadId,
+                localMessages: localMessages,
+                remoteMessages: remoteMessages,
+                encryptionDetails: encryptionDetails
+            )
+        } catch {
+            log.warning("error while syncing messages and reactions retrieved from server on local for thread \(threadId)")
+        }
     }
 }

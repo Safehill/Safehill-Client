@@ -430,6 +430,48 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
+    public func runOnce(
+        for anchor: SHInteractionAnchor,
+        anchorId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        switch anchor {
+        case .group:
+            self.syncGroupInteractions(groupId: anchorId) { result in
+                switch result {
+                case .failure(let err):
+                    self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
+                    completionHandler(.failure(err))
+                case .success:
+                    completionHandler(.success(()))
+                }
+            }
+        case .thread:
+            self.serverProxy.getThread(withId: anchorId) { getThreadResult in
+                switch getThreadResult {
+                case .failure(let error):
+                    self.log.error("failed to get thread with id \(anchorId) from server")
+                    completionHandler(.failure(error))
+                case .success(let serverThread):
+                    guard let serverThread else {
+                        self.log.warning("no such thread with id \(anchorId) from server")
+                        completionHandler(.success(()))
+                        return
+                    }
+                    self.syncThreadInteractions(thread: serverThread) { syncResult in
+                        switch syncResult {
+                        case .failure(let err):
+                            self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
+                            completionHandler(.failure(err))
+                        case .success:
+                            completionHandler(.success(()))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     public override func main() {
         guard !self.isCancelled else {
             state = .finished
