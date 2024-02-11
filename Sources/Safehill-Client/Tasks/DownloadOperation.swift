@@ -140,13 +140,19 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     internal func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
+        return try self.fetchDescriptorsFromServer(for: nil)
+    }
+    
+    internal func fetchDescriptorsFromServer(
+        for globalIdentifiers: [GlobalIdentifier]? = nil
+    ) throws -> [any SHAssetDescriptor] {
         let group = DispatchGroup()
         
         var descriptors = [any SHAssetDescriptor]()
         var error: Error? = nil
         
         group.enter()
-        serverProxy.getRemoteAssetDescriptors { result in
+        serverProxy.getRemoteAssetDescriptors(for: globalIdentifiers) { result in
             switch result {
             case .success(let descs):
                 descriptors = descs
@@ -904,7 +910,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
     }
     
-    private func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public func runOnce(
+        for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        
         guard self.user is SHAuthenticatedLocalUser else {
             completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
@@ -924,7 +934,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             /// Descriptors serve as a manifest to determine what to download.
             ///
             do {
-                descriptors = try self.fetchDescriptorsFromServer()
+                descriptors = try self.fetchDescriptorsFromServer(
+                    for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!
+                )
             } catch {
                 completionHandler(.failure(error))
                 return
