@@ -229,5 +229,7 @@ extension SHSyncOperation {
         } catch {
             log.warning("error while syncing messages and reactions retrieved from server on local for thread \(threadId)")
         }
+        
+        completionHandler(.success(()))
     }
 }
