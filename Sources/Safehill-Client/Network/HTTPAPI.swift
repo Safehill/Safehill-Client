@@ -488,7 +488,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         let parameters = [
             "query": query,
             "page": "1",
-            "per": "5"
+            "per": "20"
         ]
         self.get("users/search", parameters: parameters) { (result: Result<SHPaginatedUserSearchResults, Error>) in
             switch result {
