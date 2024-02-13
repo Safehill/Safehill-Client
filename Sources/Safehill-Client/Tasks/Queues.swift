@@ -45,7 +45,7 @@ public struct BackgroundOperationQueue {
     }
     
     public static func of(type: OperationType) throws -> KBQueueStore {
-        guard let queue = SHDBManager.queue(of: type) else {
+        guard let queue = SHDBManager.sharedInstance.queue(of: type) else {
             throw KBError.databaseNotReady
         }
         return queue

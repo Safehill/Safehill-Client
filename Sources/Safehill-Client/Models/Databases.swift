@@ -94,8 +94,10 @@ public class SHDBManager {
     private var _reactionStore: KBKVStore?
     private var _messageQueue: KBQueueStore?
     private var _knowledgeGraph: KBKnowledgeStore?
+    private var _backgroundQueues: [BackgroundOperationQueue.OperationType: KBQueueStore?]
     
     init() {
+        self._backgroundQueues = [:]
         self.disconnect()
     }
     
@@ -141,8 +143,11 @@ public class SHDBManager {
         return queueStore
     }
     
-    public static func queue(of type: BackgroundOperationQueue.OperationType) -> KBQueueStore? {
-        SHDBManager.getQueueStore(name: type.identifier, type: .fifo)
+    public func queue(of type: BackgroundOperationQueue.OperationType) -> KBQueueStore? {
+        if self._backgroundQueues[type] == nil {
+            self._backgroundQueues[type] = SHDBManager.getQueueStore(name: type.identifier, type: .fifo)
+        }
+        return self._backgroundQueues[type]!
     }
     
     public var userStore: KBKVStore? {
