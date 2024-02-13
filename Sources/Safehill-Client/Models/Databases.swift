@@ -79,7 +79,7 @@ extension KBQueueStore {
 
 public class SHDBManager {
     
-    static let sharedInstance = SHDBManager()
+    public static let sharedInstance = SHDBManager()
     
     private enum DBName: String {
         case userStore = "com.gf.safehill.LocalServer.users"
