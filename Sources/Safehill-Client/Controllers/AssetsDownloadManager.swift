@@ -16,7 +16,7 @@ public struct SHAssetsDownloadManager {
     
     /// Invoked during local cleanup (when the local user is removed or a new login happens, for instance)
     public static func deepClean() throws {
-        guard let userStore = SHDBManager.userStore else {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
         }
         let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
@@ -29,7 +29,7 @@ public struct SHAssetsDownloadManager {
     /// - Parameter userId: the user identifier
     /// - Returns: the asset identifiers that require authorization from the user
     public static func unauthorizedDownloads(for userId: String) throws -> [GlobalIdentifier] {
-        guard let userStore = SHDBManager.userStore else {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
         }
         let key = "auth-" + userId
@@ -72,7 +72,7 @@ public struct SHAssetsDownloadManager {
                 itemsWithIdentifiers: assetGIdList
             )
             
-            guard let userStore = SHDBManager.userStore else {
+            guard let userStore = SHDBManager.sharedInstance.userStore else {
                 completionHandler(.failure(KBError.databaseNotReady))
                 return
             }
@@ -280,7 +280,7 @@ private extension SHAssetsDownloadManager {
 private extension SHAssetsDownloadManager {
     
     private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
-        guard let userStore = SHDBManager.userStore else {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
         }
         let writeBatch = userStore.writeBatch()
@@ -313,7 +313,7 @@ internal extension SHAssetsDownloadManager {
     ///   - allSharedAssetIds: the full list of asset identifiers that are shared with this user
     ///   - allUserIds: all user ids that this user is connected to
     static func cleanEntriesNotIn(allSharedAssetIds: [GlobalIdentifier], allUserIds: [String]) throws {
-        guard let userStore = SHDBManager.userStore else {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
         }
         var condition = KBGenericCondition(value: false)
@@ -353,7 +353,7 @@ internal extension SHAssetsDownloadManager {
         
         try SHAssetsDownloadManager.dequeueEntries(for: assetIdentifiers)
         
-        guard let userStore = SHDBManager.userStore else {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
         }
         let key = "auth-" + self.user.identifier

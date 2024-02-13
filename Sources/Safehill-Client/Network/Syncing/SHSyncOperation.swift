@@ -119,7 +119,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             do {
                 try SHKGQuery.removeUsers(with: uIdsToRemoveFromLocal)
             } catch {
-                let _ = try? SHDBManager.graph?.removeAll()
+                let _ = try? SHDBManager.sharedInstance.graph?.removeAll()
                 log.warning("error updating the graph. Trying to remove all graph entries and force quitting. On restart the graph will be re-created, but this operation will be retried")
             }
         }
@@ -347,7 +347,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                             for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier })
                         )
                     } catch {
-                        let _ = try? SHDBManager.graph?.removeAll()
+                        let _ = try? SHDBManager.sharedInstance.graph?.removeAll()
                         self.log.error("[sync] failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
                     }
                     
@@ -363,7 +363,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     do {
                         try SHKGQuery.removeAssets(with: diff.assetsRemovedOnServer.compactMap({ $0.globalIdentifier }))
                     } catch {
-                        let _ = try? SHDBManager.graph?.removeAll()
+                        let _ = try? SHDBManager.sharedInstance.graph?.removeAll()
                         self.log.error("[sync] error removing deleted assets from the graph. Removing all triples in the graph and re-building it")
                     }
                     

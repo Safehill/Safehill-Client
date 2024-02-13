@@ -62,7 +62,7 @@ public struct SHKGQuery {
         
         do {
             try readWriteGraphQueue.sync(flags: .barrier) {
-                guard let graph = SHDBManager.graph else {
+                guard let graph = SHDBManager.sharedInstance.graph else {
                     throw KBError.databaseNotReady
                 }
                 
@@ -139,7 +139,7 @@ public struct SHKGQuery {
         
         // TODO: Support writebatch in KnowledgeGraph
         try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.graph else {
+            guard let graph = SHDBManager.sharedInstance.graph else {
                 throw KBError.databaseNotReady
             }
             try globalIdentifiers.forEach({
@@ -159,7 +159,7 @@ public struct SHKGQuery {
         
         // TODO: Support writebatch in KnowledgeGraph
         try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.graph else {
+            guard let graph = SHDBManager.sharedInstance.graph else {
                 throw KBError.databaseNotReady
             }
             for userId in userIdentifiers {
@@ -175,7 +175,7 @@ public struct SHKGQuery {
         UserIdToAssetGidSharedWithCache.removeAll()
         
         try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.graph else {
+            guard let graph = SHDBManager.sharedInstance.graph else {
                 throw KBError.databaseNotReady
             }
             let _ = try graph.removeAll()
@@ -186,7 +186,7 @@ public struct SHKGQuery {
     public static func assetGlobalIdentifiers(
         sharedBy userIdentifiers: [UserIdentifier]
     ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
-        guard let graph = SHDBManager.graph else {
+        guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
         var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
@@ -259,7 +259,7 @@ public struct SHKGQuery {
     public static func assetGlobalIdentifiers(
         sharedWith userIdentifiers: [UserIdentifier]
     ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
-        guard let graph = SHDBManager.graph else {
+        guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
         var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
@@ -324,7 +324,7 @@ public struct SHKGQuery {
     }
     
     public static func usersConnectedTo(assets globalIdentifiers: [GlobalIdentifier]) throws -> [UserIdentifier] {
-        guard let graph = SHDBManager.graph else {
+        guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
         var sharedWithCondition = KBTripleCondition(value: false)
@@ -358,7 +358,7 @@ public struct SHKGQuery {
     
     internal static func removeTriples(matching condition: KBTripleCondition) throws {
         try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.graph else {
+            guard let graph = SHDBManager.sharedInstance.graph else {
                 throw KBError.databaseNotReady
             }
             try graph.removeTriples(matching: condition)

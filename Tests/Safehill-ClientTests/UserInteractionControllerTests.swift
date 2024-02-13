@@ -212,10 +212,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
     let myUser = SHLocalUser(keychainPrefix: "")
     
     override func setUpWithError() throws {
-        let _ = try SHDBManager.sharedInstance.userStore().removeAll()
-        let _ = try SHDBManager.sharedInstance.assetStore().removeAll()
-        let _ = try SHDBManager.sharedInstance.reactionStore().removeAll()
-        let _ = try SHDBManager.sharedInstance.messageQueue().removeAll()
+        let _ = try SHDBManager.sharedInstance.userStore?.removeAll()
+        let _ = try SHDBManager.sharedInstance.assetStore?.removeAll()
+        let _ = try SHDBManager.sharedInstance.reactionStore?.removeAll()
+        let _ = try SHDBManager.sharedInstance.messageQueue?.removeAll()
     }
     
     func testKeyStability() throws {
@@ -281,7 +281,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             XCTFail() ; return
         }
         
-        let userStore = try SHDBManager.sharedInstance.userStore()
+        let userStore = SHDBManager.sharedInstance.userStore!
         let kvs = try userStore.dictionaryRepresentation()
         XCTAssertEqual(kvs.count, 4)
         XCTAssertEqual(kvs["\(SHInteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"] as! String, recipientEncryptionDetails.ephemeralPublicKey)
@@ -387,7 +387,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         wait(for: [expectation1], timeout: 5.0)
         
-        let userStore = try SHDBManager.sharedInstance.userStore()
+        let userStore = SHDBManager.sharedInstance.userStore!
         let kvs = try userStore.dictionaryRepresentation()
         XCTAssertEqual(kvs.count, 4)
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey"])
@@ -524,7 +524,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             XCTFail() ; return
         }
         
-        let userStore = try SHDBManager.sharedInstance.userStore()
+        let userStore = SHDBManager.sharedInstance.userStore!
         let kvs = try userStore.dictionaryRepresentation()
         XCTAssertEqual(kvs.count, 5)
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey"])

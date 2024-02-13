@@ -14,7 +14,7 @@ extension Array {
 extension LocalServer {
     
     func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws -> Bool {
-        guard let assetStore = SHDBManager.assetStore else {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             throw KBError.databaseNotReady
         }
         
@@ -85,7 +85,7 @@ extension LocalServer {
         }
         
         do {
-            guard let graph = SHDBManager.graph else {
+            guard let graph = SHDBManager.sharedInstance.graph else {
                 throw KBError.databaseNotReady
             }
             let _ = try graph.removeAll()
@@ -109,7 +109,7 @@ extension LocalServer {
         /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
         ///
         
-        guard let assetStore = SHDBManager.assetStore else {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             log.warning("failed to connect to the local asset store")
             completionHandler(.failure(KBError.databaseNotReady))
             return

@@ -79,12 +79,36 @@ extension KBQueueStore {
 
 public class SHDBManager {
     
+    static let sharedInstance = SHDBManager()
+    
     private enum DBName: String {
         case userStore = "com.gf.safehill.LocalServer.users"
         case assetStore = "com.gf.safehill.LocalServer.assets"
         case reactionStore = "com.gf.safehill.LocalServer.reactions"
         case messageQueue = "com.gf.safehill.LocalServer.messages"
         case knowledgeGraph = "com.gf.safehill.KnowledgeGraph"
+    }
+    
+    private var _userStore: KBKVStore?
+    private var _assetStore: KBKVStore?
+    private var _reactionStore: KBKVStore?
+    private var _messageQueue: KBQueueStore?
+    private var _knowledgeGraph: KBKnowledgeStore?
+    
+    init() {
+        self.disconnect()
+    }
+    
+    deinit {
+        self.disconnect()
+    }
+    
+    public func disconnect() {
+        self._userStore = nil
+        self._assetStore = nil
+        self._reactionStore = nil
+        self._messageQueue = nil
+        self._knowledgeGraph = nil
     }
     
     private static func getKVStore(named name: String) -> KBKVStore? {
@@ -121,22 +145,35 @@ public class SHDBManager {
         SHDBManager.getQueueStore(name: type.identifier, type: .fifo)
     }
     
-    public static var userStore: KBKVStore? = {
-        SHDBManager.getKVStore(named: DBName.userStore.rawValue)
-    }()
-    public static var assetStore: KBKVStore? = {
-        SHDBManager.getKVStore(named: DBName.assetStore.rawValue)
-    }()
-    public static var reactionStore: KBKVStore? = {
-        SHDBManager.getKVStore(named: DBName.reactionStore.rawValue)
-    }()
-    public static var messageQueue: KBQueueStore? = {
-        SHDBManager.getQueueStore(name: DBName.messageQueue.rawValue, type: .lifo)
-    }()
-    public static var graph: KBKnowledgeStore? = {
-        if let backingKVStore = SHDBManager.getKVStore(named: DBName.knowledgeGraph.rawValue) {
+    public var userStore: KBKVStore? {
+        if self._userStore == nil {
+            self._userStore = SHDBManager.getKVStore(named: DBName.userStore.rawValue)
+        }
+        return self._userStore
+    }
+    public var assetStore: KBKVStore? {
+        if self._assetStore == nil {
+            self._assetStore = SHDBManager.getKVStore(named: DBName.assetStore.rawValue)
+        }
+        return self._assetStore
+    }
+    public var reactionStore: KBKVStore? {
+        if self._reactionStore == nil {
+            self._reactionStore = SHDBManager.getKVStore(named: DBName.reactionStore.rawValue)
+        }
+        return self._reactionStore
+    }
+    public var messageQueue: KBQueueStore? {
+        if self._messageQueue == nil {
+            self._messageQueue = SHDBManager.getQueueStore(name: DBName.messageQueue.rawValue, type: .lifo)
+        }
+        return self._messageQueue
+    }
+    public var graph: KBKnowledgeStore? {
+        if self._knowledgeGraph == nil,
+           let backingKVStore = SHDBManager.getKVStore(named: DBName.knowledgeGraph.rawValue) {
             return KBKnowledgeStore.store(backingKVStore.location)
         }
-        return nil
-    }()
+        return self._knowledgeGraph
+    }
 }
