@@ -144,7 +144,9 @@ public class SHDBManager {
         }
     }
     
-    private init() {
+    private init() {}
+    
+    public func connect() {
         // Initialize user store
         if let s = KBKnowledgeStore.store(withName: DBName.userStore.rawValue) {
             self._userStore = s
@@ -227,5 +229,13 @@ public class SHDBManager {
                 }
             }
         }
+    }
+    
+    func disconnect() {
+        KBQueueStore.conn
+        self.userStore = nil
+        self.assetStore = nil
+        self.reactionStore = nil
+        self.messageQueue = nil
     }
 }
