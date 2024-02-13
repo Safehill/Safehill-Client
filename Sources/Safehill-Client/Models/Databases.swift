@@ -11,15 +11,17 @@ extension KBKVStore {
         
         let circuitBreaker = CircuitBreaker(
             timeout: 5.0,
-            maxRetries: 10,
+            maxRetries: 3,
             timeBetweenRetries: 0.5,
             exponentialBackoff: true,
             resetTimeout: 20.0
         )
         
         circuitBreaker.call = { circuitBreaker in
+            log.debug("[db] attempting a connection to kvstore \(name)")
             if let store = KBKVStore.store(withName: name) {
                 circuitBreaker.success()
+                log.debug("[db] successful connection to kvstore \(name)")
                 completionHandler(.success(store))
             } else {
                 circuitBreaker.failure()
@@ -27,7 +29,8 @@ extension KBKVStore {
         }
         
         circuitBreaker.didTrip = { circuitBreaker, err in
-            let error = KBError.databaseException("Could not connect to queue database: \(err?.localizedDescription ?? "")")
+            let error = KBError.databaseException("connection to kvstore \(name) failed: \(err?.localizedDescription ?? "")")
+            log.error("[db] FAILED connection to kvstore \(name)")
             completionHandler(.failure(error))
         }
         
@@ -46,15 +49,17 @@ extension KBQueueStore {
         
         let circuitBreaker = CircuitBreaker(
             timeout: 5.0,
-            maxRetries: 10,
+            maxRetries: 3,
             timeBetweenRetries: 0.5,
             exponentialBackoff: true,
             resetTimeout: 20.0
         )
         
         circuitBreaker.call = { circuitBreaker in
+            log.debug("[db] attempting a connection to queue store \(name)")
             if let q = KBQueueStore.store(withName: name, type: type) {
                 circuitBreaker.success()
+                log.debug("[db] successful connection to queue store \(name)")
                 completionHandler(.success(q))
             } else {
                 circuitBreaker.failure()
@@ -62,7 +67,8 @@ extension KBQueueStore {
         }
         
         circuitBreaker.didTrip = { circuitBreaker, err in
-            let error = KBError.databaseException("Could not connect to queue DB \(name): \(err?.localizedDescription ?? "")")
+            let error = KBError.databaseException("connection to queue store \(name) failed: \(err?.localizedDescription ?? "")")
+            log.error("[db] FAILED connection to queue store \(name)")
             completionHandler(.failure(error))
         }
         
