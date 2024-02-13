@@ -70,12 +70,6 @@ extension KBQueueStore {
     }
 }
 
-extension BackgroundOperationQueue {
-    static func initWithRetries(type: OperationType,
-                                completionHandler: @escaping (Result<KBQueueStore, Error>) -> Void) {
-        KBQueueStore.initKBQueueStoreWithRetries(dbName: type.identifier, type: .fifo, completionHandler: completionHandler)
-    }
-}
 
 public class SHDBManager {
     
@@ -87,154 +81,56 @@ public class SHDBManager {
         case knowledgeGraph = "com.gf.safehill.KnowledgeGraph"
     }
     
-    public static var sharedInstance = SHDBManager()
-    
-    private var _userStore: KBKVStore? = nil
-    private var _assetStore: KBKVStore? = nil
-    private var _reactionStore: KBKVStore? = nil
-    private var _messageQueue: KBQueueStore? = nil
-    private var _queues: [BackgroundOperationQueue.OperationType: KBQueueStore] = [:]
-    
-    public func queue(of type: BackgroundOperationQueue.OperationType) throws -> KBQueueStore {
-        if let q = _queues[type] {
-            return q
-        } else {
-            throw KBError.databaseException("handler for queue \(type.identifier) could not be initialized")
-        }
-    }
-    
-    public func userStore() throws -> KBKVStore {
-        if let s = _userStore {
-            return s
-        } else {
-            throw KBError.databaseException("\(DBName.userStore.rawValue) handler could not be initialized")
-        }
-    }
-    public func assetStore() throws -> KBKVStore {
-        if let s = _assetStore {
-            return s
-        } else {
-            throw KBError.databaseException("\(DBName.assetStore.rawValue) handler could not be initialized")
-        }
-    }
-    
-    public func reactionStore() throws -> KBKVStore {
-        if let s = _reactionStore {
-            return s
-        } else {
-            throw KBError.databaseException("\(DBName.assetStore.rawValue) handler could not be initialized")
-        }
-    }
-    
-    public func messageQueue() throws -> KBQueueStore {
-        if let q = _messageQueue {
-            return q
-        } else {
-            throw KBError.databaseException("handler for message queue could not be initialized")
-        }
-    }
-    
-    private var _graph: KBKnowledgeStore? = nil
-    
-    internal func graph() throws -> KBKnowledgeStore {
-        if let g = _graph {
-            return g
-        } else {
-            throw KBError.databaseException("\(DBName.assetStore.rawValue) handler could not be initialized")
-        }
-    }
-    
-    private init() {}
-    
-    public func connect() {
-        // Initialize user store
-        if let s = KBKnowledgeStore.store(withName: DBName.userStore.rawValue) {
-            self._userStore = s
-        } else {
-            DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initKVStoreWithRetries(dbName: DBName.userStore.rawValue) { result in
-                    if case .success(let kvStore) = result {
-                        self._userStore = kvStore
-                    }
-                }
+    private static func getKVStore(named name: String) -> KBKVStore? {
+        var keyValueStore: KBKVStore? = nil
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        KBKVStore.initKVStoreWithRetries(dbName: name) { result in
+            if case .success(let kvStore) = result {
+                keyValueStore = kvStore
+                semaphore.signal()
             }
         }
         
-        // Initialize asset store
-        if let s = KBKnowledgeStore.store(withName: DBName.assetStore.rawValue) {
-            self._assetStore = s
-        } else {
-            DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initKVStoreWithRetries(dbName: DBName.assetStore.rawValue) { result in
-                    if case .success(let kvStore) = result {
-                        self._assetStore = kvStore
-                    }
-                }
-            }
-        }
-        
-        // Initialize reaction store
-        if let s = KBKnowledgeStore.store(withName: DBName.reactionStore.rawValue) {
-            self._reactionStore = s
-        } else {
-            DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initKVStoreWithRetries(dbName: DBName.reactionStore.rawValue) { result in
-                    if case .success(let kvStore) = result {
-                        self._reactionStore = kvStore
-                    }
-                }
-            }
-        }
-        
-        // Initialize the user message queue
-        if let q = KBQueueStore.store(withName: DBName.messageQueue.rawValue, type: .lifo) {
-            self._messageQueue = q
-        } else {
-            DispatchQueue.global(qos: .userInteractive).async {
-                KBQueueStore.initKBQueueStoreWithRetries(dbName: DBName.messageQueue.rawValue,
-                                                         type: .lifo) { result in
-                    if case .success(let q) = result {
-                        self._messageQueue = q
-                    }
-                }
-            }
-        }
-        
-        // Initialize knowledge graph
-        if let s = KBKnowledgeStore.store(withName: DBName.knowledgeGraph.rawValue) {
-            self._graph = s
-        } else {
-            DispatchQueue.global(qos: .userInteractive).async { [self] in
-                KBKVStore.initKVStoreWithRetries(dbName: DBName.knowledgeGraph.rawValue) { result in
-                    if case .success(let kvStore) = result {
-                        /// Since we could initialize a handler to connect to the DB on this location
-                        /// it should be safe to force initialize the KBKnowledgeStore at this point
-                        self._graph = KBKnowledgeStore.store(kvStore.location)!
-                    }
-                }
-            }
-        }
-        
-        // Initialize background operation queues
-        for type in BackgroundOperationQueue.OperationType.allCases {
-            if let q = KBQueueStore.store(withName: type.identifier, type: .fifo) {
-                self._queues[type] = q
-            } else {
-                DispatchQueue.global(qos: .userInteractive).async {
-                    BackgroundOperationQueue.initWithRetries(type: type) { result in
-                        if case .success(let q) = result {
-                            self._queues[type] = q
-                        }
-                    }
-                }
-            }
-        }
+        let _ = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        return keyValueStore
     }
     
-    public func disconnect() {
-        self._userStore = nil
-        self._assetStore = nil
-        self._reactionStore = nil
-        self._messageQueue = nil
+    private static func getQueueStore(name: String, type: KBQueueStore.QueueType) -> KBQueueStore? {
+        var queueStore: KBQueueStore? = nil
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        KBQueueStore.initKBQueueStoreWithRetries(dbName: name, type: type) { result in
+            if case .success(let q) = result {
+                queueStore = q
+                semaphore.signal()
+            }
+        }
+        
+        let _ = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        return queueStore
     }
+    
+    public static func queue(of type: BackgroundOperationQueue.OperationType) -> KBQueueStore? {
+        SHDBManager.getQueueStore(name: type.identifier, type: .fifo)
+    }
+    
+    public static var userStore: KBKVStore? = {
+        SHDBManager.getKVStore(named: DBName.userStore.rawValue)
+    }()
+    public static var assetStore: KBKVStore? = {
+        SHDBManager.getKVStore(named: DBName.assetStore.rawValue)
+    }()
+    public static var reactionStore: KBKVStore? = {
+        SHDBManager.getKVStore(named: DBName.reactionStore.rawValue)
+    }()
+    public static var messageQueue: KBQueueStore? = {
+        SHDBManager.getQueueStore(name: DBName.messageQueue.rawValue, type: .lifo)
+    }()
+    public static var graph: KBKnowledgeStore? = {
+        if let backingKVStore = SHDBManager.getKVStore(named: DBName.knowledgeGraph.rawValue) {
+            return KBKnowledgeStore.store(backingKVStore.location)
+        }
+        return nil
+    }()
 }

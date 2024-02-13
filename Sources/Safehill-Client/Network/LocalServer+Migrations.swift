@@ -14,7 +14,9 @@ extension Array {
 extension LocalServer {
     
     func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws -> Bool {
-        let assetStore = try SHDBManager.sharedInstance.assetStore()
+        guard let assetStore = SHDBManager.assetStore else {
+            throw KBError.databaseNotReady
+        }
         
         var pre_1_4_keys = [String]()
         let writeBatch = assetStore.writeBatch()
@@ -70,16 +72,6 @@ extension LocalServer {
     /// 3. Reset the knowledgegraph
     ///
     public func runDataCleanup(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
-        } catch {
-            log.warning("failed to remove authorization requests from the local user store")
-            completionHandler(.failure(error))
-            return
-        }
-        
         let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload, .download]
         for queueType in queuesToClear {
             do {
@@ -93,11 +85,13 @@ extension LocalServer {
         }
         
         do {
-            let graph = try SHDBManager.sharedInstance.graph()
+            guard let graph = SHDBManager.graph else {
+                throw KBError.databaseNotReady
+            }
             let _ = try graph.removeAll()
         }
         catch {
-            log.warning("Failed to reinitialize the graph")
+            log.warning("Failed to reinitialize the graph: \(error.localizedDescription)")
         }
         
         completionHandler(.success(()))
@@ -115,12 +109,9 @@ extension LocalServer {
         /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
         ///
         
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
+        guard let assetStore = SHDBManager.assetStore else {
             log.warning("failed to connect to the local asset store")
-            completionHandler(.failure(error))
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         

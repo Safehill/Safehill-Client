@@ -17,11 +17,8 @@ struct LocalServer : SHServerAPI {
                                      publicKeyData: Data,
                                      publicSignatureData: Data,
                                      completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -82,11 +79,8 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -148,11 +142,8 @@ struct LocalServer : SHServerAPI {
                 phoneNumber: SHPhoneNumber,
                 linkedSystemContact: CNContact,
                 completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -177,11 +168,8 @@ struct LocalServer : SHServerAPI {
     
     func removeLinkedSystemContact(from users: [SHRemoteUserLinkedToContact],
                                    completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -221,11 +209,8 @@ struct LocalServer : SHServerAPI {
     
     func deleteUsers(withIdentifiers identifiers: [UserIdentifier],
                      completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -254,37 +239,31 @@ struct LocalServer : SHServerAPI {
     }
     
     func deleteAllAssets(completionHandler: @escaping (Result<[String], Error>) -> ()) {
-        let assetStore: KBKVStore
         do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-            assetStore.removeAll(completionHandler: completionHandler)
             try SHKGQuery.deepClean()
         } catch {
             completionHandler(.failure(error))
             return
         }
+        
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        assetStore.removeAll(completionHandler: completionHandler)
     }
     
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
-        let reactionStore: KBKVStore
-        do {
-            reactionStore = try SHDBManager.sharedInstance.reactionStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let reactionStore = SHDBManager.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
-        let messagesQueue: KBQueueStore
-        do {
-            messagesQueue = try SHDBManager.sharedInstance.messageQueue()
-        } catch {
-            completionHandler(.failure(error))
+        guard let messagesQueue = SHDBManager.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -385,11 +364,8 @@ struct LocalServer : SHServerAPI {
     }
     
     func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -428,11 +404,8 @@ struct LocalServer : SHServerAPI {
     }
     
     func getAllLocalUsers(completionHandler: @escaping (Swift.Result<[any SHServerUser], Error>) -> ()) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -463,11 +436,8 @@ struct LocalServer : SHServerAPI {
     
     func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
                              completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -679,11 +649,8 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -780,11 +747,8 @@ struct LocalServer : SHServerAPI {
                 descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
                 uploadState: SHAssetDescriptorUploadState,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -926,11 +890,8 @@ struct LocalServer : SHServerAPI {
                             basedOn groupIdByRecipientId: [UserIdentifier: String],
                             versions: [SHAssetQuality]? = nil,
                             completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -959,11 +920,8 @@ struct LocalServer : SHServerAPI {
                                from globalIdentifier: GlobalIdentifier,
                                versions: [SHAssetQuality]? = nil,
                                completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1013,11 +971,8 @@ struct LocalServer : SHServerAPI {
                    quality: SHAssetQuality,
                    as state: SHAssetDescriptorUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1050,11 +1005,8 @@ struct LocalServer : SHServerAPI {
     
     func share(asset: SHShareableEncryptedAsset,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1087,11 +1039,8 @@ struct LocalServer : SHServerAPI {
     
     func unshareAll(with userIdentifiers: [UserIdentifier],
                     completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1115,11 +1064,8 @@ struct LocalServer : SHServerAPI {
     func unshare(assetId: GlobalIdentifier,
                  with userPublicIdentifier: UserIdentifier,
                  completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1146,11 +1092,8 @@ struct LocalServer : SHServerAPI {
     public func getSharingInfo(forAssetIdentifier globalIdentifier: GlobalIdentifier,
                                for users: [SHServerUser],
                                completionHandler: @escaping (Result<SHShareableEncryptedAsset?, Error>) -> ()) {
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1253,11 +1196,8 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let assetStore: KBKVStore
-        do {
-            assetStore = try SHDBManager.sharedInstance.assetStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let assetStore = SHDBManager.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1344,11 +1284,8 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1375,11 +1312,8 @@ struct LocalServer : SHServerAPI {
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1469,11 +1403,8 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1499,27 +1430,18 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        let reactionStore: KBKVStore
-        do {
-            reactionStore = try SHDBManager.sharedInstance.reactionStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let reactionStore = SHDBManager.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        let messagesStore: KBQueueStore
-        do {
-            messagesStore = try SHDBManager.sharedInstance.messageQueue()
-        } catch {
-            completionHandler(.failure(error))
+        guard let messagesQueue = SHDBManager.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1527,7 +1449,7 @@ struct LocalServer : SHServerAPI {
             let condition = KBGenericCondition(.beginsWith, value: "\(anchor.rawValue)::\(anchorId)::")
             let _ = try userStore.removeValues(forKeysMatching: condition)
             let _ = try reactionStore.removeValues(forKeysMatching: condition)
-            let _ = try messagesStore.removeValues(forKeysMatching: condition)
+            let _ = try messagesQueue.removeValues(forKeysMatching: condition)
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
@@ -1562,10 +1484,12 @@ struct LocalServer : SHServerAPI {
                     return
                 }
                 
-                let userStore: KBKVStore
+                guard let userStore = SHDBManager.userStore else {
+                    completionHandler(.failure(KBError.databaseNotReady))
+                    return
+                }
+                
                 do {
-                    userStore = try SHDBManager.sharedInstance.userStore()
-                    
                     let threadName = try userStore.value(for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::name") as? String
                     let threadLastUpdated = try userStore.value(for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt") as? Double
                     let lastUpdatedAt = threadLastUpdated == nil ? Date() : Date(timeIntervalSince1970: threadLastUpdated!)
@@ -1599,11 +1523,8 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        let userStore: KBKVStore
-        do {
-            userStore = try SHDBManager.sharedInstance.userStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let userStore = SHDBManager.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1694,11 +1615,8 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
-        let reactionStore: KBKVStore
-        do {
-            reactionStore = try SHDBManager.sharedInstance.reactionStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let reactionStore = SHDBManager.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1777,11 +1695,8 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let reactionStore: KBKVStore
-        do {
-            reactionStore = try SHDBManager.sharedInstance.reactionStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let reactionStore = SHDBManager.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1817,19 +1732,13 @@ struct LocalServer : SHServerAPI {
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
-        let reactionStore: KBKVStore
-        do {
-            reactionStore = try SHDBManager.sharedInstance.reactionStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let reactionStore = SHDBManager.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        let messagesStore: KBQueueStore
-        do {
-            messagesStore = try SHDBManager.sharedInstance.messageQueue()
-        } catch {
-            completionHandler(.failure(error))
+        guard let messagesQueue = SHDBManager.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -1861,7 +1770,7 @@ struct LocalServer : SHServerAPI {
             case .failure(let error):
                 log.critical("failed to retrieve reactions for group \(groupId): \(error.localizedDescription)")
             }
-            messagesStore.keys(matching: condition) { messagesResult in
+            messagesQueue.keys(matching: condition) { messagesResult in
                 switch messagesResult {
                 case .success(let messagesKeys):
                     counts.messages = messagesKeys.count
@@ -1915,19 +1824,13 @@ struct LocalServer : SHServerAPI {
         page: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        let reactionStore: KBKVStore
-        do {
-            reactionStore = try SHDBManager.sharedInstance.reactionStore()
-        } catch {
-            completionHandler(.failure(error))
+        guard let reactionStore = SHDBManager.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        let messagesStore: KBQueueStore
-        do {
-            messagesStore = try SHDBManager.sharedInstance.messageQueue()
-        } catch {
-            completionHandler(.failure(error))
+        guard let messagesQueue = SHDBManager.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -2018,7 +1921,7 @@ struct LocalServer : SHServerAPI {
                             reactions.append(output)
                         })
                         
-                        messagesStore.keyValuesAndTimestamps(
+                        messagesQueue.keyValuesAndTimestamps(
                             forKeysMatching: condition,
                             paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
                             sort: .descending
@@ -2105,11 +2008,8 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
-        let messagesStore: KBQueueStore
-        do {
-            messagesStore = try SHDBManager.sharedInstance.messageQueue()
-        } catch {
-            completionHandler(.failure(error))
+        guard let messagesQueue = SHDBManager.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -2154,7 +2054,7 @@ struct LocalServer : SHServerAPI {
                 )
                 
                 let data = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
-                try messagesStore.insert(
+                try messagesQueue.insert(
                     data,
                     withIdentifier: key,
                     timestamp: message.createdAt!.iso8601withFractionalSeconds!
