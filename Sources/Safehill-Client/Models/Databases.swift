@@ -231,7 +231,7 @@ public class SHDBManager {
         }
     }
     
-    func disconnect() {
+    public func disconnect() {
         self._userStore = nil
         self._assetStore = nil
         self._reactionStore = nil
