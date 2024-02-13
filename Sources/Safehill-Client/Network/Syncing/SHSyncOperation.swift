@@ -149,8 +149,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: userIdsInRemoteDescriptors)
         
         do {
-            try SHAssetsDownloadManager.cleanEntriesNotIn(allSharedAssetIds: Array(assetIdToUserIds.keys),
-                                                          allUserIds: userIdsInRemoteDescriptors)
+            try SHAssetsDownloadManager.cleanEntriesNotIn(
+                allSharedAssetIds: Array(assetIdToUserIds.keys),
+                allUserIds: userIdsInRemoteDescriptors
+            )
         } catch {
             log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
         }
@@ -341,7 +343,9 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     ///
                     do {
                         let downloadsManager = SHAssetsDownloadManager(user: self.user)
-                        try downloadsManager.cleanEntries(for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier }))
+                        try downloadsManager.cleanEntries(
+                            for: diff.assetsRemovedOnServer.map({ $0.globalIdentifier })
+                        )
                     } catch {
                         let _ = try? SHDBManager.sharedInstance.graph().removeAll()
                         self.log.error("[sync] failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")

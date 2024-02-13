@@ -8,9 +8,9 @@ public struct SHAssetDownloadAuthorizationResponse {
 }
 
 public struct SHAssetsDownloadManager {
-    let user: SHAuthenticatedLocalUser
+    let user: SHLocalUserProtocol
     
-    public init(user: SHAuthenticatedLocalUser) {
+    public init(user: SHLocalUserProtocol) {
         self.user = user
     }
     

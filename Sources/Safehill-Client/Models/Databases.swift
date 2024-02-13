@@ -232,10 +232,9 @@ public class SHDBManager {
     }
     
     func disconnect() {
-        KBQueueStore.conn
-        self.userStore = nil
-        self.assetStore = nil
-        self.reactionStore = nil
-        self.messageQueue = nil
+        self._userStore = nil
+        self._assetStore = nil
+        self._reactionStore = nil
+        self._messageQueue = nil
     }
 }
