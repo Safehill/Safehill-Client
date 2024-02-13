@@ -177,7 +177,7 @@ public class SHDBManager {
     public var graph: KBKnowledgeStore? {
         if self._knowledgeGraph == nil,
            let backingKVStore = SHDBManager.getKVStore(named: DBName.knowledgeGraph.rawValue) {
-            return KBKnowledgeStore.store(backingKVStore.location)
+            self._knowledgeGraph = KBKnowledgeStore.store(backingKVStore.location)
         }
         return self._knowledgeGraph
     }
