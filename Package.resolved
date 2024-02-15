@@ -1,52 +1,59 @@
 {
-  "object": {
-    "pins": [
-      {
-        "package": "KnowledgeBase",
-        "repositoryURL": "https://github.com/gennarinoos/KnowledgeBase.git",
-        "state": {
-          "branch": "unstable",
-          "revision": "aadcca201c3f514b3f8c56e4d76b16783ab6a377",
-          "version": null
-        }
-      },
-      {
-        "package": "PhoneNumberKit",
-        "repositoryURL": "https://github.com/marmelroy/PhoneNumberKit",
-        "state": {
-          "branch": null,
-          "revision": "7268078304df2f4e07ac864b5ba27ae4c1e6f4a6",
-          "version": "3.7.7"
-        }
-      },
-      {
-        "package": "Safehill-Crypto",
-        "repositoryURL": "https://github.com/Safehill/Safehill-Crypto",
-        "state": {
-          "branch": null,
-          "revision": "3899fa4a599589dfd7e0e84525c21412560069e2",
-          "version": "1.1.17"
-        }
-      },
-      {
-        "package": "swift-crypto",
-        "repositoryURL": "https://github.com/apple/swift-crypto.git",
-        "state": {
-          "branch": null,
-          "revision": "60f13f60c4d093691934dc6cfdf5f508ada1f894",
-          "version": "2.6.0"
-        }
-      },
-      {
-        "package": "Yams",
-        "repositoryURL": "https://github.com/jpsim/Yams.git",
-        "state": {
-          "branch": null,
-          "revision": "0d9ee7ea8c4ebd4a489ad7a73d5c6cad55d6fed3",
-          "version": "5.0.6"
-        }
+  "pins" : [
+    {
+      "identity" : "knowledgebase",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/gennarinoos/KnowledgeBase.git",
+      "state" : {
+        "revision" : "55963fb1e809e796c71e0719ec18af2f79774b1e",
+        "version" : "0.9.17"
       }
-    ]
-  },
-  "version": 1
+    },
+    {
+      "identity" : "phonenumberkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/marmelroy/PhoneNumberKit",
+      "state" : {
+        "revision" : "7268078304df2f4e07ac864b5ba27ae4c1e6f4a6",
+        "version" : "3.7.7"
+      }
+    },
+    {
+      "identity" : "safehill-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Safehill/Safehill-Crypto",
+      "state" : {
+        "revision" : "3899fa4a599589dfd7e0e84525c21412560069e2",
+        "version" : "1.1.17"
+      }
+    },
+    {
+      "identity" : "sqlite.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/stephencelis/SQLite.swift.git",
+      "state" : {
+        "revision" : "7a2e3cd27de56f6d396e84f63beefd0267b55ccb",
+        "version" : "0.14.1"
+      }
+    },
+    {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto.git",
+      "state" : {
+        "revision" : "60f13f60c4d093691934dc6cfdf5f508ada1f894",
+        "version" : "2.6.0"
+      }
+    },
+    {
+      "identity" : "yams",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/jpsim/Yams.git",
+      "state" : {
+        "revision" : "0d9ee7ea8c4ebd4a489ad7a73d5c6cad55d6fed3",
+        "version" : "5.0.6"
+      }
+    }
+  ],
+  "version" : 2
 }
