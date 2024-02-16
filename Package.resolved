@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gennarinoos/KnowledgeBase.git",
       "state" : {
-        "revision" : "b3fc61b63e7df567cb81df943ff4f3f070970f8f",
-        "version" : "0.9.18"
+        "revision" : "5ae73fbf0a5515a8659cf3fc98339ed4629931fd",
+        "version" : "0.9.19"
       }
     },
     {
@@ -25,15 +25,6 @@
       "state" : {
         "revision" : "3899fa4a599589dfd7e0e84525c21412560069e2",
         "version" : "1.1.17"
-      }
-    },
-    {
-      "identity" : "sqlite.swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/stephencelis/SQLite.swift.git",
-      "state" : {
-        "revision" : "7a2e3cd27de56f6d396e84f63beefd0267b55ccb",
-        "version" : "0.14.1"
       }
     },
     {
