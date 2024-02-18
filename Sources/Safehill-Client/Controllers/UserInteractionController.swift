@@ -28,6 +28,12 @@ public struct SHUserInteractionController {
         self.serverProxy.listThreads(completionHandler: completionHandler)
     }
     
+    public func listLocalThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
+    ) {
+        self.serverProxy.listLocalThreads(completionHandler: completionHandler)
+    }
+    
     public func setupThread(
         with users: [SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void

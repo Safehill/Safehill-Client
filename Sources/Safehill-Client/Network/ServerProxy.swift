@@ -9,6 +9,10 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     )
     
+    func listLocalThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    )
+    
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
@@ -970,6 +974,12 @@ extension SHServerProxy {
                 self.localServer.listThreads(completionHandler: completionHandler)
             }
         }
+    }
+    
+    public func listLocalThreads(
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
+        self.localServer.listThreads(completionHandler: completionHandler)
     }
     
     public func getThread(

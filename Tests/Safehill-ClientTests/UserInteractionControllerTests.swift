@@ -123,6 +123,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
+    func listLocalThreads(completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
+        self.listThreads(completionHandler: completionHandler)
+    }
+    
     func createOrUpdateThread(name: String?, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()) {
         if let encryptionDetails = recipientsEncryptionDetails {
             guard let selfEncryptionDetails = encryptionDetails.first(where: { $0.recipientUserIdentifier == self.localServer.requestor.identifier }) else {
