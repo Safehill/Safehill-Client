@@ -278,4 +278,23 @@ final class Safehill_SerializationTests: XCTestCase {
             }
         }
     }
+    
+    func testDeserializeUser() throws {
+        let privateKeyData = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgnq973UVuwg+YiEkup+KLoaZDPN0ifPrBJVl8ow9aL8qhRANCAASl98xGDTjzbQzITeZ9BwtrlmZB5lTi+BFOzci9k/CtUz1hjahld0UTBnNTwVkut1hi91o1nFZGd4Z/bf9GP3hz"
+        let privateSignatureData = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbcjnbcVTpw8XXKQAz1Cb5Jle+0lfAP6zWSCiQ1/ONsShRANCAASZ94CvKtq6IXvNQ5QOpnXLLBjq+djvshZIjwsKu+HkEgDjttnXOr6+XjFHctR8SJKrk0nqFWSaxZ6FnotWtbOX"
+        
+        let privKey = try P256.KeyAgreement.PrivateKey(derRepresentation: Data(base64Encoded: privateKeyData)!)
+        let privSig = try P256.Signing.PrivateKey(derRepresentation: Data(base64Encoded: privateSignatureData)!)
+        let shUser1 = SHLocalCryptoUser(key: privKey, signature: privSig)
+        
+        let string = """
+{"keychainPrefix":"com.gf.safehill","shUser":{"privateKeyData":"MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgnq973UVuwg+YiEkup+KLoaZDPN0ifPrBJVl8ow9aL8qhRANCAASl98xGDTjzbQzITeZ9BwtrlmZB5lTi+BFOzci9k/CtUz1hjahld0UTBnNTwVkut1hi91o1nFZGd4Z/bf9GP3hz","privateSignatureData":"MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgbcjnbcVTpw8XXKQAz1Cb5Jle+0lfAP6zWSCiQ1/ONsShRANCAASZ94CvKtq6IXvNQ5QOpnXLLBjq+djvshZIjwsKu+HkEgDjttnXOr6+XjFHctR8SJKrk0nqFWSaxZ6FnotWtbOX"}}
+"""
+        
+        let data = string.data(using: .utf8)!
+        let shUser2 = try JSONDecoder().decode(SHLocalUser.self, from: data)
+        
+        XCTAssertEqual(shUser1.identifier, shUser2.identifier)
+        
+    }
 }
