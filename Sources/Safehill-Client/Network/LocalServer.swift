@@ -1364,26 +1364,24 @@ struct LocalServer : SHServerAPI {
                 break
             }
             
+            /// From the partial result …
             var result = partialResult
-            if let encryptedSecret,
-               let ephemeralPublicKey,
-               let secretPublicSignature,
-               let senderPublicSignature
-            {
-                result[threadId] = ConversationThreadOutputDTO(
-                    threadId: threadId,
-                    name: name,
-                    membersPublicIdentifier: [],
-                    lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds,
-                    encryptionDetails: RecipientEncryptionDetailsDTO(
-                        recipientUserIdentifier: self.requestor.identifier,
-                        ephemeralPublicKey: ephemeralPublicKey,
-                        encryptedSecret: encryptedSecret,
-                        secretPublicSignature: secretPublicSignature,
-                        senderPublicSignature: senderPublicSignature
-                    )
+            
+            /// … update the field corresponding to the KV pair just processed
+            /// in the existing conversation thread, or create a new one with the empty value
+            result[threadId] = ConversationThreadOutputDTO(
+                threadId: threadId,
+                name: name ?? result[threadId]?.name,
+                membersPublicIdentifier: [],
+                lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds ?? result[threadId]?.lastUpdatedAt,
+                encryptionDetails: RecipientEncryptionDetailsDTO(
+                    recipientUserIdentifier: self.requestor.identifier,
+                    ephemeralPublicKey: ephemeralPublicKey ?? result[threadId]?.encryptionDetails.ephemeralPublicKey ?? "",
+                    encryptedSecret: encryptedSecret ?? result[threadId]?.encryptionDetails.encryptedSecret ?? "",
+                    secretPublicSignature: secretPublicSignature ?? result[threadId]?.encryptionDetails.secretPublicSignature ?? "",
+                    senderPublicSignature: senderPublicSignature ?? result[threadId]?.encryptionDetails.senderPublicSignature ?? ""
                 )
-            }
+            )
             
             return result
         })
