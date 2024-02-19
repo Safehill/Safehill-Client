@@ -1261,7 +1261,7 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(Array(removedGlobalIdentifiers)))
     }
     
-    @available(*, deprecated, renamed: "createOrUpdateThread(threadId:name:lastUpdatedAt:recipientEncryptionDetails:completionHandler:)", message: "Do not use the protocol method when storing a thread locally. Information from server should be provided.")
+    @available(*, deprecated, renamed: "createOrUpdateThread(serverThread:completionHandler:)", message: "Do not use the protocol method when storing a thread locally. Information from server should be provided.")
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
@@ -1291,6 +1291,8 @@ struct LocalServer : SHServerAPI {
         
         let writeBatch = userStore.writeBatch()
         
+        writeBatch.set(value: serverThread.membersPublicIdentifier, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::membersPublicIdentifiers")
+        
         writeBatch.set(value: serverThread.encryptionDetails.encryptedSecret, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::encryptedSecret")
         writeBatch.set(value: serverThread.encryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::ephemeralPublicKey")
         writeBatch.set(value: serverThread.encryptionDetails.secretPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::secretPublicSignature")
@@ -1312,12 +1314,29 @@ struct LocalServer : SHServerAPI {
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
+        self.listThreads(withIdentifiers: nil, completionHandler: completionHandler)
+    }
+    
+    func listThreads(
+        withIdentifiers: [String]?,
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
+        var condition: KBGenericCondition
+        if let withIdentifiers {
+            condition = KBGenericCondition(value: false)
+            for identifier in withIdentifiers {
+                condition = condition.or(
+                    KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::\(identifier)")
+                )
+            }
+        } else {
+            condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
+        }
         
         let kvPairs: KBKVPairs
         do {
@@ -1339,6 +1358,7 @@ struct LocalServer : SHServerAPI {
             
             let threadId = components[1]
             var name: String? = nil
+            var membersPublicIdentifiers: [String]? = nil
             var lastUpdatedAt: Date? = nil
             var encryptedSecret: String? = nil
             var ephemeralPublicKey: String? = nil
@@ -1346,6 +1366,8 @@ struct LocalServer : SHServerAPI {
             var senderPublicSignature: String? = nil
             
             switch components[2] {
+            case "membersPublicIdentifiers":
+                membersPublicIdentifiers = value as? [String]
             case "encryptedSecret":
                 encryptedSecret = value as? String
             case "ephemeralPublicKey":
@@ -1372,7 +1394,7 @@ struct LocalServer : SHServerAPI {
             result[threadId] = ConversationThreadOutputDTO(
                 threadId: threadId,
                 name: name ?? result[threadId]?.name,
-                membersPublicIdentifier: [],
+                membersPublicIdentifier: membersPublicIdentifiers ?? result[threadId]?.membersPublicIdentifier ?? [],
                 lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds ?? result[threadId]?.lastUpdatedAt,
                 encryptionDetails: RecipientEncryptionDetailsDTO(
                     recipientUserIdentifier: self.requestor.identifier,
@@ -1390,7 +1412,8 @@ struct LocalServer : SHServerAPI {
         var filteredList = [ConversationThreadOutputDTO]()
         for element in list {
             if (
-                element.encryptionDetails.ephemeralPublicKey.isEmpty
+                element.membersPublicIdentifier.isEmpty
+                || element.encryptionDetails.ephemeralPublicKey.isEmpty
                 || element.encryptionDetails.encryptedSecret.isEmpty
                 || element.encryptionDetails.secretPublicSignature.isEmpty
                 || element.encryptionDetails.senderPublicSignature.isEmpty
@@ -1482,41 +1505,12 @@ struct LocalServer : SHServerAPI {
         withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.retrieveUserEncryptionDetails(
-            anchorType: .thread,
-            anchorId: threadId
-        ) { e2eeResult in
-            switch e2eeResult {
-            case .failure(let err):
-                completionHandler(.failure(err))
-            case .success(let encryptionDetails):
-                guard let encryptionDetails else {
-                    completionHandler(.success(nil))
-                    return
-                }
-                
-                guard let userStore = SHDBManager.sharedInstance.userStore else {
-                    completionHandler(.failure(KBError.databaseNotReady))
-                    return
-                }
-                
-                do {
-                    let threadName = try userStore.value(for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::name") as? String
-                    let threadLastUpdated = try userStore.value(for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt") as? Double
-                    let lastUpdatedAt = threadLastUpdated == nil ? Date() : Date(timeIntervalSince1970: threadLastUpdated!)
-                    let thread = ConversationThreadOutputDTO(
-                        threadId: threadId,
-                        name: threadName,
-                        membersPublicIdentifier: [],
-                        lastUpdatedAt: lastUpdatedAt.iso8601withFractionalSeconds,
-                        encryptionDetails: encryptionDetails
-                    )
-                    
-                    completionHandler(.success(thread))
-                } catch {
-                    completionHandler(.failure(error))
-                    return
-                }
+        self.listThreads(withIdentifiers: [threadId]) { result in
+            switch result {
+            case .success(let threads):
+                completionHandler(.success(threads.first))
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
         }
     }

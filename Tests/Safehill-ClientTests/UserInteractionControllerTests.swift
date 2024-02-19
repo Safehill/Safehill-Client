@@ -530,13 +530,15 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let userStore = SHDBManager.sharedInstance.userStore!
         let kvs = try userStore.dictionaryRepresentation()
-        XCTAssertEqual(kvs.count, 5)
+        XCTAssertEqual(kvs.count, 6)
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt"])
         XCTAssertNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::name"])
+        XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::membersPublicIdentifiers"] as? [String])
+        XCTAssertEqual((kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::membersPublicIdentifiers"] as! [String]).count, 2)
         
         guard let mockServerMyUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == myUser.identifier })
         else {
