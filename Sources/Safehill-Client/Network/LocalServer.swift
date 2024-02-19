@@ -1419,8 +1419,9 @@ struct LocalServer : SHServerAPI {
                 || element.encryptionDetails.senderPublicSignature.isEmpty
             ) {
                 // Do not append threads with missing information
+            } else {
+                filteredList.append(element)
             }
-            filteredList.append(element)
         }
         
         completionHandler(.success(filteredList))
