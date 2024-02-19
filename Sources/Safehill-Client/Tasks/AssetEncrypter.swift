@@ -368,11 +368,11 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
                 /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
                 /// ingest that identifier into the graph as a provisional share.
                 ///
-                try SHKGQuery.ingestShare(
+                try SHKGQuery.ingestProvisionalShare(
                     of: globalIdentifier!,
+                    localIdentifier: encryptionRequest.localIdentifier,
                     from: self.user.identifier,
-                    to: encryptionRequest.sharedWith.map({ $0.identifier }),
-                    provisional: true
+                    to: encryptionRequest.sharedWith.map({ $0.identifier })
                 )
             }
             
