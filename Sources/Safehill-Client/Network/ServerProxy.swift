@@ -370,6 +370,10 @@ extension SHServerProxy {
         }
     }
     
+    public func deleteLocalAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.deleteAccount(completionHandler: completionHandler)
+    }
+    
     public func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.deleteAccount(name: name, password: password) { result in
             if case .failure(let err) = result {
