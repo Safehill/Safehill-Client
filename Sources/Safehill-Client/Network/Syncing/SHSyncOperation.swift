@@ -462,7 +462,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         completionHandler(.success(()))
                         return
                     }
-                    self.syncThreadInteractions(thread: serverThread) { syncResult in
+                    self.syncThreadInteractions(serverThread: serverThread) { syncResult in
                         switch syncResult {
                         case .failure(let err):
                             self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")

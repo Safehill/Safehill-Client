@@ -53,8 +53,6 @@ extension SHSyncOperation {
             return
         }
         
-        self.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
-        
         /// 
         /// Remove extra threads locally
         ///
@@ -83,11 +81,11 @@ extension SHSyncOperation {
         }
         
         ///
-        /// For each thread …
+        /// Add remote threads locally and sync their interactions
         ///
-        for thread in allThreads {
-            dispatchGroup.enter()
-            self.syncThreadInteractions(thread: thread) { result in
+        
+        let syncInteractions = { (thread: ConversationThreadOutputDTO) in
+            self.syncThreadInteractions(serverThread: thread) { result in
                 if case .failure(let err) = result {
                     self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                 }
@@ -95,16 +93,34 @@ extension SHSyncOperation {
             }
         }
         
+        for thread in allThreads {
+            dispatchGroup.enter()
+            
+            if localThreads.contains(where: { $0.threadId == thread.threadId }) == false {
+                self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
+                    switch createResult {
+                    case .success:
+                        syncInteractions(thread)
+                    case .failure(let err):
+                        self.log.error("error locally creating thread \(thread.threadId). \(err.localizedDescription)")
+                    }
+                }
+            } else {
+                syncInteractions(thread)
+            }
+        }
+        
         dispatchGroup.notify(queue: .global()) {
+            self.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
             completionHandler(.success(()))
         }
     }
     
     func syncThreadInteractions(
-        thread: ConversationThreadOutputDTO,
+        serverThread: ConversationThreadOutputDTO,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        let threadId = thread.threadId
+        let threadId = serverThread.threadId
         
         let dispatchGroup = DispatchGroup()
         var error: Error? = nil
@@ -178,7 +194,7 @@ extension SHSyncOperation {
         if shouldCreateE2EEDetailsLocally {
             dispatchGroup.enter()
             serverProxy.localServer.createOrUpdateThread(
-                serverThread: thread
+                serverThread: serverThread
             ) { threadCreateResult in
                 switch threadCreateResult {
                 case .success(_):
