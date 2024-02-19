@@ -1387,7 +1387,20 @@ struct LocalServer : SHServerAPI {
         })
             .values
         
-        completionHandler(.success(Array(list)))
+        var filteredList = [ConversationThreadOutputDTO]()
+        for element in list {
+            if (
+                element.encryptionDetails.ephemeralPublicKey.isEmpty
+                || element.encryptionDetails.encryptedSecret.isEmpty
+                || element.encryptionDetails.secretPublicSignature.isEmpty
+                || element.encryptionDetails.senderPublicSignature.isEmpty
+            ) {
+                // Do not append threads with missing information
+            }
+            filteredList.append(element)
+        }
+        
+        completionHandler(.success(filteredList))
     }
     
     func setGroupEncryptionDetails(
