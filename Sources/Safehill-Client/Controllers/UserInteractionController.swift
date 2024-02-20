@@ -43,6 +43,11 @@ public struct SHUserInteractionController {
             return
         }
         
+        guard users.contains(where: { $0.identifier == self.user.identifier }) else {
+            completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
+            return
+        }
+        
         self.serverProxy.getThread(withUsers: users) { result in
             switch result {
             case .failure(let error):
@@ -53,8 +58,27 @@ public struct SHUserInteractionController {
                 
                 if let conversationThread {
                     log.info("found thread with users \(users.map({ $0.identifier })) from remote")
-                    completionHandler(.success(conversationThread))
-                    return
+                    do {
+                        let encryptionDetails = conversationThread.encryptionDetails
+                        let shareablePayload = SHShareablePayload(
+                            ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
+                            cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
+                            signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
+                        )
+                        let decryptedSecret = try SHCypher.decrypt(
+                            shareablePayload,
+                            encryptionKeyData: authedUser.shUser.privateKeyData,
+                            protocolSalt: authedUser.encryptionProtocolSalt,
+                            from: authedUser.publicSignatureData
+                        )
+                        symmetricKey = SymmetricKey(data: decryptedSecret)
+                    } catch {
+                        log.critical("""
+failed to initialize E2EE details for new users in thread \(conversationThread.threadId). error=\(error.localizedDescription)
+""")
+                        completionHandler(.failure(error))
+                        return
+                    }
                 } else {
                     log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier }))")
                     symmetricKey = createNewSecret()
@@ -129,6 +153,11 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
             return
         }
         
+        guard users.contains(where: { $0.identifier == self.user.identifier }) else {
+            completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
+            return
+        }
+        
         var symmetricKey: SymmetricKey?
         
         do {
@@ -146,16 +175,12 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
             symmetricKey = createNewSecret()
         }
         
-        var usersAndSelf = users
-        if users.contains(where: { $0.identifier == user.identifier }) == false {
-            usersAndSelf.append(user)
-        }
         do {
             self.serverProxy.setupGroupEncryptionDetails(
                 groupId: groupId,
                 recipientsEncryptionDetails: try self.newRecipientEncryptionDetails(
                     from: symmetricKey!,
-                    for: usersAndSelf,
+                    for: users,
                     anchor: .group,
                     anchorId: groupId
                 ),

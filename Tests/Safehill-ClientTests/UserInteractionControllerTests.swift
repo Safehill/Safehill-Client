@@ -263,6 +263,12 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             groupId: groupId,
             with: [
                 SHRemoteUser(
+                    identifier: myUser.identifier,
+                    name: "myUser",
+                    publicKeyData: myUser.publicKeyData,
+                    publicSignatureData: myUser.publicSignatureData
+                ),
+                SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
                     publicKeyData: recipient1.publicKeyData,
@@ -297,6 +303,12 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         controller.setupGroupEncryptionDetails(
             groupId: groupId,
             with: [
+                SHRemoteUser(
+                    identifier: myUser.identifier,
+                    name: "myUser",
+                    publicKeyData: myUser.publicKeyData,
+                    publicSignatureData: myUser.publicSignatureData
+                ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
@@ -375,6 +387,12 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         controller.setupGroupEncryptionDetails(
             groupId: groupId,
             with: [
+                SHRemoteUser(
+                    identifier: myUser.identifier,
+                    name: "myUser",
+                    publicKeyData: myUser.publicKeyData,
+                    publicSignatureData: myUser.publicSignatureData
+                ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
@@ -505,6 +523,12 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let expectation1 = XCTestExpectation(description: "initialize the thread")
         controller1.setupThread(
             with: [
+                SHRemoteUser(
+                    identifier: myUser.identifier,
+                    name: "myUser",
+                    publicKeyData: myUser.publicKeyData,
+                    publicSignatureData: myUser.publicSignatureData
+                ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
@@ -841,5 +865,155 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         }
         
         wait(for: [expectation10], timeout: 5.0)
+    }
+    
+    func testCreateThreadIdempotency() throws {
+        
+        /// Cache `myUser` in the `ServerUserCache`
+        
+        ServerUserCache.shared.cache(
+            users: [
+                SHRemoteUser(identifier: myUser.identifier,
+                             name: "myUser",
+                             publicKeyData: myUser.publicKeyData,
+                             publicSignatureData: myUser.publicSignatureData)
+                ]
+            )
+        
+        let threadId = "testThreadId1"
+        
+        /// Create the other user `recipient1` and cache it
+        
+        let recipient1 = SHLocalUser(keychainPrefix: "other")
+        
+        ServerUserCache.shared.cache(
+            users: [
+                SHRemoteUser(identifier: recipient1.identifier,
+                             name: "recipient1",
+                             publicKeyData: recipient1.publicKeyData,
+                             publicSignatureData: recipient1.publicSignatureData)
+                ]
+            )
+        
+        XCTAssertEqual(ServerUserCache.shared.user(with: myUser.identifier)?.publicSignatureData,
+                       myUser.publicSignatureData)
+        XCTAssertEqual(ServerUserCache.shared.user(with: recipient1.identifier)?.publicSignatureData,
+                       recipient1.publicSignatureData)
+        
+        /// Create the thread in the mock server for `myUser`, with no encryption details for now
+        
+        let serverThreadDetails = [
+            MockThreadDetails(
+                threadId: threadId,
+                name: nil,
+                userIds: [myUser.identifier, recipient1.identifier],
+                encryptionDetails: []
+            )
+        ]
+        let serverProxy = SHMockServerProxy(user: myUser, threads: serverThreadDetails)
+        
+        let authenticatedUser1 = SHAuthenticatedLocalUser(
+            localUser: myUser,
+            name: "myUser",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: ""
+        )
+        
+        let controller1 = SHUserInteractionController(
+            user: authenticatedUser1,
+            serverProxy: serverProxy
+        )
+        
+        /// Ask the mock server for `myUser` to create a new thread with `recipient1`
+        /// This will set up the encryption details in the mock server for the thread for both users
+        
+        let expectation1 = XCTestExpectation(description: "initialize the thread")
+        controller1.setupThread(
+            with: [
+                SHRemoteUser(
+                    identifier: myUser.identifier,
+                    name: "myUser",
+                    publicKeyData: myUser.publicKeyData,
+                    publicSignatureData: myUser.publicSignatureData
+                ),
+                SHRemoteUser(
+                    identifier: recipient1.identifier,
+                    name: "recipient1",
+                    publicKeyData: recipient1.publicKeyData,
+                    publicSignatureData: recipient1.publicSignatureData
+                )
+            ]
+        ) {
+            result in
+            if case .failure(let err) = result {
+                XCTFail(err.localizedDescription)
+            }
+            expectation1.fulfill()
+        }
+        
+        wait(for: [expectation1], timeout: 5.0)
+        
+        /// Ensure the encryption details for `myUser` are now present in the local server
+        
+        guard let mockServerThread = serverProxy.state.threads?.first(where: { $0.threadId == threadId }) else {
+            XCTFail() ; return
+        }
+        
+        guard let mockServerMyUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == myUser.identifier })
+        else {
+            XCTFail() ; return
+        }
+        
+        XCTAssertNotNil(mockServerMyUserEncryptionDetails.ephemeralPublicKey)
+        XCTAssertNotNil(mockServerMyUserEncryptionDetails.secretPublicSignature)
+        XCTAssertNotNil(mockServerMyUserEncryptionDetails.senderPublicSignature)
+        XCTAssertNotNil(mockServerMyUserEncryptionDetails.encryptedSecret)
+        
+        let expectation2 = XCTestExpectation(description: "re-initialize the thread")
+        controller1.setupThread(
+            with: [
+                SHRemoteUser(
+                    identifier: myUser.identifier,
+                    name: "myUser",
+                    publicKeyData: myUser.publicKeyData,
+                    publicSignatureData: myUser.publicSignatureData
+                ),
+                SHRemoteUser(
+                    identifier: recipient1.identifier,
+                    name: "recipient1",
+                    publicKeyData: recipient1.publicKeyData,
+                    publicSignatureData: recipient1.publicSignatureData
+                )
+            ]
+        ) { result in
+            if case .failure(let err) = result {
+                XCTFail(err.localizedDescription)
+            }
+            expectation2.fulfill()
+        }
+        
+        wait(for: [expectation2], timeout: 5.0)
+        
+        let expectation3 = XCTestExpectation(description: "initialize the thread without self")
+        controller1.setupThread(
+            with: [
+                SHRemoteUser(
+                    identifier: recipient1.identifier,
+                    name: "recipient1",
+                    publicKeyData: recipient1.publicKeyData,
+                    publicSignatureData: recipient1.publicSignatureData
+                )
+            ]
+        ) {
+            result in
+            if case .success() = result {
+                XCTFail()
+                /// EXPECT this to fail
+            }
+            expectation3.fulfill()
+        }
+        
+        wait(for: [expectation3], timeout: 5.0)
+        
     }
 }

@@ -307,11 +307,14 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 var errorInitializingThread: Error? = nil
                 let dispatchGroup = DispatchGroup()
                 
+                var usersAndSelf = shareRequest.sharedWith
+                usersAndSelf.append(self.user)
+                
                 log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
                 dispatchGroup.enter()
                 self.interactionsController.setupGroupEncryptionDetails(
                     groupId: shareRequest.groupId,
-                    with: shareRequest.sharedWith,
+                    with: usersAndSelf,
                     completionHandler: { initializeGroupResult in
                         switch initializeGroupResult {
                         case .failure(let error):
@@ -325,8 +328,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
                 dispatchGroup.enter()
                 self.interactionsController.setupThread(
-                    with: shareRequest.sharedWith
-                ) { 
+                    with: usersAndSelf
+                ) {
                     setupThreadResult in
                     switch setupThreadResult {
                     case .success(let serverThread):
