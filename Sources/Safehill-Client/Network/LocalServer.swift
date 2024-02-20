@@ -395,7 +395,15 @@ struct LocalServer : SHServerAPI {
                 }
             }
         } else {
-            userStore.values(completionHandler: callback)
+            let condition = KBGenericCondition(.contains, value: "::", negated: true)
+            userStore.values(forKeysMatching: condition) { result in
+                switch result {
+                case .failure(let err):
+                    completionHandler(.failure(err))
+                case .success(let values):
+                    callback(.success(values.compactMap({ $0 })))
+                }
+            }
         }
     }
     
@@ -403,35 +411,9 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func getAllLocalUsers(completionHandler: @escaping (Swift.Result<[any SHServerUser], Error>) -> ()) {
-        guard let userStore = SHDBManager.sharedInstance.userStore else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        userStore.values() { getResult in
-            switch getResult {
-            case .success(let resList):
-                var userList = [any SHServerUser]()
-                if let resList = resList as? [[String: Any]] {
-                    for res in resList {
-                        if let serverUser = serializeUser(res) {
-                            userList.append(serverUser)
-                        } else {
-                            log.warning("unable to serialize user in local DB \(res)")
-                        }
-                    }
-                }
-                completionHandler(.success(userList))
-            case .failure(let err):
-                completionHandler(.failure(err))
-            }
-        }
-    }
-    
     func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
         // TODO: Store and retrieve users in the knowledge graph
-        completionHandler(.success([]))
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,

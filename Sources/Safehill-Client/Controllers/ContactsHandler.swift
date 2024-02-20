@@ -251,7 +251,7 @@ public class SHAddressBookContactHandler {
             /// Remove items from the cache for users that are no longer in the Contacts
             /// When the systemContactId is linked to a SHRemoteUser in the cache, and the contact is removed, that link needs to be removed, too
             ///
-            requestor.serverProxy.getAllLocalUsers { result in
+            requestor.serverProxy.getLocalUsers(withIdentifiers: nil) { result in
                 switch result {
                 case .success(let serverUsers):
                     var usersWithLinksToRemove = [SHRemoteUserLinkedToContact]()

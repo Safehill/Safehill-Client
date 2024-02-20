@@ -193,10 +193,6 @@ extension SHServerProxy {
         self.remoteServer.signIn(clientBuild: clientBuild, completionHandler: completionHandler)
     }
     
-    internal func getAllLocalUsers(completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
-        self.localServer.getAllLocalUsers(completionHandler: completionHandler)
-    }
-    
     private func updateLocalUserDB(
         remoteServerUsers serverUsers: [any SHServerUser],
         completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
@@ -232,7 +228,10 @@ extension SHServerProxy {
                                   completionHandler: completionHandler)
     }
     
-    public func getUsers(withIdentifiers userIdentifiersToFetch: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {
+    public func getUsers(
+        withIdentifiers userIdentifiersToFetch: [String]?,
+        completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
+    ) {
         guard userIdentifiersToFetch == nil || userIdentifiersToFetch!.count > 0 else {
             return completionHandler(.success([]))
         }
@@ -263,6 +262,20 @@ extension SHServerProxy {
                 }
             }
         }
+    }
+    
+    public func getLocalUsers(
+        withIdentifiers userIdentifiersToFetch: [String]?,
+        completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
+    ) {
+        guard userIdentifiersToFetch == nil || userIdentifiersToFetch!.count > 0 else {
+            return completionHandler(.success([]))
+        }
+        
+        self.localServer.getUsers(
+            withIdentifiers: userIdentifiersToFetch,
+            completionHandler: completionHandler
+        )
     }
     
     func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {

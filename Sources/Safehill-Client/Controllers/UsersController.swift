@@ -72,7 +72,71 @@ public class SHUsersController {
         self.localUser.serverProxy
     }
     
+    /// Retrieve from either the in-memory or the on-disk cache only.
+    /// **Best effort** to retrieve users locally (maybe when there's no connection to get them from the server?)
+    /// Doesn't cache the result in memory.
+    ///
+    /// - Parameter userIdentifiers: the user identifiers to fetch
+    /// - Returns: the best effort to retrieve the requested identifiers from cache
+    public func getCachedUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) throws -> [UserIdentifier: any SHServerUser] {
+        guard userIdentifiers.count > 0 else {
+            return [:]
+        }
+        
+        var users = [UserIdentifier: any SHServerUser]()
+        var foundUserIds = [String]()
+        var missingUserIds = [String]()
+        
+        for userIdentifier in userIdentifiers {
+            if foundUserIds.contains(userIdentifier) == false {
+                if let user = ServerUserCache.shared.user(with: userIdentifier) {
+                    users[userIdentifier] = user
+                    foundUserIds.append(userIdentifier)
+                } else if missingUserIds.contains(userIdentifier) == false {
+                    missingUserIds.append(userIdentifier)
+                }
+            }
+        }
+        
+        guard missingUserIds.isEmpty == false else {
+            return users
+        }
+        
+        let group = DispatchGroup()
+        
+        group.enter()
+        serverProxy.getLocalUsers(withIdentifiers: missingUserIds) {
+            result in
+            switch result {
+            case .success(let serverUsers):
+                for serverUser in serverUsers {
+                    users[serverUser.identifier] = serverUser
+                }
+            case .failure(let err):
+                log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
+                break
+            }
+            group.leave()
+        }
+        
+        let _ = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        return users
+    }
+    
+    /// Retrieve the users from either the in-memory cache or the server.
+    /// Fallback to the on-disk cache only if the server returns an error.
+    /// Also caches the result in memory.
+    ///
+    /// - Parameter userIdentifiers: the user identifiers to fetch
+    /// - Returns: the users requested or throws an error
     public func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws -> [SHServerUser] {
+        
+        guard userIdentifiers.count > 0 else {
+            return []
+        }
+        
         var users = [any SHServerUser]()
         var foundUserIds = [String]()
         var missingUserIds = [String]()
@@ -119,33 +183,6 @@ public class SHUsersController {
         ServerUserCache.shared.cache(users: users)
         
         return users
-    }
-    
-    public func getAllLocalUsers() throws -> [any SHServerUser] {
-        var userList = [any SHServerUser]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        
-        group.enter()
-        serverProxy.getAllLocalUsers() { result in
-            switch result {
-            case .success(let serverUsers):
-                userList = serverUsers
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        return userList
     }
     
     internal func deleteUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws {
