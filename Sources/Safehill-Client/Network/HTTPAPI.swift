@@ -515,11 +515,27 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-                             completionHandler: @escaping (Swift.Result<[SHAssetDescriptor], Error>) -> ()) {
-        let parameters = forAssetGlobalIdentifiers != nil
-        ? ["globalIdentifiers": forAssetGlobalIdentifiers]
-        : nil
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier],
+                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+        let parameters = [
+            "globalIdentifiers": forAssetGlobalIdentifiers
+        ]
+        self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
+            switch result {
+            case .success(let descriptors):
+                completionHandler(.success(descriptors))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func getAssetDescriptors(since: Date,
+                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+        let parameters = [
+//            "since": date?.iso8601withFractionalSeconds
+            :
+        ] as [String: Any]
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
@@ -1136,6 +1152,57 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
         
         self.post("interactions/\(anchorType.rawValue)/\(anchorId)", 
+                  parameters: parameters,
+                  requiresAuthentication: true,
+                  completionHandler: completionHandler)
+    }
+    
+    func retrieveMessages(
+        inGroup groupId: String,
+        underMessage underMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveMessages(
+            anchorType: .group,
+            anchorId: groupId,
+            underMessage: underMessageId,
+            after: afterMessageId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func retrieveMessages(
+        inThread threadId: String,
+        underMessage underMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveMessages(
+            anchorType: .thread,
+            anchorId: threadId,
+            underMessage: underMessageId,
+            after: afterMessageId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func retrieveMessages(
+        anchorType: SHInteractionAnchor,
+        anchorId: String,
+        underMessage refMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        var parameters = [
+            "lastKnownMessageId": afterMessageId
+        ] as [String: Any]
+        
+        if let refMessageId {
+            parameters["referencedInteractionId"] = refMessageId
+        }
+        
+        self.post("interactions/messages/\(anchorType.rawValue)/\(anchorId)",
                   parameters: parameters,
                   requiresAuthentication: true,
                   completionHandler: completionHandler)

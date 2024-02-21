@@ -363,7 +363,10 @@ struct LocalServer : SHServerAPI {
         return serialized
     }
     
-    func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]?, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
+    func getUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]?,
+        completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()
+    ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -412,11 +415,30 @@ struct LocalServer : SHServerAPI {
     }
     
     func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
-        // TODO: Store and retrieve users in the knowledge graph
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier],
+                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+        self.getAssetDescriptors(
+            forAssetGlobalIdentifiers: forAssetGlobalIdentifiers,
+            since: nil,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func getAssetDescriptors(since: Date,
+                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+        // TODO: Filter with the since Date
+        self.getAssetDescriptors(
+            forAssetGlobalIdentifiers: nil,
+            since: nil,
+            completionHandler: completionHandler
+        )
+    }
+    
     func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+                             since: Date? = nil,
                              completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
@@ -1972,6 +1994,24 @@ struct LocalServer : SHServerAPI {
                 }
             }
         }
+    }
+    
+    func retrieveMessages(
+        inGroup groupId: String,
+        underMessage underMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func retrieveMessages(
+        inThread threadId: String,
+        underMessage underMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func addMessages(

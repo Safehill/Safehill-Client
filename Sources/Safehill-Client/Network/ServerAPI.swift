@@ -69,8 +69,23 @@ public protocol SHServerAPI {
     
     // MARK: Assets Management
     
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]?,
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ())
+    /// Get descriptors for specific asset global identifiers
+    /// - Parameters:
+    ///   - forAssetGlobalIdentifiers: the asset gids
+    ///   - completionHandler: the callback method
+    func getAssetDescriptors(
+        forAssetGlobalIdentifiers: [GlobalIdentifier],
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    )
+    
+    /// Retrieve asset descriptor created or updated since the reference date
+    /// - Parameters:
+    ///   - since: the reference date
+    ///   - completionHandler: the callback method
+    func getAssetDescriptors(
+        since: Date,
+        completionHandler: @escaping (Swift.Result<[any SHAssetDescriptor], Error>) -> ()
+    )
     
     /// Retrieve assets data and metadata
     /// - Parameters:
@@ -292,8 +307,9 @@ public protocol SHServerAPI {
     /// Retrieves all the messages and reactions for a group id. Results are paginated and returned in reverse cronological order.
     /// - Parameters:
     ///   - groupId: the group identifier
-    ///   - per: the number of items to retrieve
-    ///   - page: the page number, because results are paginated
+    ///   - refMessageId: if a nested thread, the message it's nested under
+    ///   - per: the limit
+    ///   - page: the page
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inGroup groupId: String,
@@ -315,6 +331,36 @@ public protocol SHServerAPI {
         underMessage refMessageId: String?,
         per: Int,
         page: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    /// Retrieves all the messages for a group id.
+    /// Provides the last known message id to retrieve only the messages after that one.
+    ///
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - refMessageId: if a nested thread, the message it's nested under
+    ///   - afterInteractionId: the last interaction known
+    ///   - completionHandler: the callback method
+    func retrieveMessages(
+        inGroup groupId: String,
+        underMessage refMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    /// Retrieves all the messages for in a thread.
+    /// Provides the last known message id to retrieve only the messages after that one.
+    ///
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - refMessageId: if a nested thread, the message it's nested under
+    ///   - afterInteractionId: the last interaction known
+    ///   - completionHandler: the callback method
+    func retrieveMessages(
+        inThread threadId: String,
+        underMessage refMessageId: String?,
+        after afterMessageId: String,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     

@@ -432,7 +432,7 @@ extension SHServerProxy {
         for globalIdentifiers: [GlobalIdentifier]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: globalIdentifiers) { serverResult in
+        let handleServerResult = { (serverResult: Result<[any SHAssetDescriptor], Error>) in
             switch serverResult {
             case .failure(let serverError):
                 completionHandler(.failure(serverError))
@@ -448,6 +448,16 @@ extension SHServerProxy {
                 }
 #endif
                 completionHandler(.success(descriptors))
+            }
+        }
+        
+        if let globalIdentifiers {
+            self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: globalIdentifiers) {
+                handleServerResult($0)
+            }
+        } else {
+            self.remoteServer.getAssetDescriptors(since: Date.distantPast) {
+                handleServerResult($0)
             }
         }
     }
@@ -1294,6 +1304,26 @@ extension SHServerProxy {
         }
     }
     
+    public func retrieveRemoteMessages(
+        inGroup groupId: String,
+        underMessage underMessageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveMessages(
+            inGroup: groupId,
+            underMessage: underMessageId,
+            after: afterMessageId
+        ) { remoteResult in
+            switch remoteResult {
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
     public func retrieveRemoteInteractions(
         inThread threadId: String,
         underMessage messageId: String?,
@@ -1306,6 +1336,26 @@ extension SHServerProxy {
             underMessage: messageId,
             per: per,
             page: page
+        ) { remoteResult in
+            switch remoteResult {
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+            }
+        }
+    }
+    
+    public func retrieveRemoteMessages(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        after afterMessageId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveMessages(
+            inThread: threadId,
+            underMessage: messageId,
+            after: afterMessageId
         ) { remoteResult in
             switch remoteResult {
             case .success(let remoteInteractions):
