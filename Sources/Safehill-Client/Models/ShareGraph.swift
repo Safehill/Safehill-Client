@@ -446,6 +446,35 @@ public struct SHKGQuery {
         return assetsToUsers
     }
     
+    public static func assetGlobalIdentifiers(
+        amongst userIdentifiers: [UserIdentifier],
+        filterOutInProgress: Bool = true
+    ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
+        var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
+        
+        let sharedBy = try self.assetGlobalIdentifiers(sharedBy: userIdentifiers, filterOutInProgress: filterOutInProgress)
+        let sharedWith = try self.assetGlobalIdentifiers(sharedWith: userIdentifiers, filterOutInProgress: filterOutInProgress)
+        
+        for (gid, uids) in sharedWith {
+            uids.forEach({ uid in
+                if let _ = assetsToUsers[gid] {
+                    assetsToUsers[gid]!.insert(uid)
+                } else {
+                    assetsToUsers[gid] = [uid]
+                }
+            })
+        }
+        for (gid, uid) in sharedBy {
+            if let _ = assetsToUsers[gid] {
+                assetsToUsers[gid]!.insert(uid)
+            } else {
+                assetsToUsers[gid] = [uid]
+            }
+        }
+        
+        return assetsToUsers
+    }
+    
     public static func usersConnectedTo(assets globalIdentifiers: [GlobalIdentifier]) throws -> [UserIdentifier] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
