@@ -15,40 +15,6 @@ public struct SHKGQuery {
     
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
     
-    public static func isKnownUser(withIdentifier userId: UserIdentifier) throws -> Bool {
-        var result = false
-        
-        let assetIdsSharedBy = try SHKGQuery.assetGlobalIdentifiers(
-            sharedBy: [userId],
-            filterOutInProgress: false
-        )
-        for (gid, uid) in assetIdsSharedBy {
-            if let _ = UserIdToAssetGidSharedByCache[uid] {
-                UserIdToAssetGidSharedByCache[uid]!.insert(gid)
-            } else {
-                UserIdToAssetGidSharedByCache[uid] = [gid]
-            }
-            result = true
-        }
-        
-        let assetIdsSharedWith = try SHKGQuery.assetGlobalIdentifiers(
-            sharedWith: [userId],
-            filterOutInProgress: false
-        )
-        for (gid, uids) in assetIdsSharedWith {
-            for uid in uids {
-                if let _ = UserIdToAssetGidSharedWithCache[uid] {
-                    UserIdToAssetGidSharedWithCache[uid]!.insert(gid)
-                } else {
-                    UserIdToAssetGidSharedWithCache[uid] = [gid]
-                }
-            }
-            result = true
-        }
-        
-        return result
-    }
-    
     public static func areUsersKnown(withIdentifiers userIds: [UserIdentifier]) throws -> [UserIdentifier: Bool] {
         var result = [UserIdentifier: Bool]()
         
@@ -446,6 +412,14 @@ public struct SHKGQuery {
         return assetsToUsers
     }
     
+    /// Assets etiher shared by or shared with the provided users are added to the resulting map.
+    /// **TODO: Support this query with variables in the KB framework, instead of merging in memory**
+    ///
+    /// - Parameters:
+    ///   - userIdentifiers: the list of user identifiers to search in the index
+    ///   - filterOutInProgress: whether or not the "in progress" shares should be considered
+    /// - Returns: the map of global identifiers to the users involved
+    /// 
     public static func assetGlobalIdentifiers(
         amongst userIdentifiers: [UserIdentifier],
         filterOutInProgress: Bool = true
