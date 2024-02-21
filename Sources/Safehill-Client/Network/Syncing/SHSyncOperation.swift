@@ -264,24 +264,14 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
-            var condition = KBTripleCondition(value: false)
             let dispatchGroup = DispatchGroup()
             var removeRecipientErrorById = [GlobalIdentifier: Error]()
             
-            ///
-            /// Remove users from the shares
-            ///
-            for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
-                for recipientId in shareDiff.groupIdByRecipientId.keys {
-                    condition = condition.or(KBTripleCondition(
-                        subject: globalIdentifier,
-                        predicate: SHKGPredicates.sharedWith.rawValue,
-                        object: recipientId
-                    ))
-                }
-            }
             do {
-                try SHKGQuery.removeTriples(matching: condition)
+                ///
+                /// Remove users from the shares
+                ///
+                try SHKGQuery.removeSharingInformation(basedOn: diff.userIdsToRemoveToSharesOfAssetGid)
                 
                 ///
                 /// Only after the Graph is updated, remove the recipients from the DB
