@@ -239,7 +239,6 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
-        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         ///
@@ -266,7 +265,6 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         ///
         let toDecryptFromLocalStoreGids = Set(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
             .union(sharedByOthersGlobalIdentifiers)
-            .intersection(globalIdentifiersFromKnownUsers)
         
         self.decryptFromLocalStore(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
@@ -301,12 +299,10 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     $0.didCompleteDownloadCycle(with: .failure(error))
                 })
                 completionHandler(.failure(error))
-            case .success(let tuple):
-                let descriptorsByGlobalIdentifier = tuple.0
-                let globalIdentifiersFromKnownUsers = tuple.1
+            case .success(let val):
+                let descriptorsByGlobalIdentifier = val
                 self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
+                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
                 ) {
                     secondResult in
                     self.downloaderDelegates.forEach({

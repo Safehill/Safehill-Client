@@ -16,22 +16,80 @@ public struct SHKGQuery {
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
     
     public static func isKnownUser(withIdentifier userId: UserIdentifier) throws -> Bool {
-        if let assetIdsSharedBy = UserIdToAssetGidSharedByCache[userId],
-           let assetIdsSharedWith = UserIdToAssetGidSharedWithCache[userId] {
-            return assetIdsSharedBy.count + assetIdsSharedWith.count > 0
+        var result = false
+        
+        let assetIdsSharedBy = try SHKGQuery.assetGlobalIdentifiers(
+            sharedBy: [userId],
+            filterOutInProgress: false
+        )
+        for (gid, uid) in assetIdsSharedBy {
+            if let _ = UserIdToAssetGidSharedByCache[uid] {
+                UserIdToAssetGidSharedByCache[uid]!.insert(gid)
+            } else {
+                UserIdToAssetGidSharedByCache[uid] = [gid]
+            }
+            result = true
         }
         
-        let assetIdsSharedBy = try SHKGQuery.assetGlobalIdentifiers(sharedBy: [userId])
-        if assetIdsSharedBy.count > 0 {
-            return true
+        let assetIdsSharedWith = try SHKGQuery.assetGlobalIdentifiers(
+            sharedWith: [userId],
+            filterOutInProgress: false
+        )
+        for (gid, uids) in assetIdsSharedWith {
+            for uid in uids {
+                if let _ = UserIdToAssetGidSharedWithCache[uid] {
+                    UserIdToAssetGidSharedWithCache[uid]!.insert(gid)
+                } else {
+                    UserIdToAssetGidSharedWithCache[uid] = [gid]
+                }
+            }
+            result = true
         }
         
-        let assetIdsSharedWith = try SHKGQuery.assetGlobalIdentifiers(sharedWith: [userId])
-        if assetIdsSharedWith.count > 0 {
-            return true
+        return result
+    }
+    
+    public static func areUsersKnown(withIdentifiers userIds: [UserIdentifier]) throws -> [UserIdentifier: Bool] {
+        var result = [UserIdentifier: Bool]()
+        
+        let sharedBy = try SHKGQuery.assetGlobalIdentifiers(
+            sharedBy: userIds,
+            filterOutInProgress: false
+        )
+        let sharedWith = try SHKGQuery.assetGlobalIdentifiers(
+            sharedWith: userIds,
+            filterOutInProgress: false
+        )
+        
+        for (gid, uid) in sharedBy {
+            if let _ = UserIdToAssetGidSharedByCache[uid] {
+                UserIdToAssetGidSharedByCache[uid]!.insert(gid)
+            } else {
+                UserIdToAssetGidSharedByCache[uid] = [gid]
+            }
+            
+            result[uid] = true
         }
         
-        return false
+        for (gid, uids) in sharedWith {
+            for uid in uids {
+                if let _ = UserIdToAssetGidSharedWithCache[uid] {
+                    UserIdToAssetGidSharedWithCache[uid]?.insert(gid)
+                } else {
+                    UserIdToAssetGidSharedWithCache[uid] = [gid]
+                }
+                
+                result[uid] = true
+            }
+        }
+        
+        for userId in userIds {
+            if result[userId] == nil {
+                result[userId] = false
+            }
+        }
+        
+        return result
     }
     
     internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: UserIdentifier) throws {
@@ -86,12 +144,6 @@ public struct SHKGQuery {
                     try kgAsset.link(to: kgCorrespondingLocalAsset, withPredicate: SHKGPredicates.localAssetIdEquivalent.rawValue)
                 }
                 
-                if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
-                    UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
-                } else {
-                    UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
-                }
-                
                 for userId in receiverUserIds {
                     if userId == senderUserId {
                         continue
@@ -99,12 +151,6 @@ public struct SHKGQuery {
                     let kgOtherUser = graph.entity(withIdentifier: userId)
                     try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
                     log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicates.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
-                    
-                    if let _ = UserIdToAssetGidSharedWithCache[userId] {
-                        UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
-                    } else {
-                        UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
-                    }
                 }
                 
                 let allTriplesAfter = try graph.triples(matching: nil)
@@ -247,23 +293,23 @@ public struct SHKGQuery {
     }
     
     public static func assetGlobalIdentifiers(
-        sharedBy userIdentifiers: [UserIdentifier]
-    ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
+        sharedBy userIdentifiers: [UserIdentifier],
+        filterOutInProgress: Bool = true
+    ) throws -> [GlobalIdentifier: UserIdentifier] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
-        var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
+        var assetsToUser = [GlobalIdentifier: UserIdentifier]()
         var sharedByUsersCondition = KBTripleCondition(value: false)
         
         var usersIdsToSearch = Set<UserIdentifier>()
         for userId in userIdentifiers {
             if let assetIdsSharedBy = UserIdToAssetGidSharedByCache[userId] {
                 assetIdsSharedBy.forEach({
-                    if assetsToUsers[$0] == nil {
-                        assetsToUsers[$0] = [userId]
-                    } else {
-                        assetsToUsers[$0]!.insert(userId)
+                    if let existing = assetsToUser[$0], userId != existing {
+                        log.critical("found an asset marked as shared by more than one user: \([existing, userId])")
                     }
+                    assetsToUser[$0] = userId
                 })
             } else {
                 usersIdsToSearch.insert(userId)
@@ -271,7 +317,7 @@ public struct SHKGQuery {
         }
         
         guard usersIdsToSearch.count > 0 else {
-            return assetsToUsers
+            return assetsToUser
         }
         
         for userId in usersIdsToSearch {
@@ -281,13 +327,16 @@ public struct SHKGQuery {
                     predicate: SHKGPredicates.shares.rawValue,
                     object: nil
                 )
-            ).or(
-                KBTripleCondition(
-                    subject: userId,
-                    predicate: SHKGPredicates.attemptedShare.rawValue,
-                    object: nil
-                )
             )
+            if filterOutInProgress == false {
+                sharedByUsersCondition = sharedByUsersCondition.or(
+                    KBTripleCondition(
+                        subject: userId,
+                        predicate: SHKGPredicates.attemptedShare.rawValue,
+                        object: nil
+                    )
+                )
+            }
         }
         
         var triples = [KBTriple]()
@@ -303,11 +352,12 @@ public struct SHKGQuery {
         
         for triple in triples {
             let assetId = triple.object
-            if let _ = assetsToUsers[assetId] {
-                assetsToUsers[assetId]!.insert(triple.subject)
-            } else {
-                assetsToUsers[assetId] = [triple.subject]
+            if let existing = assetsToUser[assetId] {
+                if existing != triple.subject {
+                    log.critical("found an asset marked as shared by more than one user: \([existing, triple.subject])")
+                }
             }
+            assetsToUser[assetId] = triple.subject
             
             if let _ = UserIdToAssetGidSharedByCache[triple.subject] {
                 UserIdToAssetGidSharedByCache[triple.subject]!.insert(triple.object)
@@ -316,11 +366,12 @@ public struct SHKGQuery {
             }
         }
         
-        return assetsToUsers
+        return assetsToUser
     }
     
     public static func assetGlobalIdentifiers(
-        sharedWith userIdentifiers: [UserIdentifier]
+        sharedWith userIdentifiers: [UserIdentifier],
+        filterOutInProgress: Bool = true
     ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
@@ -355,6 +406,15 @@ public struct SHKGQuery {
                     object: userId
                 )
             )
+            if filterOutInProgress == false {
+                sharedWithUsersCondition = sharedWithUsersCondition.or(
+                    KBTripleCondition(
+                        subject: nil,
+                        predicate: SHKGPredicates.attemptedShare.rawValue,
+                        object: userId
+                    )
+                )
+            }
         }
         
         var triples = [KBTriple]()

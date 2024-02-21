@@ -43,7 +43,7 @@ public struct SHGenericAssetGroupInfo : SHAssetGroupInfo, Codable {
 public protocol SHDescriptorSharingInfo {
     var sharedByUserIdentifier: String { get }
     /// Maps user public identifiers to asset group identifiers
-    var sharedWithUserIdentifiersInGroup: [String: String] { get }
+    var sharedWithUserIdentifiersInGroup: [UserIdentifier: String] { get }
     var groupInfoById: [String: SHAssetGroupInfo] { get }
 }
 
@@ -58,7 +58,7 @@ public extension SHDescriptorSharingInfo {
 
 public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable {
     public let sharedByUserIdentifier: String
-    public let sharedWithUserIdentifiersInGroup: [String: String]
+    public let sharedWithUserIdentifiersInGroup: [UserIdentifier: String]
     public let groupInfoById: [String: SHAssetGroupInfo]
     
     enum CodingKeys: String, CodingKey {
