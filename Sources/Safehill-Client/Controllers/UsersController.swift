@@ -86,21 +86,17 @@ public class SHUsersController {
         }
         
         var users = [UserIdentifier: any SHServerUser]()
-        var foundUserIds = [String]()
         var missingUserIds = [String]()
         
-        for userIdentifier in userIdentifiers {
-            if foundUserIds.contains(userIdentifier) == false {
-                if let user = ServerUserCache.shared.user(with: userIdentifier) {
-                    users[userIdentifier] = user
-                    foundUserIds.append(userIdentifier)
-                } else if missingUserIds.contains(userIdentifier) == false {
-                    missingUserIds.append(userIdentifier)
-                }
+        for userIdentifier in Set(userIdentifiers) {
+            if let user = ServerUserCache.shared.user(with: userIdentifier) {
+                users[userIdentifier] = user
+            } else if missingUserIds.contains(userIdentifier) == false {
+                missingUserIds.append(userIdentifier)
             }
         }
         
-        guard missingUserIds.isEmpty == false else {
+        if missingUserIds.isEmpty {
             return users
         }
         
@@ -138,30 +134,28 @@ public class SHUsersController {
         }
         
         var users = [any SHServerUser]()
-        var foundUserIds = [String]()
-        var missingUserIds = [String]()
+        var missingUserIds = [UserIdentifier]()
         
-        for userIdentifier in userIdentifiers {
-            if foundUserIds.contains(userIdentifier) == false {
-                if let user = ServerUserCache.shared.user(with: userIdentifier) {
-                    users.append(user)
-                    foundUserIds.append(userIdentifier)
-                } else if missingUserIds.contains(userIdentifier) == false {
-                    missingUserIds.append(userIdentifier)
-                }
+        for userIdentifier in Set(userIdentifiers) {
+            if let user = ServerUserCache.shared.user(with: userIdentifier) {
+                users.append(user)
+            } else if missingUserIds.contains(userIdentifier) == false {
+                missingUserIds.append(userIdentifier)
             }
         }
         
-        guard missingUserIds.isEmpty == false else {
+        if missingUserIds.isEmpty {
             return users
         }
+        
+        users = []
         
         var error: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
         serverProxy.getUsers(
-            withIdentifiers: missingUserIds
+            withIdentifiers: userIdentifiers
         ) { result in
             switch result {
             case .success(let serverUsers):
