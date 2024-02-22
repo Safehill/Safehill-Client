@@ -123,7 +123,7 @@ final class Safehill_SerializationTests: XCTestCase {
     }
     
     func testSerializeFetchRequest() throws {
-        let sender = SHLocalUser(keychainPrefix: "")
+        let sender = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.testUser")
         let queueItems = [
             SHLocalFetchRequestQueueItem(
                 localIdentifier: "localIdentifier",

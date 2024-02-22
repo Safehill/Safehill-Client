@@ -60,79 +60,78 @@ public struct SHLocalUser: SHLocalUserProtocol {
         && lhs.publicSignatureData == rhs.publicSignatureData
     }
     
+    public static func create(keychainPrefix: String) -> SHLocalUser {
+        return SHLocalUser(
+            shUser: SHLocalCryptoUser(),
+            authToken: nil,
+            maybeEncryptionProtocolSalt: nil,
+            keychainPrefix: keychainPrefix
+        )
+    }
+    
     /// Initializes a SHLocalUser and the corresponding keychain element.
     /// Creates a key pair if none exists in the keychain with label `keysKeychainLabel`,
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
     /// - Parameter keychainPrefix:the keychain prefix
-    public init(keychainPrefix: String) {
-        // Asymmetric keys
-        self.keychainPrefix = keychainPrefix
-        
+    public static func restore(keychainPrefix: String) throws -> SHLocalUser {
         let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
         let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
-        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
         let saltKeychainLabel = SHLocalUser.saltKeychainLabel(keychainPrefix: keychainPrefix)
         
-        if let shUser = try? SHLocalCryptoUser(usingKeychainEntryWithLabel: keysKeychainLabel) {
-            self.shUser = shUser
-            
-            // Bearer token
-            do {
-                self.authToken = try SHKeychain.retrieveValue(from: authTokenLabel)
-            } catch {
-                self.authToken = nil
-            }
+        // Bearer token
+        let authToken: String?
+        if let token = try? SHKeychain.retrieveValue(from: authTokenLabel) {
+            authToken = token
         } else {
-            self.shUser = SHLocalCryptoUser()
-            self.authToken = nil
-            
-            
-            try? SHKeychain.deleteValue(account: identityTokenLabel)
-            try? SHKeychain.deleteValue(account: authTokenLabel)
+            authToken = nil
         }
         
         // Protocol SALT used for encryption
-        do {
-            if let base64Salt = try SHKeychain.retrieveValue(from: saltKeychainLabel) {
-                if let salt = Data(base64Encoded: base64Salt) {
-                    self.maybeEncryptionProtocolSalt = salt
-                } else {
-                    throw SHLocalUserError.invalidKeychainEntry
-                }
-            } else {
-                self.maybeEncryptionProtocolSalt = nil
-            }
-        } catch {
-            self.maybeEncryptionProtocolSalt = nil
+        let salt: Data?
+        if let base64Salt = try? SHKeychain.retrieveValue(from: saltKeychainLabel),
+           let s = Data(base64Encoded: base64Salt) {
+            salt = s
+        } else {
+            salt = nil
         }
+        
+        return SHLocalUser(
+            shUser: try SHLocalCryptoUser(usingKeychainEntryWithLabel: keysKeychainLabel),
+            authToken: authToken,
+            maybeEncryptionProtocolSalt: salt,
+            keychainPrefix: keychainPrefix
+        )
+    }
+    
+    private init(
+        shUser: SHLocalCryptoUser,
+        authToken: String?,
+        maybeEncryptionProtocolSalt: Data?,
+        keychainPrefix: String
+    ) {
+        self.shUser = shUser
+        self.authToken = authToken
+        self.maybeEncryptionProtocolSalt = maybeEncryptionProtocolSalt
+        self.keychainPrefix = keychainPrefix
     }
     
     public func authenticate(
         _ user: SHServerUser,
         bearerToken: String,
-        encryptionProtocolSalt: Data,
-        ssoIdentifier: String?
+        encryptionProtocolSalt: Data
     ) throws -> SHAuthenticatedLocalUser {
         
         let saltKeychainLabel = SHLocalUser.saltKeychainLabel(keychainPrefix: keychainPrefix)
         let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
-        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
         
         do {
-            if let ssoIdentifier = ssoIdentifier {
-                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenLabel)
-            }
             try SHKeychain.storeValue(bearerToken, account: authTokenLabel)
             try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         } catch {
             // Re-try after deleting items in the keychain
-            try? SHKeychain.deleteValue(account: identityTokenLabel)
-            try? SHKeychain.deleteValue(account: authTokenLabel)
-            try? SHKeychain.deleteValue(account: saltKeychainLabel)
+            try? Self.deleteAuthToken(keychainPrefix)
+            try? Self.deleteProtocolSalt(keychainPrefix)
             
-            if let ssoIdentifier = ssoIdentifier {
-                try SHKeychain.storeValue(ssoIdentifier, account: identityTokenLabel)
-            }
             try SHKeychain.storeValue(bearerToken, account: authTokenLabel)
             try SHKeychain.storeValue(encryptionProtocolSalt.base64EncodedString(), account: saltKeychainLabel)
         }

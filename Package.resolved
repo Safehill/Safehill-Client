@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Safehill/Safehill-Crypto",
       "state" : {
-        "revision" : "3899fa4a599589dfd7e0e84525c21412560069e2",
-        "version" : "1.1.17"
+        "revision" : "086ea5b220bd6350de900cc9f1c269203657da15",
+        "version" : "1.1.18"
       }
     },
     {
