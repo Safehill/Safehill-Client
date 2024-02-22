@@ -26,24 +26,12 @@ public struct SHKGQuery {
             sharedWith: userIds
         )
         
-        for (gid, uid) in sharedBy {
-            if let _ = UserIdToAssetGidSharedByCache[uid] {
-                UserIdToAssetGidSharedByCache[uid]!.insert(gid)
-            } else {
-                UserIdToAssetGidSharedByCache[uid] = [gid]
-            }
-            
+        for (_, uid) in sharedBy {
             result[uid] = true
         }
         
-        for (gid, uids) in sharedWith {
+        for (_, uids) in sharedWith {
             for uid in uids {
-                if let _ = UserIdToAssetGidSharedWithCache[uid] {
-                    UserIdToAssetGidSharedWithCache[uid]?.insert(gid)
-                } else {
-                    UserIdToAssetGidSharedWithCache[uid] = [gid]
-                }
-                
                 result[uid] = true
             }
         }
@@ -426,7 +414,11 @@ public struct SHKGQuery {
         return assetsToUsers
     }
     
-    public static func usersConnectedTo(assets globalIdentifiers: [GlobalIdentifier]) throws -> [UserIdentifier] {
+    public static func usersConnectedTo(
+        assets globalIdentifiers: [GlobalIdentifier],
+        filterOutInProgress: Bool = true
+        
+    ) throws -> [UserIdentifier] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
@@ -443,20 +435,53 @@ public struct SHKGQuery {
                 KBTripleCondition(
                     subject: nil, predicate: SHKGPredicates.shares.rawValue, object: assetId
                 )
-            ).or(
-                KBTripleCondition(
-                    subject: nil, predicate: SHKGPredicates.attemptedShare.rawValue, object: assetId
-                )
             )
+            
+            if filterOutInProgress == false {
+                sharedByCondition = sharedByCondition.or(
+                    KBTripleCondition(
+                        subject: nil, predicate: SHKGPredicates.attemptedShare.rawValue, object: assetId
+                    )
+                )
+            }
         }
         
-        var userIds = [UserIdentifier]()
+        var result = Set<UserIdentifier>()
+        
+        var triplesShares = [KBTriple]()
+        var triplesSharedWith = [KBTriple]()
         try readWriteGraphQueue.sync(flags: .barrier) {
-            userIds = try graph.triples(matching: sharedWithCondition).map({ $0.object })
-            userIds.append(contentsOf: try graph.triples(matching: sharedByCondition).map({ $0.subject }))
+            triplesShares = try graph.triples(matching: sharedByCondition)
+            triplesSharedWith = try graph.triples(matching: sharedWithCondition)
         }
         
-        return Array(Set(userIds))
+        for triple in triplesShares {
+            let userId = triple.subject
+            let assetId = triple.object
+            
+            result.insert(userId)
+            
+            if let _ = UserIdToAssetGidSharedByCache[userId] {
+                UserIdToAssetGidSharedByCache[userId]!.insert(assetId)
+            } else {
+                UserIdToAssetGidSharedByCache[userId] = [assetId]
+            }
+        }
+        
+        for triple in triplesSharedWith {
+            let userId = triple.object
+            let assetId = triple.subject
+            
+            result.insert(userId)
+            
+            if let _ = UserIdToAssetGidSharedWithCache[userId] {
+                UserIdToAssetGidSharedWithCache[userId]!.insert(assetId)
+            } else {
+                UserIdToAssetGidSharedWithCache[userId] = [assetId]
+            }
+        }
+        
+        return Array(result)
     }
     
     static internal func removeSharingInformation(
