@@ -221,11 +221,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         let descriptorsFromKnownUsers = filteredDescriptors.filter {
-            $0.sharingInfo.sharedByUserIdentifier == user.identifier
-            || (
-                knownUsers[$0.sharingInfo.sharedByUserIdentifier] != nil
-                && knownUsers[$0.sharingInfo.sharedByUserIdentifier] == true
-            )
+            knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
         }
         
         ///
@@ -348,11 +344,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         var mutableDescriptors = descriptors
-        let partitionIndex = mutableDescriptors.partition { descr in
-            return (
-                knownUsers[descr.sharingInfo.sharedByUserIdentifier] != nil
-                && knownUsers[descr.sharingInfo.sharedByUserIdentifier] == true
-            )
+        let partitionIndex = mutableDescriptors.partition {
+            knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
         }
         let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
         let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])

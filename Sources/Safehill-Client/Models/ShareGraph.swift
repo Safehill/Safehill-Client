@@ -42,6 +42,10 @@ public struct SHKGQuery {
             }
         }
         
+#if DEBUG
+        assert(result.keys.count == Set(userIds).count)
+#endif
+        
         return result
     }
     
