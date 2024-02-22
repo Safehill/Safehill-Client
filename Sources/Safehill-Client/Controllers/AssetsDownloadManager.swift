@@ -4,7 +4,7 @@ import KnowledgeBase
 
 public struct SHAssetDownloadAuthorizationResponse {
     public let descriptors: [any SHAssetDescriptor]
-    public let users: [any SHServerUser]
+    public let users: [UserIdentifier: any SHServerUser]
 }
 
 public struct SHAssetsDownloadManager {
@@ -61,7 +61,7 @@ public struct SHAssetsDownloadManager {
             guard assetGIdList.count > 0 else {
                 let response = SHAssetDownloadAuthorizationResponse(
                     descriptors: [],
-                    users: []
+                    users: [:]
                 )
                 completionHandler(.success(response))
                 return
@@ -81,10 +81,10 @@ public struct SHAssetsDownloadManager {
             
             self.startAuthorizedDownload(of: descriptors) { result in
                 switch result {
-                case .success(let users):
+                case .success(let usersDict):
                     let response = SHAssetDownloadAuthorizationResponse(
                         descriptors: descriptors,
-                        users: users
+                        users: usersDict
                     )
                     completionHandler(.success(response))
                 case .failure(let error):
@@ -148,14 +148,18 @@ public struct SHAssetsDownloadManager {
         }
     }
     
-    func startAuthorizedDownload(of descriptors: [any SHAssetDescriptor],
-                                 completionHandler: @escaping (Result<[SHServerUser], Error>) -> Void) {
-        var users = [SHServerUser]()
+    func startAuthorizedDownload(
+        of descriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
+    ) {
+        var usersDict = [UserIdentifier: any SHServerUser]()
         var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
         userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
-            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            usersDict = try SHUsersController(localUser: self.user).getUsers(
+                withIdentifiers: Array(userIdentifiers)
+            )
         } catch {
             log.error("Unable to fetch users mentioned in asset descriptors: \(error.localizedDescription)")
             completionHandler(.failure(error))
@@ -165,7 +169,7 @@ public struct SHAssetsDownloadManager {
         self.startDownload(of: descriptors) { result in
             switch result {
             case .success():
-                completionHandler(.success(users))
+                completionHandler(.success(usersDict))
             case .failure(let failure):
                 completionHandler(.failure(failure))
             }

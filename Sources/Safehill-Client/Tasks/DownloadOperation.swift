@@ -174,6 +174,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return descriptors
     }
     
+    internal func getUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) throws -> [UserIdentifier: any SHServerUser] {
+        try SHUsersController(localUser: self.user).getUsers(withIdentifiers: userIdentifiers)
+    }
+    
     ///
     /// Fetch descriptors from server (remote or local, depending on whether it's running as part of the
     /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
@@ -183,10 +189,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     /// 1. the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
     /// 2. the globalIdentifiers whose sender is either self or is a known, authorized user. We return this information here so we have to query the graph once.
     ///
-    /// - Parameter completionHandler: the callback
+    /// - Parameters:
+    ///   - descriptors: the descriptors to process
+    ///   - completionHandler: the callback
+    ///
     internal func processDescriptors(
         _ descriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping (Result<([GlobalIdentifier: any SHAssetDescriptor], [GlobalIdentifier]), Error>) -> Void
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
         /// Filter out the ones:
@@ -202,34 +211,58 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         guard filteredDescriptors.count > 0 else {
             self.downloaderDelegates.forEach({
-                $0.didReceiveAssetDescriptors([], referencing: [])
+                $0.didReceiveAssetDescriptors([], referencing: [:])
             })
-            completionHandler(.success(([:], [])))
+            completionHandler(.success([:]))
             return
         }
         
         /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
         /// filter out the ones whose sender is unknown.
         /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-        let descriptorsFromKnownUsers = filteredDescriptors.filter {
-            $0.sharingInfo.sharedByUserIdentifier == user.identifier
-            || ((try? SHKGQuery.isKnownUser(withIdentifier: $0.sharingInfo.sharedByUserIdentifier)) ?? false)
+        let senderIds = filteredDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+        let knownUsers: [UserIdentifier: Bool]
+        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+        catch {
+            log.error("failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var descriptorsFromKnownUsers = filteredDescriptors.filter {
+            knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
         }
         
         ///
         /// Fetch from server users information (`SHServerUser` objects)
         /// for all user identifiers found in all descriptors shared by OTHER known users
         ///
-        var users = [SHServerUser]()
+        var usersDict = [UserIdentifier: any SHServerUser]()
         var userIdentifiers = Set(descriptorsFromKnownUsers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
         userIdentifiers.formUnion(Set(descriptorsFromKnownUsers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
-            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            usersDict = try self.getUsers(withIdentifiers: Array(userIdentifiers))
         } catch {
             self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
             completionHandler(.failure(error))
             return
+        }
+        
+        ///
+        /// Filter out the descriptor that reference any user that could not be retrieved.
+        /// For those, we expect the `SHDownloadOperation` to process them
+        ///
+        descriptorsFromKnownUsers = descriptorsFromKnownUsers.filter { desc in
+            if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
+                return false
+            }
+            for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                if usersDict[sharedWithUserId] == nil {
+                    return false
+                }
+            }
+            return true
         }
         
         ///
@@ -238,7 +271,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         self.downloaderDelegates.forEach({
             $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                          referencing: users)
+                                          referencing: usersDict)
         })
         
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
@@ -251,10 +284,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 break
             }
         }
-        completionHandler(.success((
-            descriptorsByGlobalIdentifier,
-            descriptorsFromKnownUsers.map({ $0.globalIdentifier })
-        )))
+        completionHandler(.success(descriptorsByGlobalIdentifier))
     }
     
     ///
@@ -322,7 +352,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     /// - Parameter completionHandler: the callback method
     private func downloadOrRequestAuthorization(
         forAssetsIn descriptors: [any SHAssetDescriptor],
-        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         guard descriptors.count > 0 else {
@@ -330,9 +359,18 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
+        let senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+        let knownUsers: [UserIdentifier: Bool]
+        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+        catch {
+            log.error("failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
         var mutableDescriptors = descriptors
-        let partitionIndex = mutableDescriptors.partition { descr in
-            return globalIdentifiersFromKnownUsers.contains(descr.globalIdentifier)
+        let partitionIndex = mutableDescriptors.partition {
+            knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
         }
         let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
         let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
@@ -360,12 +398,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
             }
             
-            var users = [SHServerUser]()
+            var usersDict = [UserIdentifier: any SHServerUser]()
             var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
             userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
             
             do {
-                users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+                usersDict = try SHUsersController(localUser: self.user).getUsers(
+                    withIdentifiers: Array(userIdentifiers)
+                )
             } catch {
                 self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
                 completionHandler(.failure(error))
@@ -375,7 +415,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             self.downloaderDelegates.forEach({
                 $0.didReceiveAuthorizationRequest(
                     for: unauthorizedDownloadDescriptors,
-                    referencing: users
+                    referencing: usersDict
                 )
             })
         }
@@ -396,7 +436,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     internal func processAssetsInDescriptors(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         ///
@@ -443,8 +482,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                     nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: nonLocalPhotoLibraryGlobalIdentifiers,
                     sharedBySelfGlobalIdentifiers: sharedBySelfGlobalIdentifiers,
-                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers,
-                    globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
+                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
                     self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to process \(descriptorsByGlobalIdentifier.count) asset descriptors")
@@ -647,7 +685,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
-        globalIdentifiersFromKnownUsers: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         
@@ -732,8 +769,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             group.enter()
             self.downloadOrRequestAuthorization(
-                forAssetsIn: globalIdentifiersNotOnLocalSharedByOthers.compactMap({ descriptorsByGlobalIdentifier[$0] }),
-                globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
+                forAssetsIn: globalIdentifiersNotOnLocalSharedByOthers.compactMap({ descriptorsByGlobalIdentifier[$0] })
             ) { result in
                 if case .failure(let failure) = result {
                     errors.append(failure)
@@ -913,7 +949,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             let descriptors: [any SHAssetDescriptor]
             var descriptorsByGlobalIdentifier = [GlobalIdentifier: any SHAssetDescriptor]()
-            var globalIdentifiersFromKnownUsers = [GlobalIdentifier]()
             var error: Error? = nil
             var dispatchResult: DispatchTimeoutResult? = nil
             
@@ -938,9 +973,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 case .failure(let err):
                     self.log.error("failed to download descriptors: \(err.localizedDescription)")
                     error = err
-                case .success(let tuple):
-                    descriptorsByGlobalIdentifier = tuple.0
-                    globalIdentifiersFromKnownUsers = tuple.1
+                case .success(let val):
+                    descriptorsByGlobalIdentifier = val
                 }
                 group.leave()
                 
@@ -976,8 +1010,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             ///
             group.enter()
             self.processAssetsInDescriptors(
-                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                globalIdentifiersFromKnownUsers: globalIdentifiersFromKnownUsers
+                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
             ) { descAssetResult in
                 switch descAssetResult {
                 case .failure(let err):

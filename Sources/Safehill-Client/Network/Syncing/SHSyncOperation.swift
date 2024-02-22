@@ -40,7 +40,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     ) {
         var localDescriptors = [any SHAssetDescriptor]()
         var localError: Error? = nil
-        let remoteUsersById: [UserIdentifier: SHServerUser]
+        let remoteUsersById: [UserIdentifier: any SHServerUser]
         var dispatchResult: DispatchTimeoutResult? = nil
         
         ///
@@ -93,16 +93,18 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         do {
             remoteUsersById = try SHUsersController(localUser: self.user).getUsers(
-                withIdentifiers: userIdsInRemoteDescriptors)
-                .reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
-                    var result = partialResult
-                    result[serverUser.identifier] = serverUser
-                    return result
-                }
+                withIdentifiers: userIdsInRemoteDescriptors
+            )
         } catch {
             completionHandler(.failure(error))
             return
         }
+        
+        ///
+        /// Don't consider users that can't be retrieved by the `SHUserController`.
+        /// This is just an extra measure on the client in case the server returns users that are deleted or deactivated.
+        ///
+        userIdsInRemoteDescriptorsSet = userIdsInRemoteDescriptorsSet.intersection(remoteUsersById.keys)
         
         ///
         /// Remove all users that don't exist on the server from the local server and the graph
@@ -128,7 +130,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// Get all the asset identifiers and user identifiers mentioned in the remote descriptors
         ///
         let assetIdToUserIds = remoteDescriptors
-            .reduce([GlobalIdentifier: [SHServerUser]]()) { partialResult, descriptor in
+            .reduce([GlobalIdentifier: [any SHServerUser]]()) { partialResult, descriptor in
                 var result = partialResult
                 var userIdList = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
                 userIdList.append(descriptor.sharingInfo.sharedByUserIdentifier)
@@ -264,24 +266,14 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
-            var condition = KBTripleCondition(value: false)
             let dispatchGroup = DispatchGroup()
             var removeRecipientErrorById = [GlobalIdentifier: Error]()
             
-            ///
-            /// Remove users from the shares
-            ///
-            for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
-                for recipientId in shareDiff.groupIdByRecipientId.keys {
-                    condition = condition.or(KBTripleCondition(
-                        subject: globalIdentifier,
-                        predicate: SHKGPredicates.sharedWith.rawValue,
-                        object: recipientId
-                    ))
-                }
-            }
             do {
-                try SHKGQuery.removeTriples(matching: condition)
+                ///
+                /// Remove users from the shares
+                ///
+                try SHKGQuery.removeSharingInformation(basedOn: diff.userIdsToRemoveToSharesOfAssetGid)
                 
                 ///
                 /// Only after the Graph is updated, remove the recipients from the DB

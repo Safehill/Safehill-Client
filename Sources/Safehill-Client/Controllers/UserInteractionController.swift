@@ -333,13 +333,8 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 do {
                     let usersController = SHUsersController(localUser: self.user)
                     let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
-                    let usersDict: [UserIdentifier: SHServerUser] = try usersController
+                    let usersDict: [UserIdentifier: any SHServerUser] = try usersController
                         .getUsers(withIdentifiers: userIds)
-                        .reduce([:], { partialResult, user in
-                            var result = partialResult
-                            result[user.identifier] = user
-                            return result
-                        })
                     
                     reactions = interactionsGroup.reactions.compactMap({
                         reaction in
@@ -590,16 +585,12 @@ extension SHUserInteractionController {
             signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
         )
         
-        let usersWithMessages = try SHUsersController(localUser: self.user).getUsers(
+        let usersWithMessagesKeyedById = try SHUsersController(localUser: self.user).getUsers(
             withIdentifiers: encryptedMessages.map({ $0.senderUserIdentifier! })
-        ).reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
-            var result = partialResult
-            result[serverUser.identifier] = serverUser
-            return result
-        }
+        )
         
         for encryptedMessage in encryptedMessages {
-            guard let sender = usersWithMessages[encryptedMessage.senderUserIdentifier!] else {
+            guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderUserIdentifier!] else {
                 log.warning("couldn't find user with identifier \(encryptedMessage.senderUserIdentifier!)")
                 continue
             }
