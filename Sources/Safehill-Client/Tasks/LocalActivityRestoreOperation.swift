@@ -61,6 +61,12 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         return descriptors
     }
     
+    internal override func getUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) throws -> [UserIdentifier: any SHServerUser] {
+        try SHUsersController(localUser: self.user).getCachedUsers(withIdentifiers: userIdentifiers)
+    }
+    
     ///
     /// For all the descriptors whose originator user is `self.user`, notify the restoration delegate
     /// about all groups that need to be restored along with the queue item identifiers for each `groupId`.

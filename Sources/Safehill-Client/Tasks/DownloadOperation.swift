@@ -174,6 +174,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         return descriptors
     }
     
+    internal func getUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) throws -> [UserIdentifier: any SHServerUser] {
+        try SHUsersController(localUser: self.user).getUsers(withIdentifiers: userIdentifiers)
+    }
+    
     ///
     /// Fetch descriptors from server (remote or local, depending on whether it's running as part of the
     /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
@@ -183,7 +189,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     /// 1. the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
     /// 2. the globalIdentifiers whose sender is either self or is a known, authorized user. We return this information here so we have to query the graph once.
     ///
-    /// - Parameter completionHandler: the callback
+    /// - Parameters:
+    ///   - descriptors: the descriptors to process
+    ///   - completionHandler: the callback
+    ///
     internal func processDescriptors(
         _ descriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
@@ -220,7 +229,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        let descriptorsFromKnownUsers = filteredDescriptors.filter {
+        var descriptorsFromKnownUsers = filteredDescriptors.filter {
             knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
         }
         
@@ -233,11 +242,27 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         userIdentifiers.formUnion(Set(descriptorsFromKnownUsers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
-            usersDict = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            usersDict = try self.getUsers(withIdentifiers: Array(userIdentifiers))
         } catch {
             self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
             completionHandler(.failure(error))
             return
+        }
+        
+        ///
+        /// Filter out the descriptor that reference any user that could not be retrieved.
+        /// For those, we expect the `SHDownloadOperation` to process them
+        ///
+        descriptorsFromKnownUsers = descriptorsFromKnownUsers.filter { desc in
+            if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
+                return false
+            }
+            for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                if usersDict[sharedWithUserId] == nil {
+                    return false
+                }
+            }
+            return true
         }
         
         ///
