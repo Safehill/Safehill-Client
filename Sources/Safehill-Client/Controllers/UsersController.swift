@@ -86,7 +86,7 @@ public class SHUsersController {
         }
         
         var users = [UserIdentifier: any SHServerUser]()
-        var missingUserIds = [String]()
+        var missingUserIds = [UserIdentifier]()
         
         for userIdentifier in Set(userIdentifiers) {
             if let user = ServerUserCache.shared.user(with: userIdentifier) {
@@ -127,18 +127,20 @@ public class SHUsersController {
     ///
     /// - Parameter userIdentifiers: the user identifiers to fetch
     /// - Returns: the users requested or throws an error
-    public func getUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws -> [SHServerUser] {
+    public func getUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) throws -> [UserIdentifier: any SHServerUser] {
         
         guard userIdentifiers.count > 0 else {
-            return []
+            return [:]
         }
         
-        var users = [any SHServerUser]()
+        var users = [UserIdentifier: any SHServerUser]()
         var missingUserIds = [UserIdentifier]()
         
         for userIdentifier in Set(userIdentifiers) {
             if let user = ServerUserCache.shared.user(with: userIdentifier) {
-                users.append(user)
+                users[userIdentifier] = user
             } else if missingUserIds.contains(userIdentifier) == false {
                 missingUserIds.append(userIdentifier)
             }
@@ -148,7 +150,7 @@ public class SHUsersController {
             return users
         }
         
-        users = []
+        users = [:]
         
         var error: Error? = nil
         let group = DispatchGroup()
@@ -159,7 +161,9 @@ public class SHUsersController {
         ) { result in
             switch result {
             case .success(let serverUsers):
-                users = serverUsers
+                for serverUser in serverUsers {
+                    users[serverUser.identifier] = serverUser
+                }
             case .failure(let err):
                 error = err
             }
@@ -174,7 +178,7 @@ public class SHUsersController {
             throw error!
         }
         
-        ServerUserCache.shared.cache(users: users)
+        ServerUserCache.shared.cache(users: Array(users.values))
         
         return users
     }

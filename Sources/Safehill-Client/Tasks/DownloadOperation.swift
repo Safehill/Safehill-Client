@@ -202,7 +202,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         guard filteredDescriptors.count > 0 else {
             self.downloaderDelegates.forEach({
-                $0.didReceiveAssetDescriptors([], referencing: [])
+                $0.didReceiveAssetDescriptors([], referencing: [:])
             })
             completionHandler(.success([:]))
             return
@@ -228,12 +228,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// Fetch from server users information (`SHServerUser` objects)
         /// for all user identifiers found in all descriptors shared by OTHER known users
         ///
-        var users = [SHServerUser]()
+        var usersDict = [UserIdentifier: any SHServerUser]()
         var userIdentifiers = Set(descriptorsFromKnownUsers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
         userIdentifiers.formUnion(Set(descriptorsFromKnownUsers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
         
         do {
-            users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+            usersDict = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
         } catch {
             self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
             completionHandler(.failure(error))
@@ -246,7 +246,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         ///
         self.downloaderDelegates.forEach({
             $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                          referencing: users)
+                                          referencing: usersDict)
         })
         
         var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
@@ -373,12 +373,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 }
             }
             
-            var users = [SHServerUser]()
+            var usersDict = [UserIdentifier: any SHServerUser]()
             var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
             userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
             
             do {
-                users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: Array(userIdentifiers))
+                usersDict = try SHUsersController(localUser: self.user).getUsers(
+                    withIdentifiers: Array(userIdentifiers)
+                )
             } catch {
                 self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
                 completionHandler(.failure(error))
@@ -388,7 +390,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             self.downloaderDelegates.forEach({
                 $0.didReceiveAuthorizationRequest(
                     for: unauthorizedDownloadDescriptors,
-                    referencing: users
+                    referencing: usersDict
                 )
             })
         }

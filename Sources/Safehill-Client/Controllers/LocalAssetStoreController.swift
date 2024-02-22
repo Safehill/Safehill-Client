@@ -147,11 +147,11 @@ public struct SHLocalAssetStoreController {
         if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
             sender = self.user
         } else {
-            let users = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier])
-            guard users.count == 1, let serverUser = users.first,
+            let usersDict = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier])
+            guard usersDict.count == 1, let serverUser = usersDict.values.first,
                   serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
             else {
-                throw SHBackgroundOperationError.unexpectedData(users)
+                throw SHBackgroundOperationError.unexpectedData(usersDict)
             }
             sender = serverUser
         }
