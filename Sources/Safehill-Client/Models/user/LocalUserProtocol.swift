@@ -9,11 +9,10 @@ public protocol SHLocalUserProtocol : SHServerUser {
     var keychainPrefix: String { get }
     
     static func authKeychainLabel(keychainPrefix: String) -> String
-    static func identityTokenKeychainLabel(keychainPrefix: String) -> String
     static func authTokenKeychainLabel(keychainPrefix: String) -> String
     
-    func deauthenticate() throws -> SHLocalUser
-    func destroy() throws -> SHLocalUser
+    func deauthenticate() throws
+    func destroy() throws
     
     func createShareablePayload(
         from data: Data,
@@ -35,32 +34,47 @@ extension SHLocalUserProtocol {
     public static func authKeychainLabel(keychainPrefix: String) -> String {
         "\(keychainPrefix).auth"
     }
-    public static func identityTokenKeychainLabel(keychainPrefix: String) -> String {
-        "\(authKeychainLabel(keychainPrefix: keychainPrefix)).identityToken"
-    }
     public static func authTokenKeychainLabel(keychainPrefix: String) -> String {
         "\(authKeychainLabel(keychainPrefix: keychainPrefix)).token"
     }
     
-    public func deauthenticate() throws -> SHLocalUser {
+    internal static func deleteAuthToken(
+        _ keychainPrefix: String
+    ) throws {
         let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
-        let identityTokenLabel = SHLocalUser.identityTokenKeychainLabel(keychainPrefix: keychainPrefix)
         
-        guard (try? SHKeychain.deleteValue(account: identityTokenLabel)) != nil,
-              (try? SHKeychain.deleteValue(account: authTokenLabel)) != nil
-        else {
-            log.fault("auth and identity token could not be removed from the keychain")
+        do {
+            try SHKeychain.deleteValue(account: authTokenLabel)
+        } catch {
+            log.fault("auth token could not be removed from the keychain")
             throw SHLocalUserError.failedToRemoveKeychainEntry
         }
-        
-        return SHLocalUser(keychainPrefix: self.keychainPrefix)
     }
     
-    public func destroy() throws -> SHLocalUser {
-        let _ = try self.deauthenticate()
+    internal static func deleteProtocolSalt(
+        _ keychainPrefix: String
+    ) throws {
+        /// Delete the protocol salt
+        let saltKeychainLabel = SHLocalUser.saltKeychainLabel(keychainPrefix: keychainPrefix)
+        try? SHKeychain.deleteValue(account: saltKeychainLabel)
+    }
+    
+    internal static func deleteKeys(
+        _ keychainPrefix: String
+    ) throws {
+        /// Delete the keys
         let keysKeychainLabel = Self.keysKeychainLabel(keychainPrefix: keychainPrefix)
-        try self.shUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
-        return SHLocalUser(keychainPrefix: self.keychainPrefix)
+        try SHLocalCryptoUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
+    }
+    
+    public func deauthenticate() throws {
+        try Self.deleteAuthToken(self.keychainPrefix)
+    }
+    
+    public func destroy() throws {
+        try Self.deleteAuthToken(self.keychainPrefix)
+        try Self.deleteProtocolSalt(self.keychainPrefix)
+        try Self.deleteKeys(self.keychainPrefix)
     }
 }
 

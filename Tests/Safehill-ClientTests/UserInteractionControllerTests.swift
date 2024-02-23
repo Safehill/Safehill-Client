@@ -213,22 +213,28 @@ struct SHMockServerProxy: SHServerProxyProtocol {
 
 final class Safehill_UserInteractionControllerTests: XCTestCase {
     
-    let myUser = SHLocalUser(keychainPrefix: "")
+    let testUser = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.testUser")
     
     override func setUpWithError() throws {
         let _ = try SHDBManager.sharedInstance.userStore?.removeAll()
         let _ = try SHDBManager.sharedInstance.assetStore?.removeAll()
         let _ = try SHDBManager.sharedInstance.reactionStore?.removeAll()
         let _ = try SHDBManager.sharedInstance.messageQueue?.removeAll()
+        
+        for keychainPrefix in ["com.gf.safehill.client.testUser", "com.gf.safehill.client.recipient1"] {
+            try? SHLocalUser.deleteKeys(keychainPrefix)
+            try? SHLocalUser.deleteProtocolSalt(keychainPrefix)
+            try? SHLocalUser.deleteAuthToken(keychainPrefix)
+        }
     }
     
     func testKeyStability() throws {
         ServerUserCache.shared.cache(
             users: [
-                SHRemoteUser(identifier: myUser.identifier,
-                             name: "myUser",
-                             publicKeyData: myUser.publicKeyData,
-                             publicSignatureData: myUser.publicSignatureData)
+                SHRemoteUser(identifier: self.testUser.identifier,
+                             name: "testUser",
+                             publicKeyData: self.testUser.publicKeyData,
+                             publicSignatureData: self.testUser.publicSignatureData)
             ]
         )
         
@@ -244,11 +250,11 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             ]
         )
         
-        let serverProxy = SHMockServerProxy(user: myUser)
+        let serverProxy = SHMockServerProxy(user: self.testUser)
         
         let authenticatedUser = SHAuthenticatedLocalUser(
-            localUser: myUser, 
-            name: "myUser",
+            localUser: self.testUser,
+            name: "testUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -263,10 +269,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             groupId: groupId,
             with: [
                 SHRemoteUser(
-                    identifier: myUser.identifier,
-                    name: "myUser",
-                    publicKeyData: myUser.publicKeyData,
-                    publicSignatureData: myUser.publicSignatureData
+                    identifier: self.testUser.identifier,
+                    name: "testUser",
+                    publicKeyData: self.testUser.publicKeyData,
+                    publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -304,10 +310,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             groupId: groupId,
             with: [
                 SHRemoteUser(
-                    identifier: myUser.identifier,
-                    name: "myUser",
-                    publicKeyData: myUser.publicKeyData,
-                    publicSignatureData: myUser.publicSignatureData
+                    identifier: self.testUser.identifier,
+                    name: "testUser",
+                    publicKeyData: self.testUser.publicKeyData,
+                    publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -350,10 +356,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
     func testSendMessageE2EEInGroup() throws {
         ServerUserCache.shared.cache(
             users: [
-                SHRemoteUser(identifier: myUser.identifier,
-                             name: "myUser",
-                             publicKeyData: myUser.publicKeyData,
-                             publicSignatureData: myUser.publicSignatureData)
+                SHRemoteUser(identifier: self.testUser.identifier,
+                             name: "testUser",
+                             publicKeyData: self.testUser.publicKeyData,
+                             publicSignatureData: self.testUser.publicSignatureData)
                 ]
             )
         
@@ -369,11 +375,11 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 ]
             )
         
-        let serverProxy = SHMockServerProxy(user: myUser)
+        let serverProxy = SHMockServerProxy(user: self.testUser)
         
         let authenticatedUser = SHAuthenticatedLocalUser(
-            localUser: myUser, 
-            name: "myUser",
+            localUser: self.testUser,
+            name: "testUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -388,10 +394,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             groupId: groupId,
             with: [
                 SHRemoteUser(
-                    identifier: myUser.identifier,
-                    name: "myUser",
-                    publicKeyData: myUser.publicKeyData,
-                    publicSignatureData: myUser.publicSignatureData
+                    identifier: self.testUser.identifier,
+                    name: "testUser",
+                    publicKeyData: self.testUser.publicKeyData,
+                    publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -448,7 +454,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 }
                 
                 XCTAssertNotNil(message.interactionId)
-                XCTAssertEqual(message.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(message.sender.identifier, self.testUser.identifier)
                 XCTAssertEqual(message.inReplyToAssetGlobalIdentifier, nil)
                 XCTAssertEqual(message.inReplyToInteractionId, nil)
                 XCTAssertEqual(message.message, messageText)
@@ -462,14 +468,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
     
     func testSendMessageE2EEInThread() throws {
         
-        /// Cache `myUser` in the `ServerUserCache`
+        /// Cache `testUser` in the `ServerUserCache`
         
         ServerUserCache.shared.cache(
             users: [
-                SHRemoteUser(identifier: myUser.identifier,
-                             name: "myUser",
-                             publicKeyData: myUser.publicKeyData,
-                             publicSignatureData: myUser.publicSignatureData)
+                SHRemoteUser(identifier: self.testUser.identifier,
+                             name: "testUser",
+                             publicKeyData: self.testUser.publicKeyData,
+                             publicSignatureData: self.testUser.publicSignatureData)
                 ]
             )
         
@@ -477,7 +483,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         /// Create the other user `recipient1` and cache it
         
-        let recipient1 = SHLocalUser(keychainPrefix: "other")
+        let recipient1 = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.recipient1")
         
         ServerUserCache.shared.cache(
             users: [
@@ -488,26 +494,26 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 ]
             )
         
-        XCTAssertEqual(ServerUserCache.shared.user(with: myUser.identifier)?.publicSignatureData,
-                       myUser.publicSignatureData)
+        XCTAssertEqual(ServerUserCache.shared.user(with: self.testUser.identifier)?.publicSignatureData,
+                       self.testUser.publicSignatureData)
         XCTAssertEqual(ServerUserCache.shared.user(with: recipient1.identifier)?.publicSignatureData,
                        recipient1.publicSignatureData)
         
-        /// Create the thread in the mock server for `myUser`, with no encryption details for now
+        /// Create the thread in the mock server for `testUser`, with no encryption details for now
         
         let serverThreadDetails = [
             MockThreadDetails(
                 threadId: threadId,
                 name: nil,
-                userIds: [myUser.identifier, recipient1.identifier],
+                userIds: [self.testUser.identifier, recipient1.identifier],
                 encryptionDetails: []
             )
         ]
-        let serverProxy = SHMockServerProxy(user: myUser, threads: serverThreadDetails)
+        let serverProxy = SHMockServerProxy(user: self.testUser, threads: serverThreadDetails)
         
         let authenticatedUser1 = SHAuthenticatedLocalUser(
-            localUser: myUser,
-            name: "myUser",
+            localUser: self.testUser,
+            name: "testUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -517,17 +523,17 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             serverProxy: serverProxy
         )
         
-        /// Ask the mock server for `myUser` to create a new thread with `recipient1`
+        /// Ask the mock server for `testUser` to create a new thread with `recipient1`
         /// This will set up the encryption details in the mock server for the thread for both users
         
         let expectation1 = XCTestExpectation(description: "initialize the thread")
         controller1.setupThread(
             with: [
                 SHRemoteUser(
-                    identifier: myUser.identifier,
-                    name: "myUser",
-                    publicKeyData: myUser.publicKeyData,
-                    publicSignatureData: myUser.publicSignatureData
+                    identifier: self.testUser.identifier,
+                    name: "testUser",
+                    publicKeyData: self.testUser.publicKeyData,
+                    publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -546,7 +552,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         wait(for: [expectation1], timeout: 5.0)
         
-        /// Ensure the encryption details for `myUser` are now present in the local server
+        /// Ensure the encryption details for `testUser` are now present in the local server
         
         guard let mockServerThread = serverProxy.state.threads?.first(where: { $0.threadId == threadId }) else {
             XCTFail() ; return
@@ -564,20 +570,20 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::membersPublicIdentifiers"] as? [String])
         XCTAssertEqual((kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::membersPublicIdentifiers"] as! [String]).count, 2)
         
-        guard let mockServerMyUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == myUser.identifier })
+        guard let mockServerTestUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == self.testUser.identifier })
         else {
             XCTFail() ; return
         }
         
-        /// Ensure they match the encryption details for `myUser`
+        /// Ensure they match the encryption details for `testUser`
         
-        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey"] as? String, mockServerMyUserEncryptionDetails.ephemeralPublicKey)
-        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature"] as? String, mockServerMyUserEncryptionDetails.secretPublicSignature)
-        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature"] as? String, mockServerMyUserEncryptionDetails.senderPublicSignature)
-        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret"] as? String, mockServerMyUserEncryptionDetails.encryptedSecret)
+        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey"] as? String, mockServerTestUserEncryptionDetails.ephemeralPublicKey)
+        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature"] as? String, mockServerTestUserEncryptionDetails.secretPublicSignature)
+        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature"] as? String, mockServerTestUserEncryptionDetails.senderPublicSignature)
+        XCTAssertEqual(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret"] as? String, mockServerTestUserEncryptionDetails.encryptedSecret)
         
         ///
-        /// Send a message from `myUser` to `recipient1`
+        /// Send a message from `testUser` to `recipient1`
         ///
         
         let messageText = "This is my first message"
@@ -596,7 +602,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         wait(for: [expectation2], timeout: 5.0)
         
         ///
-        /// Ensure that message can be read from `myUser`
+        /// Ensure that message can be read from `testUser`
         ///
         
         let expectation3 = XCTestExpectation(description: "retrieve thread interactions")
@@ -616,7 +622,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 }
                 
                 XCTAssertNotNil(message.interactionId)
-                XCTAssertEqual(message.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(message.sender.identifier, self.testUser.identifier)
                 XCTAssertEqual(message.inReplyToAssetGlobalIdentifier, nil)
                 XCTAssertEqual(message.inReplyToInteractionId, nil)
                 XCTAssertEqual(message.message, messageText)
@@ -629,7 +635,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         ///
         /// Ensure that message can be read from `recipient1`
         /// Because in testing the 2 users share a localServer with a local database, we have to update the KVS with the encryption details for `recipient1` first.
-        /// At this point in time, they are stored for `myUser`
+        /// At this point in time, they are stored for `testUser`
         ///
         
         guard let mockServerRecipient1EncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == recipient1.identifier })
@@ -637,14 +643,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             XCTFail() ; return
         }
         
-        XCTAssertNotEqual(mockServerRecipient1EncryptionDetails.ephemeralPublicKey, mockServerMyUserEncryptionDetails.ephemeralPublicKey)
-        XCTAssertNotEqual(mockServerRecipient1EncryptionDetails.encryptedSecret, mockServerMyUserEncryptionDetails.encryptedSecret)
-        XCTAssertNotEqual(mockServerRecipient1EncryptionDetails.secretPublicSignature, mockServerMyUserEncryptionDetails.secretPublicSignature)
+        XCTAssertNotEqual(mockServerRecipient1EncryptionDetails.ephemeralPublicKey, mockServerTestUserEncryptionDetails.ephemeralPublicKey)
+        XCTAssertNotEqual(mockServerRecipient1EncryptionDetails.encryptedSecret, mockServerTestUserEncryptionDetails.encryptedSecret)
+        XCTAssertNotEqual(mockServerRecipient1EncryptionDetails.secretPublicSignature, mockServerTestUserEncryptionDetails.secretPublicSignature)
         
         /// 
         /// Ensure sender signature is stable (the signature of the sender all the encryption details for all users were created by)
         ///
-        XCTAssertEqual(mockServerRecipient1EncryptionDetails.senderPublicSignature, mockServerMyUserEncryptionDetails.senderPublicSignature)
+        XCTAssertEqual(mockServerRecipient1EncryptionDetails.senderPublicSignature, mockServerTestUserEncryptionDetails.senderPublicSignature)
         
         let writeBatch = userStore.writeBatch()
         writeBatch.set(value: mockServerRecipient1EncryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
@@ -684,7 +690,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 }
                 
                 XCTAssertNotNil(message.interactionId)
-                XCTAssertEqual(message.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(message.sender.identifier, self.testUser.identifier)
                 XCTAssertEqual(message.inReplyToAssetGlobalIdentifier, nil)
                 XCTAssertEqual(message.inReplyToInteractionId, nil)
                 XCTAssertEqual(message.message, messageText)
@@ -695,7 +701,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         wait(for: [expectation4], timeout: 5.0)
         
         ///
-        /// Now, send a message response from `recipient1` back to `myUser`
+        /// Now, send a message response from `recipient1` back to `testUser`
         ///
         
         let messageReplyText = "This is the reply to your first message"
@@ -731,7 +737,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 }
                 
                 XCTAssertNotNil(lastMessage.interactionId)
-                XCTAssertEqual(lastMessage.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(lastMessage.sender.identifier, self.testUser.identifier)
                 XCTAssertEqual(lastMessage.inReplyToAssetGlobalIdentifier, nil)
                 XCTAssertEqual(lastMessage.inReplyToInteractionId, nil)
                 XCTAssertEqual(lastMessage.message, messageText)
@@ -797,7 +803,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 }
                 
                 XCTAssertNotNil(lastMessage.interactionId)
-                XCTAssertEqual(lastMessage.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(lastMessage.sender.identifier, self.testUser.identifier)
                 XCTAssertEqual(lastMessage.inReplyToAssetGlobalIdentifier, nil)
                 XCTAssertEqual(lastMessage.inReplyToInteractionId, nil)
                 XCTAssertEqual(lastMessage.message, messageText)
@@ -819,14 +825,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         wait(for: [expectation7, expectation8, expectation9], timeout: 5.0)
 //        
-        let expectation10 = XCTestExpectation(description: "retrieve interactions from myUser")
+        let expectation10 = XCTestExpectation(description: "retrieve interactions from testUser")
         
-        let writeBatchMyUser = userStore.writeBatch()
-        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
-        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.encryptedSecret, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret")
-        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.secretPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature")
-        writeBatchMyUser.set(value: mockServerMyUserEncryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature")
-        try writeBatchMyUser.write()
+        let writeBatchTestUser = userStore.writeBatch()
+        writeBatchTestUser.set(value: mockServerTestUserEncryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey")
+        writeBatchTestUser.set(value: mockServerTestUserEncryptionDetails.encryptedSecret, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret")
+        writeBatchTestUser.set(value: mockServerTestUserEncryptionDetails.secretPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature")
+        writeBatchTestUser.set(value: mockServerTestUserEncryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature")
+        try writeBatchTestUser.write()
         
         controller1.retrieveInteractions(inThread: threadId, per: 3, page: 1) {
             result in
@@ -856,7 +862,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 }
                 
                 XCTAssertNotNil(lastMessage.interactionId)
-                XCTAssertEqual(lastMessage.sender.identifier, self.myUser.identifier)
+                XCTAssertEqual(lastMessage.sender.identifier, self.testUser.identifier)
                 XCTAssertEqual(lastMessage.inReplyToAssetGlobalIdentifier, nil)
                 XCTAssertEqual(lastMessage.inReplyToInteractionId, nil)
                 XCTAssertEqual(lastMessage.message, messageText)
@@ -869,14 +875,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
     
     func testCreateThreadIdempotency() throws {
         
-        /// Cache `myUser` in the `ServerUserCache`
+        /// Cache `testUser` in the `ServerUserCache`
         
         ServerUserCache.shared.cache(
             users: [
-                SHRemoteUser(identifier: myUser.identifier,
-                             name: "myUser",
-                             publicKeyData: myUser.publicKeyData,
-                             publicSignatureData: myUser.publicSignatureData)
+                SHRemoteUser(identifier: self.testUser.identifier,
+                             name: "testUser",
+                             publicKeyData: self.testUser.publicKeyData,
+                             publicSignatureData: self.testUser.publicSignatureData)
                 ]
             )
         
@@ -884,7 +890,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         /// Create the other user `recipient1` and cache it
         
-        let recipient1 = SHLocalUser(keychainPrefix: "other")
+        let recipient1 = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.recipient1")
         
         ServerUserCache.shared.cache(
             users: [
@@ -895,26 +901,26 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 ]
             )
         
-        XCTAssertEqual(ServerUserCache.shared.user(with: myUser.identifier)?.publicSignatureData,
-                       myUser.publicSignatureData)
+        XCTAssertEqual(ServerUserCache.shared.user(with: self.testUser.identifier)?.publicSignatureData,
+                       self.testUser.publicSignatureData)
         XCTAssertEqual(ServerUserCache.shared.user(with: recipient1.identifier)?.publicSignatureData,
                        recipient1.publicSignatureData)
         
-        /// Create the thread in the mock server for `myUser`, with no encryption details for now
+        /// Create the thread in the mock server for `testUser`, with no encryption details for now
         
         let serverThreadDetails = [
             MockThreadDetails(
                 threadId: threadId,
                 name: nil,
-                userIds: [myUser.identifier, recipient1.identifier],
+                userIds: [self.testUser.identifier, recipient1.identifier],
                 encryptionDetails: []
             )
         ]
-        let serverProxy = SHMockServerProxy(user: myUser, threads: serverThreadDetails)
+        let serverProxy = SHMockServerProxy(user: self.testUser, threads: serverThreadDetails)
         
         let authenticatedUser1 = SHAuthenticatedLocalUser(
-            localUser: myUser,
-            name: "myUser",
+            localUser: self.testUser,
+            name: "testUser",
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -924,17 +930,17 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             serverProxy: serverProxy
         )
         
-        /// Ask the mock server for `myUser` to create a new thread with `recipient1`
+        /// Ask the mock server for `testUser` to create a new thread with `recipient1`
         /// This will set up the encryption details in the mock server for the thread for both users
         
         let expectation1 = XCTestExpectation(description: "initialize the thread")
         controller1.setupThread(
             with: [
                 SHRemoteUser(
-                    identifier: myUser.identifier,
-                    name: "myUser",
-                    publicKeyData: myUser.publicKeyData,
-                    publicSignatureData: myUser.publicSignatureData
+                    identifier: self.testUser.identifier,
+                    name: "testUser",
+                    publicKeyData: self.testUser.publicKeyData,
+                    publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -953,30 +959,30 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         wait(for: [expectation1], timeout: 5.0)
         
-        /// Ensure the encryption details for `myUser` are now present in the local server
+        /// Ensure the encryption details for `testUser` are now present in the local server
         
         guard let mockServerThread = serverProxy.state.threads?.first(where: { $0.threadId == threadId }) else {
             XCTFail() ; return
         }
         
-        guard let mockServerMyUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == myUser.identifier })
+        guard let mockServerTestUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == self.testUser.identifier })
         else {
             XCTFail() ; return
         }
         
-        XCTAssertNotNil(mockServerMyUserEncryptionDetails.ephemeralPublicKey)
-        XCTAssertNotNil(mockServerMyUserEncryptionDetails.secretPublicSignature)
-        XCTAssertNotNil(mockServerMyUserEncryptionDetails.senderPublicSignature)
-        XCTAssertNotNil(mockServerMyUserEncryptionDetails.encryptedSecret)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.ephemeralPublicKey)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.secretPublicSignature)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.senderPublicSignature)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.encryptedSecret)
         
         let expectation2 = XCTestExpectation(description: "re-initialize the thread")
         controller1.setupThread(
             with: [
                 SHRemoteUser(
-                    identifier: myUser.identifier,
-                    name: "myUser",
-                    publicKeyData: myUser.publicKeyData,
-                    publicSignatureData: myUser.publicSignatureData
+                    identifier: self.testUser.identifier,
+                    name: "testUser",
+                    publicKeyData: self.testUser.publicKeyData,
+                    publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
@@ -1005,8 +1011,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 )
             ]
         ) {
-            result in
-            if case .success() = result {
+            (result: Result<ConversationThreadOutputDTO, Error>) in
+            if case .success = result {
                 XCTFail()
                 /// EXPECT this to fail
             }

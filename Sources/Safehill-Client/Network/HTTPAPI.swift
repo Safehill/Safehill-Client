@@ -422,11 +422,10 @@ struct SHServerHTTPAPI : SHServerAPI {
                 )
                 
                 do {
-                    let decryptedChallenge = try SHCypher.decrypt(
-                        encryptedChallenge,
-                        encryptionKeyData: self.requestor.shUser.privateKeyData,
+                    let decryptedChallenge = try SHUserContext(user: self.requestor.shUser).decryptSecret(
+                        usingEncryptedSecret: encryptedChallenge,
                         protocolSalt: authSalt,
-                        from: serverCrypto.publicSignatureData
+                        signedWith: serverCrypto.publicSignatureData
                     )
                     let signatureForData = try self.requestor.shUser.signature(for: decryptedChallenge)
                     let digest512 = Data(SHA512.hash(data: decryptedChallenge))

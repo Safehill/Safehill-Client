@@ -259,11 +259,10 @@ extension SHLocalAssetStoreController {
             cyphertext: version.encryptedSecret,
             signature: version.publicSignatureData
         )
-        return try SHCypher.decrypt(
-            encryptedSecret,
-            encryptionKeyData: self.user.shUser.privateKeyData,
+        return try SHUserContext(user: self.user.shUser).decryptSecret(
+            usingEncryptedSecret: encryptedSecret,
             protocolSalt: encryptionProtocolSalt,
-            from: self.user.publicSignatureData
+            signedWith: self.user.publicSignatureData
         )
     }
 }

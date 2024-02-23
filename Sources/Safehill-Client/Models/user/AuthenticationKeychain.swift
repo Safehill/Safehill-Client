@@ -4,6 +4,9 @@ import Safehill_Crypto
 
 // MARK: Store auth token in the keychaing
 
+public enum SHKeychainItemError: CustomNSError, LocalizedError {
+    case failedToConvertToData
+}
 extension SHKeychain {
     static func retrieveValue(from account: String) throws -> String? {
         // Seek a generic password with the given account.
@@ -25,7 +28,7 @@ extension SHKeychain {
     
     static func storeValue(_ token: String, account: String) throws {
         guard let tokenData = token.data(using: .utf8) else {
-            throw SHKeychain.Error.generic("Unable to convert string to data.")
+            throw SHKeychainItemError.failedToConvertToData
         }
         
         // Treat the key data as a generic password.

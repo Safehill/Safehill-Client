@@ -312,13 +312,10 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
 
 final class Safehill_ClientIntegrationTests { // : XCTestCase {
     
-    var user = SHLocalUser(keychainPrefix: "")
     let username = "testUser"
     let password = "abc"
     
-    var serverProxy: SHServerProxy {
-        SHServerProxy(user: self.user)
-    }
+    let testUser = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.testUser")
     
     func setUpWithError() throws {
         // Create sender on the server
@@ -326,11 +323,11 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         let group = DispatchGroup()
         
         group.enter()
-        serverProxy.createUser(name: self.username) {
+        self.testUser.serverProxy.createUser(name: self.username) {
             createResult in
             switch createResult {
             case .success(_):
-                self.serverProxy.signIn(clientBuild: nil) {
+                self.testUser.serverProxy.signIn(clientBuild: nil) {
                     signInResult in
                     switch signInResult {
                     case .success(let authResponse):
@@ -338,11 +335,11 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
                             guard let authSalt = Data(base64Encoded: authResponse.encryptionProtocolSalt) else {
                                 throw SHHTTPError.ServerError.unexpectedResponse(authResponse.encryptionProtocolSalt)
                             }
-                            try self.user.authenticate(
+                            try self.testUser.authenticate(
                                 authResponse.user,
                                 bearerToken: authResponse.bearerToken,
-                                encryptionProtocolSalt: authSalt,
-                                ssoIdentifier: nil)
+                                encryptionProtocolSalt: authSalt
+                            )
                         } catch {}
                     case .failure(let err):
                         error = err
@@ -367,11 +364,22 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
     }
     
     private func destroyUser() throws {
+        let _ = try SHDBManager.sharedInstance.userStore?.removeAll()
+        let _ = try SHDBManager.sharedInstance.assetStore?.removeAll()
+        let _ = try SHDBManager.sharedInstance.reactionStore?.removeAll()
+        let _ = try SHDBManager.sharedInstance.messageQueue?.removeAll()
+        
+        for keychainPrefix in ["com.gf.safehill.client.testUser", "com.gf.safehill.client.recipient1"] {
+            try SHLocalUser.deleteKeys(keychainPrefix)
+            try SHLocalUser.deleteProtocolSalt(keychainPrefix)
+            try SHLocalUser.deleteAuthToken(keychainPrefix)
+        }
+        
         var error: Error? = nil
         let group = DispatchGroup()
         
         group.enter()
-        serverProxy.deleteAccount() { result in
+        self.testUser.serverProxy.deleteAccount() { result in
             if case .failure(let err) = result {
                 error = err
             }
@@ -388,7 +396,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
     func testUploadAndDownload() throws {
         let plainText = "example data"
         let data = plainText.data(using: .utf8)!
-        let sender = user.shUser
+        let sender = self.testUser.shUser
         let receiver = SHLocalCryptoUser()
         
         let group = DispatchGroup()
@@ -399,7 +407,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         
         // Sender uploads
         group.enter()
-        serverProxy.remoteServer.create(assets: [encryptedAsset], groupId: "groupId", filterVersions: nil) { result in
+        self.testUser.serverProxy.remoteServer.create(assets: [encryptedAsset], groupId: "groupId", filterVersions: nil) { result in
             switch result {
             case .success(let serverAssets):
                 guard let serverAsset = serverAssets.first else {
@@ -407,7 +415,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
                     group.leave()
                     return
                 }
-                self.serverProxy.upload(serverAsset: serverAsset, asset: encryptedAsset) { result in
+                self.testUser.serverProxy.upload(serverAsset: serverAsset, asset: encryptedAsset) { result in
                     if case .failure(let err) = result {
                         error = err
                     }
@@ -427,7 +435,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         
         // Receiver downloads
         group.enter()
-        serverProxy.getAssets(
+        self.testUser.serverProxy.getAssets(
             withGlobalIdentifiers: [encryptedAsset.globalIdentifier],
             versions: [.lowResolution]
         ) { result in

@@ -65,11 +65,10 @@ public struct SHUserInteractionController {
                             cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
                             signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
                         )
-                        let decryptedSecret = try SHCypher.decrypt(
-                            shareablePayload,
-                            encryptionKeyData: authedUser.shUser.privateKeyData,
+                        let decryptedSecret = try SHUserContext(user: self.user.shUser).decryptSecret(
+                            usingEncryptedSecret: shareablePayload,
                             protocolSalt: authedUser.encryptionProtocolSalt,
-                            from: authedUser.publicSignatureData
+                            signedWith: authedUser.publicSignatureData
                         )
                         symmetricKey = SymmetricKey(data: decryptedSecret)
                     } catch {
@@ -560,11 +559,10 @@ extension SHUserInteractionController {
             cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
             signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
         )
-        let decryptedSecret = try SHCypher.decrypt(
-            shareablePayload,
-            encryptionKeyData: self.user.shUser.privateKeyData,
+        let decryptedSecret = try SHUserContext(user: self.user.shUser).decryptSecret(
+            usingEncryptedSecret: shareablePayload,
             protocolSalt: salt,
-            from: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
+            signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
         )
         return SymmetricKey(data: decryptedSecret)
     }
