@@ -65,11 +65,23 @@ public struct SHUserInteractionController {
                             cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
                             signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
                         )
-                        let decryptedSecret = try SHUserContext(user: self.user.shUser).decryptSecret(
-                            usingEncryptedSecret: shareablePayload,
-                            protocolSalt: authedUser.encryptionProtocolSalt,
-                            signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
-                        )
+                        let decryptedSecret: Data
+                        
+                        do {
+                            decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
+                                usingEncryptedSecret: shareablePayload,
+                                protocolSalt: authedUser.encryptionProtocolSalt,
+                                signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
+                            )
+                        } catch SHCypher.DecryptionError.authenticationError {
+                            log.warning("group details were force-updated on the server. Attempting to decrypt the secret using this user's public signature instead of the one recorded by the server")
+                            decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
+                                usingEncryptedSecret: shareablePayload,
+                                protocolSalt: authedUser.encryptionProtocolSalt,
+                                signedWith: authedUser.publicSignatureData
+                            )
+                        }
+                        
                         symmetricKey = SymmetricKey(data: decryptedSecret)
                     } catch {
                         log.critical("""
