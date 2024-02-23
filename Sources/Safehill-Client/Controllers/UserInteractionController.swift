@@ -68,7 +68,7 @@ public struct SHUserInteractionController {
                         let decryptedSecret = try SHUserContext(user: self.user.shUser).decryptSecret(
                             usingEncryptedSecret: shareablePayload,
                             protocolSalt: authedUser.encryptionProtocolSalt,
-                            signedWith: authedUser.publicSignatureData
+                            signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
                         )
                         symmetricKey = SymmetricKey(data: decryptedSecret)
                     } catch {
