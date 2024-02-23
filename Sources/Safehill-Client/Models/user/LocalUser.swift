@@ -175,6 +175,7 @@ extension SHLocalUser: Codable {
     
     public func shareableLocalUser() throws -> Data {
         let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
         return try encoder.encode(self)
     }
 
