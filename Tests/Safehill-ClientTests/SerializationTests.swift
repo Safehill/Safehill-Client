@@ -295,6 +295,44 @@ final class Safehill_SerializationTests: XCTestCase {
         let shUser2 = try JSONDecoder().decode(SHLocalUser.self, from: data)
         
         XCTAssertEqual(shUser1.identifier, shUser2.identifier)
+    }
+    
+    func testSerializeAuthenticatedUser() throws {
+        let keychainPrefix = "com.gf.safehill.client.test"
+        let user = SHLocalUser.create(keychainPrefix: keychainPrefix)
+        
+        let authedUser = SHAuthenticatedLocalUser(
+            localUser: user,
+            name: "testUser",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: "token"
+        )
+        
+        let jsonForAuthedUser = try authedUser.toLocalUser().shareableLocalUser()
+        let jsonForUnauthedUser = try user.shareableLocalUser()
+        
+        XCTAssertEqual(String(data: jsonForAuthedUser, encoding: .utf8)!,
+                       String(data: jsonForUnauthedUser, encoding: .utf8)!)
+        
+        let expectedJsonString = """
+{"keychainPrefix":"\(keychainPrefix)","shUser":{"privateKeyData":"\(user.shUser.privateKeyData.base64EncodedString())","privateSignatureData":"\(user.shUser.privateSignatureData.base64EncodedString())"}}
+"""
+        let expectedJsonData = expectedJsonString.data(using: .utf8)!
+        
+        let jsonDecoder = JSONDecoder()
+        
+        let expectedUser = try jsonDecoder.decode(SHLocalUser.self, from: expectedJsonData)
+        
+        let serializedUnauthedUser = try jsonDecoder.decode(SHLocalUser.self, from: jsonForUnauthedUser)
+        let serializedAuthedUser = try jsonDecoder.decode(SHLocalUser.self, from: jsonForAuthedUser)
+        
+        XCTAssertEqual(serializedAuthedUser.identifier, serializedUnauthedUser.identifier)
+        XCTAssertEqual(serializedAuthedUser.publicKeyData.base64EncodedString(), serializedUnauthedUser.publicKeyData.base64EncodedString())
+        XCTAssertEqual(serializedAuthedUser.publicSignatureData.base64EncodedString(), serializedUnauthedUser.publicSignatureData.base64EncodedString())
+        
+        XCTAssertEqual(serializedAuthedUser.identifier, expectedUser.identifier)
+        XCTAssertEqual(serializedAuthedUser.publicKeyData.base64EncodedString(), expectedUser.publicKeyData.base64EncodedString())
+        XCTAssertEqual(serializedAuthedUser.publicSignatureData.base64EncodedString(), expectedUser.publicSignatureData.base64EncodedString())
         
     }
 }

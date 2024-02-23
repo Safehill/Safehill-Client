@@ -103,7 +103,7 @@ public struct SHLocalUser: SHLocalUserProtocol {
         )
     }
     
-    private init(
+    fileprivate init(
         shUser: SHLocalCryptoUser,
         authToken: String?,
         maybeEncryptionProtocolSalt: Data?,
@@ -145,6 +145,12 @@ public struct SHLocalUser: SHLocalUserProtocol {
     }
 }
 
+///
+/// `SHAuthenticationLocalUser` is not serializable because it's the authenticated version of a `SHLocalUser`.
+/// Serializing an object of type `SHAuthenticationLocalUser` requires a conversion to a `SHLocalUser` first.
+/// `authedUser.toLocalUser().shareableLocalUser()`
+///
+
 extension SHLocalUser: Codable {
     
     enum CodingKeys: String, CodingKey {
@@ -171,4 +177,18 @@ extension SHLocalUser: Codable {
         let encoder = JSONEncoder()
         return try encoder.encode(self)
     }
+
+}
+
+extension SHAuthenticatedLocalUser {
+    
+    public func toLocalUser() -> SHLocalUser {
+        SHLocalUser.init(
+            shUser: self.shUser,
+            authToken: self.authToken,
+            maybeEncryptionProtocolSalt: self.maybeEncryptionProtocolSalt,
+            keychainPrefix: self.keychainPrefix
+        )
+    }
+
 }
