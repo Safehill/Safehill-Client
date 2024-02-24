@@ -214,6 +214,13 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        do {
+            try SHKGQuery.removeUsers(with: identifiers)
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         var condition = KBGenericCondition(value: false)
         for userIdentifier in identifiers {
             condition = condition.or(KBGenericCondition(.equal, value: userIdentifier))
@@ -222,12 +229,7 @@ struct LocalServer : SHServerAPI {
         userStore.removeValues(forKeysMatching: condition) { getResult in
             switch getResult {
             case .success(_):
-                do {
-                    try SHKGQuery.removeUsers(with: identifiers)
-                    completionHandler(.success(()))
-                } catch {
-                    completionHandler(.failure(error))
-                }
+                completionHandler(.success(()))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
@@ -239,6 +241,11 @@ struct LocalServer : SHServerAPI {
     }
     
     func deleteAllAssets(completionHandler: @escaping (Result<[String], Error>) -> ()) {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
         do {
             try SHKGQuery.deepClean()
         } catch {
@@ -246,10 +253,6 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
         assetStore.removeAll(completionHandler: completionHandler)
     }
     
@@ -890,8 +893,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func addAssetRecipients(to globalIdentifier: GlobalIdentifier,
-                            basedOn groupIdByRecipientId: [UserIdentifier: String],
+    func addAssetRecipients(basedOn userIdsToAddToAssetGids: [GlobalIdentifier: ShareSenderReceivers],
                             versions: [SHAssetQuality]? = nil,
                             completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -899,29 +901,44 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        // TODO: Optimize this to reduce the number of writes
+        for (globalIdentifier, shareDiff) in userIdsToAddToAssetGids {
+            do {
+                try SHKGQuery.ingestShare(
+                    of: globalIdentifier,
+                    from: shareDiff.from,
+                    to: Array(shareDiff.groupIdByRecipientId.keys)
+                )
+            } catch {
+                completionHandler(.failure(error))
+                return
+            }
+        }
+        
         let versions = versions ?? SHAssetQuality.all
         
         let writeBatch = assetStore.writeBatch()
         
-        for version in versions {
-            for (recipientUserId, groupId) in groupIdByRecipientId {
-                writeBatch.set(
-                    value: ["groupId": groupId],
-                    for: [
-                        "receiver",
-                        recipientUserId,
-                        version.rawValue,
-                        globalIdentifier
-                       ].joined(separator: "::")
-                )
+        for (globalIdentifier, shareDiff) in userIdsToAddToAssetGids {
+            for (recipientUserId, groupId) in shareDiff.groupIdByRecipientId {
+                for version in versions {
+                    writeBatch.set(
+                        value: ["groupId": groupId],
+                        for: [
+                            "receiver",
+                            recipientUserId,
+                            version.rawValue,
+                            globalIdentifier
+                        ].joined(separator: "::")
+                    )
+                }
             }
         }
         
         writeBatch.write(completionHandler: completionHandler)
     }
     
-    func removeAssetRecipients(recipientUserIds: [UserIdentifier],
-                               from globalIdentifier: GlobalIdentifier,
+    func removeAssetRecipients(basedOn userIdsToRemoveFromAssetGid: [GlobalIdentifier: ShareSenderReceivers],
                                versions: [SHAssetQuality]? = nil,
                                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -929,18 +946,31 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        do {
+            try SHKGQuery.removeSharingInformation(basedOn: userIdsToRemoveFromAssetGid)
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        ///
+        /// Only after the Graph is updated, remove the recipients from the DB
+        /// This ensures that if the graph update fails is attempted again (as the descriptors from local haven't been updated yet)
+        ///
         let versions = versions ?? SHAssetQuality.all
         
         let writeBatch = assetStore.writeBatch()
         
-        for version in versions {
-            for recipientUserId in recipientUserIds {
-                writeBatch.set(value: nil, for: [
-                    "receiver",
-                    recipientUserId,
-                    version.rawValue,
-                    globalIdentifier
-                   ].joined(separator: "::"))
+        for (globalIdentifier, shareDiff) in userIdsToRemoveFromAssetGid {
+            for (recipientUserId, _) in shareDiff.groupIdByRecipientId {
+                for version in versions {
+                    writeBatch.set(value: nil, for: [
+                        "receiver",
+                        recipientUserId,
+                        version.rawValue,
+                        globalIdentifier
+                    ].joined(separator: "::"))
+                }
             }
         }
         
@@ -1205,6 +1235,13 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        do {
+            try SHKGQuery.removeAssets(with: globalIdentifiers)
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         var removedGlobalIdentifiers = Set<String>()
         var err: Error? = nil
         let group = DispatchGroup()
@@ -1254,12 +1291,6 @@ struct LocalServer : SHServerAPI {
         guard err == nil else {
             completionHandler(.failure(err!))
             return
-        }
-        
-        do {
-            try SHKGQuery.removeAssets(with: globalIdentifiers)
-        } catch {
-            completionHandler(.failure(error))
         }
         
         completionHandler(.success(Array(removedGlobalIdentifiers)))
