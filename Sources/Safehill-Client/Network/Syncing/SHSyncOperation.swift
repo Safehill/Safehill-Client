@@ -34,7 +34,16 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         )
     }
     
-    private func syncDescriptors(
+    private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
+        var userIdsDescriptorsSet = Set<UserIdentifier>()
+        for descriptor in descriptors {
+            userIdsDescriptorsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
+            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsDescriptorsSet.insert($0) })
+        }
+        return userIdsDescriptorsSet
+    }
+    
+    private func syncWithLocalDescriptors(
         _ remoteDescriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<AssetDescriptorsDiff, Error>) -> ()
     ) {
@@ -72,19 +81,11 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         /// Get all users referenced in either local or remote descriptors (excluding THIS user)
         ///
-        var userIdsInLocalDescriptorsSet = Set<UserIdentifier>()
-        for localDescriptor in localDescriptors {
-            userIdsInLocalDescriptorsSet.insert(localDescriptor.sharingInfo.sharedByUserIdentifier)
-            localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInLocalDescriptorsSet.insert($0) })
-        }
+        var userIdsInLocalDescriptorsSet = self.uniqueUserIds(in: localDescriptors)
         userIdsInLocalDescriptorsSet.remove(self.user.identifier)
         let userIdsInLocalDescriptors = Array(userIdsInLocalDescriptorsSet)
         
-        var userIdsInRemoteDescriptorsSet = Set<UserIdentifier>()
-        for remoteDescriptor in remoteDescriptors {
-            userIdsInRemoteDescriptorsSet.insert(remoteDescriptor.sharingInfo.sharedByUserIdentifier)
-            remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsInRemoteDescriptorsSet.insert($0) })
-        }
+        var userIdsInRemoteDescriptorsSet = self.uniqueUserIds(in: remoteDescriptors)
         userIdsInRemoteDescriptorsSet.remove(self.user.identifier)
         let userIdsInRemoteDescriptors = Array(userIdsInRemoteDescriptorsSet)
         
@@ -325,13 +326,12 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// Sync them with the local descriptors
         ///
         group.enter()
-        self.syncDescriptors(remoteDescriptors) { result in
-            switch result {
+        self.syncWithLocalDescriptors(remoteDescriptors) { syncWithLocalDescResult in
+            switch syncWithLocalDescResult {
             case .success(let diff):
                 if diff.stateDifferentOnServer.count > 0 {
                     // TODO: Do we need to mark things as failed/pending depending on state?
                 }
-                break
             case .failure(let err):
                 self.log.error("failed to update local descriptors from server descriptors: \(err.localizedDescription)")
                 descriptorsSyncError = err

@@ -1,7 +1,7 @@
 import KnowledgeBase
 import Foundation
 
-public enum SHKGPredicates: String {
+public enum SHKGPredicate: String {
     case attemptedShare = "attemptedShare"
     case localAssetIdEquivalent = "localAssetIdEquivalent"
     case shares = "shares"
@@ -92,13 +92,13 @@ public struct SHKGQuery {
                 let kgSender = graph.entity(withIdentifier: senderUserId)
                 let kgAsset = graph.entity(withIdentifier: assetIdentifier)
                 
-                log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
-                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.attemptedShare.rawValue)
+                log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicate.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
+                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicate.attemptedShare.rawValue)
                 
                 if let localIdentifier {
                     let kgCorrespondingLocalAsset = graph.entity(withIdentifier: localIdentifier)
-                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicates.localAssetIdEquivalent.rawValue), localAsset=\(kgCorrespondingLocalAsset.identifier)>")
-                    try kgAsset.link(to: kgCorrespondingLocalAsset, withPredicate: SHKGPredicates.localAssetIdEquivalent.rawValue)
+                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.localAssetIdEquivalent.rawValue), localAsset=\(kgCorrespondingLocalAsset.identifier)>")
+                    try kgAsset.link(to: kgCorrespondingLocalAsset, withPredicate: SHKGPredicate.localAssetIdEquivalent.rawValue)
                 }
                 
                 for userId in receiverUserIds {
@@ -106,8 +106,8 @@ public struct SHKGQuery {
                         continue
                     }
                     let kgOtherUser = graph.entity(withIdentifier: userId)
-                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
-                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicates.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
+                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
+                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
                 }
                 
                 let allTriplesAfter = try graph.triples(matching: nil)
@@ -142,11 +142,11 @@ public struct SHKGQuery {
                 let kgSender = graph.entity(withIdentifier: senderUserId)
                 let kgAsset = graph.entity(withIdentifier: assetIdentifier)
                 
-                log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicates.shares.rawValue), asset=\(kgAsset.identifier)>")
-                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicates.shares.rawValue)
+                log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicate.shares.rawValue), asset=\(kgAsset.identifier)>")
+                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicate.shares.rawValue)
 
-                let tripleCondition = KBTripleCondition(subject: kgSender.identifier, predicate: SHKGPredicates.attemptedShare.rawValue, object: kgAsset.identifier)
-                log.debug("[sh-kg] removing triples matching <user=\(kgSender.identifier), \(SHKGPredicates.attemptedShare.rawValue), \(kgAsset.identifier)>")
+                let tripleCondition = KBTripleCondition(subject: kgSender.identifier, predicate: SHKGPredicate.attemptedShare.rawValue, object: kgAsset.identifier)
+                log.debug("[sh-kg] removing triples matching <user=\(kgSender.identifier), \(SHKGPredicate.attemptedShare.rawValue), \(kgAsset.identifier)>")
                 try graph.removeTriples(matching: tripleCondition)
                 
                 if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
@@ -160,8 +160,8 @@ public struct SHKGQuery {
                         continue
                     }
                     let kgOtherUser = graph.entity(withIdentifier: userId)
-                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicates.sharedWith.rawValue)
-                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicates.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
+                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
+                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
                     
                     if let _ = UserIdToAssetGidSharedWithCache[userId] {
                         UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
@@ -281,7 +281,7 @@ public struct SHKGQuery {
             sharedByUsersCondition = sharedByUsersCondition.or(
                 KBTripleCondition(
                     subject: userId,
-                    predicate: SHKGPredicates.shares.rawValue,
+                    predicate: SHKGPredicate.shares.rawValue,
                     object: nil
                 )
             )
@@ -289,7 +289,7 @@ public struct SHKGQuery {
                 sharedByUsersCondition = sharedByUsersCondition.or(
                     KBTripleCondition(
                         subject: userId,
-                        predicate: SHKGPredicates.attemptedShare.rawValue,
+                        predicate: SHKGPredicate.attemptedShare.rawValue,
                         object: nil
                     )
                 )
@@ -352,7 +352,7 @@ public struct SHKGQuery {
             sharedWithUsersCondition = sharedWithUsersCondition.or(
                 KBTripleCondition(
                     subject: nil,
-                    predicate: SHKGPredicates.sharedWith.rawValue,
+                    predicate: SHKGPredicate.sharedWith.rawValue,
                     object: userId
                 )
             )
@@ -392,8 +392,8 @@ public struct SHKGQuery {
     public static func assetGlobalIdentifiers(
         amongst userIdentifiers: [UserIdentifier],
         filterOutInProgress: Bool = true
-    ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
-        var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
+    ) throws -> [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]] {
+        var assetsToUsers = [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]()
         
         let sharedBy = try self.assetGlobalIdentifiers(sharedBy: userIdentifiers, filterOutInProgress: filterOutInProgress)
         let sharedWith = try self.assetGlobalIdentifiers(sharedWith: userIdentifiers)
@@ -401,17 +401,17 @@ public struct SHKGQuery {
         for (gid, uids) in sharedWith {
             uids.forEach({ uid in
                 if let _ = assetsToUsers[gid] {
-                    assetsToUsers[gid]!.insert(uid)
+                    assetsToUsers[gid]!.append((SHKGPredicate.sharedWith, uid))
                 } else {
-                    assetsToUsers[gid] = [uid]
+                    assetsToUsers[gid] = [(SHKGPredicate.sharedWith, uid)]
                 }
             })
         }
         for (gid, uid) in sharedBy {
             if let _ = assetsToUsers[gid] {
-                assetsToUsers[gid]!.insert(uid)
+                assetsToUsers[gid]!.append((SHKGPredicate.shares, uid))
             } else {
-                assetsToUsers[gid] = [uid]
+                assetsToUsers[gid] = [(SHKGPredicate.sharedWith, uid)]
             }
         }
         
@@ -421,8 +421,7 @@ public struct SHKGQuery {
     public static func usersConnectedTo(
         assets globalIdentifiers: [GlobalIdentifier],
         filterOutInProgress: Bool = true
-        
-    ) throws -> [UserIdentifier] {
+    ) throws -> [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
@@ -432,25 +431,25 @@ public struct SHKGQuery {
         for assetId in globalIdentifiers {
             sharedWithCondition = sharedWithCondition.or(
                 KBTripleCondition(
-                    subject: assetId, predicate: SHKGPredicates.sharedWith.rawValue, object: nil
+                    subject: assetId, predicate: SHKGPredicate.sharedWith.rawValue, object: nil
                 )
             )
             sharedByCondition = sharedByCondition.or(
                 KBTripleCondition(
-                    subject: nil, predicate: SHKGPredicates.shares.rawValue, object: assetId
+                    subject: nil, predicate: SHKGPredicate.shares.rawValue, object: assetId
                 )
             )
             
             if filterOutInProgress == false {
                 sharedByCondition = sharedByCondition.or(
                     KBTripleCondition(
-                        subject: nil, predicate: SHKGPredicates.attemptedShare.rawValue, object: assetId
+                        subject: nil, predicate: SHKGPredicate.attemptedShare.rawValue, object: assetId
                     )
                 )
             }
         }
         
-        var result = Set<UserIdentifier>()
+        var result = [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]()
         
         var triplesShares = [KBTriple]()
         var triplesSharedWith = [KBTriple]()
@@ -463,7 +462,11 @@ public struct SHKGQuery {
             let userId = triple.subject
             let assetId = triple.object
             
-            result.insert(userId)
+            if result[assetId] == nil {
+                result[assetId] = [(SHKGPredicate.shares, userId)]
+            } else {
+                result[assetId]!.append((SHKGPredicate.shares, userId))
+            }
             
             if let _ = UserIdToAssetGidSharedByCache[userId] {
                 UserIdToAssetGidSharedByCache[userId]!.insert(assetId)
@@ -476,7 +479,11 @@ public struct SHKGQuery {
             let userId = triple.object
             let assetId = triple.subject
             
-            result.insert(userId)
+            if result[assetId] == nil {
+                result[assetId] = [(SHKGPredicate.sharedWith, userId)]
+            } else {
+                result[assetId]!.append((SHKGPredicate.sharedWith, userId))
+            }
             
             if let _ = UserIdToAssetGidSharedWithCache[userId] {
                 UserIdToAssetGidSharedWithCache[userId]!.insert(assetId)
@@ -485,7 +492,7 @@ public struct SHKGQuery {
             }
         }
         
-        return Array(result)
+        return result
     }
     
     static internal func removeSharingInformation(
@@ -496,7 +503,7 @@ public struct SHKGQuery {
             for recipientId in shareDiff.groupIdByRecipientId.keys {
                 condition = condition.or(KBTripleCondition(
                     subject: globalIdentifier,
-                    predicate: SHKGPredicates.sharedWith.rawValue,
+                    predicate: SHKGPredicate.sharedWith.rawValue,
                     object: recipientId
                 ))
             }

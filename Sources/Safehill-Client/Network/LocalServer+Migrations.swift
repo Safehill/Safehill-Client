@@ -64,6 +64,64 @@ extension LocalServer {
         return removed.count > 0
     }
     
+    public func syncLocalGraphWithServer(
+        dryRun: Bool = true,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.requestor.serverProxy.getRemoteAssetDescriptors { remoteResult in
+            switch remoteResult {
+            case .success(let remoteDescriptors):
+                var uniqueAssetGids = Set<GlobalIdentifier>()
+                for remoteDescriptor in remoteDescriptors {
+                    uniqueAssetGids.insert(remoteDescriptor.globalIdentifier)
+                }
+                
+                do {
+                    let assetToUsers: [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]
+                    assetToUsers = try SHKGQuery.usersConnectedTo(assets: Array(uniqueAssetGids))
+                    
+                    /// 
+                    /// Additions and Edits
+                    /// 
+                    for remoteDescriptor in remoteDescriptors {
+                        let assetGid = remoteDescriptor.globalIdentifier
+                        
+                        if assetToUsers[assetGid] == nil {
+                            let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
+                            let recipients = Array(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                            log.info("[graph-sync] missing triples from <asset:\(assetGid)> <from:\(sender)> <to:\(recipients)>")
+                            if dryRun == false {
+                                try SHKGQuery.ingestShare(
+                                    of: assetGid,
+                                    from: sender,
+                                    to: recipients
+                                )
+                            }
+                        } else {
+                            // TODO: Edits
+                        }
+                    }
+                    
+                    /// 
+                    /// Removals
+                    ///
+                    let extraAssetIdsInGraph = Array(assetToUsers.keys.filter({ uniqueAssetGids.contains($0) == false }))
+                    log.info("[graph-sync] extra assets in graph \(extraAssetIdsInGraph)")
+                    if dryRun == false {
+                        try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
+                    }
+                }
+                catch {
+                    completionHandler(.failure(error))
+                    return
+                }
+            case .failure(let err):
+                log.info("[graph-sync] failed to sync with remote server: \(err.localizedDescription)")
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     ///
     /// Data cleanup to perform at application launch when requested, for data that can be re-generated on sync:
     ///
@@ -71,7 +129,10 @@ extension LocalServer {
     /// 2. Remove from the download authorization queue
     /// 3. Reset the knowledgegraph
     ///
-    public func runDataCleanup(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    public func runDataCleanup(
+        authedUser: SHAuthenticatedLocalUser,
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
+    ) {
         let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload, .download]
         for queueType in queuesToClear {
             do {
@@ -89,12 +150,20 @@ extension LocalServer {
                 throw KBError.databaseNotReady
             }
             let _ = try graph.removeAll()
+            
+            self.syncLocalGraphWithServer { syncWithGraphResult in
+                switch syncWithGraphResult {
+                case .success:
+                    completionHandler(.success(()))
+                case .failure(let err):
+                    completionHandler(.failure(err))
+                }
+            }
         }
         catch {
             log.warning("Failed to reinitialize the graph: \(error.localizedDescription)")
+            completionHandler(.failure(error))
         }
-        
-        completionHandler(.success(()))
     }
     
     ///
