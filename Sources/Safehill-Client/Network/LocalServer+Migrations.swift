@@ -77,7 +77,7 @@ extension LocalServer {
                 }
                 
                 do {
-                    for uniqueAssetGidsChunk in uniqueAssetGids.chunked(into: 30) {
+                    for uniqueAssetGidsChunk in Array(uniqueAssetGids).chunked(into: 30) {
                         let assetToUsers: [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]
                         assetToUsers = try SHKGQuery.usersConnectedTo(assets: Array(uniqueAssetGidsChunk))
                         
