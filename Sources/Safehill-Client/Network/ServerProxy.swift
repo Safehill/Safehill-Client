@@ -1367,6 +1367,15 @@ extension SHServerProxy {
     }
 }
 
+extension SHServerProxy {
+    public func syncLocalGraphWithServer(
+        dryRun: Bool = true,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.syncLocalGraphWithServer(dryRun: dryRun, completionHandler: completionHandler)
+    }
+}
+
 
 // MARK: - Subscriptions
 extension SHServerProxy {
