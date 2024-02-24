@@ -112,6 +112,8 @@ extension LocalServer {
                             try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
                         }
                     }
+                    
+                    completionHandler(.success(()))
                 }
                 catch {
                     completionHandler(.failure(error))
