@@ -525,4 +525,12 @@ public struct SHKGQuery {
             }
         }
     }
+    
+    public static func assetGlobalIdentifiers(
+        notIn globalIdentifiersToExclude: [GlobalIdentifier],
+        filterOutInProgress: Bool = true
+    ) throws -> [GlobalIdentifier] {
+        // TODO: Implement negated triple conditions
+        return []
+    }
 }

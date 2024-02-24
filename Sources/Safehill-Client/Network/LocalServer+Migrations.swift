@@ -103,15 +103,17 @@ extension LocalServer {
                                 // TODO: Edits
                             }
                         }
-                        
-                        ///
-                        /// Removals
-                        ///
-                        let extraAssetIdsInGraph = Array(assetToUsers.keys.filter({ uniqueAssetGidsChunk.contains($0) == false }))
-                        log.info("[graph-sync] extra assets in graph \(extraAssetIdsInGraph)")
-                        if dryRun == false {
-                            try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
-                        }
+                    }
+                    
+                    ///
+                    /// Removals
+                    ///
+                    // TODO: Removals
+                    
+                    let extraAssetIdsInGraph = try SHKGQuery.assetGlobalIdentifiers(notIn: Array(uniqueAssetGids))
+                    log.info("[graph-sync] extra assets in graph \(extraAssetIdsInGraph)")
+                    if dryRun == false {
+                        try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
                     }
                     
                     completionHandler(.success(()))
