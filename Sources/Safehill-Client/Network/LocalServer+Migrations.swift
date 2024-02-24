@@ -84,7 +84,8 @@ extension LocalServer {
                         ///
                         /// Additions and Edits
                         ///
-                        for remoteDescriptor in remoteDescriptors {
+                        let relevantRemoteDescriptors = remoteDescriptors.filter({ uniqueAssetGidsChunk.contains($0.globalIdentifier) })
+                        for remoteDescriptor in relevantRemoteDescriptors {
                             let assetGid = remoteDescriptor.globalIdentifier
                             
                             if assetToUsers[assetGid] == nil {
