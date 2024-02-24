@@ -77,38 +77,40 @@ extension LocalServer {
                 }
                 
                 do {
-                    let assetToUsers: [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]
-                    assetToUsers = try SHKGQuery.usersConnectedTo(assets: Array(uniqueAssetGids))
-                    
-                    /// 
-                    /// Additions and Edits
-                    /// 
-                    for remoteDescriptor in remoteDescriptors {
-                        let assetGid = remoteDescriptor.globalIdentifier
+                    for uniqueAssetGidsChunk in uniqueAssetGids.chunked(into: 30) {
+                        let assetToUsers: [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]
+                        assetToUsers = try SHKGQuery.usersConnectedTo(assets: Array(uniqueAssetGidsChunk))
                         
-                        if assetToUsers[assetGid] == nil {
-                            let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
-                            let recipients = Array(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
-                            log.info("[graph-sync] missing triples from <asset:\(assetGid)> <from:\(sender)> <to:\(recipients)>")
-                            if dryRun == false {
-                                try SHKGQuery.ingestShare(
-                                    of: assetGid,
-                                    from: sender,
-                                    to: recipients
-                                )
+                        ///
+                        /// Additions and Edits
+                        ///
+                        for remoteDescriptor in remoteDescriptors {
+                            let assetGid = remoteDescriptor.globalIdentifier
+                            
+                            if assetToUsers[assetGid] == nil {
+                                let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
+                                let recipients = Array(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                                log.info("[graph-sync] missing triples from <asset:\(assetGid)> <from:\(sender)> <to:\(recipients)>")
+                                if dryRun == false {
+                                    try SHKGQuery.ingestShare(
+                                        of: assetGid,
+                                        from: sender,
+                                        to: recipients
+                                    )
+                                }
+                            } else {
+                                // TODO: Edits
                             }
-                        } else {
-                            // TODO: Edits
                         }
-                    }
-                    
-                    /// 
-                    /// Removals
-                    ///
-                    let extraAssetIdsInGraph = Array(assetToUsers.keys.filter({ uniqueAssetGids.contains($0) == false }))
-                    log.info("[graph-sync] extra assets in graph \(extraAssetIdsInGraph)")
-                    if dryRun == false {
-                        try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
+                        
+                        ///
+                        /// Removals
+                        ///
+                        let extraAssetIdsInGraph = Array(assetToUsers.keys.filter({ uniqueAssetGidsChunk.contains($0) == false }))
+                        log.info("[graph-sync] extra assets in graph \(extraAssetIdsInGraph)")
+                        if dryRun == false {
+                            try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
+                        }
                     }
                 }
                 catch {
