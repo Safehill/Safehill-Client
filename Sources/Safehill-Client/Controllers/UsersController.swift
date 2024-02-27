@@ -4,7 +4,7 @@ public typealias UserIdentifier = String
 
 internal class ServerUserCache {
     
-    private let writeQueue = DispatchQueue(label: "ServerUserCache.write")
+    private let writeQueue = DispatchQueue(label: "ServerUserCache.write", attributes: .concurrent)
     
     static var shared = ServerUserCache()
     
@@ -26,7 +26,7 @@ internal class ServerUserCache {
     }
     
     func cache(users: [any SHServerUser]) {
-        writeQueue.sync {
+        writeQueue.sync(flags: .barrier) {
             for user in users {
                 let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
                 self.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
@@ -51,7 +51,7 @@ internal class ServerUserCache {
     }
     
     func evict(usersWithIdentifiers userIdentifiers: [String]) {
-        writeQueue.sync {
+        writeQueue.sync(flags: .barrier) {
             for userIdentifier in userIdentifiers {
                 self.cache.removeObject(forKey: NSString(string: userIdentifier))
                 self.evictors[userIdentifier]?.invalidate()
