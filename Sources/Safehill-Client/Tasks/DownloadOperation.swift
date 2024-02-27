@@ -818,13 +818,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 // MARK: Start
                 
-                for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.downloaderDelegates.forEach({
-                        $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier,
-                                                   descriptor: descriptor,
-                                                   in: groupId)
-                    })
-                }
+                let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
+                self.downloaderDelegates.forEach({
+                    $0.didStartDownloadOfAsset(
+                        withGlobalIdentifier: globalIdentifier,
+                        descriptor: descriptor,
+                        in: groupId
+                    )
+                })
                 
                 guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
                     self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
@@ -855,14 +856,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         self.downloaderDelegates.forEach({
                             $0.didFetchLowResolutionAsset(decryptedAsset)
                         })
-                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                            self.downloaderDelegates.forEach({
-                                $0.didCompleteDownloadOfAsset(
-                                    withGlobalIdentifier: decryptedAsset.globalIdentifier,
-                                    in: groupId
-                                )
-                            })
-                        }
+                        
+                        let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
+                        self.downloaderDelegates.forEach({
+                            $0.didCompleteDownloadOfAsset(
+                                withGlobalIdentifier: decryptedAsset.globalIdentifier,
+                                in: groupId
+                            )
+                        })
                     case .failure(let error):
                         shouldDequeue = false
                         
@@ -873,23 +874,22 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
                         }
                         
-                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                        let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
+                        self.downloaderDelegates.forEach({
+                            $0.didFailDownloadOfAsset(
+                                withGlobalIdentifier: globalIdentifier,
+                                in: groupId,
+                                with: error
+                            )
+                        })
+                        if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
+                            shouldDequeue = true
                             self.downloaderDelegates.forEach({
-                                $0.didFailDownloadOfAsset(
+                                $0.didFailRepeatedlyDownloadOfAsset(
                                     withGlobalIdentifier: globalIdentifier,
-                                    in: groupId,
-                                    with: error
+                                    in: groupId
                                 )
                             })
-                            if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
-                                shouldDequeue = true
-                                self.downloaderDelegates.forEach({
-                                    $0.didFailRepeatedlyDownloadOfAsset(
-                                        withGlobalIdentifier: globalIdentifier,
-                                        in: groupId
-                                    )
-                                })
-                            }
                         }
                     }
                     group.leave()
