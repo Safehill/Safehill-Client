@@ -635,8 +635,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "localIdentifier": asset.localIdentifier,
             "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
-            "versions": assetVersions,
-            "forceUpdateVersions": true
+            "versions": assetVersions
         ]
         
         self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in

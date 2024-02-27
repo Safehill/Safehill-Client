@@ -116,10 +116,10 @@ struct LocalServer : SHServerAPI {
                     ]
                 }
                 
-                if let name = name {
+                if let name {
                     value["name"] = name
                 }
-                if let phoneNumber = phoneNumber {
+                if let phoneNumber {
                     value["phoneNumber"] = phoneNumber.e164FormattedNumber
                 }
                 
