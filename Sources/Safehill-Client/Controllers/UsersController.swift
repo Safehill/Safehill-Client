@@ -4,7 +4,7 @@ public typealias UserIdentifier = String
 
 internal class ServerUserCache {
     
-    private let writeQueue = DispatchQueue(label: "ServerUserCache.write", attributes: .concurrent)
+    private let writeQueue = DispatchQueue(label: "ServerUserCache.write")
     
     static var shared = ServerUserCache()
     
@@ -26,32 +26,32 @@ internal class ServerUserCache {
     }
     
     func cache(users: [any SHServerUser]) {
-        writeQueue.sync(flags: .barrier) {
+        writeQueue.sync {
             for user in users {
                 let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
                 self.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
                 self.evictors[user.identifier]?.invalidate()
                 self.evictors.removeValue(forKey: user.identifier)
             }
-        }
-        
-        DispatchQueue.main.async {
-            for (i, user) in users.enumerated() {
-                // Cache retention policy: TTL = 2 minutes
-                self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
-                                                                      repeats: false,
-                                                                      block: { (timer) in
-                    self.writeQueue.sync(flags: .barrier) {
-                        self.cache.removeObject(forKey: NSString(string: user.identifier))
-                        timer.invalidate()
-                    }
-                })
+            
+            DispatchQueue.main.async {
+                for (i, user) in users.enumerated() {
+                    // Cache retention policy: TTL = 2 minutes
+                    self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
+                                                                          repeats: false,
+                                                                          block: { (timer) in
+                        self.writeQueue.sync(flags: .barrier) {
+                            self.cache.removeObject(forKey: NSString(string: user.identifier))
+                            timer.invalidate()
+                        }
+                    })
+                }
             }
         }
     }
     
     func evict(usersWithIdentifiers userIdentifiers: [String]) {
-        writeQueue.sync(flags: .barrier) {
+        writeQueue.sync {
             for userIdentifier in userIdentifiers {
                 self.cache.removeObject(forKey: NSString(string: userIdentifier))
                 self.evictors[userIdentifier]?.invalidate()
