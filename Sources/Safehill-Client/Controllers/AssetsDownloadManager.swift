@@ -22,7 +22,7 @@ public struct SHAssetsDownloadManager {
         let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
         
         // Unauthorized queues are removed in LocalServer::runDataMigrations
-        Task {
+        Task(priority: .low) {
             do {
                 try await SHDownloadBlacklist.shared.deepClean()
             } catch {
@@ -54,53 +54,53 @@ public struct SHAssetsDownloadManager {
     public func authorizeDownloads(from userId: String,
                                    completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void) {
         
-        Task {
-            await SHDownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
-        }
-        
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
             return
         }
         
-        do {
-            let assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
-            guard assetGIdList.count > 0 else {
-                let response = SHAssetDownloadAuthorizationResponse(
-                    descriptors: [],
-                    users: [:]
-                )
-                completionHandler(.success(response))
-                return
-            }
+        Task(priority: .high) {
+            await SHDownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
             
-            let descriptors = try SHAssetsDownloadManager.dequeue(
-                from: unauthorizedQueue,
-                itemsWithIdentifiers: assetGIdList
-            )
-            
-            guard let userStore = SHDBManager.sharedInstance.userStore else {
-                completionHandler(.failure(KBError.databaseNotReady))
-                return
-            }
-            let key = "auth-" + userId
-            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
-            
-            self.startAuthorizedDownload(of: descriptors) { result in
-                switch result {
-                case .success(let usersDict):
+            do {
+                let assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
+                guard assetGIdList.count > 0 else {
                     let response = SHAssetDownloadAuthorizationResponse(
-                        descriptors: descriptors,
-                        users: usersDict
+                        descriptors: [],
+                        users: [:]
                     )
                     completionHandler(.success(response))
-                case .failure(let error):
-                    completionHandler(.failure(error))
+                    return
                 }
+                
+                let descriptors = try SHAssetsDownloadManager.dequeue(
+                    from: unauthorizedQueue,
+                    itemsWithIdentifiers: assetGIdList
+                )
+                
+                guard let userStore = SHDBManager.sharedInstance.userStore else {
+                    completionHandler(.failure(KBError.databaseNotReady))
+                    return
+                }
+                let key = "auth-" + userId
+                let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
+                
+                self.startAuthorizedDownload(of: descriptors) { result in
+                    switch result {
+                    case .success(let usersDict):
+                        let response = SHAssetDownloadAuthorizationResponse(
+                            descriptors: descriptors,
+                            users: usersDict
+                        )
+                        completionHandler(.success(response))
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+            } catch {
+                completionHandler(.failure(error))
             }
-        } catch {
-            completionHandler(.failure(error))
         }
     }
     

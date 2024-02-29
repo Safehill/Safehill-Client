@@ -86,9 +86,6 @@ public struct SHKGQuery {
                     throw KBError.databaseNotReady
                 }
                 
-                let allTriplesBefore = try graph.triples(matching: nil)
-                log.debug("[sh-kg] graph before ingest \(allTriplesBefore)")
-                
                 let kgSender = graph.entity(withIdentifier: senderUserId)
                 let kgAsset = graph.entity(withIdentifier: assetIdentifier)
                 
@@ -109,9 +106,6 @@ public struct SHKGQuery {
                     try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
                     log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
                 }
-                
-                let allTriplesAfter = try graph.triples(matching: nil)
-                log.debug("[sh-kg] graph after ingest \(allTriplesAfter)")
             }
         } catch {
             log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
@@ -135,9 +129,6 @@ public struct SHKGQuery {
                 guard let graph = SHDBManager.sharedInstance.graph else {
                     throw KBError.databaseNotReady
                 }
-                
-                let allTriplesBefore = try graph.triples(matching: nil)
-                log.debug("[sh-kg] graph before ingest \(allTriplesBefore)")
                 
                 let kgSender = graph.entity(withIdentifier: senderUserId)
                 let kgAsset = graph.entity(withIdentifier: assetIdentifier)
@@ -169,9 +160,6 @@ public struct SHKGQuery {
                         UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
                     }
                 }
-                
-                let allTriplesAfter = try graph.triples(matching: nil)
-                log.debug("[sh-kg] graph after ingest \(allTriplesAfter)")
             }
         } catch {
             log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")

@@ -142,7 +142,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// that user can be safely removed from the blacklist,
         /// as well as all downloads from that user currently awaiting authorization
         ///
-        Task {
+        Task(priority: .low) {
             await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
                 userIdentifiers: userIdsInRemoteDescriptors
             )

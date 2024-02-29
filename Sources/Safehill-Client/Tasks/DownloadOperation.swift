@@ -800,7 +800,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     private func downloadAssets(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        Task(priority: .low) {
+        Task(priority: .medium) {
             do {
                 var count = 1
                 guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
