@@ -203,7 +203,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// - whose users were blacklisted
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
-        Task {
+        Task(priority: .medium) {
             let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
             var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
@@ -800,7 +800,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     private func downloadAssets(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        Task {
+        Task(priority: .low) {
             do {
                 var count = 1
                 guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
@@ -885,7 +885,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                 )
                             })
                             
-                            Task {
+                            Task(priority: .low) {
                                 await SHDownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
                             }
                         case .failure(let error):
@@ -898,7 +898,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                 )
                             })
                             
-                            Task {
+                            Task(priority: .low) {
                                 if error is SHCypher.DecryptionError {
                                     await SHDownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
                                 } else {
