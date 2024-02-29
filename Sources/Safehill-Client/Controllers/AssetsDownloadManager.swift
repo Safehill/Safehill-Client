@@ -332,7 +332,7 @@ internal extension SHAssetsDownloadManager {
         
         /// Remove dangling users
         for userId in allUserIds {
-            condition = condition.or(KBGenericCondition(.equal, value: "auth-\(userId)", negated: true))
+            condition = condition.and(KBGenericCondition(.equal, value: "auth-\(userId)", negated: true))
         }
         condition = KBGenericCondition(.beginsWith, value: "auth-").and(condition)
         let _ = try userStore.removeValues(forKeysMatching: condition)
