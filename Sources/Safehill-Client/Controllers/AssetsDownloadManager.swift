@@ -22,8 +22,13 @@ public struct SHAssetsDownloadManager {
         let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
         
         // Unauthorized queues are removed in LocalServer::runDataMigrations
-        
-        try DownloadBlacklist.shared.deepClean()
+        Task {
+            do {
+                try await DownloadBlacklist.shared.deepClean()
+            } catch {
+                log.error("failed to clean the download blacklist")
+            }
+        }
     }
     
     /// - Parameter userId: the user identifier
@@ -48,7 +53,10 @@ public struct SHAssetsDownloadManager {
     ///   - completionHandler: the callback method
     public func authorizeDownloads(from userId: String,
                                    completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void) {
-        SHAssetsDownloadManager.removeUsersFromBlacklist(with: [userId])
+        
+        Task {
+            await DownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
+        }
         
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
             log.error("Unable to connect to local queue or database")
