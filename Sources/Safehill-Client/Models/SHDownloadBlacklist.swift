@@ -6,7 +6,7 @@ public actor SHDownloadBlacklist {
     
     let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
     
-    static var shared = SHDownloadBlacklist()
+    public static var shared = SHDownloadBlacklist()
     
     /// Give up retrying after a download for an asset after this many attempts
     static let FailedDownloadCountThreshold = 50
