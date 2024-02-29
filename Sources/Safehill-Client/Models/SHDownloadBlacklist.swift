@@ -71,7 +71,7 @@ public actor SHDownloadBlacklist {
         }
     }
     
-    func blacklist(userIdentifier: UserIdentifier) {
+    public func blacklist(userIdentifier: UserIdentifier) {
         guard blacklistedUsers.contains(userIdentifier) == false else {
             return
         }
