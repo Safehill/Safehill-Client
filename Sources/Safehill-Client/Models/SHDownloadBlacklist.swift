@@ -2,11 +2,11 @@ import KnowledgeBase
 import Foundation
 
 
-actor DownloadBlacklist {
+public actor SHDownloadBlacklist {
     
     let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
     
-    static var shared = DownloadBlacklist()
+    static var shared = SHDownloadBlacklist()
     
     /// Give up retrying after a download for an asset after this many attempts
     static let FailedDownloadCountThreshold = 50
@@ -14,13 +14,13 @@ actor DownloadBlacklist {
     var repeatedDownloadFailuresByAssetId = [GlobalIdentifier: Int]()
     
     private let blacklistUserStorage = KBKVStore.userDefaultsStore()!
-    internal var blacklistedUsers: [String] {
+    internal var blacklistedUsers: [UserIdentifier] {
         get {
             do {
                 let savedList = try self.blacklistUserStorage.value(
                     for: kSHUsersBlacklistKey
                 )
-                if let savedList = savedList as? [String] {
+                if let savedList = savedList as? [UserIdentifier] {
                     return savedList
                 }
             } catch {}
@@ -38,6 +38,11 @@ actor DownloadBlacklist {
         }
     }
     
+    
+    public func allBlacklistedUsers() -> [UserIdentifier] {
+        return blacklistedUsers
+    }
+    
     func recordFailedAttempt(globalIdentifier: GlobalIdentifier) {
         if repeatedDownloadFailuresByAssetId[globalIdentifier] == nil {
             self.repeatedDownloadFailuresByAssetId[globalIdentifier] = 1
@@ -47,18 +52,18 @@ actor DownloadBlacklist {
     }
     
     func blacklist(globalIdentifier: GlobalIdentifier) {
-        self.repeatedDownloadFailuresByAssetId[globalIdentifier] = DownloadBlacklist.FailedDownloadCountThreshold
+        self.repeatedDownloadFailuresByAssetId[globalIdentifier] = SHDownloadBlacklist.FailedDownloadCountThreshold
     }
     
-    func removeFromBlacklist(assetGlobalIdentifier: GlobalIdentifier) {
+    public func removeFromBlacklist(assetGlobalIdentifier: GlobalIdentifier) {
         let _ = self.repeatedDownloadFailuresByAssetId.removeValue(forKey: assetGlobalIdentifier)
     }
     
-    func isBlacklisted(assetGlobalIdentifier: GlobalIdentifier) -> Bool {
-        DownloadBlacklist.FailedDownloadCountThreshold == repeatedDownloadFailuresByAssetId[assetGlobalIdentifier]
+    public func isBlacklisted(assetGlobalIdentifier: GlobalIdentifier) -> Bool {
+        SHDownloadBlacklist.FailedDownloadCountThreshold == repeatedDownloadFailuresByAssetId[assetGlobalIdentifier]
     }
     
-    func areBlacklisted(assetGlobalIdentifiers: [GlobalIdentifier]) -> [GlobalIdentifier: Bool] {
+    public func areBlacklisted(assetGlobalIdentifiers: [GlobalIdentifier]) -> [GlobalIdentifier: Bool] {
         return assetGlobalIdentifiers.reduce([GlobalIdentifier: Bool]()) { partialResult, assetId in
             var result = partialResult
             result[assetId] = isBlacklisted(assetGlobalIdentifier: assetId)
@@ -73,7 +78,7 @@ actor DownloadBlacklist {
         blacklistedUsers.append(userIdentifier)
     }
     
-    func removeFromBlacklist(userIdentifiers: [UserIdentifier]) {
+    public func removeFromBlacklist(userIdentifiers: [UserIdentifier]) {
         self.blacklistedUsers.removeAll(where: { userIdentifiers.contains($0) })
     }
     
@@ -81,11 +86,11 @@ actor DownloadBlacklist {
         self.blacklistedUsers.removeAll(where: { userIdentifiers.contains($0) == false })
     }
     
-    func isBlacklisted(userIdentifier: UserIdentifier) -> Bool {
+    public func isBlacklisted(userIdentifier: UserIdentifier) -> Bool {
         blacklistedUsers.contains(userIdentifier)
     }
     
-    func areBlacklisted(userIdentifiers: [UserIdentifier]) -> [UserIdentifier: Bool] {
+    public func areBlacklisted(userIdentifiers: [UserIdentifier]) -> [UserIdentifier: Bool] {
         return userIdentifiers.reduce([UserIdentifier: Bool]()) { partialResult, userId in
             var result = partialResult
             result[userId] = isBlacklisted(userIdentifier: userId)

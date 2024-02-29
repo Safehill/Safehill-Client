@@ -143,7 +143,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// as well as all downloads from that user currently awaiting authorization
         ///
         Task {
-            await DownloadBlacklist.shared.removeFromBlacklistIfNotIn(
+            await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
                 userIdentifiers: userIdsInRemoteDescriptors
             )
         }

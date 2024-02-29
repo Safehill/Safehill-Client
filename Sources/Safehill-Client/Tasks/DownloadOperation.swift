@@ -206,10 +206,10 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         Task {
             let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
             var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
-            let blacklistedAssets = await DownloadBlacklist.shared.areBlacklisted(
+            let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
                 assetGlobalIdentifiers: globalIdentifiers
             )
-            let blacklistedUsers = await DownloadBlacklist.shared.areBlacklisted(
+            let blacklistedUsers = await SHDownloadBlacklist.shared.areBlacklisted(
                 userIdentifiers: senderIds
             )
             
@@ -839,7 +839,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                         )
                     })
                     
-                    guard await DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
+                    guard await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
                         self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
                         
                         do {
@@ -886,7 +886,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             })
                             
                             Task {
-                                await DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
+                                await SHDownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
                             }
                         case .failure(let error):
                             let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
@@ -900,12 +900,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             
                             Task {
                                 if error is SHCypher.DecryptionError {
-                                    await DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
+                                    await SHDownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
                                 } else {
-                                    await DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
+                                    await SHDownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
                                 }
                                 
-                                if await DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
+                                if await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
                                     self.downloaderDelegates.forEach({
                                         $0.didFailRepeatedlyDownloadOfAsset(
                                             withGlobalIdentifier: globalIdentifier,

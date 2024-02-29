@@ -24,7 +24,7 @@ public struct SHAssetsDownloadManager {
         // Unauthorized queues are removed in LocalServer::runDataMigrations
         Task {
             do {
-                try await DownloadBlacklist.shared.deepClean()
+                try await SHDownloadBlacklist.shared.deepClean()
             } catch {
                 log.error("failed to clean the download blacklist")
             }
@@ -55,7 +55,7 @@ public struct SHAssetsDownloadManager {
                                    completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void) {
         
         Task {
-            await DownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
+            await SHDownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
         }
         
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
