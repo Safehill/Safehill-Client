@@ -1067,12 +1067,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 threadsDelegates: self.threadsSyncDelegates
             )
             group.enter()
-            syncOperation.sync(
-                remoteDescriptors: Array(remoteAndLocalDescriptors),
-                localDescriptors: localDescriptors
-            ) { syncResult in
-                group.leave()
-            }
+//            syncOperation.sync(
+//                remoteDescriptors: Array(remoteAndLocalDescriptors),
+//                localDescriptors: localDescriptors
+//            ) { syncResult in
+//                group.leave()
+//            }
             
             ///
             /// Given the whole remote descriptors set (to retrieve threads and groups), sync the interactions

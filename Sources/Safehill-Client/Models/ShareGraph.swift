@@ -322,7 +322,7 @@ public struct SHKGQuery {
         
         var usersIdsToSearch = [UserIdentifier]()
         
-        try readWriteGraphQueue.sync(flags: .barrier) {
+        readWriteGraphQueue.sync(flags: .barrier) {
             for userId in Set(userIdentifiers) {
                 if let assetIdsSharedWith = UserIdToAssetGidSharedWithCache[userId] {
                     assetIdsSharedWith.forEach({
