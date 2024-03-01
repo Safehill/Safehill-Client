@@ -142,7 +142,11 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// that user can be safely removed from the blacklist,
         /// as well as all downloads from that user currently awaiting authorization
         ///
-        DownloadBlacklist.shared.removeFromBlacklistIfNotIn(userIdentifiers: userIdsInRemoteDescriptors)
+        Task(priority: .low) {
+            await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
+                userIdentifiers: userIdsInRemoteDescriptors
+            )
+        }
         
         do {
             try SHAssetsDownloadManager.cleanEntriesNotIn(
@@ -152,9 +156,6 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         } catch {
             log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
         }
-        let userBlacklist = SHAssetsDownloadManager.blacklistedUsers
-        let uIdsToRemoveFromBlacklist = userBlacklist.subtract(userIdsInRemoteDescriptors)
-        SHAssetsDownloadManager.removeUsersFromBlacklist(with: uIdsToRemoveFromBlacklist)
         
         ///
         /// Generate a diff of assets and users (latter organized by group)

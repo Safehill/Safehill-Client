@@ -203,88 +203,99 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// - whose users were blacklisted
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
-        let filteredDescriptors = descriptors.filter {
-            DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: $0.globalIdentifier) == false
-            && DownloadBlacklist.shared.isBlacklisted(userIdentifier: $0.sharingInfo.sharedByUserIdentifier) == false
-            && $0.uploadState == .completed || $0.uploadState == .partial
-        }
-        
-        guard filteredDescriptors.count > 0 else {
-            self.downloaderDelegates.forEach({
-                $0.didReceiveAssetDescriptors([], referencing: [:])
-            })
-            completionHandler(.success([:]))
-            return
-        }
-        
-        /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
-        /// filter out the ones whose sender is unknown.
-        /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-        let senderIds = filteredDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
-        let knownUsers: [UserIdentifier: Bool]
-        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
-        catch {
-            log.error("failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var descriptorsFromKnownUsers = filteredDescriptors.filter {
-            knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
-        }
-        
-        ///
-        /// Fetch from server users information (`SHServerUser` objects)
-        /// for all user identifiers found in all descriptors shared by OTHER known users
-        ///
-        var usersDict = [UserIdentifier: any SHServerUser]()
-        var userIdentifiers = Set(descriptorsFromKnownUsers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptorsFromKnownUsers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-        
-        do {
-            usersDict = try self.getUsers(withIdentifiers: Array(userIdentifiers))
-        } catch {
-            self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        ///
-        /// Filter out the descriptor that reference any user that could not be retrieved.
-        /// For those, we expect the `SHDownloadOperation` to process them
-        ///
-        descriptorsFromKnownUsers = descriptorsFromKnownUsers.filter { desc in
-            if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
-                return false
+        Task(priority: .medium) {
+            let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
+            var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+            let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
+                assetGlobalIdentifiers: globalIdentifiers
+            )
+            let blacklistedUsers = await SHDownloadBlacklist.shared.areBlacklisted(
+                userIdentifiers: senderIds
+            )
+            
+            let filteredDescriptors = descriptors.filter {
+                (blacklistedAssets[$0.globalIdentifier] ?? false) == false
+                && (blacklistedUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false) == false
+                && $0.uploadState == .completed || $0.uploadState == .partial
             }
-            for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                if usersDict[sharedWithUserId] == nil {
+            
+            guard filteredDescriptors.count > 0 else {
+                self.downloaderDelegates.forEach({
+                    $0.didReceiveAssetDescriptors([], referencing: [:])
+                })
+                completionHandler(.success([:]))
+                return
+            }
+            
+            /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
+            /// filter out the ones whose sender is unknown.
+            /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
+            senderIds = filteredDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+            let knownUsers: [UserIdentifier: Bool]
+            do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+            catch {
+                log.error("failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
+                completionHandler(.failure(error))
+                return
+            }
+            
+            var descriptorsFromKnownUsers = filteredDescriptors.filter {
+                knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
+            }
+            
+            ///
+            /// Fetch from server users information (`SHServerUser` objects)
+            /// for all user identifiers found in all descriptors shared by OTHER known users
+            ///
+            var usersDict = [UserIdentifier: any SHServerUser]()
+            var userIdentifiers = Set(descriptorsFromKnownUsers.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            userIdentifiers.formUnion(Set(descriptorsFromKnownUsers.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+            
+            do {
+                usersDict = try self.getUsers(withIdentifiers: Array(userIdentifiers))
+            } catch {
+                self.log.error("Unable to fetch users from local server: \(error.localizedDescription)")
+                completionHandler(.failure(error))
+                return
+            }
+            
+            ///
+            /// Filter out the descriptor that reference any user that could not be retrieved.
+            /// For those, we expect the `SHDownloadOperation` to process them
+            ///
+            descriptorsFromKnownUsers = descriptorsFromKnownUsers.filter { desc in
+                if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
                     return false
                 }
+                for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                    if usersDict[sharedWithUserId] == nil {
+                        return false
+                    }
+                }
+                return true
             }
-            return true
-        }
-        
-        ///
-        /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by other known users**.
-        /// The ones shared by THIS user will be restored through the restoration delegate.
-        ///
-        self.downloaderDelegates.forEach({
-            $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                          referencing: usersDict)
-        })
-        
-        var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-        for descriptor in filteredDescriptors {
-            descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
+            
             ///
-            /// Limit based on the task configuration
+            /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by other known users**.
+            /// The ones shared by THIS user will be restored through the restoration delegate.
             ///
-            if let limit = self.limit, descriptorsByGlobalIdentifier.count > limit {
-                break
+            self.downloaderDelegates.forEach({
+                $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
+                                              referencing: usersDict)
+            })
+            
+            var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
+            for descriptor in filteredDescriptors {
+                descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
+                ///
+                /// Limit based on the task configuration
+                ///
+                if let limit = self.limit, descriptorsByGlobalIdentifier.count > limit {
+                    break
+                }
             }
+            completionHandler(.success(descriptorsByGlobalIdentifier))
         }
-        completionHandler(.success(descriptorsByGlobalIdentifier))
     }
     
     ///
@@ -789,91 +800,96 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     private func downloadAssets(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            var count = 1
-            guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
-                self.log.error("[downloadAssets] unable to connect to local queue or database")
-                completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
-                return
-            }
-            
-            while let item = try queue.peek() {
-                let start = CFAbsoluteTimeGetCurrent()
+        Task(priority: .medium) {
+            do {
+                var count = 1
+                guard let queue = try? BackgroundOperationQueue.of(type: .download) else {
+                    self.log.error("[downloadAssets] unable to connect to local queue or database")
+                    completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
+                    return
+                }
                 
-                log.info("[downloadAssets] downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
-                
-                guard let downloadRequest = try? content(ofQueueItem: item) as? SHDownloadRequestQueueItem else {
-                    log.error("[downloadAssets] unexpected data found in DOWNLOAD queue. Dequeueing")
+                while let item = try queue.peek() {
+                    let start = CFAbsoluteTimeGetCurrent()
+                    
+                    log.info("[downloadAssets] downloading assets from descriptors in item \(count), with identifier \(item.identifier) created at \(item.createdAt)")
+                    
+                    guard let downloadRequest = try? content(ofQueueItem: item) as? SHDownloadRequestQueueItem else {
+                        log.error("[downloadAssets] unexpected data found in DOWNLOAD queue. Dequeueing")
+                        
+                        do { _ = try queue.dequeue() }
+                        catch {
+                            log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        }
+                        
+                        continue
+                    }
+                    
+                    let globalIdentifier = downloadRequest.assetDescriptor.globalIdentifier
+                    let descriptor = downloadRequest.assetDescriptor
+                    
+                    // MARK: Start
+                    
+                    let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
+                    self.downloaderDelegates.forEach({
+                        $0.didStartDownloadOfAsset(
+                            withGlobalIdentifier: globalIdentifier,
+                            descriptor: descriptor,
+                            in: groupId
+                        )
+                    })
+                    
+                    guard await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
+                        self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
+                        
+                        do {
+                            let downloadsManager = SHAssetsDownloadManager(user: self.user)
+                            try downloadsManager.stopDownload(ofAssetsWith: [globalIdentifier])
+                        } catch {
+                            log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        }
+                        
+                        continue
+                    }
                     
                     do { _ = try queue.dequeue() }
                     catch {
-                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                        log.warning("[downloadAssets] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
                     }
                     
-                    continue
-                }
-                
-                let globalIdentifier = downloadRequest.assetDescriptor.globalIdentifier
-                let descriptor = downloadRequest.assetDescriptor
-                
-                // MARK: Start
-                
-                for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.downloaderDelegates.forEach({
-                        $0.didStartDownloadOfAsset(withGlobalIdentifier: globalIdentifier,
-                                                   descriptor: descriptor,
-                                                   in: groupId)
-                    })
-                }
-                
-                guard DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: downloadRequest.assetDescriptor.globalIdentifier) == false else {
-                    self.log.info("[downloadAssets] skipping item \(downloadRequest.assetDescriptor.globalIdentifier) because it was attempted too many times")
+                    count += 1
                     
-                    do {
-                        let downloadsManager = SHAssetsDownloadManager(user: self.user)
-                        try downloadsManager.stopDownload(ofAssetsWith: [globalIdentifier])
-                    } catch {
-                        log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again.")
+                    guard !self.isCancelled else {
+                        log.info("[downloadAssets] download task cancelled. Finishing")
+                        state = .finished
+                        break
                     }
                     
-                    continue
-                }
-                
-                let group = DispatchGroup()
-                var shouldDequeue = true
-                
-                // MARK: Get Low Res asset
-                
-                group.enter()
-                self.fetchAsset(withGlobalIdentifier: globalIdentifier,
-                                quality: .lowResolution,
-                                descriptor: downloadRequest.assetDescriptor) { result in
-                    switch result {
-                    case .success(let decryptedAsset):
-                        DownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
+                    // MARK: Get Low Res asset
+                    
+                    self.fetchAsset(withGlobalIdentifier: globalIdentifier,
+                                    quality: .lowResolution,
+                                    descriptor: downloadRequest.assetDescriptor) { result in
                         
-                        self.downloaderDelegates.forEach({
-                            $0.didFetchLowResolutionAsset(decryptedAsset)
-                        })
-                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                        switch result {
+                        case .success(let decryptedAsset):
+                            self.downloaderDelegates.forEach({
+                                $0.didFetchLowResolutionAsset(decryptedAsset)
+                            })
+                            
+                            let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
                             self.downloaderDelegates.forEach({
                                 $0.didCompleteDownloadOfAsset(
                                     withGlobalIdentifier: decryptedAsset.globalIdentifier,
                                     in: groupId
                                 )
                             })
-                        }
-                    case .failure(let error):
-                        shouldDequeue = false
-                        
-                        // Record the failure for the asset
-                        if error is SHCypher.DecryptionError {
-                            DownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
-                        } else {
-                            DownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
-                        }
-                        
-                        for groupId in descriptor.sharingInfo.groupInfoById.keys {
+                            
+                            Task(priority: .low) {
+                                await SHDownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
+                            }
+                        case .failure(let error):
+                            let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
                             self.downloaderDelegates.forEach({
                                 $0.didFailDownloadOfAsset(
                                     withGlobalIdentifier: globalIdentifier,
@@ -881,56 +897,35 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                                     with: error
                                 )
                             })
-                            if DownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
-                                shouldDequeue = true
-                                self.downloaderDelegates.forEach({
-                                    $0.didFailRepeatedlyDownloadOfAsset(
-                                        withGlobalIdentifier: globalIdentifier,
-                                        in: groupId
-                                    )
-                                })
+                            
+                            Task(priority: .low) {
+                                if error is SHCypher.DecryptionError {
+                                    await SHDownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
+                                } else {
+                                    await SHDownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
+                                }
+                                
+                                if await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: globalIdentifier) {
+                                    self.downloaderDelegates.forEach({
+                                        $0.didFailRepeatedlyDownloadOfAsset(
+                                            withGlobalIdentifier: globalIdentifier,
+                                            in: groupId
+                                        )
+                                    })
+                                }
                             }
                         }
-                    }
-                    group.leave()
-                }
-                
-                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds))
-                guard dispatchResult == .success else {
-                    if shouldDequeue {
-                        do { _ = try queue.dequeue() }
-                        catch {
-                            log.warning("[downloadAssets] dequeuing failed of unexpected data in DOWNLOAD. ATTENTION: this operation will be attempted again even if it's unintended.")
-                        }
-                    }
-                    
-                    continue
-                }
-                
-                let end = CFAbsoluteTimeGetCurrent()
-                log.debug("[downloadAssets][PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
-                
-                if shouldDequeue {
-                    do { _ = try queue.dequeue() }
-                    catch {
-                        log.warning("[downloadAssets] asset \(globalIdentifier) was downloaded but dequeuing failed, so this operation will be attempted again.")
+                        
+                        let end = CFAbsoluteTimeGetCurrent()
+                        self.log.debug("[downloadAssets][PERF] it took \(CFAbsoluteTime(end - start)) to download the asset")
                     }
                 }
                 
-                count += 1
-                
-                guard !self.isCancelled else {
-                    log.info("[downloadAssets] download task cancelled. Finishing")
-                    state = .finished
-                    break
-                }
+                completionHandler(.success(()))
+            } catch {
+                log.error("[downloadAssets] error executing download task: \(error.localizedDescription)")
+                completionHandler(.failure(error))
             }
-            
-            completionHandler(.success(()))
-            
-        } catch {
-            log.error("[downloadAssets] error executing download task: \(error.localizedDescription)")
-            completionHandler(.failure(error))
         }
     }
     

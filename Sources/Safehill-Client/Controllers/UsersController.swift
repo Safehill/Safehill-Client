@@ -33,19 +33,19 @@ internal class ServerUserCache {
                 self.evictors[user.identifier]?.invalidate()
                 self.evictors.removeValue(forKey: user.identifier)
             }
-        }
-        
-        DispatchQueue.main.async {
-            for (i, user) in users.enumerated() {
-                // Cache retention policy: TTL = 2 minutes
-                self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
-                                                                      repeats: false,
-                                                                      block: { (timer) in
-                    self.writeQueue.sync(flags: .barrier) {
-                        self.cache.removeObject(forKey: NSString(string: user.identifier))
-                        timer.invalidate()
-                    }
-                })
+            
+            DispatchQueue.main.async {
+                for (i, user) in users.enumerated() {
+                    // Cache retention policy: TTL = 2 minutes
+                    self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
+                                                                          repeats: false,
+                                                                          block: { (timer) in
+                        self.writeQueue.sync(flags: .barrier) {
+                            self.cache.removeObject(forKey: NSString(string: user.identifier))
+                            timer.invalidate()
+                        }
+                    })
+                }
             }
         }
     }

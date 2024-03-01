@@ -196,13 +196,12 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 return
             }
             
-            for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                self.downloaderDelegates.forEach({
-                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                               descriptor: descriptor,
-                                               in: groupId)
-                })
-            }
+            let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
+            self.downloaderDelegates.forEach({
+                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
+                                           descriptor: descriptor,
+                                           in: groupId)
+            })
             
             do {
                 let decryptedAsset = try localAssetsStore.decryptedAsset(
@@ -214,26 +213,22 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 self.downloaderDelegates.forEach({
                     $0.didFetchLowResolutionAsset(decryptedAsset)
                 })
-                for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.downloaderDelegates.forEach({
-                        $0.didCompleteDownloadOfAsset(
-                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                            in: groupId
-                        )
-                    })
-                }
+                self.downloaderDelegates.forEach({
+                    $0.didCompleteDownloadOfAsset(
+                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                        in: groupId
+                    )
+                })
             } catch {
                 self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 
-                for groupId in descriptor.sharingInfo.groupInfoById.keys {
-                    self.downloaderDelegates.forEach({
-                        $0.didFailDownloadOfAsset(
-                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                            in: groupId,
-                            with: error
-                        )
-                    })
-                }
+                self.downloaderDelegates.forEach({
+                    $0.didFailDownloadOfAsset(
+                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                        in: groupId,
+                        with: error
+                    )
+                })
             }
         }
         
