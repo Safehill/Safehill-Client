@@ -8,46 +8,14 @@ extension SHSyncOperation {
     /// - Parameter descriptorsByGlobalIdentifier: the descriptors retrieved from server, from which to collect all unique groups
     ///
     func syncGroupInteractions(
-        remoteDescriptors: [any SHAssetDescriptor],
+        groupIds: [String],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        ///
-        /// Extract unique group ids from the descriptors
-        ///
-        
-        let allSharedGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
-            var result = partialResult
-            
-            var isShared = false
-            let userIdsSharedWith: Set<String> = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
-            let myUserId = self.user.identifier
-            if descriptor.sharingInfo.sharedByUserIdentifier == myUserId {
-                if userIdsSharedWith.subtracting([myUserId]).count > 0 {
-                    isShared = true
-                }
-            } else if userIdsSharedWith.contains(myUserId) {
-                isShared = true
-            }
-            
-            guard isShared else {
-                /// If not shared, do nothing (do not update the partial result)
-                return result
-            }
-            
-            for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                if userId != self.user.identifier {
-                    result[groupId] = 1
-                }
-            }
-            return result
-        }).keys)
-        
-        
         ///
         /// For each group …
         ///
         let dispatchGroup = DispatchGroup()
-        for groupId in allSharedGroupIds {
+        for groupId in groupIds {
             dispatchGroup.enter()
             self.syncGroupInteractions(groupId: groupId) { result in
                 if case .failure(let err) = result {

@@ -43,40 +43,12 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         return userIdsDescriptorsSet
     }
     
-    private func syncWithLocalDescriptors(
-        _ remoteDescriptors: [any SHAssetDescriptor],
+    private func syncDescriptors(
+        remoteDescriptors: [any SHAssetDescriptor],
+        localDescriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<AssetDescriptorsDiff, Error>) -> ()
     ) {
-        var localDescriptors = [any SHAssetDescriptor]()
-        var localError: Error? = nil
         let remoteUsersById: [UserIdentifier: any SHServerUser]
-        var dispatchResult: DispatchTimeoutResult? = nil
-        
-        ///
-        /// Get all the local descriptors
-        ///
-        let group = DispatchGroup()
-        group.enter()
-        self.serverProxy.getLocalAssetDescriptors { localResult in
-            switch localResult {
-            case .success(let descriptors):
-                localDescriptors = descriptors
-            case .failure(let err):
-                self.log.error("failed to fetch descriptors from LOCAL server when calculating diff: \(err.localizedDescription)")
-                localError = err
-            }
-            group.leave()
-        }
-        
-        dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHBackgroundOperationError.timedOut))
-            return
-        }
-        guard localError == nil else {
-            completionHandler(.failure(localError!))
-            return
-        }
         
         ///
         /// Get all users referenced in either local or remote descriptors (excluding THIS user)
@@ -317,17 +289,20 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     public func sync(
         remoteDescriptors: [any SHAssetDescriptor],
+        localDescriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let group = DispatchGroup()
         var descriptorsSyncError: Error? = nil
-        var interactionsSyncError: Error? = nil
         
         ///
         /// Sync them with the local descriptors
         ///
         group.enter()
-        self.syncWithLocalDescriptors(remoteDescriptors) { syncWithLocalDescResult in
+        self.syncDescriptors(
+            remoteDescriptors: remoteDescriptors,
+            localDescriptors: localDescriptors
+        ) { syncWithLocalDescResult in
             switch syncWithLocalDescResult {
             case .success(let diff):
                 if diff.stateDifferentOnServer.count > 0 {
@@ -340,11 +315,55 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
+        group.notify(queue: .global(qos: .background)) {
+            if let err = descriptorsSyncError {
+                completionHandler(.failure(err))
+            }
+            else {
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    public func syncInteractions(
+        remoteDescriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         ///
-        /// Sync interactions
+        /// Extract unique group ids from the descriptors
         ///
+        let allSharedGroupIds = Array(remoteDescriptors.reduce([String: Int](), { partialResult, descriptor in
+            var result = partialResult
+            
+            var isShared = false
+            let userIdsSharedWith: Set<String> = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+            let myUserId = self.user.identifier
+            if descriptor.sharingInfo.sharedByUserIdentifier == myUserId {
+                if userIdsSharedWith.subtracting([myUserId]).count > 0 {
+                    isShared = true
+                }
+            } else if userIdsSharedWith.contains(myUserId) {
+                isShared = true
+            }
+            
+            guard isShared else {
+                /// If not shared, do nothing (do not update the partial result)
+                return result
+            }
+            
+            for (userId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                if userId != self.user.identifier {
+                    result[groupId] = 1
+                }
+            }
+            return result
+        }).keys)
+        
+        let group = DispatchGroup()
+        var interactionsSyncError: Error? = nil
+        
         group.enter()
-        self.syncGroupInteractions(remoteDescriptors: remoteDescriptors) { result in
+        self.syncGroupInteractions(groupIds: allSharedGroupIds) { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
                 interactionsSyncError = err
@@ -353,7 +372,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         group.enter()
-        self.syncThreadInteractions(remoteDescriptors: remoteDescriptors) { result in
+        self.syncThreadInteractions { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
                 interactionsSyncError = err
@@ -362,10 +381,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         
         group.notify(queue: .global(qos: .background)) {
-            if let err = descriptorsSyncError {
-                completionHandler(.failure(err))
-            }
-            else if let err = interactionsSyncError {
+            if let err = interactionsSyncError {
                 completionHandler(.failure(err))
             }
             else {
@@ -375,18 +391,40 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     }
     
     private func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        
         ///
-        /// Get the descriptors from the server
+        /// Get the descriptors from the local server
         ///
-        self.serverProxy.getRemoteAssetDescriptors { remoteResult in
-            switch remoteResult {
+        self.serverProxy.getLocalAssetDescriptors { localResult in
+            switch localResult {
             case .success(let descriptors):
+                let localDescriptors = descriptors
+                
                 ///
-                /// Start the sync process
+                /// Get the descriptors from the server
                 ///
-                self.sync(remoteDescriptors: descriptors, completionHandler: completionHandler)
+                self.serverProxy.getRemoteAssetDescriptors { remoteResult in
+                    switch remoteResult {
+                    case .success(let descriptors):
+                        let remoteDescriptors = descriptors.filter { remoteDesc in
+                            localDescriptors.contains(where: {
+                                $0.globalIdentifier == remoteDesc.globalIdentifier
+                            })
+                        }
+                        
+                        ///
+                        /// Start the sync process
+                        ///
+                        self.sync(remoteDescriptors: remoteDescriptors,
+                                  localDescriptors: localDescriptors,
+                                  completionHandler: completionHandler)
+                    case .failure(let err):
+                        self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
+                        completionHandler(.failure(err))
+                    }
+                }
             case .failure(let err):
-                self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
+                self.log.error("failed to fetch descriptors from LOCAL server when calculating diff: \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }

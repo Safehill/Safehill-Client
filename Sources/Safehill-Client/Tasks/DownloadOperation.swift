@@ -942,39 +942,45 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         DispatchQueue.global(qos: .background).async {
             let group = DispatchGroup()
             
-            let descriptors: [any SHAssetDescriptor]
+            var localDescriptors = [any SHAssetDescriptor]()
+            var remoteDescriptors = [any SHAssetDescriptor]()
             var descriptorsByGlobalIdentifier = [GlobalIdentifier: any SHAssetDescriptor]()
-            var error: Error? = nil
+            var localError: Error? = nil
+            var remoteError: Error? = nil
             var dispatchResult: DispatchTimeoutResult? = nil
             
             ///
             /// Get all asset descriptors associated with this user from the server.
             /// Descriptors serve as a manifest to determine what to download.
             ///
-            do {
-                descriptors = try self.fetchDescriptorsFromServer(
-                    for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!
-                )
-            } catch {
-                completionHandler(.failure(error))
-                return
-            }
-            
-            let start = CFAbsoluteTimeGetCurrent()
-            
             group.enter()
-            self.processDescriptors(descriptors) { descResult in
-                switch descResult {
+            self.serverProxy.getRemoteAssetDescriptors(
+                for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!
+            ) { remoteResult in
+                switch remoteResult {
+                case .success(let descriptors):
+                    remoteDescriptors = descriptors
                 case .failure(let err):
-                    self.log.error("failed to download descriptors: \(err.localizedDescription)")
-                    error = err
-                case .success(let val):
-                    descriptorsByGlobalIdentifier = val
+                    self.log.error("failed to fetch descriptors from REMOTE server when syncing: \(err.localizedDescription)")
+                    remoteError = err
                 }
                 group.leave()
-                
-                let end = CFAbsoluteTimeGetCurrent()
-                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.count) descriptors")
+            }
+            
+            ///
+            /// Get all the local descriptors.
+            /// These need to be filtered out. Syncing will take care of updating descriptors that are present locally
+            ///
+            group.enter()
+            self.serverProxy.getLocalAssetDescriptors { localResult in
+                switch localResult {
+                case .success(let descriptors):
+                    localDescriptors = descriptors
+                case .failure(let err):
+                    self.log.error("failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
+                    localError = err
+                }
+                group.leave()
             }
             
             dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
@@ -982,27 +988,53 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 completionHandler(.failure(SHBackgroundOperationError.timedOut))
                 return
             }
-            guard error == nil else {
-                completionHandler(.failure(error!))
+            guard remoteError == nil else {
+                completionHandler(.failure(remoteError!))
+                return
+            }
+            guard localError == nil else {
+                completionHandler(.failure(localError!))
                 return
             }
             
-            ///
-            /// Given these descriptors, sync local and remote state (REMOVALS and UPDATES)
-            ///
-            let syncOperation = SHSyncOperation(
-                user: self.user as! SHAuthenticatedLocalUser,
-                assetsDelegates: self.assetsSyncDelegates,
-                threadsDelegates: self.threadsSyncDelegates
-            )
-            group.enter()
-            syncOperation.sync(remoteDescriptors: descriptors) { syncResult in
-                group.leave()
+            var remoteDescriptorsCopy = Array(remoteDescriptors)
+            let p = remoteDescriptorsCopy.partition { remoteDesc in
+                localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier })
             }
+            let remoteOnlyDescriptors = remoteDescriptorsCopy[..<p]
+            let remoteAndLocalDescriptors = remoteDescriptorsCopy[p...]
+            
+            let start = CFAbsoluteTimeGetCurrent()
+            var processingError: Error? = nil
             
             ///
-            /// Given these descriptors, determine what needs to be downloaded (CREATES)
+            /// Given the descriptors that are only in local, determine what needs to be downloaded (CREATES)
             ///
+            group.enter()
+            self.processDescriptors(Array(remoteOnlyDescriptors)) { descResult in
+                switch descResult {
+                case .failure(let err):
+                    self.log.error("failed to download descriptors: \(err.localizedDescription)")
+                    processingError = err
+                case .success(let val):
+                    descriptorsByGlobalIdentifier = val
+                }
+                group.leave()
+                
+                let end = CFAbsoluteTimeGetCurrent()
+                self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(remoteDescriptors.count) descriptors")
+            }
+            
+            dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+            guard dispatchResult == .success else {
+                completionHandler(.failure(SHBackgroundOperationError.timedOut))
+                return
+            }
+            guard processingError == nil else {
+                completionHandler(.failure(processingError!))
+                return
+            }
+            
             group.enter()
             self.processAssetsInDescriptors(
                 descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
@@ -1010,7 +1042,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 switch descAssetResult {
                 case .failure(let err):
                     self.log.error("failed to process assets in descriptors: \(err.localizedDescription)")
-                    error = err
+                    processingError = err
                 case .success():
                     ///
                     /// Get all asset descriptors associated with this user from the server.
@@ -1019,11 +1051,37 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     self.downloadAssets { result in
                         if case .failure(let err) = result {
                             self.log.error("failed to download assets: \(err.localizedDescription)")
-                            error = err
+                            processingError = err
                         }
                         group.leave()
                     }
                 }
+            }
+            
+            ///
+            /// Given the whole remote descriptors set, sync local and remote state (REMOVALS and UPDATES)
+            ///
+            let syncOperation = SHSyncOperation(
+                user: self.user as! SHAuthenticatedLocalUser,
+                assetsDelegates: self.assetsSyncDelegates,
+                threadsDelegates: self.threadsSyncDelegates
+            )
+            group.enter()
+            syncOperation.sync(
+                remoteDescriptors: Array(remoteAndLocalDescriptors),
+                localDescriptors: localDescriptors
+            ) { syncResult in
+                group.leave()
+            }
+            
+            ///
+            /// Given the whole remote descriptors set (to retrieve threads and groups), sync the interactions
+            ///
+            group.enter()
+            syncOperation.syncInteractions(
+                remoteDescriptors: remoteDescriptors
+            ) { syncInteractionsResult in
+                group.leave()
             }
             
             dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
@@ -1031,8 +1089,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 completionHandler(.failure(SHBackgroundOperationError.timedOut))
                 return
             }
-            guard error == nil else {
-                completionHandler(.failure(error!))
+            guard processingError == nil else {
+                completionHandler(.failure(processingError!))
                 return
             }
             completionHandler(.success(()))
