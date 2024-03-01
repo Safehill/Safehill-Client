@@ -166,6 +166,8 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
+        self.log.debug("[localrestoration] attempting to decrypt following assets from local store: \(Array(original.keys))")
+        
         guard original.count > 0 else {
             completionHandler(.success(()))
             return
