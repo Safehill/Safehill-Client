@@ -531,8 +531,8 @@ extension SHServerProxy {
                 }
                 
                 self.cacheAssets(for: descriptorsByGlobalIdentifier, quality: quality)
-            case .failure(_):
-                log.error("[CACHING] Unable to get asset descriptors \(globalIdentifiers) from remote server")
+            case .failure(let error):
+                log.error("[CACHING] Unable to get asset descriptors \(globalIdentifiers) from remote server. error=\(error.localizedDescription)")
             }
         }
     }
