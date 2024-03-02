@@ -195,6 +195,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///
     internal func processDescriptors(
         _ descriptors: [any SHAssetDescriptor],
+        priority: TaskPriority,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
@@ -203,7 +204,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         /// - whose users were blacklisted
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
-        Task(priority: .medium) {
+        Task(priority: priority) {
             let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
             var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
@@ -1007,7 +1008,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 /// Given the descriptors that are only in local, determine what needs to be downloaded (CREATES)
                 ///
                 group.enter()
-                self.processDescriptors(Array(remoteOnlyDescriptors)) { descResult in
+                self.processDescriptors(Array(remoteOnlyDescriptors), priority: .background) { descResult in
                     switch descResult {
                     case .failure(let err):
                         self.log.error("failed to download descriptors: \(err.localizedDescription)")

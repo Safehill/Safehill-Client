@@ -294,7 +294,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             return
         }
         
-        self.processDescriptors(descriptors) { result in
+        self.processDescriptors(descriptors, priority: .high) { result in
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
