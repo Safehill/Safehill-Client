@@ -1035,28 +1035,28 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 return
             }
             
-            group.enter()
-            self.processAssetsInDescriptors(
-                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
-            ) { descAssetResult in
-                switch descAssetResult {
-                case .failure(let err):
-                    self.log.error("failed to process assets in descriptors: \(err.localizedDescription)")
-                    processingError = err
-                case .success():
-                    ///
-                    /// Get all asset descriptors associated with this user from the server.
-                    /// Descriptors serve as a manifest to determine what to download
-                    ///
-                    self.downloadAssets { result in
-                        if case .failure(let err) = result {
-                            self.log.error("failed to download assets: \(err.localizedDescription)")
-                            processingError = err
-                        }
-                        group.leave()
-                    }
-                }
-            }
+//            group.enter()
+//            self.processAssetsInDescriptors(
+//                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+//            ) { descAssetResult in
+//                switch descAssetResult {
+//                case .failure(let err):
+//                    self.log.error("failed to process assets in descriptors: \(err.localizedDescription)")
+//                    processingError = err
+//                case .success():
+//                    ///
+//                    /// Get all asset descriptors associated with this user from the server.
+//                    /// Descriptors serve as a manifest to determine what to download
+//                    ///
+//                    self.downloadAssets { result in
+//                        if case .failure(let err) = result {
+//                            self.log.error("failed to download assets: \(err.localizedDescription)")
+//                            processingError = err
+//                        }
+//                        group.leave()
+//                    }
+//                }
+//            }
             
             ///
             /// Given the whole remote descriptors set, sync local and remote state (REMOVALS and UPDATES)
@@ -1066,7 +1066,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 assetsDelegates: self.assetsSyncDelegates,
                 threadsDelegates: self.threadsSyncDelegates
             )
-            group.enter()
+//            group.enter()
 //            syncOperation.sync(
 //                remoteDescriptors: Array(remoteAndLocalDescriptors),
 //                localDescriptors: localDescriptors
