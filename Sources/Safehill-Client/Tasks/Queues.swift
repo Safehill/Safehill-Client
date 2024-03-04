@@ -15,8 +15,7 @@ public struct BackgroundOperationQueue {
              successfulShare, // successful share history
              failedUpload, // failed upload history
              failedShare, // failed share history
-             unauthorizedDownload,  // downloads that need to be accepted (from unknown users)
-             download // downloading assets
+             unauthorizedDownload  // downloads that need to be accepted (from unknown users)
         
         var identifier: String {
             switch self {
@@ -38,8 +37,6 @@ public struct BackgroundOperationQueue {
                 return "com.gf.safehill.PhotoAssetFailedShareQueue"
             case .unauthorizedDownload:
                 return "com.gf.safehill.PhotoAssetUnauthorizedDownloadQueue"
-            case .download:
-                return "com.gf.safehill.PhotoAssetDownloadQueue"
             }
         }
     }

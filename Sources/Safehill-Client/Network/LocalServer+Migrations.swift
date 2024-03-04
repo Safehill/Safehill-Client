@@ -140,7 +140,7 @@ extension LocalServer {
         authedUser: SHAuthenticatedLocalUser,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
-        let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload, .download]
+        let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]
         for queueType in queuesToClear {
             do {
                 let unauthorizedDownloadsQueue = try BackgroundOperationQueue.of(type: .unauthorizedDownload)

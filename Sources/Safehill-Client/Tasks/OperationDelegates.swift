@@ -88,12 +88,17 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// Notifies about the successful download operation for a specific asset.
     /// - Parameter globalIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
-    func didCompleteDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
-                                    in groupId: String)
+    func didCompleteDownloadOfAsset(
+        withGlobalIdentifier globalIdentifier: GlobalIdentifier,
+        in groupId: String
+    )
     
     /// One cycle of downloads has finished
-    /// - Parameter result:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched
-    func didCompleteDownloadCycle(with result: Swift.Result<Void, Error>)
+    /// - Parameter result:  a callback returning either the descriptors for the assets downloaded,
+    /// or  an error if items couldn't be dequeued, or the descriptors couldn't be fetched
+    func didCompleteDownloadCycle(
+        with result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>
+    )
     
 }
 
