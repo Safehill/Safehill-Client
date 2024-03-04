@@ -191,6 +191,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///
     /// - Parameters:
     ///   - descriptors: the descriptors to process
+    ///   - priority: the task priority.  Usually`.high` for initial restoration at start, `.background` for background downloads
     ///   - completionHandler: the callback
     ///
     internal func processDescriptors(
