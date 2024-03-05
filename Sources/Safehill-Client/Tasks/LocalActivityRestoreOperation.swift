@@ -331,7 +331,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     case .success(let descriptorsToDecrypt):
 #if DEBUG
                         let delta = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
-                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). delta=\(delta)")
 #endif
                         
                         self.decryptFromLocalStore(
