@@ -936,6 +936,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 /// **CREATES**
                 /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded
                 ///
+                
+                self.log.debug("original descriptors: \(remoteOnlyDescriptors.count)")
+                
                 dispatchGroup.enter()
                 self.processDescriptors(Array(remoteOnlyDescriptors), priority: .background) { descResult in
                     switch descResult {
@@ -959,6 +962,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     
                     dispatchGroup.enter()
                     
+#if DEBUG
+                let delta = Set(remoteOnlyDescriptors.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                self.log.debug("after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+#endif
+                    
                     self.processAssetsInDescriptors(
                         descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
                     ) { descAssetResult in
@@ -968,6 +976,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             processingError = err
                             dispatchGroup.leave()
                         case .success(let descriptorsReadyToDownload):
+#if DEBUG
+                            let delta1 = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
+                            let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                            self.log.debug("ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
+#endif
                             self.downloadAssets(for: descriptorsReadyToDownload) {
                                 dispatchGroup.leave()
                             }
