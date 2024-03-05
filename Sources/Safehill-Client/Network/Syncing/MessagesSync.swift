@@ -28,23 +28,25 @@ extension SHSyncOperation {
                 case .failure(let failure):
                     self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
                 case .success(let messages):
-                    switch anchor {
-                    case .group:
-                        self.threadsDelegates.forEach({
-                            $0.didReceiveMessages(
-                                messages,
-                                inGroup: anchorId,
-                                encryptionDetails: encryptionDetails
-                            )
-                        })
-                    case .thread:
-                        self.threadsDelegates.forEach({
-                            $0.didReceiveMessages(
-                                messages,
-                                inThread: anchorId,
-                                encryptionDetails: encryptionDetails
-                            )
-                        })
+                    self.delegatesQueue.async { [weak self] in
+                        switch anchor {
+                        case .group:
+                            self?.threadsDelegates.forEach({
+                                $0.didReceiveMessages(
+                                    messages,
+                                    inGroup: anchorId,
+                                    encryptionDetails: encryptionDetails
+                                )
+                            })
+                        case .thread:
+                            self?.threadsDelegates.forEach({
+                                $0.didReceiveMessages(
+                                    messages,
+                                    inThread: anchorId,
+                                    encryptionDetails: encryptionDetails
+                                )
+                            })
+                        }
                     }
                 }
             }

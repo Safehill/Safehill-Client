@@ -201,11 +201,13 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             }
             
             let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
-            self.downloaderDelegates.forEach({
-                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                           descriptor: descriptor,
-                                           in: groupId)
-            })
+            self.delegatesQueue.async { [weak self] in
+                self?.downloaderDelegates.forEach({
+                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
+                                               descriptor: descriptor,
+                                               in: groupId)
+                })
+            }
             
             do {
                 let decryptedAsset = try localAssetsStore.decryptedAsset(
@@ -214,27 +216,31 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     descriptor: descriptor
                 )
                 
-                self.downloaderDelegates.forEach({
-                    $0.didFetchLowResolutionAsset(decryptedAsset)
-                })
-                self.downloaderDelegates.forEach({
-                    $0.didCompleteDownloadOfAsset(
-                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                        in: groupId
-                    )
-                })
+                self.delegatesQueue.async { [weak self] in
+                    self?.downloaderDelegates.forEach({
+                        $0.didFetchLowResolutionAsset(decryptedAsset)
+                    })
+                    self?.downloaderDelegates.forEach({
+                        $0.didCompleteDownloadOfAsset(
+                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                            in: groupId
+                        )
+                    })
+                }
                 
                 successfullyDecrypted.append((decryptedAsset, descriptor))
             } catch {
                 self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 
-                self.downloaderDelegates.forEach({
-                    $0.didFailDownloadOfAsset(
-                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                        in: groupId,
-                        with: error
-                    )
-                })
+                self.delegatesQueue.async { [weak self] in
+                    self?.downloaderDelegates.forEach({
+                        $0.didFailDownloadOfAsset(
+                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                            in: groupId,
+                            with: error
+                        )
+                    })
+                }
             }
         }
         
@@ -305,9 +311,11 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
-                self.downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: .failure(error))
-                })
+                self.delegatesQueue.async { [weak self] in
+                    self?.downloaderDelegates.forEach({
+                        $0.didCompleteDownloadCycle(with: .failure(error))
+                    })
+                }
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
                 self.processAssetsInDescriptors(
@@ -321,9 +329,11 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                             filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
                         ) {
                             thirdResult in
-                            self.downloaderDelegates.forEach({
-                                $0.didCompleteDownloadCycle(with: thirdResult)
-                            })
+                            self.delegatesQueue.async { [weak self] in
+                                self?.downloaderDelegates.forEach({
+                                    $0.didCompleteDownloadCycle(with: thirdResult)
+                                })
+                            }
                             completionHandler(.success(()))
                         }
                         

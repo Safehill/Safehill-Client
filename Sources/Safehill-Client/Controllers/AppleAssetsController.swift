@@ -56,8 +56,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
             }
         }
     }
-    private let ingestionQueue = DispatchQueue(label: "com.gf.knowledgebase.indexer.photos.ingestion", qos: .userInitiated)
-    private let processingQueue = DispatchQueue(label: "com.gf.knowledgebase.indexer.photos.processing", qos: .background)
+    private let ingestionQueue = DispatchQueue(label: "com.safehill.indexer.photos.ingestion", qos: .userInitiated)
+    private let processingQueue = DispatchQueue(label: "com.safehill.indexer.photos.processing", qos: .background)
+    private let delegatesQueue = DispatchQueue(label: "com.safehill.indexer.delegates")
     
     public init(withIndex index: KBKVStore? = nil) {
         self.index = index
@@ -256,7 +257,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
         guard lastFetch.count > 0 else {
             /// If the previous fetch returned 0 results, and we get a notification, it's likely that the authorization status changed.
             /// In fact, this happens on first launch when the user allow photos access for the first time.
-            self.delegates.forEach { $0.value.authorizationChanged() }
+            self.delegatesQueue.async { [weak self] in
+                self?.delegates.forEach { $0.value.authorizationChanged() }
+            }
             return
         }
         
@@ -291,8 +294,11 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     for asset in changeDetails.insertedObjects {
                         writeBatch?.set(value: SHApplePhotoAsset(for: asset), for: asset.localIdentifier)
                     }
-                    for delegate in self.delegates.values {
-                        delegate.didAddToCameraRoll(assets: changeDetails.insertedObjects)
+                    self.delegatesQueue.async { [weak self] in
+                        guard let sself = self else { return }
+                        for delegate in sself.delegates.values {
+                            delegate.didAddToCameraRoll(assets: changeDetails.insertedObjects)
+                        }
                     }
                 }
                 // Removed
@@ -300,8 +306,11 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     for asset in changeDetails.removedObjects {
                         writeBatch?.set(value: nil, for: asset.localIdentifier)
                     }
-                    for delegate in self.delegates.values {
-                        delegate.didRemoveFromCameraRoll(assets: changeDetails.removedObjects)
+                    self.delegatesQueue.async { [weak self] in
+                        guard let sself = self else { return }
+                        for delegate in sself.delegates.values {
+                            delegate.didRemoveFromCameraRoll(assets: changeDetails.removedObjects)
+                        }
                     }
                 }
                 
@@ -314,13 +323,17 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
                     }
                 }
             } else {
-                self.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
+                self.delegatesQueue.async { [weak self] in
+                    self?.delegates.forEach { $0.value.needsToFetchWholeLibrary() }
+                }
             }
         }
     }
     
     public func photoLibraryDidBecomeUnavailable(_ photoLibrary: PHPhotoLibrary) {
-        self.delegates.forEach { $0.value.authorizationChanged() }
+        self.delegatesQueue.async { [weak self] in
+            self?.delegates.forEach { $0.value.authorizationChanged() }
+        }
     }
 }
 

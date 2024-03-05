@@ -93,11 +93,13 @@ extension SHSyncOperation {
         }
         
         if anyChanged {
-            switch anchor {
-            case .thread:
-                self.threadsDelegates.forEach({ $0.reactionsDidChange(inThread: anchorId) })
-            case .group:
-                self.threadsDelegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
+            self.delegatesQueue.async { [weak self] in
+                switch anchor {
+                case .thread:
+                    self?.threadsDelegates.forEach({ $0.reactionsDidChange(inThread: anchorId) })
+                case .group:
+                    self?.threadsDelegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
+                }
             }
         }
         

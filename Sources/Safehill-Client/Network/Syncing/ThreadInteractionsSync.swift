@@ -110,7 +110,9 @@ extension SHSyncOperation {
         }
         
         dispatchGroup.notify(queue: .global()) {
-            self.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
+            self.delegatesQueue.async { [weak self] in
+                self?.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
+            }
             completionHandler(.success(()))
         }
     }
