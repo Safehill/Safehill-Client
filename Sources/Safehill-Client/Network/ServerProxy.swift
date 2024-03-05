@@ -484,7 +484,7 @@ extension SHServerProxy {
             switch result {
             case .success(let encryptedDict):
                 guard encryptedDict.isEmpty == false else {
-                    log.trace("[CACHING] No \(quality.rawValue) for assets \(globalIdentifiers) on remote server")
+                    log.error("[CACHING] No \(quality.rawValue) for assets \(globalIdentifiers) on remote server")
                     return
                 }
                 
@@ -815,6 +815,7 @@ extension SHServerProxy {
             switch serverResult {
             case .success(let assetsDict):
                 guard assetsDict.count > 0 else {
+                    error = SHHTTPError.ClientError.notFound
                     log.error("No assets with globalIdentifiers \(assetIdentifiersToFetch)")
                     break
                 }
