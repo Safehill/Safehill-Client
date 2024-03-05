@@ -183,6 +183,7 @@ public class SHUsersController {
         return users
     }
     
+    /*
     internal func deleteUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws {
         var error: Error? = nil
         let group = DispatchGroup()
@@ -213,4 +214,5 @@ public class SHUsersController {
             throw error!
         }
     }
+     */
 }

@@ -81,6 +81,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         ///
         userIdsInRemoteDescriptorsSet = userIdsInRemoteDescriptorsSet.intersection(remoteUsersById.keys)
         
+        /*
         ///
         /// Remove all users that don't exist on the server from the local server and the graph
         ///
@@ -93,6 +94,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 log.warning("error removing local users, but this operation will be retried")
             }
         }
+        */
         
         ///
         /// Get all the asset identifiers and user identifiers mentioned in the remote descriptors
@@ -210,6 +212,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             }
         }
         
+        /*
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         
         self.delegatesQueue.async { [weak self] in
@@ -226,6 +229,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 })
             }
         }
+        */
         
         let dispatchGroup = DispatchGroup()
         
@@ -265,6 +269,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             }
         }
         
+        /*
         if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
             var error: Error? = nil
             
@@ -298,6 +303,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 log.error("[sync] failed to remove recipients from some shares: \(error)")
             }
         }
+        */
         
         completionHandler(.success(diff))
     }

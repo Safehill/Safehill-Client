@@ -133,6 +133,7 @@ struct AssetDescriptorsDiff {
                     }
                 }
                 
+                /*
                 for (userId, groupId) in localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                     if serverDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
                         if userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] == nil {
@@ -150,6 +151,7 @@ struct AssetDescriptorsDiff {
                         }
                     }
                 }
+                */
             }
         }
         

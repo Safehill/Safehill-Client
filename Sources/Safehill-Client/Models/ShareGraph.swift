@@ -205,6 +205,7 @@ public struct SHKGQuery {
         }
     }
     
+    /*
     internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
         // TODO: Support writebatch in KnowledgeGraph
         try readWriteGraphQueue.sync(flags: .barrier) {
@@ -224,6 +225,7 @@ public struct SHKGQuery {
             }
         }
     }
+    */
     
     internal static func deepClean() throws {
         try readWriteGraphQueue.sync(flags: .barrier) {
