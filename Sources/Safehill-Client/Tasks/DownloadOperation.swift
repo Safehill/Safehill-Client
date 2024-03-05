@@ -252,7 +252,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             
             var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-            for descriptor in filteredDescriptors {
+            for descriptor in descriptorsFromKnownUsers {
                 descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
                 ///
                 /// Limit based on the task configuration
