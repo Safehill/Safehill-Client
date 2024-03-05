@@ -137,7 +137,6 @@ extension LocalServer {
     /// 3. Reset the knowledgegraph
     ///
     public func runDataCleanup(
-        authedUser: SHAuthenticatedLocalUser,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
         let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]

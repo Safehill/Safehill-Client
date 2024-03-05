@@ -113,8 +113,12 @@ public struct SHServerProxy: SHServerProxyProtocol {
 // MARK: - Migrations
 extension SHServerProxy {
     
-    public func runLocalMigrations(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func runLocalMigrations(completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.localServer.runDataMigrations(completionHandler: completionHandler)
+    }
+    
+    public func localDataCleanup(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.localServer.runDataCleanup(completionHandler: completionHandler)
     }
     
 }
