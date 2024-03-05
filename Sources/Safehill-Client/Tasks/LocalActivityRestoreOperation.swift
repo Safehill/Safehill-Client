@@ -330,8 +330,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     switch secondResult {
                     case .success(let descriptorsToDecrypt):
 #if DEBUG
-                        let delta = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
-                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). delta=\(delta)")
+                        let delta1 = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
+                        let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
                         
                         self.decryptFromLocalStore(
