@@ -289,7 +289,10 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    public func runOnce(completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void) {
+    public override func runOnce(
+        for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let descriptors: [any SHAssetDescriptor]
         do {
             descriptors = try self.fetchDescriptorsFromServer()
@@ -321,7 +324,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                             self.downloaderDelegates.forEach({
                                 $0.didCompleteDownloadCycle(with: thirdResult)
                             })
-                            completionHandler(secondResult)
+                            completionHandler(.success(()))
                         }
                         
                     case .failure(let error):
