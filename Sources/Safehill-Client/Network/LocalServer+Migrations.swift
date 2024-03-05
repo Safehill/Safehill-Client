@@ -134,7 +134,7 @@ extension LocalServer {
     ///
     /// 1. Remove from the download queue
     /// 2. Remove from the download authorization queue
-    /// 3. Reset the knowledgegraph
+    /// 3. Remove from the knowledgegraph
     ///
     public func runDataCleanup(
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
@@ -156,15 +156,6 @@ extension LocalServer {
                 throw KBError.databaseNotReady
             }
             let _ = try graph.removeAll()
-            
-            self.syncLocalGraphWithServer { syncWithGraphResult in
-                switch syncWithGraphResult {
-                case .success:
-                    completionHandler(.success(()))
-                case .failure(let err):
-                    completionHandler(.failure(err))
-                }
-            }
         }
         catch {
             log.warning("Failed to reinitialize the graph: \(error.localizedDescription)")
