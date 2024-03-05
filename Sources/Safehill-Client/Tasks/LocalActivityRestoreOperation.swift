@@ -307,6 +307,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             return
         }
         
+        self.log.debug("[localrestoration] original descriptors: \(descriptors.count)")
         self.processDescriptors(descriptors, priority: .high) { result in
             switch result {
             case .failure(let error):
@@ -318,12 +319,21 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 }
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
+#if DEBUG
+                let delta = Set(descriptors.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                self.log.debug("[localrestoration] after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+#endif
                 self.processAssetsInDescriptors(
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
                 ) { secondResult in
                     
                     switch secondResult {
                     case .success(let descriptorsToDecrypt):
+#if DEBUG
+                        let delta = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
+                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+#endif
+                        
                         self.decryptFromLocalStore(
                             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                             filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
