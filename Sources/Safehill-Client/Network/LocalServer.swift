@@ -207,6 +207,7 @@ struct LocalServer : SHServerAPI {
         )
     }
     
+    /*
     func deleteUsers(withIdentifiers identifiers: [UserIdentifier],
                      completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
@@ -235,6 +236,7 @@ struct LocalServer : SHServerAPI {
             }
         }
     }
+    */
     
     func deleteAccount(name: String, password: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.deleteAccount(completionHandler: completionHandler)

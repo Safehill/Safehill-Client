@@ -8,7 +8,6 @@ extension SHSyncOperation {
     /// - Parameter descriptorsByGlobalIdentifier: the descriptors retrieved from server, from which to collect all unique groups
     ///
     func syncThreadInteractions(
-        remoteDescriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         let dispatchGroup = DispatchGroup()
@@ -111,7 +110,9 @@ extension SHSyncOperation {
         }
         
         dispatchGroup.notify(queue: .global()) {
-            self.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
+            self.delegatesQueue.async { [weak self] in
+                self?.threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })
+            }
             completionHandler(.success(()))
         }
     }

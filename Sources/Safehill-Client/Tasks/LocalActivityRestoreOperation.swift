@@ -164,17 +164,19 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     internal func decryptFromLocalStore(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        self.log.debug("[localrestoration] attempting to decrypt following assets from local store: \(Array(original.keys))")
+        
         guard original.count > 0 else {
-            completionHandler(.success(()))
+            completionHandler(.success([]))
             return
         }
         
         let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
         
         guard descriptorsByGlobalIdentifier.count > 0 else {
-            completionHandler(.success(()))
+            completionHandler(.success([]))
             return
         }
         
@@ -189,6 +191,8 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             return
         }
         
+        var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+        
         for (globalAssetId, encryptedAsset) in encryptedAssets {
             guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
                 log.critical("[localrestoration] malformed descriptorsByGlobalIdentifier")
@@ -197,11 +201,13 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             }
             
             let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
-            self.downloaderDelegates.forEach({
-                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                           descriptor: descriptor,
-                                           in: groupId)
-            })
+            self.delegatesQueue.async { [weak self] in
+                self?.downloaderDelegates.forEach({
+                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
+                                               descriptor: descriptor,
+                                               in: groupId)
+                })
+            }
             
             do {
                 let decryptedAsset = try localAssetsStore.decryptedAsset(
@@ -210,29 +216,35 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     descriptor: descriptor
                 )
                 
-                self.downloaderDelegates.forEach({
-                    $0.didFetchLowResolutionAsset(decryptedAsset)
-                })
-                self.downloaderDelegates.forEach({
-                    $0.didCompleteDownloadOfAsset(
-                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                        in: groupId
-                    )
-                })
+                self.delegatesQueue.async { [weak self] in
+                    self?.downloaderDelegates.forEach({
+                        $0.didFetchLowResolutionAsset(decryptedAsset)
+                    })
+                    self?.downloaderDelegates.forEach({
+                        $0.didCompleteDownloadOfAsset(
+                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                            in: groupId
+                        )
+                    })
+                }
+                
+                successfullyDecrypted.append((decryptedAsset, descriptor))
             } catch {
                 self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 
-                self.downloaderDelegates.forEach({
-                    $0.didFailDownloadOfAsset(
-                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                        in: groupId,
-                        with: error
-                    )
-                })
+                self.delegatesQueue.async { [weak self] in
+                    self?.downloaderDelegates.forEach({
+                        $0.didFailDownloadOfAsset(
+                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                            in: groupId,
+                            with: error
+                        )
+                    })
+                }
             }
         }
         
-        completionHandler(.success(()))
+        completionHandler(.success(successfullyDecrypted))
     }
     
     override func processForDownload(
@@ -240,7 +252,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
         /// FOR THE ONES SHARED BY THIS USER
@@ -267,11 +279,11 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         let toDecryptFromLocalStoreGids = Set(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
             .union(sharedByOthersGlobalIdentifiers)
         
-        self.decryptFromLocalStore(
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: Array(toDecryptFromLocalStoreGids),
-            completionHandler: completionHandler
-        )
+        completionHandler(.success(Array(
+            descriptorsByGlobalIdentifier.values.filter({
+                toDecryptFromLocalStoreGids.contains($0.globalIdentifier)
+            })
+        )))
     }
     
     ///
@@ -283,7 +295,10 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    public func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public override func runOnce(
+        for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let descriptors: [any SHAssetDescriptor]
         do {
             descriptors = try self.fetchDescriptorsFromServer()
@@ -292,24 +307,50 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             return
         }
         
-        self.processDescriptors(descriptors) { result in
+        self.log.debug("[localrestoration] original descriptors: \(descriptors.count)")
+        self.processDescriptors(descriptors, priority: .high) { result in
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
-                self.downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: .failure(error))
-                })
+                self.delegatesQueue.async { [weak self] in
+                    self?.downloaderDelegates.forEach({
+                        $0.didCompleteDownloadCycle(with: .failure(error))
+                    })
+                }
                 completionHandler(.failure(error))
-            case .success(let val):
-                let descriptorsByGlobalIdentifier = val
+            case .success(let descriptorsByGlobalIdentifier):
+#if DEBUG
+                let delta = Set(descriptors.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                self.log.debug("[localrestoration] after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+#endif
                 self.processAssetsInDescriptors(
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
-                ) {
-                    secondResult in
-                    self.downloaderDelegates.forEach({
-                        $0.didCompleteDownloadCycle(with: secondResult)
-                    })
-                    completionHandler(secondResult)
+                ) { secondResult in
+                    
+                    switch secondResult {
+                    case .success(let descriptorsToDecrypt):
+#if DEBUG
+                        let delta1 = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
+                        let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
+#endif
+                        
+                        self.decryptFromLocalStore(
+                            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
+                        ) {
+                            thirdResult in
+                            self.delegatesQueue.async { [weak self] in
+                                self?.downloaderDelegates.forEach({
+                                    $0.didCompleteDownloadCycle(with: thirdResult)
+                                })
+                            }
+                            completionHandler(.success(()))
+                        }
+                        
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
                 }
             }
         }

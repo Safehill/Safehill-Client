@@ -8,7 +8,11 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [SHServerUser]])
     
     func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
-    func usersWereAddedToShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+    func usersWereAddedToShare(
+        of: GlobalIdentifier,
+        groupIdByRecipientId: [UserIdentifier: String],
+        groupInfoById: [String: SHAssetGroupInfo]
+    )
     func usersWereRemovedFromShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
     
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
@@ -69,12 +73,10 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func didFailRepeatedlyDownloadOfAsset(withGlobalIdentifier: GlobalIdentifier,
                                           in groupId: String)
     
-    /// Notifies about an asset in the local library that is linked to one on the server (backed up)
+    /// Notifies about assets in the local library that are linked to one on the server (backed up)
     /// - Parameters:
-    ///   - localAsset: the local `PHAsset` from the Apple Photos Library
-    ///   - globalIdentifier: the global identifier of the corresponding remote asset
-    func didIdentify(localAsset phAsset: PHAsset,
-                     correspondingTo globalIdentifier: GlobalIdentifier)
+    ///   - localToGlobal: The global identifier of the remote asset to the corresponding local `PHAsset` from the Apple Photos Library
+    func didIdentify(globalToLocalAssets: [GlobalIdentifier: PHAsset])
     
     /// The low res was downloaded successfullly for some assets
     /// - Parameter _: the decrypted low res asset
@@ -88,12 +90,17 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// Notifies about the successful download operation for a specific asset.
     /// - Parameter globalIdentifier: the global identifier for the asset
     /// - Parameter groupId: the group id of the request it belongs to
-    func didCompleteDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
-                                    in groupId: String)
+    func didCompleteDownloadOfAsset(
+        withGlobalIdentifier globalIdentifier: GlobalIdentifier,
+        in groupId: String
+    )
     
     /// One cycle of downloads has finished
-    /// - Parameter result:  a callback with an error if items couldn't be dequeued, or the descriptors couldn't be fetched
-    func didCompleteDownloadCycle(with result: Swift.Result<Void, Error>)
+    /// - Parameter result:  a callback returning either the descriptors for the assets downloaded,
+    /// or  an error if items couldn't be dequeued, or the descriptors couldn't be fetched
+    func didCompleteDownloadCycle(
+        with result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>
+    )
     
 }
 

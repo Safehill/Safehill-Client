@@ -9,6 +9,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
     }
     
+    let delegatesQueue = DispatchQueue(label: "com.safehill.encryptAndShare.delegates")
+    
     public override func clone() -> SHBackgroundOperationProtocol {
         SHEncryptAndShareOperation(
             user: self.user,
@@ -333,7 +335,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     setupThreadResult in
                     switch setupThreadResult {
                     case .success(let serverThread):
-                        self.threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
+                        self.delegatesQueue.async { [weak self] in
+                            self?.threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
+                        }
                     case .failure(let error):
                         errorInitializingThread = error
                     }

@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gennarinoos/KnowledgeBase.git",
       "state" : {
-        "revision" : "5ae73fbf0a5515a8659cf3fc98339ed4629931fd",
-        "version" : "0.9.19"
+        "revision" : "f2787830d201b112f132c323ccd572077047b148",
+        "version" : "0.9.20"
       }
     },
     {
@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/marmelroy/PhoneNumberKit",
       "state" : {
-        "revision" : "301e2c1931ab294aa7c1bbabf2ed5fe7a78f1549",
-        "version" : "3.7.8"
+        "revision" : "a8d72d9c90f8336aff6fd6002976d7e36f4fbe8c",
+        "version" : "3.7.9"
       }
     },
     {

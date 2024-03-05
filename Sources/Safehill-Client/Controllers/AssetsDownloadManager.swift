@@ -1,10 +1,14 @@
 import Foundation
 import KnowledgeBase
-
+import Safehill_Crypto
 
 public struct SHAssetDownloadAuthorizationResponse {
     public let descriptors: [any SHAssetDescriptor]
     public let users: [UserIdentifier: any SHServerUser]
+}
+
+public enum SHAssetDownloadError: Error {
+    case assetIsBlacklisted(GlobalIdentifier)
 }
 
 public struct SHAssetsDownloadManager {
@@ -43,6 +47,50 @@ public struct SHAssetsDownloadManager {
             throw SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId(userId)
         }
         return assetGIdList
+    }
+    
+    private func fetchAsset(
+        withGlobalIdentifier globalIdentifier: GlobalIdentifier,
+        quality: SHAssetQuality,
+        descriptor: any SHAssetDescriptor,
+        completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
+    ) {
+        let start = CFAbsoluteTimeGetCurrent()
+        
+        log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
+        user.serverProxy.getAssets(
+            withGlobalIdentifiers: [globalIdentifier],
+            versions: [quality]
+        )
+        { result in
+            switch result {
+            case .success(let assetsDict):
+                guard assetsDict.count > 0,
+                      let encryptedAsset = assetsDict[globalIdentifier] else {
+                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                    return
+                }
+                do {
+                    let localAssetStore = SHLocalAssetStoreController(
+                        user: self.user
+                    )
+                    let decryptedAsset = try localAssetStore.decryptedAsset(
+                        encryptedAsset: encryptedAsset,
+                        quality: quality,
+                        descriptor: descriptor
+                    )
+                    completionHandler(.success(decryptedAsset))
+                }
+                catch {
+                    completionHandler(.failure(error))
+                }
+            case .failure(let err):
+                log.critical("unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
+                completionHandler(.failure(err))
+            }
+            let end = CFAbsoluteTimeGetCurrent()
+            log.debug("[PERF] \(CFAbsoluteTime(end - start)) for version \(quality.rawValue)")
+        }
     }
     
     /// Authorizing downloads from a user means:
@@ -126,36 +174,6 @@ public struct SHAssetsDownloadManager {
         }
     }
     
-    /// Enqueue downloads from authorized users in the authorized queue, so they'll be picked up for download
-    /// - Parameters:
-    ///   - descriptors: the list of asset descriptors for the assets that can be downloaded
-    ///   - users: the cache of user objects, if one was already retrieved by the caller method
-    ///   - completionHandler: the callback method
-    func startDownload(of descriptors: [any SHAssetDescriptor],
-                       completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        guard descriptors.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        guard let authorizedQueue = try? BackgroundOperationQueue.of(type: .download) else {
-            log.error("Unable to connect to local queue or database")
-            completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
-            return
-        }
-        
-        do {
-            try self.enqueue(descriptors: descriptors, in: authorizedQueue)
-            do {
-                try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
-            } catch {
-                log.error("[KG] failed to ingest some descriptor into the graph")
-            }
-            completionHandler(.success(()))
-        } catch {
-            completionHandler(.failure(error))
-        }
-    }
-    
     func startAuthorizedDownload(
         of descriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
@@ -174,19 +192,92 @@ public struct SHAssetsDownloadManager {
             return
         }
         
-        self.startDownload(of: descriptors) { result in
-            switch result {
-            case .success():
+        let dispatchGroup = DispatchGroup()
+        var errors = [Error]()
+        
+        for descriptor in descriptors {
+            dispatchGroup.enter()
+            self.downloadAsset(for: descriptor) { result in
+                switch result {
+                case .success(_):
+                    break
+                case .failure(let error):
+                    errors.append(error)
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            if errors.isEmpty {
                 completionHandler(.success(usersDict))
-            case .failure(let failure):
-                completionHandler(.failure(failure))
+            } else {
+                completionHandler(.failure(errors.first!))
             }
         }
     }
     
-    func stopDownload(ofAssetsWith globalIdentifiers: [GlobalIdentifier]) throws {
-        try SHKGQuery.removeAssets(with: globalIdentifiers)
-        try SHAssetsDownloadManager.dequeueEntries(for: globalIdentifiers)
+    /// Downloads the asset for the given descriptor, decrypts it, and returns the decrypted version, or an error.
+    /// - Parameters:
+    ///   - descriptor: the descriptor for the assets to download
+    ///   - completionHandler: the callback
+    func downloadAsset(
+        for descriptor: any SHAssetDescriptor,
+        completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
+    ) {
+        Task(priority: .medium) {
+            
+
+            log.info("[downloadAssets] downloading assets with identifier \(descriptor.globalIdentifier)")
+            
+            let start = CFAbsoluteTimeGetCurrent()
+            let globalIdentifier = descriptor.globalIdentifier
+            
+            // MARK: Start
+            
+            guard await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: descriptor.globalIdentifier) == false else {
+                
+                do {
+                    try SHKGQuery.removeAssets(with: [globalIdentifier])
+                } catch {
+                    log.warning("[downloadAssets] Attempt to remove asset \(globalIdentifier) the knowledgeGraph because it's blacklisted FAILED. \(error.localizedDescription)")
+                }
+                
+                completionHandler(.failure(SHAssetDownloadError.assetIsBlacklisted(globalIdentifier)))
+                return
+            }
+            
+            // MARK: Get Low Res asset
+            
+            self.fetchAsset(
+                withGlobalIdentifier: globalIdentifier,
+                quality: .lowResolution,
+                descriptor: descriptor
+            ) { result in
+                
+                switch result {
+                case .success(let decryptedAsset):
+                    completionHandler(.success(decryptedAsset))
+                    
+                    Task(priority: .low) {
+                        await SHDownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
+                    }
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                    
+                    Task(priority: .low) {
+                        if error is SHCypher.DecryptionError {
+                            await SHDownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
+                        } else {
+                            await SHDownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
+                        }
+                    }
+                }
+                
+                let end = CFAbsoluteTimeGetCurrent()
+                log.debug("[downloadAssets][PERF] it took \(CFAbsoluteTime(end - start)) to download asset \(globalIdentifier)")
+            }
+        }
     }
 }
 
@@ -380,7 +471,7 @@ internal extension SHAssetsDownloadManager {
             return
         }
         
-        let queueTypes: [BackgroundOperationQueue.OperationType] = [.download, .unauthorizedDownload]
+        let queueTypes: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]
         for queueType in queueTypes {
             guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
                 log.error("Unable to connect to local queue or database \(queueType.identifier)")

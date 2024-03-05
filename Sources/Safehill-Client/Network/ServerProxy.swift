@@ -113,8 +113,12 @@ public struct SHServerProxy: SHServerProxyProtocol {
 // MARK: - Migrations
 extension SHServerProxy {
     
-    public func runLocalMigrations(completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func runLocalMigrations(completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.localServer.runDataMigrations(completionHandler: completionHandler)
+    }
+    
+    public func localDataCleanup(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.localServer.runDataCleanup(completionHandler: completionHandler)
     }
     
 }
@@ -480,7 +484,7 @@ extension SHServerProxy {
             switch result {
             case .success(let encryptedDict):
                 guard encryptedDict.isEmpty == false else {
-                    log.trace("[CACHING] No \(quality.rawValue) for assets \(globalIdentifiers) on remote server")
+                    log.error("[CACHING] No \(quality.rawValue) for assets \(globalIdentifiers) on remote server")
                     return
                 }
                 
@@ -531,8 +535,8 @@ extension SHServerProxy {
                 }
                 
                 self.cacheAssets(for: descriptorsByGlobalIdentifier, quality: quality)
-            case .failure(_):
-                log.error("[CACHING] Unable to get asset descriptors \(globalIdentifiers) from remote server")
+            case .failure(let error):
+                log.error("[CACHING] Unable to get asset descriptors \(globalIdentifiers) from remote server. error=\(error.localizedDescription)")
             }
         }
     }
@@ -761,10 +765,6 @@ extension SHServerProxy {
             switch result {
             case .success(let descriptors):
                 descriptorsByAssetGlobalId = descriptors
-                    .filter { descriptor in
-                        descriptor.uploadState == .completed
-                        && descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.localServer.requestor.identifier] != nil
-                    }
                     .reduce([:]) { partialResult, descriptor in
                         var result = partialResult
                         result[descriptor.globalIdentifier] = descriptor
@@ -815,6 +815,7 @@ extension SHServerProxy {
             switch serverResult {
             case .success(let assetsDict):
                 guard assetsDict.count > 0 else {
+                    error = SHHTTPError.ClientError.notFound
                     log.error("No assets with globalIdentifiers \(assetIdentifiersToFetch)")
                     break
                 }

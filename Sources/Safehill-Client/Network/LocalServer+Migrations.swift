@@ -1,7 +1,7 @@
 import Foundation
 import KnowledgeBase
 
-extension Array {
+public extension Array {
     func chunked(into size: Int) -> [[Element]] {
         return stride(from: 0, to: count, by: size).map {
             Array(self[$0 ..< Swift.min($0 + size, count)])
@@ -137,14 +137,13 @@ extension LocalServer {
     /// 3. Reset the knowledgegraph
     ///
     public func runDataCleanup(
-        authedUser: SHAuthenticatedLocalUser,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
-        let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload, .download]
+        let queuesToClear = BackgroundOperationQueue.OperationType.allCases
         for queueType in queuesToClear {
             do {
-                let unauthorizedDownloadsQueue = try BackgroundOperationQueue.of(type: .unauthorizedDownload)
-                let _ = try unauthorizedDownloadsQueue.removeAll()
+                let queue = try BackgroundOperationQueue.of(type: queueType)
+                let _ = try queue.removeAll()
             } catch {
                 log.warning("failed to remove items from the \(queueType.identifier) queue")
                 completionHandler(.failure(error))

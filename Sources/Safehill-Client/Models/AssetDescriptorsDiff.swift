@@ -1,6 +1,6 @@
 import Foundation
 
-typealias ShareSenderReceivers = (from: UserIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+typealias ShareSenderReceivers = (from: UserIdentifier, groupIdByRecipientId: [UserIdentifier: String], groupInfoById: [String: SHAssetGroupInfo])
 
 ///
 /// Utility class to diff descriptors coming from `LocalServer` and `RemoteServer`
@@ -120,19 +120,30 @@ struct AssetDescriptorsDiff {
                         if userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] == nil {
                             userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
-                                groupIdByRecipientId: [userId: groupId]
+                                groupIdByRecipientId: [userId: groupId],
+                                groupInfoById: [groupId: SHGenericAssetGroupInfo(
+                                    name: serverDescriptor.sharingInfo.groupInfoById[groupId]!.name,
+                                    createdAt: serverDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                                )]
                             )
                         } else {
                             var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
                             newDict[userId] = groupId
+                            var newGroupInfoDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
+                            newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
+                                name: serverDescriptor.sharingInfo.groupInfoById[groupId]!.name,
+                                createdAt: serverDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                            )
                             userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
-                                groupIdByRecipientId: newDict
+                                groupIdByRecipientId: newDict,
+                                groupInfoById: newGroupInfoDict
                             )
                         }
                     }
                 }
                 
+                /*
                 for (userId, groupId) in localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                     if serverDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
                         if userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] == nil {
@@ -150,6 +161,7 @@ struct AssetDescriptorsDiff {
                         }
                     }
                 }
+                */
             }
         }
         
