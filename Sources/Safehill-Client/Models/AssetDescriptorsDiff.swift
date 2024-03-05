@@ -122,8 +122,8 @@ struct AssetDescriptorsDiff {
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
                                 groupIdByRecipientId: [userId: groupId],
                                 groupInfoById: [groupId: SHGenericAssetGroupInfo(
-                                    name: localDescriptor.sharingInfo.groupInfoById[groupId]!.name,
-                                    createdAt: localDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                                    name: serverDescriptor.sharingInfo.groupInfoById[groupId]!.name,
+                                    createdAt: serverDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
                                 )]
                             )
                         } else {
@@ -131,8 +131,8 @@ struct AssetDescriptorsDiff {
                             newDict[userId] = groupId
                             var newGroupInfoDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
                             newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
-                                name: localDescriptor.sharingInfo.groupInfoById[groupId]!.name,
-                                createdAt: localDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                                name: serverDescriptor.sharingInfo.groupInfoById[groupId]!.name,
+                                createdAt: serverDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
                             )
                             userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
