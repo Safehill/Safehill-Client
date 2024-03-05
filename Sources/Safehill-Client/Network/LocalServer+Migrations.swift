@@ -139,11 +139,11 @@ extension LocalServer {
     public func runDataCleanup(
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
-        let queuesToClear: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]
+        let queuesToClear = BackgroundOperationQueue.OperationType.allCases
         for queueType in queuesToClear {
             do {
-                let unauthorizedDownloadsQueue = try BackgroundOperationQueue.of(type: .unauthorizedDownload)
-                let _ = try unauthorizedDownloadsQueue.removeAll()
+                let queue = try BackgroundOperationQueue.of(type: queueType)
+                let _ = try queue.removeAll()
             } catch {
                 log.warning("failed to remove items from the \(queueType.identifier) queue")
                 completionHandler(.failure(error))
