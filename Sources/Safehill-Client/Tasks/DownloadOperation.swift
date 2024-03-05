@@ -296,19 +296,19 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         var filteredGlobalIdentifiers = [GlobalIdentifier]()
+        var globalToPHAsset = [GlobalIdentifier: PHAsset]()
         for descriptor in descriptorsByGlobalIdentifier.values {
             if let localId = descriptor.localIdentifier,
-               phAssetsByLocalIdentifier.keys.contains(localId) {
-                self.downloaderDelegates.forEach({
-                    $0.didIdentify(
-                        localAsset: phAssetsByLocalIdentifier[localId]!,
-                        correspondingTo: descriptor.globalIdentifier
-                    )
-                })
+               let phAsset = phAssetsByLocalIdentifier[localId] {
+                globalToPHAsset[descriptor.globalIdentifier] = phAsset
             } else {
                 filteredGlobalIdentifiers.append(descriptor.globalIdentifier)
             }
         }
+        
+        self.downloaderDelegates.forEach({
+            $0.didIdentify(globalToLocalAssets: globalToPHAsset)
+        })
         
         completionHandler(.success(filteredGlobalIdentifiers))
     }
@@ -704,7 +704,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             ///
             /// (2) is handled by downloading them as regular downloads from other users, with the only difference that authorization is skipped
             ///
-            /// For (1), identification `didIdentify(localAsset:correspondingTo:)` happens in `mergeDescriptorsWithApplePhotosAssets(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server, add items to the success queue (upload and share) and call the restoration delegate.
+            /// For (1), identification `didIdentify(globalToLocalAssets:)` happens in `mergeDescriptorsWithApplePhotosAssets(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server, add items to the success queue (upload and share) and call the restoration delegate.
             ///
             
             /// (1)

@@ -69,12 +69,10 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func didFailRepeatedlyDownloadOfAsset(withGlobalIdentifier: GlobalIdentifier,
                                           in groupId: String)
     
-    /// Notifies about an asset in the local library that is linked to one on the server (backed up)
+    /// Notifies about assets in the local library that are linked to one on the server (backed up)
     /// - Parameters:
-    ///   - localAsset: the local `PHAsset` from the Apple Photos Library
-    ///   - globalIdentifier: the global identifier of the corresponding remote asset
-    func didIdentify(localAsset phAsset: PHAsset,
-                     correspondingTo globalIdentifier: GlobalIdentifier)
+    ///   - localToGlobal: The global identifier of the remote asset to the corresponding local `PHAsset` from the Apple Photos Library
+    func didIdentify(globalToLocalAssets: [GlobalIdentifier: PHAsset])
     
     /// The low res was downloaded successfullly for some assets
     /// - Parameter _: the decrypted low res asset
