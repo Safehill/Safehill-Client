@@ -445,6 +445,16 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
+    public func runOnceForThreads(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.syncThreadInteractions { result in
+            if case .failure(let err) = result {
+                self.log.error("failed to sync interactions: \(err.localizedDescription)")
+                completionHandler(.failure(err))
+            }
+            completionHandler(.success(()))
+        }
+    }
+    
     public func runOnce(
         for anchor: SHInteractionAnchor,
         anchorId: String,
