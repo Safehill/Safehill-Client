@@ -761,10 +761,6 @@ extension SHServerProxy {
             switch result {
             case .success(let descriptors):
                 descriptorsByAssetGlobalId = descriptors
-                    .filter { descriptor in
-                        descriptor.uploadState == .completed
-                        && descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.localServer.requestor.identifier] != nil
-                    }
                     .reduce([:]) { partialResult, descriptor in
                         var result = partialResult
                         result[descriptor.globalIdentifier] = descriptor
