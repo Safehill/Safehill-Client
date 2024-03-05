@@ -248,7 +248,11 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     self.delegatesQueue.async { [weak self] in
                         for (globalIdentifier, shareDiff) in diff.userIdsToAddToSharesOfAssetGid {
                             self?.assetsDelegates.forEach {
-                                $0.usersWereAddedToShare(of: globalIdentifier, groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                                $0.usersWereAddedToShare(
+                                    of: globalIdentifier,
+                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId,
+                                    groupInfoById: shareDiff.groupInfoById
+                                )
                             }
                         }
                     }

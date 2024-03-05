@@ -1,6 +1,6 @@
 import Foundation
 
-typealias ShareSenderReceivers = (from: UserIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+typealias ShareSenderReceivers = (from: UserIdentifier, groupIdByRecipientId: [UserIdentifier: String], groupInfoById: [String: SHAssetGroupInfo])
 
 ///
 /// Utility class to diff descriptors coming from `LocalServer` and `RemoteServer`
@@ -120,14 +120,22 @@ struct AssetDescriptorsDiff {
                         if userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] == nil {
                             userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
-                                groupIdByRecipientId: [userId: groupId]
+                                groupIdByRecipientId: [userId: groupId],
+                                groupInfoById: [groupId: SHGenericAssetGroupInfo(
+                                    name: localDescriptor.sharingInfo.groupInfoById[groupId]!.name,
+                                    createdAt: localDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                                )]
                             )
                         } else {
                             var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
                             newDict[userId] = groupId
                             userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
                                 from: localDescriptor.sharingInfo.sharedByUserIdentifier,
-                                groupIdByRecipientId: newDict
+                                groupIdByRecipientId: newDict,
+                                groupInfoById: [groupId: SHGenericAssetGroupInfo(
+                                    name: localDescriptor.sharingInfo.groupInfoById[groupId]!.name,
+                                    createdAt: localDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                                )]
                             )
                         }
                     }

@@ -8,7 +8,11 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [SHServerUser]])
     
     func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
-    func usersWereAddedToShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
+    func usersWereAddedToShare(
+        of: GlobalIdentifier,
+        groupIdByRecipientId: [UserIdentifier: String],
+        groupInfoById: [String: SHAssetGroupInfo]
+    )
     func usersWereRemovedFromShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
     
     func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
