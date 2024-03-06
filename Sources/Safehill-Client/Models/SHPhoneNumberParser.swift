@@ -15,27 +15,37 @@ public struct SHPhoneNumberParser {
     /// Unverified, unformatted phone number string to verified, e164 format
     private var cache: [String: String]
     
+    /// Thread-safety: controls reads and writes to `assetsByIdentifier` and `orederedList`
+    private let accessQueue = DispatchQueue(
+        label: "com.gf.safehill.SHPhoneNumberParser",
+        qos: .userInteractive,
+        attributes: .concurrent
+    )
+    
     let kvs: KBKnowledgeStore?
     let phoneNumberKit = PhoneNumberKit()
     
     private init() {
         self.kvs = KBKnowledgeStore.store(withName: "com.safehill.cachedParsedPhoneNumbers")
         self.cache = [String: String]()
-        do {
-            let keyValues = try kvs?.dictionaryRepresentation()
-            var invalidKeys = [String]()
-            for (unformatted, formatted) in keyValues ?? [:] {
-                guard let formatted = formatted as? String else {
-                    log.warning("invalid entry for in SHPhoneNumberParser cache KVS")
-                    invalidKeys.append(unformatted)
-                    continue
+        
+        accessQueue.sync(flags: .barrier) {
+            do {
+                let keyValues = try kvs?.dictionaryRepresentation()
+                var invalidKeys = [String]()
+                for (unformatted, formatted) in keyValues ?? [:] {
+                    guard let formatted = formatted as? String else {
+                        log.warning("invalid entry for in SHPhoneNumberParser cache KVS")
+                        invalidKeys.append(unformatted)
+                        continue
+                    }
+                    self.cache[unformatted] = formatted
                 }
-                self.cache[unformatted] = formatted
+                
+                kvs?.removeValues(for: invalidKeys, completionHandler: { (result: Result<Void, Error>) in })
+            } catch {
+                log.error("failed to initialize SHPhoneNumberParser cache")
             }
-            
-            kvs?.removeValues(for: invalidKeys, completionHandler: { (result: Result<Void, Error>) in })
-        } catch {
-            log.error("failed to initialize SHPhoneNumberParser cache")
         }
     }
     
@@ -92,31 +102,34 @@ public struct SHPhoneNumberParser {
         _ contact: CNLabeledValue<CNPhoneNumber>,
         writeBatch: KBKVStoreWriteBatch?
     ) -> SHPhoneNumber? {
-        if let cachedValue = self.cache[contact.value.stringValue] {
-            if cachedValue == InvalidPhoneNumberPlaceholderValue {
-                return nil
+        var returnVal: SHPhoneNumber? = nil
+        accessQueue.sync(flags: .barrier) {
+            if let cachedValue = self.cache[contact.value.stringValue] {
+                if cachedValue == InvalidPhoneNumberPlaceholderValue {
+                    returnVal = nil
+                }
+                returnVal = SHPhoneNumber(
+                    e164FormattedNumber: cachedValue,
+                    stringValue: contact.value.stringValue,
+                    label: contact.label
+                )
+            } else if let e164String = self.format(maybePhoneNumber: contact.value.stringValue) {
+                self.cache[contact.value.stringValue] = e164String
+                writeBatch?.set(value: e164String, for: contact.value.stringValue)
+                
+                returnVal = SHPhoneNumber(
+                    e164FormattedNumber: e164String,
+                    stringValue: contact.value.stringValue,
+                    label: contact.label
+                )
+            } else {
+                self.cache[contact.value.stringValue] = InvalidPhoneNumberPlaceholderValue
+                writeBatch?.set(value: InvalidPhoneNumberPlaceholderValue, for: contact.value.stringValue)
+                returnVal = nil
             }
-            return SHPhoneNumber(
-                e164FormattedNumber: cachedValue,
-                stringValue: contact.value.stringValue,
-                label: contact.label
-            )
         }
         
-        if let e164String = self.format(maybePhoneNumber: contact.value.stringValue) {
-            self.cache[contact.value.stringValue] = e164String
-            writeBatch?.set(value: e164String, for: contact.value.stringValue)
-            
-            return SHPhoneNumber(
-                e164FormattedNumber: e164String,
-                stringValue: contact.value.stringValue,
-                label: contact.label
-            )
-        } else {
-            self.cache[contact.value.stringValue] = InvalidPhoneNumberPlaceholderValue
-            writeBatch?.set(value: InvalidPhoneNumberPlaceholderValue, for: contact.value.stringValue)
-            return nil
-        }
+        return returnVal
     }
     
     /// Takes a string and returns a e164 formatted phone number
