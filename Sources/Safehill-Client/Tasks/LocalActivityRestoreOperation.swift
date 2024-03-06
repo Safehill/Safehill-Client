@@ -201,8 +201,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             }
             
             let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
-            self.delegatesQueue.async { [weak self] in
-                self?.downloaderDelegates.forEach({
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
                     $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
                                                descriptor: descriptor,
                                                in: groupId)
@@ -216,11 +217,11 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                     descriptor: descriptor
                 )
                 
-                self.delegatesQueue.async { [weak self] in
-                    self?.downloaderDelegates.forEach({
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
                         $0.didFetchLowResolutionAsset(decryptedAsset)
                     })
-                    self?.downloaderDelegates.forEach({
+                    downloaderDelegates.forEach({
                         $0.didCompleteDownloadOfAsset(
                             withGlobalIdentifier: encryptedAsset.globalIdentifier,
                             in: groupId
@@ -232,8 +233,8 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             } catch {
                 self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 
-                self.delegatesQueue.async { [weak self] in
-                    self?.downloaderDelegates.forEach({
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
                         $0.didFailDownloadOfAsset(
                             withGlobalIdentifier: encryptedAsset.globalIdentifier,
                             in: groupId,
@@ -312,8 +313,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
-                self.delegatesQueue.async { [weak self] in
-                    self?.downloaderDelegates.forEach({
+                let downloaderDelegates = self.downloaderDelegates
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
                         $0.didCompleteDownloadCycle(with: .failure(error))
                     })
                 }
@@ -340,8 +342,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                             filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
                         ) {
                             thirdResult in
-                            self.delegatesQueue.async { [weak self] in
-                                self?.downloaderDelegates.forEach({
+                            let downloaderDelegates = self.downloaderDelegates
+                            self.delegatesQueue.async {
+                                downloaderDelegates.forEach({
                                     $0.didCompleteDownloadCycle(with: thirdResult)
                                 })
                             }

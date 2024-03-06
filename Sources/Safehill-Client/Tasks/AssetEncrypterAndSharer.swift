@@ -335,8 +335,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     setupThreadResult in
                     switch setupThreadResult {
                     case .success(let serverThread):
-                        self.delegatesQueue.async { [weak self] in
-                            self?.threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
+                        let threadsDelegates = self.threadsDelegates
+                        self.delegatesQueue.async {
+                            threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
                         }
                     case .failure(let error):
                         errorInitializingThread = error

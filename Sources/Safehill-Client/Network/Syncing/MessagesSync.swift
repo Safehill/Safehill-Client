@@ -28,10 +28,11 @@ extension SHSyncOperation {
                 case .failure(let failure):
                     self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
                 case .success(let messages):
-                    self.delegatesQueue.async { [weak self] in
+                    let threadsDelegates = self.threadsDelegates
+                    self.delegatesQueue.async {
                         switch anchor {
                         case .group:
-                            self?.threadsDelegates.forEach({
+                            threadsDelegates.forEach({
                                 $0.didReceiveMessages(
                                     messages,
                                     inGroup: anchorId,
@@ -39,7 +40,7 @@ extension SHSyncOperation {
                                 )
                             })
                         case .thread:
-                            self?.threadsDelegates.forEach({
+                            threadsDelegates.forEach({
                                 $0.didReceiveMessages(
                                     messages,
                                     inThread: anchorId,
