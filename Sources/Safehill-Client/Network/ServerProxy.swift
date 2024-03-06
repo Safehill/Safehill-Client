@@ -417,7 +417,12 @@ extension SHServerProxy {
         self.remoteServer.getAssetDescriptors(since: .distantPast) { result in
             switch result {
             case .success(let descs):
-                completionHandler(.success(descs.count))
+                completionHandler(.success(
+                    descs.filter({
+                        $0.sharingInfo.sharedByUserIdentifier == self.remoteServer.requestor.identifier
+                    })
+                    .count
+                ))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
