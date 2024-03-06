@@ -963,8 +963,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     dispatchGroup.enter()
                     
 #if DEBUG
-                let delta = Set(remoteOnlyDescriptors.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
-                self.log.debug("after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+                    let delta = Set(remoteOnlyDescriptors.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                    self.log.debug("after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
 #endif
                     
                     self.processAssetsInDescriptors(

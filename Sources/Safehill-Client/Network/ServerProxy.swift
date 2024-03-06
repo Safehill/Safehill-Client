@@ -409,6 +409,21 @@ extension SHServerProxy {
 // MARK: - Assets
 extension SHServerProxy {
     
+    public func getCurrentUsage(
+        completionHandler: @escaping (Result<Int, Error>) -> ()
+    ) {
+        // TODO: Server support for getting usage (MB used?, or just an integer)
+        // Definitely do not download the whole descriptors just for calulating quota
+        self.remoteServer.getAssetDescriptors(since: .distantPast) { result in
+            switch result {
+            case .success(let descs):
+                completionHandler(.success(descs.count))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
     func getLocalAssetDescriptors(completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
         self.localServer.getAssetDescriptors { result in
             switch result {
