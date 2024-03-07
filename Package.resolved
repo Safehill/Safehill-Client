@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/marmelroy/PhoneNumberKit",
       "state" : {
-        "revision" : "301e2c1931ab294aa7c1bbabf2ed5fe7a78f1549",
-        "version" : "3.7.8"
+        "revision" : "a8d72d9c90f8336aff6fd6002976d7e36f4fbe8c",
+        "version" : "3.7.9"
       }
     },
     {
@@ -23,8 +23,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Safehill/Safehill-Crypto",
       "state" : {
-        "revision" : "16cad75eff811f4afecc819a40fc1b9c2e2fff0c",
-        "version" : "1.1.20"
+        "revision" : "da33bdac935bf846543d4626019a8c4e3c0b4862",
+        "version" : "1.1.21"
       }
     },
     {
