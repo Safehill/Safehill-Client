@@ -96,6 +96,11 @@ public class SHDBManager {
     private var _knowledgeGraph: KBKnowledgeStore?
     private var _backgroundQueues: [BackgroundOperationQueue.OperationType: KBQueueStore?]
     
+    private let backgroundQueuesAccessQueue = DispatchQueue(
+        label: "com.gf.safehill.SHDBManager.backgroundQueue.access",
+        attributes: .concurrent
+    )
+    
     init() {
         self._backgroundQueues = [:]
         self.disconnect()
@@ -144,10 +149,14 @@ public class SHDBManager {
     }
     
     public func queue(of type: BackgroundOperationQueue.OperationType) -> KBQueueStore? {
-        if self._backgroundQueues[type] == nil {
-            self._backgroundQueues[type] = SHDBManager.getQueueStore(name: type.identifier, type: .fifo)
+        let queue: KBQueueStore? = nil
+        backgroundQueuesAccessQueue.sync(flags: .barrier) {
+            if self._backgroundQueues[type] == nil {
+                self._backgroundQueues[type] = SHDBManager.getQueueStore(name: type.identifier, type: .fifo)
+            }
+            queue = self._backgroundQueues[type]!
         }
-        return self._backgroundQueues[type]!
+        return queue
     }
     
     public var userStore: KBKVStore? {
