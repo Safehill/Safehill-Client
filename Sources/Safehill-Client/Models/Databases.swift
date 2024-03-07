@@ -149,7 +149,7 @@ public class SHDBManager {
     }
     
     public func queue(of type: BackgroundOperationQueue.OperationType) -> KBQueueStore? {
-        let queue: KBQueueStore? = nil
+        var queue: KBQueueStore? = nil
         backgroundQueuesAccessQueue.sync(flags: .barrier) {
             if self._backgroundQueues[type] == nil {
                 self._backgroundQueues[type] = SHDBManager.getQueueStore(name: type.identifier, type: .fifo)

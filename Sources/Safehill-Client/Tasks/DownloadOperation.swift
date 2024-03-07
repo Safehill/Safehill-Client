@@ -773,13 +773,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     func downloadAssets(
         for descriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping () -> Void
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download
         ///
         var successfullyDownloadedAssetsAndDescriptors = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+        var downloadError: Error? = nil
         let dispatchGroup = DispatchGroup()
         
         for descriptor in descriptors {
@@ -810,6 +811,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 
                 case .failure(let error):
                     self.log.error("failed to download asset \(descriptor.globalIdentifier)")
+                    
+                    downloadError = error
                     
                     let downloaderDelegates = self.downloaderDelegates
                     self.delegatesQueue.async {
@@ -857,19 +860,17 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         dispatchGroup.notify(queue: .global()) {
-            let downloaderDelegates = self.downloaderDelegates
-            self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: .success(successfullyDownloadedAssetsAndDescriptors))
-                })
+            if let downloadError {
+                completionHandler(.failure(downloadError))
+            } else {
+                completionHandler(.success(successfullyDownloadedAssetsAndDescriptors))
             }
-            completionHandler()
         }
     }
     
     public func runOnce(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         
         guard self.user is SHAuthenticatedLocalUser else {
@@ -975,6 +976,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     self.log.debug("after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
 #endif
                     
+                    var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+                    
                     self.processAssetsInDescriptors(
                         descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
                     ) { descAssetResult in
@@ -989,7 +992,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
                             self.log.debug("ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
 #endif
-                            self.downloadAssets(for: descriptorsReadyToDownload) {
+                            self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
+                                switch downloadResult {
+                                case .success(let list):
+                                    successfullyDownloadedAssets = list
+                                case .failure(let error):
+                                    processingError = error
+                                }
                                 dispatchGroup.leave()
                             }
                         }
@@ -1028,7 +1037,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             return
                         }
                         
-                        completionHandler(.success(()))
+                        completionHandler(.success(successfullyDownloadedAssets))
                     }
                 }
             }
@@ -1044,6 +1053,12 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         state = .executing
         
         self.runOnce { result in
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
+                    $0.didCompleteDownloadCycle(with: result)
+                })
+            }
             self.state = .finished
         }
     }

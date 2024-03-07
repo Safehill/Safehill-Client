@@ -298,7 +298,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     /// - Parameter completionHandler: the callback method
     public override func runOnce(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         let descriptors: [any SHAssetDescriptor]
         do {
@@ -339,18 +339,9 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                         
                         self.decryptFromLocalStore(
                             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
-                        ) {
-                            thirdResult in
-                            let downloaderDelegates = self.downloaderDelegates
-                            self.delegatesQueue.async {
-                                downloaderDelegates.forEach({
-                                    $0.didCompleteDownloadCycle(with: thirdResult)
-                                })
-                            }
-                            completionHandler(.success(()))
-                        }
-                        
+                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier }),
+                            completionHandler: completionHandler
+                        )
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }
