@@ -181,8 +181,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
             
             guard filteredDescriptors.count > 0 else {
-                self.delegatesQueue.async { [weak self] in
-                    self?.downloaderDelegates.forEach({
+                let downloaderDelegates = self.downloaderDelegates
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
                         $0.didReceiveAssetDescriptors([], referencing: [:])
                     })
                 }
@@ -244,8 +245,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             ///
             let descriptorsFromKnownUsersImmutable = descriptorsFromKnownUsers
             let userDictsImmutable = usersDict
-            self.delegatesQueue.async { [weak self] in
-                self?.downloaderDelegates.forEach({
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
                     $0.didReceiveAssetDescriptors(descriptorsFromKnownUsersImmutable,
                                                   referencing: userDictsImmutable)
                 })
@@ -314,8 +316,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             }
         }
         
-        self.delegatesQueue.async { [weak self] in
-            self?.downloaderDelegates.forEach({
+        let downloaderDelegates = self.downloaderDelegates
+        self.delegatesQueue.async {
+            downloaderDelegates.forEach({
                 $0.didIdentify(globalToLocalAssets: globalToPHAsset)
             })
         }
@@ -392,8 +395,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 return
             }
 
-            self.delegatesQueue.async { [weak self] in
-                self?.downloaderDelegates.forEach({
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
                     $0.didReceiveAuthorizationRequest(
                         for: unauthorizedDownloadDescriptors,
                         referencing: usersDict
@@ -769,13 +773,14 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     func downloadAssets(
         for descriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping () -> Void
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download
         ///
         var successfullyDownloadedAssetsAndDescriptors = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+        var downloadError: Error? = nil
         let dispatchGroup = DispatchGroup()
         
         for descriptor in descriptors {
@@ -787,8 +792,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             
             let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
             
-            self.delegatesQueue.async { [weak self] in
-                self?.downloaderDelegates.forEach({
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
                     $0.didStartDownloadOfAsset(
                         withGlobalIdentifier: descriptor.globalIdentifier,
                         descriptor: descriptor,
@@ -806,8 +812,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 case .failure(let error):
                     self.log.error("failed to download asset \(descriptor.globalIdentifier)")
                     
-                    self.delegatesQueue.async { [weak self] in
-                        self?.downloaderDelegates.forEach {
+                    downloadError = error
+                    
+                    let downloaderDelegates = self.downloaderDelegates
+                    self.delegatesQueue.async {
+                        downloaderDelegates.forEach {
                             $0.didFailDownloadOfAsset(
                                 withGlobalIdentifier: descriptor.globalIdentifier,
                                 in: groupId,
@@ -818,8 +827,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     
                     if case SHAssetDownloadError.assetIsBlacklisted(_) = error {
                         self.log.info("[downloadAssets] skipping item \(descriptor.globalIdentifier) because it was attempted too many times")
-                        self.delegatesQueue.async { [weak self] in
-                            self?.downloaderDelegates.forEach({
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
                                 $0.didFailRepeatedlyDownloadOfAsset(
                                     withGlobalIdentifier: descriptor.globalIdentifier,
                                     in: groupId
@@ -829,12 +838,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     }
                     
                 case .success(let decryptedAsset):
-                    self.delegatesQueue.async { [weak self] in
-                        self?.downloaderDelegates.forEach({
+                    let downloaderDelegates = self.downloaderDelegates
+                    self.delegatesQueue.async {
+                        downloaderDelegates.forEach({
                             $0.didFetchLowResolutionAsset(decryptedAsset)
                         })
                         
-                        self?.downloaderDelegates.forEach({
+                        downloaderDelegates.forEach({
                             $0.didCompleteDownloadOfAsset(
                                 withGlobalIdentifier: decryptedAsset.globalIdentifier,
                                 in: groupId
@@ -850,18 +860,17 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         }
         
         dispatchGroup.notify(queue: .global()) {
-            self.delegatesQueue.async { [weak self] in
-                self?.downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: .success(successfullyDownloadedAssetsAndDescriptors))
-                })
+            if let downloadError {
+                completionHandler(.failure(downloadError))
+            } else {
+                completionHandler(.success(successfullyDownloadedAssetsAndDescriptors))
             }
-            completionHandler()
         }
     }
     
     public func runOnce(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         
         guard self.user is SHAuthenticatedLocalUser else {
@@ -967,6 +976,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     self.log.debug("after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
 #endif
                     
+                    var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+                    
                     self.processAssetsInDescriptors(
                         descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
                     ) { descAssetResult in
@@ -981,7 +992,13 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
                             self.log.debug("ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
 #endif
-                            self.downloadAssets(for: descriptorsReadyToDownload) {
+                            self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
+                                switch downloadResult {
+                                case .success(let list):
+                                    successfullyDownloadedAssets = list
+                                case .failure(let error):
+                                    processingError = error
+                                }
                                 dispatchGroup.leave()
                             }
                         }
@@ -1020,7 +1037,15 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             return
                         }
                         
-                        completionHandler(.success(()))
+                        let result = Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>.success(successfullyDownloadedAssets)
+                        let downloaderDelegates = self.downloaderDelegates
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didCompleteDownloadCycle(with: result)
+                            })
+                        }
+                        
+                        completionHandler(result)
                     }
                 }
             }
@@ -1035,7 +1060,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         state = .executing
         
-        self.runOnce { result in
+        self.runOnce { _ in
             self.state = .finished
         }
     }

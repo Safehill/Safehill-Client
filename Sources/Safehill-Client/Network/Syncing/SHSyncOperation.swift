@@ -108,8 +108,9 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 return result
             }
         
-        self.delegatesQueue.async { [weak self] in
-            self?.assetsDelegates.forEach({
+        let assetsDelegates = self.assetsDelegates
+        self.delegatesQueue.async {
+            assetsDelegates.forEach({
                 $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
             })
         }
@@ -190,8 +191,9 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     
                     self.log.debug("[sync] notifying delegates about deleted assets \(diff.assetsRemovedOnServer)")
                     
-                    self.delegatesQueue.async { [weak self] in
-                        self?.assetsDelegates.forEach({
+                    let assetsDelegates = self.assetsDelegates
+                    self.delegatesQueue.async {
+                        assetsDelegates.forEach({
                             $0.assetsWereDeleted(diff.assetsRemovedOnServer)
                         })
                     }
@@ -215,16 +217,15 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /*
         let queueDiff = self.removeUsersFromStores(diff.userIdsToRemoveFromGroup)
         
-        self.delegatesQueue.async { [weak self] in
+        let assetsDelegates = self.assetsDelegates
+        self.delegatesQueue.async {
             if queueDiff.changed.count > 0 {
-                self?.log.debug("[sync] notifying queue items changed \(queueDiff.changed)")
-                self?.assetsDelegates.forEach({
+                assetsDelegates.forEach({
                     $0.shareHistoryQueueItemsChanged(withIdentifiers: queueDiff.changed)
                 })
             }
             if queueDiff.removed.count > 0 {
-                self?.log.debug("[sync] notifying queue items removed \(queueDiff.removed)")
-                self?.assetsDelegates.forEach({
+                assetsDelegates.forEach({
                     $0.shareHistoryQueueItemsRemoved(withIdentifiers: queueDiff.removed)
                 })
             }
@@ -245,9 +246,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             ) { result in
                 switch result {
                 case .success():
-                    self.delegatesQueue.async { [weak self] in
+                    let assetsDelegates = self.assetsDelegates
+                    self.delegatesQueue.async {
                         for (globalIdentifier, shareDiff) in diff.userIdsToAddToSharesOfAssetGid {
-                            self?.assetsDelegates.forEach {
+                            assetsDelegates.forEach {
                                 $0.usersWereAddedToShare(
                                     of: globalIdentifier,
                                     groupIdByRecipientId: shareDiff.groupIdByRecipientId,
@@ -283,9 +285,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             ) { result in
                 switch result {
                 case .success:
-                    self.delegatesQueue.async { [weak self] in
+                    let assetsDelegates = self.assetsDelegates
+                    delegatesQueue.async {
                         for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
-                            self?.assetsDelegates.forEach {
+                            assetsDelegates.forEach {
                                 $0.usersWereRemovedFromShare(of: globalIdentifier,
                                                              groupIdByRecipientId: shareDiff.groupIdByRecipientId)
                             }
