@@ -200,7 +200,12 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 return
             }
             
-            let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier]!
+            guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                log.critical("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
+                return
+            }
+            
             let downloaderDelegates = self.downloaderDelegates
             self.delegatesQueue.async {
                 downloaderDelegates.forEach({
