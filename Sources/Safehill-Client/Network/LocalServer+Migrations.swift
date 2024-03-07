@@ -156,6 +156,7 @@ extension LocalServer {
                 throw KBError.databaseNotReady
             }
             let _ = try graph.removeAll()
+            completionHandler(.success(()))
         }
         catch {
             log.warning("Failed to reinitialize the graph: \(error.localizedDescription)")
