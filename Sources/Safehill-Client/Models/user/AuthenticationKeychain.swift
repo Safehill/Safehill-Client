@@ -7,7 +7,8 @@ import Safehill_Crypto
 public enum SHKeychainItemError: CustomNSError, LocalizedError {
     case failedToConvertToData
 }
-extension SHKeychain {
+
+public extension SHKeychain {
     static func retrieveValue(from account: String) throws -> String? {
         // Seek a generic password with the given account.
         let query = [kSecClass: kSecClassGenericPassword,
