@@ -339,9 +339,20 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                         
                         self.decryptFromLocalStore(
                             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier }),
-                            completionHandler: completionHandler
-                        )
+                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
+                        ) {
+                            thirdResult in
+                            
+                            let downloaderDelegates = self.downloaderDelegates
+                            self.delegatesQueue.async {
+                                downloaderDelegates.forEach({
+                                    $0.didCompleteDownloadCycle(with: thirdResult)
+                                })
+                            }
+                            
+                            completionHandler(thirdResult)
+                        }
+                        
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }

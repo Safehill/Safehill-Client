@@ -1037,7 +1037,15 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                             return
                         }
                         
-                        completionHandler(.success(successfullyDownloadedAssets))
+                        let result = Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>.success(successfullyDownloadedAssets)
+                        let downloaderDelegates = self.downloaderDelegates
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didCompleteDownloadCycle(with: result)
+                            })
+                        }
+                        
+                        completionHandler(result)
                     }
                 }
             }
@@ -1052,13 +1060,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         state = .executing
         
-        self.runOnce { result in
-            let downloaderDelegates = self.downloaderDelegates
-            self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: result)
-                })
-            }
+        self.runOnce { _ in
             self.state = .finished
         }
     }
