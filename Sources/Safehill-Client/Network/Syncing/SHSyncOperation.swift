@@ -498,17 +498,3 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
 }
-
-
-private class SHSyncProcessor : SHBackgroundOperationProcessor<SHSyncOperation> {
-    
-    public static var shared = SHSyncProcessor(
-        delayedStartInSeconds: 6,
-        dispatchIntervalInSeconds: 15
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds,
-                   dispatchIntervalInSeconds: dispatchIntervalInSeconds)
-    }
-}

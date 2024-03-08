@@ -101,10 +101,12 @@ public protocol SHServerAPI {
     ///   - assets: the encrypted data for each asset
     ///   - groupId: the group identifier used for the first upload
     ///   - filterVersions: because the input `SHEncryptedAsset`, optionally specify which versions to pick up from the `assets` object
+    ///   - force: if set to true overrides all sharing information for the existing asset version for the requesting user, if one with the same name exists
     ///   - completionHandler: the callback method
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
+                force: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ())
     
     // MARK: Assets Sharing

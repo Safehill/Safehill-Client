@@ -117,6 +117,78 @@ public struct SHKGQuery {
         }
     }
     
+    private static func ingestShare(
+        of assetIdentifier: GlobalIdentifier,
+        from senderUserId: UserIdentifier,
+        to receiverUserIds: [UserIdentifier],
+        in graph: KBKnowledgeStore
+    ) throws {
+        let kgSender = graph.entity(withIdentifier: senderUserId)
+        let kgAsset = graph.entity(withIdentifier: assetIdentifier)
+        
+        log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicate.shares.rawValue), asset=\(kgAsset.identifier)>")
+        try kgSender.link(to: kgAsset, withPredicate: SHKGPredicate.shares.rawValue)
+
+        let tripleCondition = KBTripleCondition(subject: kgSender.identifier, predicate: SHKGPredicate.attemptedShare.rawValue, object: kgAsset.identifier)
+        log.debug("[sh-kg] removing triples matching <user=\(kgSender.identifier), \(SHKGPredicate.attemptedShare.rawValue), \(kgAsset.identifier)>")
+        try graph.removeTriples(matching: tripleCondition)
+        
+        if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
+            UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
+        } else {
+            UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
+        }
+        
+        for userId in receiverUserIds {
+            if userId == senderUserId {
+                continue
+            }
+            let kgOtherUser = graph.entity(withIdentifier: userId)
+            try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
+            log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
+            
+            if let _ = UserIdToAssetGidSharedWithCache[userId] {
+                UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
+            } else {
+                UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
+            }
+        }
+    }
+    
+    internal static func ingestShares(
+        _ userIdsToAddToAssetGids: [GlobalIdentifier: ShareSenderReceivers]
+    ) throws {
+        var errors = [Error]()
+        
+        do {
+            try readWriteGraphQueue.sync(flags: .barrier) {
+                guard let graph = SHDBManager.sharedInstance.graph else {
+                    throw KBError.databaseNotReady
+                }
+                
+                for (assetIdentifier, senderReceivers) in userIdsToAddToAssetGids {
+                    do {
+                        try SHKGQuery.ingestShare(
+                            of: assetIdentifier,
+                            from: senderReceivers.from,
+                            to: Array(senderReceivers.groupIdByRecipientId.keys),
+                            in: graph
+                        )
+                    } catch {
+                        log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
+                        errors.append(error)
+                    }
+                }
+            }
+        } catch {
+            log.critical("[KG] graph DB not ready")
+        }
+        
+        if errors.isEmpty == false {
+            throw errors.first!
+        }
+    }
+    
     internal static func ingestShare(
         of assetIdentifier: GlobalIdentifier,
         from senderUserId: UserIdentifier,
@@ -130,36 +202,12 @@ public struct SHKGQuery {
                     throw KBError.databaseNotReady
                 }
                 
-                let kgSender = graph.entity(withIdentifier: senderUserId)
-                let kgAsset = graph.entity(withIdentifier: assetIdentifier)
-                
-                log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicate.shares.rawValue), asset=\(kgAsset.identifier)>")
-                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicate.shares.rawValue)
-
-                let tripleCondition = KBTripleCondition(subject: kgSender.identifier, predicate: SHKGPredicate.attemptedShare.rawValue, object: kgAsset.identifier)
-                log.debug("[sh-kg] removing triples matching <user=\(kgSender.identifier), \(SHKGPredicate.attemptedShare.rawValue), \(kgAsset.identifier)>")
-                try graph.removeTriples(matching: tripleCondition)
-                
-                if let _ = UserIdToAssetGidSharedByCache[senderUserId] {
-                    UserIdToAssetGidSharedByCache[senderUserId]!.insert(assetIdentifier)
-                } else {
-                    UserIdToAssetGidSharedByCache[senderUserId] = [assetIdentifier]
-                }
-                
-                for userId in receiverUserIds {
-                    if userId == senderUserId {
-                        continue
-                    }
-                    let kgOtherUser = graph.entity(withIdentifier: userId)
-                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
-                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
-                    
-                    if let _ = UserIdToAssetGidSharedWithCache[userId] {
-                        UserIdToAssetGidSharedWithCache[userId]!.insert(assetIdentifier)
-                    } else {
-                        UserIdToAssetGidSharedWithCache[userId] = [assetIdentifier]
-                    }
-                }
+                try SHKGQuery.ingestShare(
+                    of: assetIdentifier,
+                    from: senderUserId,
+                    to: receiverUserIds,
+                    in: graph
+                )
             }
         } catch {
             log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")

@@ -27,14 +27,18 @@ struct SHAssetStoreController {
     
     public let user: SHAuthenticatedLocalUser
     
-    func upload(asset encryptedAsset: any SHEncryptedAsset,
-                with groupId: String,
-                filterVersions: [SHAssetQuality]? = nil) throws -> SHServerAsset
+    func upload(
+        asset encryptedAsset: any SHEncryptedAsset,
+        with groupId: String,
+        filterVersions: [SHAssetQuality]? = nil,
+        force: Bool
+    ) throws -> SHServerAsset
     {
         let serverAsset = try self.createRemoteAsset(
             encryptedAsset,
             groupId: groupId,
-            filterVersions: filterVersions
+            filterVersions: filterVersions,
+            force: force
         )
         
         do {
@@ -55,9 +59,12 @@ struct SHAssetStoreController {
 
 extension SHAssetStoreController {
     
-    private func createRemoteAsset(_ asset: any SHEncryptedAsset,
-                                   groupId: String,
-                                   filterVersions: [SHAssetQuality]?) throws -> SHServerAsset {
+    private func createRemoteAsset(
+        _ asset: any SHEncryptedAsset,
+        groupId: String,
+        filterVersions: [SHAssetQuality]?,
+        force: Bool
+    ) throws -> SHServerAsset {
         log.info("creating asset \(asset.globalIdentifier) on server")
         
         var serverAsset: SHServerAsset? = nil
@@ -69,7 +76,8 @@ extension SHAssetStoreController {
         self.user.serverProxy.remoteServer.create(
             assets: [asset],
             groupId: groupId,
-            filterVersions: filterVersions
+            filterVersions: filterVersions,
+            force: force
         ) { result in
             switch result {
             case .success(let serverAssets):

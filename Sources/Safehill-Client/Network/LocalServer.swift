@@ -723,8 +723,26 @@ struct LocalServer : SHServerAPI {
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
+                force: Bool = true,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
-        // TODO: Filter versions from `assets`
+        
+        var assets = assets
+        if let filterVersions, filterVersions.isEmpty == false {
+            assets = assets.map({
+                var newVersions = $0.encryptedVersions
+                for (versionKey, versionValue) in $0.encryptedVersions {
+                    if filterVersions.contains(versionKey) {
+                        newVersions[versionKey] = versionValue
+                    }
+                }
+                return SHGenericEncryptedAsset(
+                    globalIdentifier: $0.globalIdentifier,
+                    localIdentifier: $0.localIdentifier,
+                    creationDate: $0.creationDate,
+                    encryptedVersions: newVersions
+                )
+            })
+        }
         
         var descriptorsByGlobalId = [GlobalIdentifier: any SHAssetDescriptor]()
         for encryptedAsset in assets {
@@ -903,18 +921,11 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        // TODO: Optimize this to reduce the number of writes
-        for (globalIdentifier, shareDiff) in userIdsToAddToAssetGids {
-            do {
-                try SHKGQuery.ingestShare(
-                    of: globalIdentifier,
-                    from: shareDiff.from,
-                    to: Array(shareDiff.groupIdByRecipientId.keys)
-                )
-            } catch {
-                completionHandler(.failure(error))
-                return
-            }
+        do {
+            try SHKGQuery.ingestShares(userIdsToAddToAssetGids)
+        } catch {
+            completionHandler(.failure(error))
+            return
         }
         
         let versions = versions ?? SHAssetQuality.all

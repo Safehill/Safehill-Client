@@ -604,6 +604,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
+                force: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.count == 1, let asset = assets.first else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API only supports creating one asset per request")))
@@ -630,13 +631,17 @@ struct SHServerHTTPAPI : SHServerAPI {
                 "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString()
             ])
         }
-        let createDict: [String: Any?] = [
+        var createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
             "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions
         ]
+        
+        if force {
+            createDict["force"] = true
+        }
         
         self.post("assets/create", parameters: createDict) { (result: Result<SHServerAsset, Error>) in
             switch result {
