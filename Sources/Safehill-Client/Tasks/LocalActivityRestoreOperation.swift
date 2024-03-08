@@ -258,6 +258,7 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
@@ -303,18 +304,19 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
     /// - Parameter completionHandler: the callback method
     public override func runOnce(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        let descriptors: [any SHAssetDescriptor]
+        let fullDescriptorList: [any SHAssetDescriptor]
         do {
-            descriptors = try self.fetchDescriptorsFromServer()
+            fullDescriptorList = try self.fetchDescriptorsFromServer()
         } catch {
             completionHandler(.failure(error))
             return
         }
         
-        self.log.debug("[localrestoration] original descriptors: \(descriptors.count)")
-        self.processDescriptors(descriptors, priority: .high) { result in
+        self.log.debug("[localrestoration] original descriptors: \(fullDescriptorList.count)")
+        self.processDescriptors(fullDescriptorList, qos: qos) { result in
             switch result {
             case .failure(let error):
                 self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
@@ -327,11 +329,12 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 completionHandler(.failure(error))
             case .success(let descriptorsByGlobalIdentifier):
 #if DEBUG
-                let delta = Set(descriptors.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
                 self.log.debug("[localrestoration] after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
 #endif
                 self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                    qos: qos
                 ) { secondResult in
                     
                     switch secondResult {

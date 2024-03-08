@@ -121,7 +121,6 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         let _ = try BackgroundOperationQueue.of(type: .successfulShare)
         let _ = try BackgroundOperationQueue.of(type: .failedUpload)
         let _ = try BackgroundOperationQueue.of(type: .failedShare)
-        let _ = try BackgroundOperationQueue.of(type: .download)
     }
     
     func testBatchPhoneNumberParsing() throws {
@@ -335,7 +334,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
                             guard let authSalt = Data(base64Encoded: authResponse.encryptionProtocolSalt) else {
                                 throw SHHTTPError.ServerError.unexpectedResponse(authResponse.encryptionProtocolSalt)
                             }
-                            try self.testUser.authenticate(
+                            let _ = try self.testUser.authenticate(
                                 authResponse.user,
                                 bearerToken: authResponse.bearerToken,
                                 encryptionProtocolSalt: authSalt

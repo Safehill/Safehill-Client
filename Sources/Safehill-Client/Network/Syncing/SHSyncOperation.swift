@@ -353,7 +353,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
-    public func syncInteractions(
+    public func syncGroupInteractions(
         remoteDescriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
@@ -387,29 +387,9 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             return result
         }).keys)
         
-        let group = DispatchGroup()
-        var interactionsSyncError: Error? = nil
-        
-        group.enter()
         self.syncGroupInteractions(groupIds: allSharedGroupIds) { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
-                interactionsSyncError = err
-            }
-            group.leave()
-        }
-        
-        group.enter()
-        self.syncThreadInteractions { result in
-            if case .failure(let err) = result {
-                self.log.error("failed to sync interactions: \(err.localizedDescription)")
-                interactionsSyncError = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global(qos: .background)) {
-            if let err = interactionsSyncError {
                 completionHandler(.failure(err))
             }
             else {

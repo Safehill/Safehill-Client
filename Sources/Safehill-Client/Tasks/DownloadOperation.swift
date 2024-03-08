@@ -140,13 +140,11 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     }
     
     ///
-    /// Fetch descriptors from server (remote or local, depending on whether it's running as part of the
+    /// Takes the full list of descriptors from server (remote or local, depending on whether it's running as part of the
     /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
     /// Filters out the blacklisted assets and users, as well as the non-completed uploads.
     /// Call the delegate with the full manifest of assets shared by OTHER users, regardless of the limit on the task config) for the assets.
-    /// Return a tuple with the following values:
-    /// 1. the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
-    /// 2. the globalIdentifiers whose sender is either self or is a known, authorized user. We return this information here so we have to query the graph once.
+    /// Returns the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
     ///
     /// - Parameters:
     ///   - descriptors: the descriptors to process
@@ -155,16 +153,17 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///
     internal func processDescriptors(
         _ descriptors: [any SHAssetDescriptor],
-        priority: TaskPriority,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
+        
         ///
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
-        Task(priority: priority) {
+        Task(priority: qos.toTaskPriority()) {
             let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
             var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
@@ -426,6 +425,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     ///   - completionHandler: the callback, returning the assets to be downloaded, or an error
     internal func processAssetsInDescriptors(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
@@ -472,7 +472,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                     nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: nonLocalPhotoLibraryGlobalIdentifiers,
                     sharedBySelfGlobalIdentifiers: sharedBySelfGlobalIdentifiers,
-                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers
+                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers,
+                    qos: qos
                 ) { result in
                     let end = CFAbsoluteTimeGetCurrent()
                     self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to process \(descriptorsByGlobalIdentifier.count) asset descriptors")
@@ -675,6 +676,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         
@@ -760,7 +762,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 group.leave()
             }
             
-            group.notify(queue: DispatchQueue.global()) {
+            group.notify(queue: DispatchQueue.global(qos: qos)) {
                 if errors.count > 0 {
                     self.log.error("[downloadAssets] failed downloading assets with errors: \(errors.map({ $0.localizedDescription }).joined(separator: ","))")
                     completionHandler(.failure(errors.first!))
@@ -874,6 +876,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     
     public func runOnce(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         
@@ -882,7 +885,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
             return
         }
         
-        DispatchQueue.global(qos: .background).async {
+        DispatchQueue.global(qos: qos).async {
             let dispatchGroup = DispatchGroup()
             
             var localDescriptors = [any SHAssetDescriptor]()
@@ -953,7 +956,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 self.log.debug("original descriptors: \(remoteOnlyDescriptors.count)")
                 
                 dispatchGroup.enter()
-                self.processDescriptors(Array(remoteOnlyDescriptors), priority: .background) { descResult in
+                self.processDescriptors(Array(remoteOnlyDescriptors), qos: qos) { descResult in
                     switch descResult {
                     case .failure(let err):
                         self.log.error("failed to download descriptors: \(err.localizedDescription)")
@@ -967,7 +970,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(remoteDescriptors.count) descriptors")
                 }
                 
-                dispatchGroup.notify(queue: .global(qos: .background)) {
+                dispatchGroup.notify(queue: .global(qos: qos)) {
                     guard processingError == nil else {
                         completionHandler(.failure(processingError!))
                         return
@@ -983,7 +986,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
                     
                     self.processAssetsInDescriptors(
-                        descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
+                        descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                        qos: qos
                     ) { descAssetResult in
                         switch descAssetResult {
                         case .failure(let err):
@@ -1026,16 +1030,17 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     }
         
                     ///
-                    /// Given the whole remote descriptors set (to retrieve threads and groups), sync the interactions
+                    /// Given the whole remote descriptors set (to retrieve threads and groups),
+                    /// sync the comments and reactions in posts
                     ///
                     dispatchGroup.enter()
-                    syncOperation.syncInteractions(
+                    syncOperation.syncGroupInteractions(
                         remoteDescriptors: remoteDescriptors
                     ) { syncInteractionsResult in
                         dispatchGroup.leave()
                     }
                     
-                    dispatchGroup.notify(queue: .global(qos: .background)) {
+                    dispatchGroup.notify(queue: .global(qos: qos)) {
                         guard processingError == nil else {
                             completionHandler(.failure(processingError!))
                             return
@@ -1064,7 +1069,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
         
         state = .executing
         
-        self.runOnce { _ in
+        self.runOnce(qos: .background) { _ in
             self.state = .finished
         }
     }
