@@ -172,10 +172,14 @@ public extension PHAsset {
                 
                 if let size = size, // A size was specified
                    (image.size.width > size.width || image.size.height > size.height), // the retrieved size doesn't match the requested size
-                   exactSize, // the exact size was requested
-                   let newSizeImage = image.resized(to: size) // resizing was possible
+                   exactSize // the exact size was requested
                 {
-                    image = newSizeImage
+                    if let newSizeImage = image.resized(to: size) { // resizing was possible
+                        image = newSizeImage
+                    } else {
+                        completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to fetch exact size")))
+                        return
+                    }
                 }
                 
                 if let data = image.pngData() {
@@ -183,8 +187,10 @@ public extension PHAsset {
                     if shouldCache {
                         SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
                     }
+                    return
                 } else {
                     completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
+                    return
                 }
 #else
                 guard case .appKit(var image) = nsuiimage else {
@@ -194,10 +200,14 @@ public extension PHAsset {
                 
                 if let size = size, // A size was specified
                    image.size != size, // the retrieved size doesn't match the requested size
-                   exactSize, // the exact size was requested
-                   let newSizeImage = image.resized(to: size) // resizing was possible
+                   exactSize // the exact size was requested
                 {
-                    image = newSizeImage
+                    if let newSizeImage = image.resized(to: size) { // resizing was possible
+                        image = newSizeImage
+                    } else {
+                        completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to fetch exact size")))
+                        return
+                    }
                 }
 
                 if let data = image.png {
@@ -205,8 +215,10 @@ public extension PHAsset {
                     if shouldCache {
                         SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
                     }
+                    return
                 } else {
                     completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
+                    return
                 }
 #endif
             case .failure(let error):
