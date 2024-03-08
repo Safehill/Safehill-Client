@@ -7,8 +7,12 @@ extension SHSyncOperation {
         anchorId: String,
         localMessages: [MessageOutputDTO],
         remoteMessages: [MessageOutputDTO],
-        encryptionDetails: EncryptionDetailsClass
-    ) throws {
+        encryptionDetails: EncryptionDetailsClass,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        var errors = [Error]()
+        
         var messagesToUpdate = [MessageOutputDTO]()
         for remoteMessage in remoteMessages {
             let existing = localMessages.first(where: {
@@ -27,6 +31,7 @@ extension SHSyncOperation {
                 switch addMessagesResult {
                 case .failure(let failure):
                     self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
+                    errors.append(failure)
                 case .success(let messages):
                     let threadsDelegates = self.threadsDelegates
                     self.delegatesQueue.async {
@@ -75,9 +80,14 @@ extension SHSyncOperation {
             }
         }
         
-        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
+        dispatchGroup.notify(queue: .global(qos: qos)) {
+            guard errors.isEmpty else {
+                self.log.warning("error while syncing messages in \(anchor.rawValue) \(anchorId): \(errors.map({ $0.localizedDescription }))")
+                completionHandler(.failure(errors.first!))
+                return
+            }
+            
+            completionHandler(.success(()))
         }
     }
     

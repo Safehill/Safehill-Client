@@ -6,8 +6,10 @@ extension SHSyncOperation {
         anchor: SHInteractionAnchor,
         anchorId: String,
         localReactions: [ReactionOutputDTO],
-        remoteReactions: [ReactionOutputDTO]
-    ) throws {
+        remoteReactions: [ReactionOutputDTO],
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         var reactionsToUpdate = [ReactionOutputDTO]()
         var reactionsToRemove = [ReactionOutputDTO]()
         for remoteReaction in remoteReactions {
@@ -35,6 +37,7 @@ extension SHSyncOperation {
         }
         
         let dispatchGroup = DispatchGroup()
+        var errors = [Error]()
         var anyChanged = false
         
         if reactionsToUpdate.count > 0 {
@@ -43,6 +46,7 @@ extension SHSyncOperation {
             let callback = { (addReactionsResult: Result<[ReactionOutputDTO], Error>) in
                 if case .failure(let failure) = addReactionsResult {
                     self.log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
+                    errors.append(failure)
                 } else {
                     anyChanged = true
                 }
@@ -68,6 +72,7 @@ extension SHSyncOperation {
             let callback = { (removeReactionsResult: Result<Void, Error>) in
                 if case .failure(let failure) = removeReactionsResult {
                     self.log.warning("failed to remove reactions from local. \(failure.localizedDescription)")
+                    errors.append(failure)
                 } else {
                     anyChanged = true
                 }
@@ -104,9 +109,12 @@ extension SHSyncOperation {
             }
         }
         
-        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
+        dispatchGroup.notify(queue: DispatchQueue.global(qos: qos)) {
+            if errors.isEmpty {
+                completionHandler(.success(()))
+            } else {
+                completionHandler(.failure(errors.first!))
+            }
         }
     }
     

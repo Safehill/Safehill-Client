@@ -45,7 +45,7 @@ public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, 
             assetsDelegates: self.assetsSyncDelegates,
             threadsDelegates: self.threadsSyncDelegates
         )
-        syncOperation.syncThreadInteractions(completionHandler: completionHandler)
+        syncOperation.syncThreadInteractions(qos: qos, completionHandler: completionHandler)
     }
     
     public override func main() {

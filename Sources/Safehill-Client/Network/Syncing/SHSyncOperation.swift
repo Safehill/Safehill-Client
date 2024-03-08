@@ -48,6 +48,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     private func syncDescriptors(
         remoteDescriptors: [any SHAssetDescriptor],
         localDescriptors: [any SHAssetDescriptor],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<AssetDescriptorsDiff, Error>) -> ()
     ) {
         let remoteUsersById: [UserIdentifier: any SHServerUser]
@@ -122,7 +123,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         /// that user can be safely removed from the blacklist,
         /// as well as all downloads from that user currently awaiting authorization
         ///
-        Task(priority: .low) {
+        Task(priority: qos.toTaskPriority()) {
             await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
                 userIdentifiers: userIdsInRemoteDescriptors
             )
@@ -264,60 +265,60 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 dispatchGroup.leave()
             }
             
-            let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            guard dispatchResult == .success else {
-                log.error("[sync] TIMED OUT when adding recipients to some shares")
-                completionHandler(.failure(SHBackgroundOperationError.timedOut))
-                return
-            }
-            if let error {
-                log.error("[sync] failed to add recipients to some shares: \(error)")
-            }
-        }
-        
-        /*
-        if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
-            var error: Error? = nil
-            
-            dispatchGroup.enter()
-            self.serverProxy.localServer.removeAssetRecipients(
-                basedOn: diff.userIdsToRemoveToSharesOfAssetGid
-            ) { result in
-                switch result {
-                case .success:
-                    let assetsDelegates = self.assetsDelegates
-                    delegatesQueue.async {
-                        for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
-                            assetsDelegates.forEach {
-                                $0.usersWereRemovedFromShare(of: globalIdentifier,
-                                                             groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+            dispatchGroup.notify(queue: .global(qos: qos)) {
+                if let error {
+                    self.log.error("[sync] failed to add recipients to some shares: \(error)")
+                    completionHandler(.failure(error))
+                } else {
+                    
+                    /*
+                    if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
+                        var error: Error? = nil
+                        
+                        dispatchGroup.enter()
+                        self.serverProxy.localServer.removeAssetRecipients(
+                            basedOn: diff.userIdsToRemoveToSharesOfAssetGid
+                        ) { result in
+                            switch result {
+                            case .success:
+                                let assetsDelegates = self.assetsDelegates
+                                delegatesQueue.async {
+                                    for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
+                                        assetsDelegates.forEach {
+                                            $0.usersWereRemovedFromShare(of: globalIdentifier,
+                                                                         groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                                        }
+                                    }
+                                }
+                            case .failure(let err):
+                                error = err
                             }
+                            dispatchGroup.leave()
+                        }
+                        
+                        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+                        guard dispatchResult == .success else {
+                            log.error("[sync] TIMED OUT when removing recipients to some shares")
+                            completionHandler(.failure(SHBackgroundOperationError.timedOut))
+                            return
+                        }
+                        if let error {
+                            log.error("[sync] failed to remove recipients from some shares: \(error)")
                         }
                     }
-                case .failure(let err):
-                    error = err
+                    */
+                    
+                    completionHandler(.success(diff))
                 }
-                dispatchGroup.leave()
-            }
-            
-            let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            guard dispatchResult == .success else {
-                log.error("[sync] TIMED OUT when removing recipients to some shares")
-                completionHandler(.failure(SHBackgroundOperationError.timedOut))
-                return
-            }
-            if let error {
-                log.error("[sync] failed to remove recipients from some shares: \(error)")
             }
         }
-        */
         
-        completionHandler(.success(diff))
     }
     
     public func sync(
         remoteDescriptors: [any SHAssetDescriptor],
         localDescriptors: [any SHAssetDescriptor],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let group = DispatchGroup()
@@ -329,7 +330,8 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         group.enter()
         self.syncDescriptors(
             remoteDescriptors: remoteDescriptors,
-            localDescriptors: localDescriptors
+            localDescriptors: localDescriptors,
+            qos: qos
         ) { syncWithLocalDescResult in
             switch syncWithLocalDescResult {
             case .success(let diff):
@@ -343,7 +345,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             group.leave()
         }
         
-        group.notify(queue: .global(qos: .background)) {
+        group.notify(queue: .global(qos: qos)) {
             if let err = descriptorsSyncError {
                 completionHandler(.failure(err))
             }
@@ -355,6 +357,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     
     public func syncGroupInteractions(
         remoteDescriptors: [any SHAssetDescriptor],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         ///
@@ -387,7 +390,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
             return result
         }).keys)
         
-        self.syncGroupInteractions(groupIds: allSharedGroupIds) { result in
+        self.syncGroupInteractions(groupIds: allSharedGroupIds, qos: qos) { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
                 completionHandler(.failure(err))
@@ -398,7 +401,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
-    private func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    private func runOnce(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
         
         ///
         /// Get the descriptors from the local server
@@ -425,6 +428,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         ///
                         self.sync(remoteDescriptors: remoteDescriptors,
                                   localDescriptors: localDescriptors,
+                                  qos: qos,
                                   completionHandler: completionHandler)
                     case .failure(let err):
                         self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
@@ -438,24 +442,15 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
-    public func runOnceForThreads(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.syncThreadInteractions { result in
-            if case .failure(let err) = result {
-                self.log.error("failed to sync interactions: \(err.localizedDescription)")
-                completionHandler(.failure(err))
-            }
-            completionHandler(.success(()))
-        }
-    }
-    
     public func runOnce(
         for anchor: SHInteractionAnchor,
         anchorId: String,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         switch anchor {
         case .group:
-            self.syncGroupInteractions(groupId: anchorId) { result in
+            self.syncGroupInteractions(groupId: anchorId, qos: qos) { result in
                 switch result {
                 case .failure(let err):
                     self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
@@ -476,7 +471,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                         completionHandler(.success(()))
                         return
                     }
-                    self.syncThreadInteractions(serverThread: serverThread) { syncResult in
+                    self.syncThreadInteractions(serverThread: serverThread, qos: qos) { syncResult in
                         switch syncResult {
                         case .failure(let err):
                             self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
@@ -498,7 +493,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         
         state = .executing
         
-        self.runOnce { result in
+        self.runOnce(qos: .background) { result in
             self.state = .finished
         }
     }

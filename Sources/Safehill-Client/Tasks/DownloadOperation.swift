@@ -1024,7 +1024,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     dispatchGroup.enter()
                     syncOperation.sync(
                         remoteDescriptors: Array(remoteAndLocalDescriptors),
-                        localDescriptors: localDescriptors
+                        localDescriptors: localDescriptors,
+                        qos: qos
                     ) { syncResult in
                         dispatchGroup.leave()
                     }
@@ -1035,7 +1036,8 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                     ///
                     dispatchGroup.enter()
                     syncOperation.syncGroupInteractions(
-                        remoteDescriptors: remoteDescriptors
+                        remoteDescriptors: remoteDescriptors,
+                        qos: qos
                     ) { syncInteractionsResult in
                         dispatchGroup.leave()
                     }
