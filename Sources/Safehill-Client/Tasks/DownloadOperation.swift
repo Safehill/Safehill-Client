@@ -948,6 +948,35 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 let start = CFAbsoluteTimeGetCurrent()
                 var processingError: Error? = nil
                 
+                if remoteAndLocalDescriptors.isEmpty == false {
+                    
+                    ///
+                    /// **MAPS**
+                    /// Given the descriptors that are both LOCAL and REMOTE, determine what local assets map to global identifiers
+                    ///
+                    
+                    let filteredLocalDescriptorByGid = Array(remoteAndLocalDescriptors)
+                        .reduce([GlobalIdentifier: any SHAssetDescriptor]()) {
+                            partialResult, descriptor in
+                            var result = partialResult
+                            if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
+                                result[descriptor.globalIdentifier] = descriptor
+                            }
+                            return result
+                        }
+                    
+                    dispatchGroup.enter()
+                    self.mergeDescriptorsWithApplePhotosAssets(
+                        descriptorsByGlobalIdentifier: filteredLocalDescriptorByGid,
+                        filteringKeys: Array(filteredLocalDescriptorByGid.keys)
+                    ) { result in
+                        if case .failure(let err) = result {
+                            processingError = err
+                        }
+                        dispatchGroup.leave()
+                    }
+                }
+                
                 ///
                 /// **CREATES**
                 /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded
