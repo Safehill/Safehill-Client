@@ -233,86 +233,87 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
         */
         
-        let dispatchGroup = DispatchGroup()
-        
-        if diff.userIdsToAddToSharesOfAssetGid.count > 0 {
-            var error: Error? = nil
-            
-            ///
-            /// Add users to the shares in the graph and notify the delegates
-            ///
-            dispatchGroup.enter()
-            self.serverProxy.localServer.addAssetRecipients(
-                basedOn: diff.userIdsToAddToSharesOfAssetGid
-            ) { result in
-                switch result {
-                case .success():
-                    let assetsDelegates = self.assetsDelegates
-                    self.delegatesQueue.async {
-                        for (globalIdentifier, shareDiff) in diff.userIdsToAddToSharesOfAssetGid {
-                            assetsDelegates.forEach {
-                                $0.usersWereAddedToShare(
-                                    of: globalIdentifier,
-                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId,
-                                    groupInfoById: shareDiff.groupInfoById
-                                )
-                            }
-                        }
-                    }
-                case .failure(let err):
-                    error = err
-                }
-                dispatchGroup.leave()
-            }
-            
-            dispatchGroup.notify(queue: .global(qos: qos)) {
-                if let error {
-                    self.log.error("[sync] failed to add recipients to some shares: \(error)")
-                    completionHandler(.failure(error))
-                } else {
-                    
-                    /*
-                    if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
-                        var error: Error? = nil
-                        
-                        dispatchGroup.enter()
-                        self.serverProxy.localServer.removeAssetRecipients(
-                            basedOn: diff.userIdsToRemoveToSharesOfAssetGid
-                        ) { result in
-                            switch result {
-                            case .success:
-                                let assetsDelegates = self.assetsDelegates
-                                delegatesQueue.async {
-                                    for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
-                                        assetsDelegates.forEach {
-                                            $0.usersWereRemovedFromShare(of: globalIdentifier,
-                                                                         groupIdByRecipientId: shareDiff.groupIdByRecipientId)
-                                        }
-                                    }
-                                }
-                            case .failure(let err):
-                                error = err
-                            }
-                            dispatchGroup.leave()
-                        }
-                        
-                        let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-                        guard dispatchResult == .success else {
-                            log.error("[sync] TIMED OUT when removing recipients to some shares")
-                            completionHandler(.failure(SHBackgroundOperationError.timedOut))
-                            return
-                        }
-                        if let error {
-                            log.error("[sync] failed to remove recipients from some shares: \(error)")
-                        }
-                    }
-                    */
-                    
-                    completionHandler(.success(diff))
-                }
-            }
+        guard diff.userIdsToAddToSharesOfAssetGid.count > 0 else {
+            completionHandler(.success(diff))
+            return
         }
         
+        let dispatchGroup = DispatchGroup()
+        var error: Error? = nil
+        
+        ///
+        /// Add users to the shares in the graph and notify the delegates
+        ///
+        dispatchGroup.enter()
+        self.serverProxy.localServer.addAssetRecipients(
+            basedOn: diff.userIdsToAddToSharesOfAssetGid
+        ) { result in
+            switch result {
+            case .success():
+                let assetsDelegates = self.assetsDelegates
+                self.delegatesQueue.async {
+                    for (globalIdentifier, shareDiff) in diff.userIdsToAddToSharesOfAssetGid {
+                        assetsDelegates.forEach {
+                            $0.usersWereAddedToShare(
+                                of: globalIdentifier,
+                                groupIdByRecipientId: shareDiff.groupIdByRecipientId,
+                                groupInfoById: shareDiff.groupInfoById
+                            )
+                        }
+                    }
+                }
+            case .failure(let err):
+                error = err
+            }
+            dispatchGroup.leave()
+        }
+        
+        dispatchGroup.notify(queue: .global(qos: qos)) {
+            if let error {
+                self.log.error("[sync] failed to add recipients to some shares: \(error)")
+                completionHandler(.failure(error))
+            } else {
+                
+                /*
+                if diff.userIdsToRemoveToSharesOfAssetGid.count > 0 {
+                    var error: Error? = nil
+                    
+                    dispatchGroup.enter()
+                    self.serverProxy.localServer.removeAssetRecipients(
+                        basedOn: diff.userIdsToRemoveToSharesOfAssetGid
+                    ) { result in
+                        switch result {
+                        case .success:
+                            let assetsDelegates = self.assetsDelegates
+                            delegatesQueue.async {
+                                for (globalIdentifier, shareDiff) in diff.userIdsToRemoveToSharesOfAssetGid {
+                                    assetsDelegates.forEach {
+                                        $0.usersWereRemovedFromShare(of: globalIdentifier,
+                                                                     groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                                    }
+                                }
+                            }
+                        case .failure(let err):
+                            error = err
+                        }
+                        dispatchGroup.leave()
+                    }
+                    
+                    let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+                    guard dispatchResult == .success else {
+                        log.error("[sync] TIMED OUT when removing recipients to some shares")
+                        completionHandler(.failure(SHBackgroundOperationError.timedOut))
+                        return
+                    }
+                    if let error {
+                        log.error("[sync] failed to remove recipients from some shares: \(error)")
+                    }
+                }
+                */
+                
+                completionHandler(.success(diff))
+            }
+        }
     }
     
     public func sync(
