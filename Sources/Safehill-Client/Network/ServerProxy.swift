@@ -887,8 +887,8 @@ extension SHServerProxy {
         }
     }
     
-    public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [String],
-                             completionHandler: @escaping (Result<[String], Error>) -> ()) {
+    public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [GlobalIdentifier],
+                             completionHandler: @escaping (Result<[GlobalIdentifier], Error>) -> ()) {
         self.remoteServer.deleteAssets(withGlobalIdentifiers: globalIdentifiers) { result in
             switch result {
             case .success(_):
