@@ -1083,7 +1083,7 @@ public class SHFullDownloadPipelineProcessor : SHBackgroundOperationProcessor<SH
     
     public static var shared = SHFullDownloadPipelineProcessor(
         delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 7
+        dispatchIntervalInSeconds: 5
     )
     private override init(delayedStartInSeconds: Int,
                           dispatchIntervalInSeconds: Int? = nil) {

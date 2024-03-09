@@ -228,18 +228,15 @@ public class SHAddressBookContactHandler {
                 group.leave()
             }
             
-            let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-            guard dispatchResult == .success else {
-                completionHandler(.failure(SHBackgroundOperationError.timedOut))
-                return
-            }
-            guard error == nil else {
-                completionHandler(.failure(error!))
-                return
+            group.notify(queue: .global()) {
+                guard error == nil else {
+                    completionHandler(.failure(error!))
+                    return
+                }
+                
+                completionHandler(.success(usersByPhoneNumber))
             }
         }
-        
-        completionHandler(.success(usersByPhoneNumber))
     }
     
     public func syncContactsAndLocalServerUsers(
