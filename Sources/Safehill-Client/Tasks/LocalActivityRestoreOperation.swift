@@ -4,7 +4,7 @@ import KnowledgeBase
 import os
 
 
-public class SHLocalActivityRestoreOperation: SHDownloadOperation {
+public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
     @available(*, unavailable)
     public override init(user: SHLocalUserProtocol,
@@ -367,5 +367,20 @@ public class SHLocalActivityRestoreOperation: SHDownloadOperation {
                 }
             }
         }
+    }
+}
+
+
+// MARK: - Local Download Operation Processor
+
+public class SHLocalDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHLocalDownloadOperation> {
+    
+    public static var shared = SHLocalDownloadPipelineProcessor(
+        delayedStartInSeconds: 0,
+        dispatchIntervalInSeconds: 5
+    )
+    private override init(delayedStartInSeconds: Int,
+                          dispatchIntervalInSeconds: Int? = nil) {
+        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

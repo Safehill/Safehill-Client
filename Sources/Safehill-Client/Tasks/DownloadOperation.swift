@@ -3,10 +3,10 @@ import KnowledgeBase
 import os
 import Photos
 
-protocol SHDownloadOperationProtocol {}
+protocol SHDownloadOperation {}
 
 
-public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol, SHDownloadOperationProtocol {
+public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol, SHDownloadOperation {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -41,7 +41,7 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     public func clone() -> SHBackgroundOperationProtocol {
-        SHDownloadOperation(
+        SHRemoteDownloadOperation(
             user: self.user,
             downloaderDelegates: self.downloaderDelegates,
             assetsSyncDelegates: self.assetsSyncDelegates,
@@ -948,35 +948,6 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
                 let start = CFAbsoluteTimeGetCurrent()
                 var processingError: Error? = nil
                 
-                if remoteAndLocalDescriptors.isEmpty == false {
-                    
-                    ///
-                    /// **MAPS**
-                    /// Given the descriptors that are both LOCAL and REMOTE, determine what local assets map to global identifiers
-                    ///
-                    
-                    let filteredLocalDescriptorByGid = Array(remoteAndLocalDescriptors)
-                        .reduce([GlobalIdentifier: any SHAssetDescriptor]()) {
-                            partialResult, descriptor in
-                            var result = partialResult
-                            if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-                                result[descriptor.globalIdentifier] = descriptor
-                            }
-                            return result
-                        }
-                    
-                    dispatchGroup.enter()
-                    self.mergeDescriptorsWithApplePhotosAssets(
-                        descriptorsByGlobalIdentifier: filteredLocalDescriptorByGid,
-                        filteringKeys: Array(filteredLocalDescriptorByGid.keys)
-                    ) { result in
-                        if case .failure(let err) = result {
-                            processingError = err
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-                
                 ///
                 /// **CREATES**
                 /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded
@@ -1108,9 +1079,9 @@ public class SHDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQue
 
 // MARK: - Download Operation Processor
 
-public class SHFullDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHDownloadOperation> {
+public class SHRemoteDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHRemoteDownloadOperation> {
     
-    public static var shared = SHFullDownloadPipelineProcessor(
+    public static var shared = SHRemoteDownloadPipelineProcessor(
         delayedStartInSeconds: 0,
         dispatchIntervalInSeconds: 5
     )
