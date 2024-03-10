@@ -29,6 +29,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         )
     }
     
+    public override func clone() -> SHBackgroundOperationProtocol {
+        SHLocalDownloadOperation(
+            user: self.user,
+            delegates: self.downloaderDelegates,
+            restorationDelegate: self.restorationDelegate
+        )
+    }
+    
     /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch
     /// happen against the local server (instead of the remote server)
     /// - Returns: the list of descriptors
