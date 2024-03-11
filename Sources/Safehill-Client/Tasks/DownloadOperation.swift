@@ -77,7 +77,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         var appleLibraryFetchError: Error? = nil
         
         group.enter()
-        self.photoIndexer.fetchCameraRollAssets(withFilters: [.withLocalIdentifiers(localIdentifiers)]) { result in
+        self.photoIndexer.fetchAllAssets(withFilters: [.withLocalIdentifiers(localIdentifiers)]) { result in
             switch result {
             case .success(let fullFetchResult):
                 fetchResult = fullFetchResult

@@ -23,7 +23,6 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
         self.delegates = delegates
         self.imageManager = imageManager ?? PHCachingImageManager()
         self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
-        self.photoIndexer.fetchCameraRollAssets(withFilters: []) { _ in }
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
@@ -67,7 +66,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
         let group = DispatchGroup()
         
         group.enter()
-        photoIndexer.fetchCameraRollAsset(withLocalIdentifier: localIdentifier) { result in
+        photoIndexer.fetchAsset(withLocalIdentifier: localIdentifier) { result in
             switch result {
             case .failure(let err):
                 error = err
