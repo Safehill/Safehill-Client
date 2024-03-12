@@ -228,7 +228,7 @@ public struct SHAssetsDownloadManager {
         Task(priority: .medium) {
             
 
-            log.info("[downloadAssets] downloading assets with identifier \(descriptor.globalIdentifier)")
+            log.info("[downloadManager] downloading assets with identifier \(descriptor.globalIdentifier)")
             
             let start = CFAbsoluteTimeGetCurrent()
             let globalIdentifier = descriptor.globalIdentifier
@@ -240,7 +240,7 @@ public struct SHAssetsDownloadManager {
                 do {
                     try SHKGQuery.removeAssets(with: [globalIdentifier])
                 } catch {
-                    log.warning("[downloadAssets] Attempt to remove asset \(globalIdentifier) the knowledgeGraph because it's blacklisted FAILED. \(error.localizedDescription)")
+                    log.warning("[downloadManager] Attempt to remove asset \(globalIdentifier) the knowledgeGraph because it's blacklisted FAILED. \(error.localizedDescription)")
                 }
                 
                 completionHandler(.failure(SHAssetDownloadError.assetIsBlacklisted(globalIdentifier)))
@@ -275,7 +275,7 @@ public struct SHAssetsDownloadManager {
                 }
                 
                 let end = CFAbsoluteTimeGetCurrent()
-                log.debug("[downloadAssets][PERF] it took \(CFAbsoluteTime(end - start)) to download asset \(globalIdentifier)")
+                log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to download asset \(globalIdentifier)")
             }
         }
     }

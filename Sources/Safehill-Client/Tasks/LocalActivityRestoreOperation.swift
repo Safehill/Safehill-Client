@@ -6,20 +6,43 @@ import os
 
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
+    /// 
+    /// This pipeline deals with assets in the LocalServer and the Apple Photos Library,
+    /// and is responsible for identifying the mapping between the two, and decrypt from local store the remainder.
+    ///
+    /// The steps are:
+    /// 1. the descriptors are fetched from the local server (`fetchDescriptorsFromServer`)
+    /// 2. they are filtered based on blacklisting of users or assets, and whether the sender is known (`processDescriptors`)
+    /// 3. they are merged with the local library based on localIdentifier, calling the delegate for the matches (`processAssetsInDescriptors`)
+    /// 4. for the remainder the decryption step runs and passes the decrypted asset to the delegates (`decryptFromLocalStore`)
+    ///
+    /// The `decryptAssets` flag determines whether step 4 is run.
+    /// Usually in the lifecycle of the application, the decryption happens once, then the delegate is responsible for keeping these
+    /// decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
+    ///
+    
+    let decryptAssets: Bool
+    
     @available(*, unavailable)
-    public override init(user: SHLocalUserProtocol,
-                         downloaderDelegates: [SHAssetDownloaderDelegate],
-                         assetsSyncDelegates: [SHAssetSyncingDelegate],
-                         threadsSyncDelegates: [SHThreadSyncingDelegate],
-                         restorationDelegate: SHAssetActivityRestorationDelegate,
-                         limitPerRun limit: Int? = nil,
-                         photoIndexer: SHPhotosIndexer? = nil) {
+    public override init(
+        user: SHLocalUserProtocol,
+        downloaderDelegates: [SHAssetDownloaderDelegate],
+        assetsSyncDelegates: [SHAssetSyncingDelegate],
+        threadsSyncDelegates: [SHThreadSyncingDelegate],
+        restorationDelegate: SHAssetActivityRestorationDelegate,
+        limitPerRun limit: Int? = nil,
+        photoIndexer: SHPhotosIndexer? = nil
+    ) {
         fatalError("Not supported")
     }
     
-    public init(user: SHLocalUserProtocol,
-                delegates: [SHAssetDownloaderDelegate],
-                restorationDelegate: SHAssetActivityRestorationDelegate) {
+    public init(
+        user: SHLocalUserProtocol,
+        delegates: [SHAssetDownloaderDelegate],
+        restorationDelegate: SHAssetActivityRestorationDelegate,
+        decryptAssets: Bool
+    ) {
+        self.decryptAssets = decryptAssets
         super.init(
             user: user,
             downloaderDelegates: delegates,
@@ -33,7 +56,20 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         SHLocalDownloadOperation(
             user: self.user,
             delegates: self.downloaderDelegates,
-            restorationDelegate: self.restorationDelegate
+            restorationDelegate: self.restorationDelegate,
+            decryptAssets: self.decryptAssets
+        )
+    }
+    
+    /// Clone as above, but override the `decryptAssets` flag
+    /// - Parameter decryptAssets: the overriden value
+    /// - Returns: the cloned object
+    public func clone(decryptAssets: Bool) -> SHBackgroundOperationProtocol {
+        SHLocalDownloadOperation(
+            user: self.user,
+            delegates: self.downloaderDelegates,
+            restorationDelegate: self.restorationDelegate,
+            decryptAssets: decryptAssets
         )
     }
     
@@ -352,21 +388,29 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
                         self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
-                        
-                        self.decryptFromLocalStore(
-                            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
-                        ) {
-                            thirdResult in
-                            
+                        if self.decryptAssets {
+                            self.decryptFromLocalStore(
+                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                                filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
+                            ) {
+                                thirdResult in
+                                
+                                let downloaderDelegates = self.downloaderDelegates
+                                self.delegatesQueue.async {
+                                    downloaderDelegates.forEach({
+                                        $0.didCompleteDownloadCycle(with: thirdResult)
+                                    })
+                                }
+                                
+                                completionHandler(thirdResult)
+                            }
+                        } else {
                             let downloaderDelegates = self.downloaderDelegates
                             self.delegatesQueue.async {
                                 downloaderDelegates.forEach({
-                                    $0.didCompleteDownloadCycle(with: thirdResult)
+                                    $0.didCompleteDownloadCycle(with: .success([]))
                                 })
                             }
-                            
-                            completionHandler(thirdResult)
                         }
                         
                     case .failure(let error):
