@@ -197,6 +197,11 @@ extension SHServerProxy {
         self.remoteServer.signIn(clientBuild: clientBuild, completionHandler: completionHandler)
     }
     
+    ///
+    /// Save the users retrieved from the remote server to the local server for a file-based cache.
+    /// Having a persistent cache (in addition to the in-memory one,
+    /// helps when there is no connectivity or the server can not be reached
+    ///
     private func updateLocalUserDB(
         remoteServerUsers serverUsers: [any SHServerUser],
         completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
@@ -233,7 +238,7 @@ extension SHServerProxy {
     }
     
     public func getUsers(
-        withIdentifiers userIdentifiersToFetch: [String]?,
+        withIdentifiers userIdentifiersToFetch: [UserIdentifier]?,
         completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
     ) {
         guard userIdentifiersToFetch == nil || userIdentifiersToFetch!.count > 0 else {
@@ -243,33 +248,59 @@ extension SHServerProxy {
         self.remoteServer.getUsers(withIdentifiers: userIdentifiersToFetch) { result in
             switch result {
             case .success(let serverUsers):
-                self.updateLocalUserDB(remoteServerUsers: serverUsers, completionHandler: completionHandler)
-            case .failure(let error):
-                /// 
-                /// If can't get from the server try to get them from the local cache
+                completionHandler(.success(serverUsers))
+                
+                guard serverUsers.isEmpty == false else {
+                    return
+                }
+                
                 ///
-                self.localServer.getUsers(withIdentifiers: userIdentifiersToFetch) { localResult in
-                    switch localResult {
-                    case .success(let serverUsers):
-                        if userIdentifiersToFetch != nil,
-                           serverUsers.count == userIdentifiersToFetch!.count {
-                            completionHandler(localResult)
-                        } else {
-                            ///
-                            /// If you can't get them all throw an error
-                            ///
-                            completionHandler(.failure(error))
+                /// Save them also to the local server for a file-based cache.
+                /// Having a persistent cache (in addition to the in-memory one,
+                /// helps when there is no connectivity or the server can not be reached
+                ///
+                DispatchQueue.global(qos: .background).async {
+                    self.updateLocalUserDB(remoteServerUsers: serverUsers) { updateResult in
+                        switch updateResult {
+                        case .failure(let failure):
+                            log.error("failed to store server users in local server: \(failure.localizedDescription)")
+                        case .success:
+                            break
                         }
-                    case .failure(_):
-                        completionHandler(.failure(error))
                     }
+                }
+                
+            case .failure(let err):
+                if err is URLError || err is SHHTTPError.TransportError {
+                    ///
+                    /// If can't get from the server because of a connection issue
+                    /// try to get them from the local cache
+                    ///
+                    self.localServer.getUsers(withIdentifiers: userIdentifiersToFetch) { localResult in
+                        switch localResult {
+                        case .success(let serverUsers):
+                            if userIdentifiersToFetch != nil,
+                               serverUsers.count == userIdentifiersToFetch!.count {
+                                completionHandler(localResult)
+                            } else {
+                                ///
+                                /// If you can't get them all throw an error
+                                ///
+                                completionHandler(.failure(err))
+                            }
+                        case .failure(_):
+                            completionHandler(.failure(err))
+                        }
+                    }
+                } else {
+                    completionHandler(.failure(err))
                 }
             }
         }
     }
     
     public func getLocalUsers(
-        withIdentifiers userIdentifiersToFetch: [String]?,
+        withIdentifiers userIdentifiersToFetch: [UserIdentifier]?,
         completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
     ) {
         guard userIdentifiersToFetch == nil || userIdentifiersToFetch!.count > 0 else {
@@ -282,7 +313,8 @@ extension SHServerProxy {
         )
     }
     
-    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
+    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], 
+                  completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
         self.remoteServer.getUsers(withHashedPhoneNumbers: hashedPhoneNumbers, completionHandler: completionHandler)
     }
     
@@ -300,7 +332,7 @@ extension SHServerProxy {
         let userIds = Array(userIdsSet)
 
         group.enter()
-        self.remoteServer.getUsers(withIdentifiers: userIds) { result in
+        self.getUsers(withIdentifiers: userIds) { result in
             switch result {
             case .success(let serverUsers):
                 response = serverUsers
@@ -329,21 +361,25 @@ extension SHServerProxy {
     /// Fetch the local user details. If fails fall back to local cache if the server is unreachable or the token is expired
     /// - Parameters:
     ///   - completionHandler: the callback method
-    public func fetchUserAccount(completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
-        self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
+    public func fetchUserAccount(completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+        self.fetchRemoteUserAccount { result in
             switch result {
-            case .success(let users):
-                guard users.count > 0 else {
-                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
-                    return
-                }
-                self.updateLocalUserDB(remoteServerUsers: users) { result in
-                    switch result {
-                    case .failure(let failure):
-                        log.error("failed to store this user's server user in local server: \(failure.localizedDescription)")
-                        completionHandler(.success(users.first))
-                    case .success(let localUsers):
-                        completionHandler(.success(localUsers.first))
+            case .success(let user):
+                completionHandler(.success(user))
+                
+                ///
+                /// Save it also to the local server for a file-based cache.
+                /// Having a persistent cache (in addition to the in-memory one,
+                /// helps when there is no connectivity or the server can not be reached
+                ///
+                DispatchQueue.global(qos: .background).async {
+                    self.updateLocalUserDB(remoteServerUsers: [user]) { result in
+                        switch result {
+                        case .failure(let failure):
+                            log.error("failed to store this user's server user in local server: \(failure.localizedDescription)")
+                        case .success:
+                            break
+                        }
                     }
                 }
             case .failure(let err):
@@ -351,9 +387,11 @@ extension SHServerProxy {
                     /// 
                     /// Can't connect to the server, get details from local cache
                     ///
-                    log.warning("Failed to get user details from server. Using local cache\n \(err)")
-                    self.fetchLocalUserAccount(originalServerError: err,
-                                               completionHandler: completionHandler)
+                    log.error("failed to get user details from server. Using local cache. Error=\(err)")
+                    self.fetchLocalUserAccount(
+                        originalServerError: err,
+                        completionHandler: completionHandler
+                    )
                 } else {
                     completionHandler(.failure(err))
                 }
@@ -361,32 +399,36 @@ extension SHServerProxy {
         }
     }
     
-    public func fetchRemoteUserAccount(originalServerError: Error? = nil,
-                                      completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
+    public func fetchRemoteUserAccount(completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                guard users.count == 0 || users.count == 1 else {
-                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("Found \(users.count) users")))
+                guard users.count == 1 else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("Sever sent a 200 response to user fetch with \(users.count) users")))
                     return
                 }
-                completionHandler(.success(users.first))
+                completionHandler(.success(users.first!))
             case .failure(let err):
-                completionHandler(.failure(originalServerError ?? err))
+                completionHandler(.failure(err))
             }
         }
     }
     
     private func fetchLocalUserAccount(originalServerError: Error? = nil,
-                                      completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
+                                      completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):
-                guard users.count > 0 else {
+                guard users.count == 0 || users.count == 1 else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("Local server retrieved more than one (\(users.count)) self user")))
+                    return
+                }
+                guard let user = users.first else {
+                    /// Mimic server behavior on not found
                     completionHandler(.failure(SHHTTPError.ClientError.notFound))
                     return
                 }
-                completionHandler(.success(users.first))
+                completionHandler(.success(user))
             case .failure(let err):
                 completionHandler(.failure(originalServerError ?? err))
             }
