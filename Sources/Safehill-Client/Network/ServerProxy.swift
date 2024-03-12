@@ -361,6 +361,22 @@ extension SHServerProxy {
         }
     }
     
+    public func fetchRemoteUserAccount(originalServerError: Error? = nil,
+                                      completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
+        self.remoteServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
+            switch result {
+            case .success(let users):
+                guard users.count == 0 || users.count == 1 else {
+                    completionHandler(.failure(SHHTTPError.ServerError.unexpectedResponse("Found \(users.count) users")))
+                    return
+                }
+                completionHandler(.success(users.first))
+            case .failure(let err):
+                completionHandler(.failure(originalServerError ?? err))
+            }
+        }
+    }
+    
     private func fetchLocalUserAccount(originalServerError: Error? = nil,
                                       completionHandler: @escaping (Result<(any SHServerUser)?, Error>) -> ()) {
         self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
