@@ -335,4 +335,15 @@ final class Safehill_SerializationTests: XCTestCase {
         XCTAssertEqual(serializedAuthedUser.publicSignatureData.base64EncodedString(), expectedUser.publicSignatureData.base64EncodedString())
         
     }
+    
+    func testSerializePhone() throws {
+        let parsed = SHPhoneNumberParser.sharedInstance.parse(["+14085373509"])
+        if let first = parsed.first, let phoneNumber = first {
+            print(phoneNumber.e164FormattedNumber)
+            let hashedPhoneNumber = phoneNumber.hashedPhoneNumber
+            print(hashedPhoneNumber)
+        }
+        print("nothing")
+        print("DONE")
+    }
 }

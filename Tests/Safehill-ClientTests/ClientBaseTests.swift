@@ -406,7 +406,12 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         
         // Sender uploads
         group.enter()
-        self.testUser.serverProxy.remoteServer.create(assets: [encryptedAsset], groupId: "groupId", filterVersions: nil) { result in
+        self.testUser.serverProxy.remoteServer.create(
+            assets: [encryptedAsset],
+            groupId: "groupId",
+            filterVersions: nil,
+            force: false
+        ) { result in
             switch result {
             case .success(let serverAssets):
                 guard let serverAsset = serverAssets.first else {

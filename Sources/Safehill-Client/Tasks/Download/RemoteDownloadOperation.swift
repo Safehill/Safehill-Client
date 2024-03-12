@@ -491,6 +491,8 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             return
         }
         
+        self.log.debug("[downloadoperation] recreating local assets and queue items for \(globalIdentifiers)")
+        
         ///
         /// Get the `.lowResolution` assets data from the remote server
         ///
