@@ -4,22 +4,32 @@ import KnowledgeBase
 import os
 
 
+///
+/// This pipeline operation deals with assets in the LocalServer and the Apple Photos Library.
+/// **IT DOES NOT** deal with remote server or remote descriptors. See `SHRemoteDwonloadOperation` for remote descriptor processing.
+/// It is responsible for identifying the mapping between the assets in the two sets, and then decrypt the assets in the local store for the ones that don't have a mapping to the local photo library.
+///
+/// The steps are:
+/// 1. `fetchDescriptorsFromServer()` : the descriptors are fetched from the local server
+/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
+/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
+///     - for the assets shared by _this_ user, local server assets and queue items are created when missing
+///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
+/// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted asset to the delegates
+///
+/// The `decryptAssets` flag determines whether step 4 is run.
+/// Usually in the lifecycle of the application, the decryption happens only once.
+/// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
+/// Hence, it's advised to run it with that flag set to true once (at start) and then run it continously with that flag set to false.
+/// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor,
+/// running `SHRemoteDownloadOperation`s.
+///
+/// The pipeline sequence is:
+/// ```
+/// 1 -->   2 -->    3 -->    4 (optional)
+/// ```
+///
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
-    
-    /// 
-    /// This pipeline deals with assets in the LocalServer and the Apple Photos Library,
-    /// and is responsible for identifying the mapping between the two, and decrypt from local store the remainder.
-    ///
-    /// The steps are:
-    /// 1. the descriptors are fetched from the local server (`fetchDescriptorsFromServer`)
-    /// 2. they are filtered based on blacklisting of users or assets, and whether the sender is known (`processDescriptors`)
-    /// 3. they are merged with the local library based on localIdentifier, calling the delegate for the matches (`processAssetsInDescriptors`)
-    /// 4. for the remainder the decryption step runs and passes the decrypted asset to the delegates (`decryptFromLocalStore`)
-    ///
-    /// The `decryptAssets` flag determines whether step 4 is run.
-    /// Usually in the lifecycle of the application, the decryption happens once, then the delegate is responsible for keeping these
-    /// decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
-    ///
     
     let decryptAssets: Bool
     
@@ -76,7 +86,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch
     /// happen against the local server (instead of the remote server)
     /// - Returns: the list of descriptors
-    internal override func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
+    internal func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
         let group = DispatchGroup()
         
         var descriptors = [any SHAssetDescriptor]()
@@ -124,6 +134,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
+        // TODO: local queue items restoration is disabled
+        /*
         guard original.count > 0 else {
             completionHandler(.success(()))
             return
@@ -186,8 +198,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             }
         }
         
-        self.log.debug("upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-        self.log.debug("share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
+        self.log.debug("[localrestoration] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
+        self.log.debug("[localrestoration] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
         
         for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
             self.restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
@@ -202,6 +214,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         )
         
         completionHandler(.success(()))
+        */
     }
     
     
@@ -297,7 +310,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         completionHandler(.success(successfullyDecrypted))
     }
     
-    override func processForDownload(
+    override internal func processForDownload(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
@@ -405,6 +418,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                 completionHandler(thirdResult)
                             }
                         } else {
+                            self.log.debug("[localrestoration] skipping decryption step")
+                            
                             let downloaderDelegates = self.downloaderDelegates
                             self.delegatesQueue.async {
                                 downloaderDelegates.forEach({
