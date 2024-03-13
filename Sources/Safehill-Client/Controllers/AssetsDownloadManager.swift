@@ -43,6 +43,16 @@ public struct SHAssetsDownloadManager {
         }
         let key = "auth-" + userId
         
+        let queueTypes: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]
+        for queueType in queueTypes {
+            guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
+                log.error("Unable to connect to local queue or database \(queueType.identifier)")
+                throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
+            }
+            
+            let _ = try queue.removeAll()
+        }
+        
         guard let assetGIdList = try userStore.value(for: key) as? [String] else {
             throw SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId(userId)
         }
@@ -166,8 +176,12 @@ public struct SHAssetsDownloadManager {
         }
         
         do {
+            log.debug("[downloadManager] index BEFORE \(SHDBManager.sharedInstance.userStore?.keys(matching: KBGenericCondition(.beginsWith, value: "auth-")))")
+            log.debug("[downloadManager] enqueueing descriptors for senders \(descriptors.map({ ($0.sharingInfo.sharedByUserIdentifier, $0.globalIdentifier) })) to unauthorized queue")
             let enqueuedGids = try self.enqueue(descriptors: descriptors, in: unauthorizedQueue)
+            log.debug("[downloadManager] enqueued asset gids \(descriptors.map({ $0.globalIdentifier }))")
             try self.indexUnauthorizedDownloads(from: descriptors, filtering: enqueuedGids)
+            log.debug("[downloadManager] index AFTER \(SHDBManager.sharedInstance.userStore?.keys(matching: KBGenericCondition(.beginsWith, value: "auth-")))")
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
