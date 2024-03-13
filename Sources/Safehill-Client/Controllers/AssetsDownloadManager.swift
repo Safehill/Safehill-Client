@@ -176,12 +176,12 @@ public struct SHAssetsDownloadManager {
         }
         
         do {
-            log.debug("[downloadManager] index BEFORE \(SHDBManager.sharedInstance.userStore?.keys(matching: KBGenericCondition(.beginsWith, value: "auth-")))")
+            log.debug("[downloadManager] index BEFORE \(try! SHDBManager.sharedInstance.userStore!.keys(matching: KBGenericCondition(.beginsWith, value: "auth-")))")
             log.debug("[downloadManager] enqueueing descriptors for senders \(descriptors.map({ ($0.sharingInfo.sharedByUserIdentifier, $0.globalIdentifier) })) to unauthorized queue")
             let enqueuedGids = try self.enqueue(descriptors: descriptors, in: unauthorizedQueue)
             log.debug("[downloadManager] enqueued asset gids \(descriptors.map({ $0.globalIdentifier }))")
             try self.indexUnauthorizedDownloads(from: descriptors, filtering: enqueuedGids)
-            log.debug("[downloadManager] index AFTER \(SHDBManager.sharedInstance.userStore?.keys(matching: KBGenericCondition(.beginsWith, value: "auth-")))")
+            log.debug("[downloadManager] index AFTER \(try! SHDBManager.sharedInstance.userStore!.keys(matching: KBGenericCondition(.beginsWith, value: "auth-")))")
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
