@@ -216,7 +216,6 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        
         DispatchQueue.global(qos: qos).async {
             self.fetchDescriptors {
                 (result: Result<(
@@ -237,13 +236,26 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
             }
         }
     }
+    
+    public override func main() {
+        guard !self.isCancelled else {
+            state = .finished
+            return
+        }
+        
+        state = .executing
+        
+        self.runOnce(qos: .background) { _ in
+            self.state = .finished
+        }
+    }
 }
 
 
 public class SHLowPrioritySyncProcessor : SHBackgroundOperationProcessor<SHLowPrioritySyncOperation> {
     
     public static var shared = SHLowPrioritySyncProcessor(
-        delayedStartInSeconds: 60,
+        delayedStartInSeconds: 20,
         dispatchIntervalInSeconds: 120
     )
     private override init(delayedStartInSeconds: Int,
