@@ -13,10 +13,10 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
         groupIdByRecipientId: [UserIdentifier: String],
         groupInfoById: [String: SHAssetGroupInfo]
     )
-    func usersWereRemovedFromShare(of: GlobalIdentifier, groupIdByRecipientId: [UserIdentifier: String])
-    
-    func shareHistoryQueueItemsChanged(withIdentifiers identifiers: [String])
-    func shareHistoryQueueItemsRemoved(withIdentifiers identifiers: [String])
+    func usersWereRemovedFromShare(
+        of: GlobalIdentifier,
+        groupIdByRecipientId: [UserIdentifier: String]
+    )
 }
 
 public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {

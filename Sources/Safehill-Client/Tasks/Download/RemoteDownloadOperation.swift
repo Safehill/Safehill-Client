@@ -1043,10 +1043,19 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         )
                         dispatchGroup.enter()
                         syncOperation.sync(
-                            remoteDescriptors: descriptors.localAndRemote,
+                            remoteAndLocalDescriptors: descriptors.localAndRemote,
                             localDescriptors: descriptors.allLocal,
                             qos: qos
                         ) { syncResult in
+                            dispatchGroup.leave()
+                        }
+                        
+                        dispatchGroup.enter()
+                        syncOperation.syncCaches(
+                            allRemoteDescriptors: descriptors.allRemote,
+                            allLocalDescriptors: descriptors.allLocal,
+                            qos: .background
+                        ) { syncCachesResult in
                             dispatchGroup.leave()
                         }
             
