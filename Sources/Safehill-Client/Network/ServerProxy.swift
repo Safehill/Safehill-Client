@@ -204,11 +204,11 @@ extension SHServerProxy {
     ///
     private func updateLocalUserDB(
         remoteServerUsers serverUsers: [any SHServerUser],
-        completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
+        completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         let group = DispatchGroup()
         
-        for (i, serverUserChunk) in serverUsers.chunked(into: 5).enumerated() {
+        for (i, serverUserChunk) in serverUsers.chunked(into: 10).enumerated() {
             for serverUser in serverUserChunk {
                 group.enter()
                 self.localServer.createOrUpdateUser(
@@ -228,13 +228,9 @@ extension SHServerProxy {
             }
         }
         
-        guard group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * serverUsers.count)) == .success else {
-            completionHandler(.success(serverUsers))
-            return
+        group.notify(queue: .global(qos: .background)) {
+            completionHandler(.success(()))
         }
-        
-        self.localServer.getUsers(withIdentifiers: serverUsers.map({ $0.identifier }),
-                                  completionHandler: completionHandler)
     }
     
     public func getUsers(
