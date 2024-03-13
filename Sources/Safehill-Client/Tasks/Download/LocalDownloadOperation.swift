@@ -327,45 +327,45 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         /// Only call the restoration delegate for items to restore from the history queues
         /// when restoring. Otherwise the delegate will be called at every cycle
         /// with items that have already been restored
-        /// 
-        if isRestoring {
-            // TODO: This method does not re-create missing items from the history queues. If an item is missing it will not be restored
+        ///
+        guard isRestoring else {
+            self.log.debug("[\(type(of: self))] skipping restoration and local decryption step")
             
-            ///
-            /// FOR THE ONES SHARED BY THIS USER
-            /// Notify the restoration delegates about the assets that need to be restored from the successful queues
-            /// These can only reference assets shared by THIS user. All other descriptors are ignored.
-            ///
-            /// These assets are definitely in the local server (because the descriptors fetch by a `SHLocalDownloadOperation`
-            /// contain only assets from the local server).
-            /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptors
-            ///
-            self.restoreQueueItems(
-                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                filteringKeys: sharedBySelfGlobalIdentifiers
-            ) { _ in }
+            completionHandler(.success([]))
+            return
         }
         
-        ///
-        /// FOR THE ONES SHARED BY OTHER USERS + NOT IN THE APPLE PHOTOS LIBRARY
-        /// Decrypt the remainder from the local store, namely assets:
-        /// - not in the apple photos library (we'll use the apple photos version as long as it exists)
-        /// - not shared by self (until multi-device is implemented, these items are expected to be in the apple photos library)
-        
-        // TODO: IMPLEMENT THIS because activities and assets that no longer exist in (or app has no longer access to from) the Apple photos library are problematic otherwise
+        // TODO: This method does not re-create missing items from the history queues. If an item is missing it will not be restored
         
         ///
-        /// Remember: because the full manifest of descriptors (`descriptorsByGlobalIdentifier`)
-        /// is fetched from LocalStore, all assets are guaranteed to be found
+        /// FOR THE ONES SHARED BY THIS USER
+        /// Notify the restoration delegates about the assets that need to be restored from the successful queues
+        /// These can only reference assets shared by THIS user. All other descriptors are ignored.
         ///
-        let toDecryptFromLocalStoreGids = Set(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
-            .union(sharedByOthersGlobalIdentifiers)
-        
-        completionHandler(.success(Array(
-            descriptorsByGlobalIdentifier.values.filter({
-                toDecryptFromLocalStoreGids.contains($0.globalIdentifier)
-            })
-        )))
+        /// These assets are definitely in the local server (because the descriptors fetch by a `SHLocalDownloadOperation`
+        /// contain only assets from the local server).
+        /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptors
+        ///
+        self.restoreQueueItems(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+            filteringKeys: sharedBySelfGlobalIdentifiers
+        ) { _ in
+            
+            ///
+            /// FOR THE ONES SHARED BY OTHER USERS
+            /// Decrypt from the local store
+            ///
+            
+            ///
+            /// Remember: because the full manifest of descriptors (`descriptorsByGlobalIdentifier`)
+            /// is fetched from LocalStore, all assets are guaranteed to be found
+            ///
+            completionHandler(.success(Array(
+                descriptorsByGlobalIdentifier.values.filter({
+                    sharedByOthersGlobalIdentifiers.contains($0.globalIdentifier)
+                })
+            )))
+        }
     }
     
     ///
@@ -436,31 +436,20 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
                         self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
-                        if self.isRestoring {
-                            self.decryptFromLocalStore(
-                                descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
-                                filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
-                            ) {
-                                thirdResult in
-                                
-                                let downloaderDelegates = self.downloaderDelegates
-                                self.delegatesQueue.async {
-                                    downloaderDelegates.forEach({
-                                        $0.didCompleteDownloadCycle(with: thirdResult)
-                                    })
-                                }
-                                
-                                completionHandler(thirdResult)
-                            }
-                        } else {
-                            self.log.debug("[\(type(of: self))] skipping decryption step")
+                        self.decryptFromLocalStore(
+                            descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
+                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
+                        ) {
+                            thirdResult in
                             
                             let downloaderDelegates = self.downloaderDelegates
                             self.delegatesQueue.async {
                                 downloaderDelegates.forEach({
-                                    $0.didCompleteDownloadCycle(with: .success([]))
+                                    $0.didCompleteDownloadCycle(with: thirdResult)
                                 })
                             }
+                            
+                            completionHandler(thirdResult)
                         }
                         
                     case .failure(let error):
