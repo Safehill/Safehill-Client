@@ -799,128 +799,122 @@ extension SHServerProxy {
         ///
         group.enter()
         self.getLocalAssets(
-            withGlobalIdentifiers: assetIdentifiers,
+            withGlobalIdentifiers: assetIdentifiersToFetch,
             versions: Array(versions),
             cacheHiResolution: false
         ) { localResult in
             if case .success(let assetsDict) = localResult {
                 localDictionary = assetsDict
+                
             }
             group.leave()
         }
         
-        guard group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds)) == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        assetIdentifiersToFetch = assetIdentifiers.subtract(Array(localDictionary.keys))
-        
-        /// If all could be found locally return success
-        guard assetIdentifiersToFetch.count > 0 else {
-            completionHandler(.success(localDictionary))
-            return
-        }
-        
-        ///
-        /// Get the asset descriptors from the remote Safehill server.
-        /// This is needed to:
-        /// - filter out assets that haven't been uploaded yet. The call to the CDN would otherwise fail for those.
-        /// - filter out the ones that are no longer shared with this user. In fact, it is possible the client still asks for this asset, but it should not be fetched.
-        /// - determine the groupId used to upload or share by/with this user. That is the groupId that should be saved with the asset sharing info by the `LocalServer`.
-        ///
-        
-        var error: Error? = nil
-        var descriptorsByAssetGlobalId: [String: any SHAssetDescriptor] = [:]
-        
-        group.enter()
-        self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: assetIdentifiersToFetch) {
-            result in
-            switch result {
-            case .success(let descriptors):
-                descriptorsByAssetGlobalId = descriptors
-                    .reduce([:]) { partialResult, descriptor in
-                        var result = partialResult
-                        result[descriptor.globalIdentifier] = descriptor
-                        return result
-                    }
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        guard group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds)) == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        
-        guard error == nil else {
-            if error is URLError || error is SHHTTPError.TransportError {
-                /// Failing to establish the connection with the server very likely means the other calls will fail too.
-                /// Return the local results
+        group.notify(queue: .global()) {
+            assetIdentifiersToFetch = assetIdentifiers.subtract(Array(localDictionary.keys))
+            
+            /// If all could be found locally return success
+            guard assetIdentifiersToFetch.count > 0 else {
                 completionHandler(.success(localDictionary))
-            } else {
-                completionHandler(.failure(error!))
+                return
             }
-            return
-        }
-        
-        ///
-        /// Reset the descriptors to fetch based on the server descriptors
-        ///
-        if assetIdentifiersToFetch.count != descriptorsByAssetGlobalId.count {
-            log.warning("Some assets requested could not be found in the server manifest, shared with you. Skipping those")
-        }
-        assetIdentifiersToFetch = Array(descriptorsByAssetGlobalId.keys)
-        guard assetIdentifiersToFetch.count > 0 else {
-            completionHandler(.success(localDictionary))
-            return
-        }
-        
-        ///
-        /// Get the asset from the remote Safehill server.
-        ///
-        var remoteDictionary = [String: any SHEncryptedAsset]()
-        
-        group.enter()
-        self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch,
-                                    versions: Array(newVersions)) { serverResult in
-            switch serverResult {
-            case .success(let assetsDict):
-                guard assetsDict.count > 0 else {
-                    error = SHHTTPError.ClientError.notFound
-                    log.error("No assets with globalIdentifiers \(assetIdentifiersToFetch)")
-                    break
+            
+            ///
+            /// Get the asset descriptors from the remote Safehill server.
+            /// This is needed to:
+            /// - filter out assets that haven't been uploaded yet. The call to the CDN would otherwise fail for those.
+            /// - filter out the ones that are no longer shared with this user. In fact, it is possible the client still asks for this asset, but it should not be fetched.
+            /// - determine the groupId used to upload or share by/with this user. That is the groupId that should be saved with the asset sharing info by the `LocalServer`.
+            ///
+            
+            var error: Error? = nil
+            var descriptorsByAssetGlobalId: [String: any SHAssetDescriptor] = [:]
+            
+            group.enter()
+            self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: assetIdentifiersToFetch) {
+                result in
+                switch result {
+                case .success(let descriptors):
+                    descriptorsByAssetGlobalId = descriptors
+                        .reduce([:]) { partialResult, descriptor in
+                            var result = partialResult
+                            result[descriptor.globalIdentifier] = descriptor
+                            return result
+                        }
+                case .failure(let err):
+                    error = err
                 }
-                remoteDictionary = self.organizeAssetVersions(assetsDict, basedOnRequested: versions)
-            case .failure(let err):
-                log.error("failed to get assets with globalIdentifiers \(assetIdentifiersToFetch): \(err.localizedDescription)")
-                error = err
+                group.leave()
             }
-            group.leave()
-        }
-        
-        guard group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds)) == .success else {
-            completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-            return
-        }
-        guard error == nil else {
-            completionHandler(.failure(error!))
-            return
-        }
-        
-        ///
-        /// Create a copy of the assets just fetched from the server in the local server (cache)
-        ///
-        let encryptedAssetsToCreate = remoteDictionary.filter({ assetGid, _ in descriptorsByAssetGlobalId[assetGid] != nil }).values
-        self.localServer.create(assets: Array(encryptedAssetsToCreate),
-                                descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                                uploadState: .completed) { result in
-            if case .failure(let err) = result {
-                log.warning("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+            
+            group.notify(queue: .global()) {
+                
+                guard error == nil else {
+                    if error is URLError || error is SHHTTPError.TransportError {
+                        /// Failing to establish the connection with the server very likely means the other calls will fail too.
+                        /// Return the local results
+                        completionHandler(.success(localDictionary))
+                    } else {
+                        completionHandler(.failure(error!))
+                    }
+                    return
+                }
+                
+                ///
+                /// Reset the descriptors to fetch based on the server descriptors
+                ///
+                if assetIdentifiersToFetch.count != descriptorsByAssetGlobalId.count {
+                    log.warning("Some assets requested could not be found in the server manifest, shared with you. Skipping those")
+                }
+                assetIdentifiersToFetch = Array(descriptorsByAssetGlobalId.keys)
+                guard assetIdentifiersToFetch.count > 0 else {
+                    completionHandler(.success(localDictionary))
+                    return
+                }
+                
+                ///
+                /// Get the asset from the remote Safehill server.
+                ///
+                var remoteDictionary = [String: any SHEncryptedAsset]()
+                
+                group.enter()
+                self.remoteServer.getAssets(withGlobalIdentifiers: assetIdentifiersToFetch,
+                                            versions: Array(newVersions)) { serverResult in
+                    switch serverResult {
+                    case .success(let assetsDict):
+                        guard assetsDict.count > 0 else {
+                            error = SHHTTPError.ClientError.notFound
+                            log.error("No assets with globalIdentifiers \(assetIdentifiersToFetch)")
+                            break
+                        }
+                        remoteDictionary = self.organizeAssetVersions(assetsDict, basedOnRequested: versions)
+                    case .failure(let err):
+                        log.error("failed to get assets with globalIdentifiers \(assetIdentifiersToFetch): \(err.localizedDescription)")
+                        error = err
+                    }
+                    group.leave()
+                }
+                
+                group.notify(queue: .global()) {
+                    guard error == nil else {
+                        completionHandler(.failure(error!))
+                        return
+                    }
+                    
+                    ///
+                    /// Create a copy of the assets just fetched from the server in the local server (cache)
+                    ///
+                    let encryptedAssetsToCreate = remoteDictionary.filter({ assetGid, _ in descriptorsByAssetGlobalId[assetGid] != nil }).values
+                    self.localServer.create(assets: Array(encryptedAssetsToCreate),
+                                            descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
+                                            uploadState: .completed) { result in
+                        if case .failure(let err) = result {
+                            log.warning("could not save downloaded server asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                        }
+                        completionHandler(.success(localDictionary.merging(remoteDictionary, uniquingKeysWith: { _, server in server })))
+                    }
+                }
             }
-            completionHandler(.success(localDictionary.merging(remoteDictionary, uniquingKeysWith: { _, server in server })))
         }
     }
     
