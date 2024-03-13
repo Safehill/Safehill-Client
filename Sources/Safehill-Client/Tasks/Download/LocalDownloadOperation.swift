@@ -196,8 +196,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             }
         }
         
-        self.log.debug("[localrestoration] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-        self.log.debug("[localrestoration] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
+        self.log.debug("[\(type(of: self))] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
+        self.log.debug("[\(type(of: self))] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
         
         for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
             self.restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
@@ -232,7 +232,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
-        self.log.debug("[localrestoration] attempting to decrypt following assets from local store: \(Array(descriptorsByGlobalIdentifier.keys))")
+        self.log.debug("[\(type(of: self))] attempting to decrypt following assets from local store: \(Array(descriptorsByGlobalIdentifier.keys))")
         
         let localAssetsStore = SHLocalAssetStoreController(user: self.user)
         let encryptedAssets: [GlobalIdentifier: any SHEncryptedAsset]
@@ -243,7 +243,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 cacheHiResolution: false
             )
         } catch {
-            self.log.error("[localrestoration] unable to fetch local assets: \(error.localizedDescription)")
+            self.log.error("[\(type(of: self))] unable to fetch local assets: \(error.localizedDescription)")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
             return
         }
@@ -252,7 +252,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         
         for (globalAssetId, encryptedAsset) in encryptedAssets {
             guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
-                log.critical("[localrestoration] malformed descriptorsByGlobalIdentifier")
+                log.critical("[\(type(of: self))] malformed descriptorsByGlobalIdentifier")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptorsByGlobalIdentifier")))
                 return
             }
@@ -293,7 +293,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 
                 successfullyDecrypted.append((decryptedAsset, descriptor))
             } catch {
-                self.log.error("[localrestoration] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
                 
                 self.delegatesQueue.async {
                     downloaderDelegates.forEach({
@@ -372,11 +372,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
-        self.log.debug("[localrestoration] original descriptors: \(fullDescriptorList.count)")
+        self.log.debug("[\(type(of: self))] original descriptors: \(fullDescriptorList.count)")
         self.processDescriptors(fullDescriptorList, qos: qos) { result in
             switch result {
             case .failure(let error):
-                self.log.error("[localrestoration] failed to fetch local descriptors: \(error.localizedDescription)")
+                self.log.error("[\(type(of: self))] failed to fetch local descriptors: \(error.localizedDescription)")
                 let downloaderDelegates = self.downloaderDelegates
                 self.delegatesQueue.async {
                     downloaderDelegates.forEach({
@@ -401,7 +401,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
                 })
                 let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
-                self.log.debug("[localrestoration] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
+                self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
 #endif
                 self.processAssetsInDescriptors(
                     descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
@@ -413,8 +413,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
 #if DEBUG
                         let delta1 = Set(filteredDescriptorsFromKnownUsersByGid.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
                         let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
-                        self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
-                        self.log.debug("[localrestoration] decrypting: \(descriptorsToDecrypt.map({ $0.globalIdentifier }))")
+                        self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
+                        self.log.debug("[\(type(of: self))] decrypting: \(descriptorsToDecrypt.map({ $0.globalIdentifier }))")
 #endif
                         if self.decryptAssets {
                             self.decryptFromLocalStore(
@@ -433,7 +433,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                 completionHandler(thirdResult)
                             }
                         } else {
-                            self.log.debug("[localrestoration] skipping decryption step")
+                            self.log.debug("[\(type(of: self))] skipping decryption step")
                             
                             let downloaderDelegates = self.downloaderDelegates
                             self.delegatesQueue.async {

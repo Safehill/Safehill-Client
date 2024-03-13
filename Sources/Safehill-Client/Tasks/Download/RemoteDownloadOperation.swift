@@ -131,7 +131,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             case .success(let descriptors):
                 remoteDescriptors = descriptors
             case .failure(let err):
-                self.log.error("[downloadoperation] failed to fetch descriptors from REMOTE server when syncing: \(err.localizedDescription)")
+                self.log.error("[\(type(of: self))] failed to fetch descriptors from REMOTE server when syncing: \(err.localizedDescription)")
                 remoteError = err
             }
             dispatchGroup.leave()
@@ -147,7 +147,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             case .success(let descriptors):
                 localDescriptors = descriptors
             case .failure(let err):
-                self.log.error("[downloadoperation] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
+                self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
                 localError = err
             }
             dispatchGroup.leave()
@@ -251,7 +251,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             do {
                 usersDict = try self.getUsers(withIdentifiers: Array(userIdentifiers))
             } catch {
-                self.log.error("[downloadoperation] unable to fetch users from local server: \(error.localizedDescription)")
+                self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
                 completionHandler(.failure(error))
                 return
             }
@@ -278,7 +278,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             let knownUsers: [UserIdentifier: Bool]
             do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
             catch {
-                log.error("[downloadoperation] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
+                log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
                 completionHandler(.failure(error))
                 return
             }
@@ -396,7 +396,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         let knownUsers: [UserIdentifier: Bool]
         do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
         catch {
-            log.error("[downloadoperation] failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
+            log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
             completionHandler(.failure(error))
             return
         }
@@ -408,7 +408,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
         let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
         
-        self.log.info("[downloadoperation] found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
+        self.log.info("[\(type(of: self))] found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
         
         let downloadsManager = SHAssetsDownloadManager(user: self.user)
         
@@ -430,7 +430,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         // TODO: When running on a cron, avoid notifying delegates about authorizations over and over
                         break
                     } else {
-                        self.log.critical("[downloadoperation] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
+                        self.log.critical("[\(type(of: self))] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
                     }
                 default:
                     break
@@ -445,7 +445,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         withIdentifiers: Array(userIdentifiers)
                     )
                 } catch {
-                    self.log.error("[downloadoperation] unable to fetch users from local server: \(error.localizedDescription)")
+                    self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
                     completionHandler(.failure(error))
                     return
                 }
@@ -548,7 +548,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             return
         }
         
-        self.log.debug("[downloadoperation] recreating local assets and queue items for \(globalIdentifiers)")
+        self.log.debug("[\(type(of: self))] recreating local assets and queue items for \(globalIdentifiers)")
         
         ///
         /// Get the `.lowResolution` assets data from the remote server
@@ -582,15 +582,15 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
 //                                usersReferenced: usersReferenced
 //                            )
                         } catch {
-                            self.log.warning("[downloadoperation] failed to fetch users from remote server when restoring items in local library but not in local server")
+                            self.log.warning("[\(type(of: self))] failed to fetch users from remote server when restoring items in local library but not in local server")
                         }
                         
                     case .failure(let error):
-                        self.log.warning("[downloadoperation] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                        self.log.warning("[\(type(of: self))] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
                     }
                 }
             case .failure(let error):
-                self.log.warning("[downloadoperation] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                self.log.warning("[\(type(of: self))] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
             }
         }
     }
@@ -645,7 +645,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     groupIdToUploadItem[groupId] = (item, groupCreationDate)
                 } else {
                     guard let user = otherUsersById[recipientUserId] else {
-                        log.critical("[downloadoperation] inconsistency between user ids referenced in descriptors and user objects returned from server")
+                        log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server")
                         continue
                     }
                     
@@ -698,7 +698,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     in: BackgroundOperationQueue.of(type: .successfulUpload),
                     at: timestamp
                 )) == nil {
-                    log.warning("[downloadoperation] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
+                    log.warning("[\(type(of: self))] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
                 }
             }
             for (shareItem, timestamp) in groupIdToShareItem.values {
@@ -706,12 +706,12 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     in: BackgroundOperationQueue.of(type: .successfulShare),
                     at: timestamp
                 )) == nil {
-                    log.warning("[downloadoperation] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
+                    log.warning("[\(type(of: self))] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
                 }
             }
 
-            log.debug("[downloadoperation] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-            log.debug("[downloadoperation] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
+            log.debug("[\(type(of: self))] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
+            log.debug("[\(type(of: self))] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
 
             for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
                 self.restorationDelegate.restoreUploadQueueItems(
@@ -817,7 +817,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         
         group.notify(queue: DispatchQueue.global(qos: qos)) {
             if errors.count > 0 {
-                self.log.error("[downloadoperation] failed downloading assets with errors: \(errors.map({ $0.localizedDescription }).joined(separator: ","))")
+                self.log.error("[\(type(of: self))] failed downloading assets with errors: \(errors.map({ $0.localizedDescription }).joined(separator: ","))")
                 completionHandler(.failure(errors.first!))
             } else {
                 completionHandler(.success(descriptorsReadyToDownload))
@@ -839,13 +839,13 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         
         for descriptor in descriptors {
             guard !self.isCancelled else {
-                log.info("[downloadoperation] download task cancelled. Finishing")
+                log.info("[\(type(of: self))] download task cancelled. Finishing")
                 state = .finished
                 break
             }
             
             guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
-                log.critical("[downloadoperation] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
+                log.critical("[\(type(of: self))] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
                 return
             }
@@ -868,7 +868,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 switch result {
                 
                 case .failure(let error):
-                    self.log.error("[downloadoperation] failed to download asset \(descriptor.globalIdentifier)")
+                    self.log.error("[\(type(of: self))] failed to download asset \(descriptor.globalIdentifier)")
                     
                     downloadError = error
                     
@@ -884,7 +884,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     }
                     
                     if case SHAssetDownloadError.assetIsBlacklisted(_) = error {
-                        self.log.info("[downloadoperation] skipping item \(descriptor.globalIdentifier) because it was attempted too many times")
+                        self.log.info("[\(type(of: self))] skipping item \(descriptor.globalIdentifier) because it was attempted too many times")
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
                                 $0.didFailRepeatedlyDownloadOfAsset(
@@ -959,7 +959,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded after filtering
                     ///
                     
-                    self.log.debug("[downloadoperation] original descriptors: \(descriptors.remoteOnly.count)")
+                    self.log.debug("[\(type(of: self))] original descriptors: \(descriptors.remoteOnly.count)")
                     
                     let dispatchGroup = DispatchGroup()
                     
@@ -967,7 +967,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     self.processDescriptors(descriptors.remoteOnly, qos: qos) { descResult in
                         switch descResult {
                         case .failure(let err):
-                            self.log.error("[downloadoperation] failed to download descriptors: \(err.localizedDescription)")
+                            self.log.error("[\(type(of: self))] failed to download descriptors: \(err.localizedDescription)")
                             processingError = err
                         case .success(let val):
                             filteredDescriptorsByAssetGid = val.fromRetrievableUsers
@@ -988,7 +988,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         
     #if DEBUG
                         let delta = Set(descriptors.remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
-                        self.log.debug("[downloadoperation] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
+                        self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
     #endif
                         
                         var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
@@ -999,14 +999,14 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         ) { descAssetResult in
                             switch descAssetResult {
                             case .failure(let err):
-                                self.log.error("[downloadoperation] failed to process assets in descriptors: \(err.localizedDescription)")
+                                self.log.error("[\(type(of: self))] failed to process assets in descriptors: \(err.localizedDescription)")
                                 processingError = err
                                 dispatchGroup.leave()
                             case .success(let descriptorsReadyToDownload):
     #if DEBUG
                                 let delta1 = Set(filteredDescriptorsByAssetGid.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
                                 let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
-                                self.log.debug("[downloadoperation] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
+                                self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
     #endif
                                 self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
                                     switch downloadResult {
