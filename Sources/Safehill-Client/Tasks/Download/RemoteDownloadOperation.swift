@@ -582,10 +582,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                             ///
                             /// Re-create the successful upload and share queue items
                             ///
-                            self.restoreQueueItems(
-                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                                usersReferenced: usersReferenced
-                            )
+                            // TODO: Disable queue items creationg from Remote download
+//                            self.restoreQueueItems(
+//                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+//                                usersReferenced: usersReferenced
+//                            )
                         } catch {
                             self.log.warning("[downloadoperation] failed to fetch users from remote server when restoring items in local library but not in local server")
                         }

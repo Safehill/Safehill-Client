@@ -134,8 +134,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        // TODO: local queue items restoration is disabled
-        /*
         guard original.count > 0 else {
             completionHandler(.success(()))
             return
@@ -214,7 +212,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         )
         
         completionHandler(.success(()))
-        */
     }
     
     
