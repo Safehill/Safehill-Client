@@ -400,6 +400,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         let delta1 = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
                         let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
                         self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
+                        self.log.debug("[localrestoration] decrypting: \(descriptorsToDecrypt.map({ $0.globalIdentifier }))")
 #endif
                         if self.decryptAssets {
                             self.decryptFromLocalStore(
