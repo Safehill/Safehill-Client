@@ -27,7 +27,7 @@ protocol SHDownloadOperation {}
 ///   \->   6
 /// ```
 ///
-public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol, SHDownloadOperation {
+public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol, SHDownloadOperation {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -71,25 +71,6 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             limitPerRun: self.limit,
             photoIndexer: self.photoIndexer
         )
-    }
-    
-    public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
-        guard let data = item.content as? Data else {
-            throw KBError.unexpectedData(item.content)
-        }
-        
-        let unarchiver: NSKeyedUnarchiver
-        if #available(macOS 10.13, *) {
-            unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
-        } else {
-            unarchiver = NSKeyedUnarchiver(forReadingWith: data)
-        }
-        
-        guard let downloadRequest = unarchiver.decodeObject(of: SHDownloadRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey) else {
-            throw KBError.unexpectedData(item)
-        }
-        
-        return downloadRequest
     }
     
     internal func fetchApplePhotosLibraryAssets(for localIdentifiers: [String]) throws -> PHFetchResult<PHAsset>? {
@@ -1047,15 +1028,6 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                             localDescriptors: descriptors.allLocal,
                             qos: qos
                         ) { syncResult in
-                            dispatchGroup.leave()
-                        }
-                        
-                        dispatchGroup.enter()
-                        syncOperation.syncCaches(
-                            allRemoteDescriptors: descriptors.allRemote,
-                            allLocalDescriptors: descriptors.allLocal,
-                            qos: .background
-                        ) { syncCachesResult in
                             dispatchGroup.leave()
                         }
             
