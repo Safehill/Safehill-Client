@@ -166,8 +166,8 @@ public struct SHAssetsDownloadManager {
         }
         
         do {
-            try self.enqueue(descriptors: descriptors, in: unauthorizedQueue)
-            try self.indexUnauthorizedDownloads(from: descriptors)
+            let enqueuedGids = try self.enqueue(descriptors: descriptors, in: unauthorizedQueue)
+            try self.indexUnauthorizedDownloads(from: descriptors, filtering: enqueuedGids)
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
@@ -285,16 +285,18 @@ public struct SHAssetsDownloadManager {
 
 private extension SHAssetsDownloadManager {
     
-    private func enqueue(descriptors: [any SHAssetDescriptor], in queue: KBQueueStore) throws {
+    private func enqueue(descriptors: [any SHAssetDescriptor], in queue: KBQueueStore) throws -> [GlobalIdentifier] {
         var errors = [Error]()
+        var enqueuedGIds = [GlobalIdentifier]()
         
         for descr in descriptors {
             let queueItemIdentifier = descr.globalIdentifier
             guard let existingItemIdentifiers = try? queue.keys(matching: KBGenericCondition(.equal, value: queueItemIdentifier)),
                   existingItemIdentifiers.isEmpty else {
-                log.info("Not enqueueing item \(queueItemIdentifier) in queue \(queue.name) as a request with the same identifier hasn't been fulfilled yet")
                 continue
             }
+            
+            enqueuedGIds.append(descr.globalIdentifier)
             
             let queueItem = SHDownloadRequestQueueItem(
                 assetDescriptor: descr,
@@ -313,6 +315,12 @@ private extension SHAssetsDownloadManager {
         if errors.count > 0 {
             throw errors.first!
         }
+        
+        if enqueuedGIds.isEmpty {
+            throw SHBackgroundOperationError.alreadyProcessed
+        }
+        
+        return enqueuedGIds
     }
     
     private static func dequeue(from queue: KBQueueStore, itemsWithIdentifiers identifiers: [GlobalIdentifier]) throws -> [any SHAssetDescriptor] {
@@ -382,14 +390,17 @@ private extension SHAssetsDownloadManager {
 
 private extension SHAssetsDownloadManager {
     
-    private func indexUnauthorizedDownloads(from descriptors: [any SHAssetDescriptor]) throws {
+    private func indexUnauthorizedDownloads(
+        from descriptors: [any SHAssetDescriptor],
+        filtering assetGlobalIdentifiers: [GlobalIdentifier]
+    ) throws {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
         }
         let writeBatch = userStore.writeBatch()
         var updatedKVs = [String: [String]]()
         
-        for descr in descriptors {
+        for descr in descriptors.filter({ assetGlobalIdentifiers.contains($0.globalIdentifier) }) {
             let key = "auth-" + descr.sharingInfo.sharedByUserIdentifier
             var newAssetGIdList: [GlobalIdentifier]
             if let assetGIdList = try userStore.value(for: key) as? [String] {

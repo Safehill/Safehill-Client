@@ -41,6 +41,7 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
     case missingUnauthorizedDownloadIndexForUserId(String)
     case missingE2EEDetailsForGroup(String)
     case missingE2EEDetailsForThread(String)
+    case alreadyProcessed
     
     public var description: String {
         switch self {
@@ -60,6 +61,8 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
             return "The global identifier for local id \(localIdentifier) doesn't match the one previously computed"
         case .unexpectedData(let data):
             return "unexpected data: \(String(describing: data))"
+        case .alreadyProcessed:
+            return "A request with the same identifier is enqueued for processing already"
         }
     }
     

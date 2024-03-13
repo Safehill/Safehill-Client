@@ -438,7 +438,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             downloadsManager.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
                 switch result {
                 case .failure(let error):
-                    self.log.critical("[downloadoperation] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
+                    if case SHBackgroundOperationError.alreadyProcessed = error {
+                        // Do nothing
+                    } else {
+                        self.log.critical("[downloadoperation] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
+                    }
                 default:
                     var usersDict = [UserIdentifier: any SHServerUser]()
                     var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
