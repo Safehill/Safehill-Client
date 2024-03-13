@@ -14,7 +14,7 @@ protocol SHDownloadOperation {}
 /// 1. `fetchDescriptors(for:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
 /// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
-///     - for the assets shared by _this_ user, local server assets and queue items are created when missing
+///     - for the assets shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
 ///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
 /// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt the ones from "known" authorized users and append to the unauthorized queue for the "uknown" users
 /// 5. `sync(remoteDescriptors:localDescriptors:qos:completionHandler:)` : similarly to how step 2.1 takes care of creating assets that do not exist on local server, this step takes care of assets that are both in local and remote server as well as the ones only in local. Local server is updated according to remote server information.
@@ -576,11 +576,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                             ///
                             /// Re-create the successful upload and share queue items
                             ///
-                            // TODO: Disable queue items creationg from Remote download
-//                            self.restoreQueueItems(
-//                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-//                                usersReferenced: usersReferenced
-//                            )
+                            self.restoreQueueItems(
+                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                                usersReferenced: usersReferenced
+                            )
                         } catch {
                             self.log.warning("[\(type(of: self))] failed to fetch users from remote server when restoring items in local library but not in local server")
                         }
@@ -595,8 +594,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         }
     }
     
-    private func restoreQueueItems(descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-                                   usersReferenced: [any SHServerUser]) {
+    private func restoreQueueItems(
+        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        usersReferenced: [any SHServerUser]
+    ) {
         guard descriptorsByGlobalIdentifier.count > 0 else {
             return
         }
@@ -613,7 +614,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             && $0.value.localIdentifier != nil
         })
         
-        self.restorationDelegate.didStartRestoration()
+        let restorationDelegate = self.restorationDelegate
+        self.delegatesQueue.async {
+            restorationDelegate.didStartRestoration()
+        }
         var userIdsInvolvedInRestoration = Set<String>()
         
         for remoteDescriptor in remoteServerDescriptorByAssetGid.values {
@@ -624,7 +628,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             
             for (recipientUserId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 let localIdentifier = remoteDescriptor.localIdentifier!
-                let groupCreationDate = remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt ?? Date()
+                let groupCreationDate = remoteDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt!
                 
                 if recipientUserId == myUser.identifier {
                     if uploadLocalAssetIdByGroupId[groupId] == nil {
@@ -713,22 +717,26 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             log.debug("[\(type(of: self))] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
             log.debug("[\(type(of: self))] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
 
-            for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
-                self.restorationDelegate.restoreUploadQueueItems(
-                    forLocalIdentifiers: Array(localIdentifiers),
-                    in: groupId
-                )
-            }
-
-            for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
-                self.restorationDelegate.restoreShareQueueItems(
-                    forLocalIdentifiers: Array(localIdentifiers),
-                    in: groupId
-                )
+            self.delegatesQueue.async {
+                for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
+                    restorationDelegate.restoreUploadQueueItems(
+                        forLocalIdentifiers: Array(localIdentifiers),
+                        in: groupId
+                    )
+                }
+                
+                for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
+                    restorationDelegate.restoreShareQueueItems(
+                        forLocalIdentifiers: Array(localIdentifiers),
+                        in: groupId
+                    )
+                }
             }
         }
         
-        self.restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration))
+        self.delegatesQueue.async {
+            restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration))
+        }
     }
     
     internal func processForDownload(
@@ -745,7 +753,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         
         ///
         /// FOR THE ASSETS SHARED BY THIS USER
-        /// Because assets that are already in the local server are filtered out by when this method is called, we only deal with assets that:
+        /// Because assets that are already in the local server are filtered out by when this method is called (by `fetchDescriptors` of `SHRemoteDownloadOperation`, we only deal with assets that:
         /// - are shared by THIS user
         /// - are not in the local server
         ///
@@ -767,6 +775,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         /// 
         /// (1)
         ///
+        
         let globalIdentifiersNotOnLocalSharedBySelfInApplePhotoLibrary = sharedBySelfGlobalIdentifiers
             .subtract(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
         
@@ -779,7 +788,6 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         /// 
         /// (2)
         ///
-        
         
         /// Collect all items ready to download, starting from the ones shared by self
         var descriptorsReadyToDownload = nonApplePhotoLibrarySharedBySelfGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
