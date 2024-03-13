@@ -9,7 +9,7 @@ public actor SHDownloadBlacklist {
     public static var shared = SHDownloadBlacklist()
     
     /// Give up retrying after a download for an asset after this many attempts
-    static let FailedDownloadCountThreshold = 50
+    static let FailedDownloadCountThreshold = 10
     
     var repeatedDownloadFailuresByAssetId = [GlobalIdentifier: Int]()
     
