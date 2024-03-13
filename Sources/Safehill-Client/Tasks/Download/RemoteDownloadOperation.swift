@@ -439,34 +439,37 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 switch result {
                 case .failure(let error):
                     if case SHBackgroundOperationError.alreadyProcessed = error {
-                        // Do nothing
+                        // TODO: When running on a cron, avoid notifying delegates about authorizations over and over
+                        break
                     } else {
                         self.log.critical("[downloadoperation] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
                     }
                 default:
-                    var usersDict = [UserIdentifier: any SHServerUser]()
-                    var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-                    userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-                    
-                    do {
-                        usersDict = try SHUsersController(localUser: self.user).getUsers(
-                            withIdentifiers: Array(userIdentifiers)
-                        )
-                    } catch {
-                        self.log.error("[downloadoperation] unable to fetch users from local server: \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                        return
-                    }
+                    break
+                }
+                
+                var usersDict = [UserIdentifier: any SHServerUser]()
+                var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+                userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+                
+                do {
+                    usersDict = try SHUsersController(localUser: self.user).getUsers(
+                        withIdentifiers: Array(userIdentifiers)
+                    )
+                } catch {
+                    self.log.error("[downloadoperation] unable to fetch users from local server: \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                    return
+                }
 
-                    let downloaderDelegates = self.downloaderDelegates
-                    self.delegatesQueue.async {
-                        downloaderDelegates.forEach({
-                            $0.didReceiveAuthorizationRequest(
-                                for: unauthorizedDownloadDescriptors,
-                                referencing: usersDict
-                            )
-                        })
-                    }
+                let downloaderDelegates = self.downloaderDelegates
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
+                        $0.didReceiveAuthorizationRequest(
+                            for: unauthorizedDownloadDescriptors,
+                            referencing: usersDict
+                        )
+                    })
                 }
             }
         }
