@@ -220,8 +220,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        self.log.debug("[localrestoration] attempting to decrypt following assets from local store: \(Array(original.keys))")
-        
         guard original.count > 0 else {
             completionHandler(.success([]))
             return
@@ -234,13 +232,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
+        self.log.debug("[localrestoration] attempting to decrypt following assets from local store: \(Array(descriptorsByGlobalIdentifier.keys))")
+        
         let localAssetsStore = SHLocalAssetStoreController(user: self.user)
-        guard let encryptedAssets = try? localAssetsStore.encryptedAssets(
-            with: Array(descriptorsByGlobalIdentifier.keys),
-            versions: [.lowResolution],
-            cacheHiResolution: false
-        ) else {
-            self.log.error("[localrestoration] unable to fetch local assets")
+        let encryptedAssets: [GlobalIdentifier: any SHEncryptedAsset]
+        do {
+            encryptedAssets = try localAssetsStore.encryptedAssets(
+                with: Array(descriptorsByGlobalIdentifier.keys),
+                versions: [.lowResolution],
+                cacheHiResolution: false
+            )
+        } catch {
+            self.log.error("[localrestoration] unable to fetch local assets: \(error.localizedDescription)")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
             return
         }
