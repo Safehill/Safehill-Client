@@ -384,27 +384,41 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     })
                 }
                 completionHandler(.failure(error))
-            case .success(let descriptorsByGlobalIdentifier):
+            case .success(let filteredDescriptors):
 #if DEBUG
-                let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
-                self.log.debug("[localrestoration] after processing: \(descriptorsByGlobalIdentifier.count). delta=\(delta)")
+                /// 
+                /// The `SHLocalDownloadOperation` doesn't deal with request authorizations
+                /// The `SHRemoteDownloadOperation` is responsible for it.
+                /// The `didReceiveAssetDescriptors(_:referencing:)` delegate method is called with only descriptors from known users
+                /// so we need to make sure the decryption only happens for those, and the delegate is not called for assets that are not from known users.
+                /// If not, the delegate might get a call to `didStartDownloadOfAsset` for an asset that wasn't in the set of provided to `didReceiveAssetDescriptors`.
+                ///
+                /// The reason why the `didReceiveAssetDescriptors` method is called with descriptors for known users
+                /// is because the `SHRemoteDownloadOperation` treats differently known (not needing authorization) and unknown users (needing authorization).
+                /// The client should never initiate/start a download for an asset from an unknown user.
+                ///
+                let filteredDescriptorsFromKnownUsersByGid = filteredDescriptors.fromRetrievableUsers.filter({
+                    filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
+                })
+                let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
+                self.log.debug("[localrestoration] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
 #endif
                 self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                    descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
                     qos: qos
                 ) { secondResult in
                     
                     switch secondResult {
                     case .success(let descriptorsToDecrypt):
 #if DEBUG
-                        let delta1 = Set(descriptorsByGlobalIdentifier.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
-                        let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(descriptorsByGlobalIdentifier.keys)
+                        let delta1 = Set(filteredDescriptorsFromKnownUsersByGid.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
+                        let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
                         self.log.debug("[localrestoration] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
                         self.log.debug("[localrestoration] decrypting: \(descriptorsToDecrypt.map({ $0.globalIdentifier }))")
 #endif
                         if self.decryptAssets {
                             self.decryptFromLocalStore(
-                                descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+                                descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
                                 filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
                             ) {
                                 thirdResult in

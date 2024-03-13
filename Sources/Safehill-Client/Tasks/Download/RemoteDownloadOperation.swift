@@ -200,7 +200,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     internal func processDescriptors(
         _ descriptors: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
+        completionHandler: @escaping (Result<(
+                fromRetrievableUsers: [GlobalIdentifier: any SHAssetDescriptor],
+                fromKnownUsers: [GlobalIdentifier]
+            ), Error>
+        ) -> Void
     ) {
         
         ///
@@ -232,7 +236,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         $0.didReceiveAssetDescriptors([], referencing: [:])
                     })
                 }
-                completionHandler(.success([:]))
+                completionHandler(.success((fromRetrievableUsers: [:], fromKnownUsers: [])))
                 return
             }
             
@@ -306,7 +310,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     break
                 }
             }
-            completionHandler(.success(descriptorsByGlobalIdentifier))
+            completionHandler(.success((
+                fromRetrievableUsers: descriptorsByGlobalIdentifier,
+                fromKnownUsers: descriptorsFromKnownUsers.map({ $0.globalIdentifier })
+            )))
         }
     }
     
@@ -963,7 +970,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                             self.log.error("[downloadoperation] failed to download descriptors: \(err.localizedDescription)")
                             processingError = err
                         case .success(let val):
-                            filteredDescriptorsByAssetGid = val
+                            filteredDescriptorsByAssetGid = val.fromRetrievableUsers
                         }
                         dispatchGroup.leave()
                         
