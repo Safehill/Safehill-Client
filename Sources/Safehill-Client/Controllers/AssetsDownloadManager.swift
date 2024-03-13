@@ -25,6 +25,16 @@ public struct SHAssetsDownloadManager {
         }
         let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: "auth-"))
         
+        let queueTypes: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]
+        for queueType in queueTypes {
+            guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
+                log.error("Unable to connect to local queue or database \(queueType.identifier)")
+                throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
+            }
+            
+            let _ = try queue.removeAll()
+        }
+        
         // Unauthorized queues are removed in LocalServer::runDataMigrations
         Task(priority: .low) {
             do {
@@ -42,16 +52,6 @@ public struct SHAssetsDownloadManager {
             throw KBError.databaseNotReady
         }
         let key = "auth-" + userId
-        
-        let queueTypes: [BackgroundOperationQueue.OperationType] = [.unauthorizedDownload]
-        for queueType in queueTypes {
-            guard let queue = try? BackgroundOperationQueue.of(type: queueType) else {
-                log.error("Unable to connect to local queue or database \(queueType.identifier)")
-                throw SHBackgroundOperationError.fatalError("Unable to connect to local queue or database \(queueType.identifier)")
-            }
-            
-            let _ = try queue.removeAll()
-        }
         
         guard let assetGIdList = try userStore.value(for: key) as? [String] else {
             throw SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId(userId)
