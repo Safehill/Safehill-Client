@@ -837,6 +837,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         for descriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        guard descriptors.count > 0 else {
+            completionHandler(.success([]))
+            return
+        }
+        
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download
