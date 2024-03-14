@@ -150,6 +150,8 @@ public struct SHAssetsDownloadManager {
                 let key = "auth-" + userId
                 let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
                 
+                try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+                
                 let usersDict = try self.user.serverProxy.getUsers(inAssetDescriptors: descriptors)
                     .reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
                         var result = partialResult
