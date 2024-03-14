@@ -570,9 +570,14 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     switch localCreationResult {
                     case .success(_):
                         do {
+                            try SHKGQuery.ingest(Array(descriptorsByGlobalIdentifier.values), receiverUserId: self.user.identifier)
+                        } catch {
+                            self.log.warning("[\(type(of: self))] failed to update the graph when re-creating share requests")
+                        }
+                        
+                        do {
                             let usersReferenced = try self.serverProxy
                                 .getUsers(inAssetDescriptors: Array(descriptorsByGlobalIdentifier.values))
-                            
                             ///
                             /// Re-create the successful upload and share queue items
                             ///
@@ -999,10 +1004,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                         
                         dispatchGroup.enter()
                         
-    #if DEBUG
+#if DEBUG
                         let delta = Set(descriptors.remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
-    #endif
+#endif
                         
                         var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
                         
@@ -1016,11 +1021,20 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                                 processingError = err
                                 dispatchGroup.leave()
                             case .success(let descriptorsReadyToDownload):
-    #if DEBUG
+#if DEBUG
                                 let delta1 = Set(filteredDescriptorsByAssetGid.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
                                 let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
                                 self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
-    #endif
+#endif
+                                
+                                do {
+                                    try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)
+                                } catch {
+                                    processingError = error
+                                    dispatchGroup.leave()
+                                    return
+                                }
+                                
                                 self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
                                     switch downloadResult {
                                     case .success(let list):
