@@ -392,7 +392,29 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             return
         }
         
-        let senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+        /// 
+        /// This method is called for every download cycle.
+        /// Once a user that is "uknown" is enqueued for authorization, we don't need to re-add them to the queue (although it would be replaced, not appended)
+        /// For known users, that don't need authorization, nothing will be filtered out by the following filter if the user is not in the unauthorized queue.
+        /// In other words, we expect descriptors for a "known" user to always pass the condition below.
+        ///
+        let notEnqueuedAsUnauthorized = descriptors.filter { descriptor in
+            (try? SHAssetsDownloadManager.unauthorizedDownloads(for: descriptor.sharingInfo.sharedByUserIdentifier))?.isEmpty ?? true
+            // If current unauth status can't be feched safely re-add them to the unauthorized queue as needed (hence, default to true)
+        }
+        self.log.info("[\(type(of: self))] of \(descriptors.count) \(notEnqueuedAsUnauthorized.count) have already been enqueued as unauthorized")
+        
+        guard notEnqueuedAsUnauthorized.count > 0 else {
+            completionHandler(.success([]))
+            return
+        }
+        
+        /// 
+        /// For the ones that are not already marked as unauthorized (all descriptors - unauthorized)
+        /// - check if the user is known (if so, add them to the unauthorized queue)
+        /// - return the rest so they can be downloaded
+        ///
+        let senderIds = notEnqueuedAsUnauthorized.map({ $0.sharingInfo.sharedByUserIdentifier })
         let knownUsers: [UserIdentifier: Bool]
         do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
         catch {
@@ -401,14 +423,14 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             return
         }
         
-        var mutableDescriptors = descriptors
+        var mutableDescriptors = notEnqueuedAsUnauthorized
         let partitionIndex = mutableDescriptors.partition {
             knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
         }
         let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
         let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
         
-        self.log.info("[\(type(of: self))] found \(descriptors.count) assets on the server. Need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count). limit=\(self.limit ?? 0)")
+        self.log.info("[\(type(of: self))] of \(notEnqueuedAsUnauthorized.count) need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count)")
         
         let downloadsManager = SHAssetsDownloadManager(user: self.user)
         
