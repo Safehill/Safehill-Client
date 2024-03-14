@@ -109,12 +109,23 @@ public struct SHAssetsDownloadManager {
     /// - Parameters:
     ///   - userId: the user identifier
     ///   - completionHandler: the callback method
-    public func authorizeDownloads(from userId: String,
-                                   completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void) {
+    public func authorizeDownloads(
+        from userId: String,
+        completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void
+    ) {
+        guard self.user is SHAuthenticatedLocalUser else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
         
         guard let unauthorizedQueue = try? BackgroundOperationQueue.of(type: .unauthorizedDownload) else {
             log.error("Unable to connect to local queue or database")
             completionHandler(.failure(SHBackgroundOperationError.fatalError("Unable to connect to local queue or database")))
+            return
+        }
+        
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
@@ -136,26 +147,21 @@ public struct SHAssetsDownloadManager {
                     from: unauthorizedQueue,
                     itemsWithIdentifiers: assetGIdList
                 )
-                
-                guard let userStore = SHDBManager.sharedInstance.userStore else {
-                    completionHandler(.failure(KBError.databaseNotReady))
-                    return
-                }
                 let key = "auth-" + userId
                 let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
                 
-                self.startAuthorizedDownload(of: descriptors) { result in
-                    switch result {
-                    case .success(let usersDict):
-                        let response = SHAssetDownloadAuthorizationResponse(
-                            descriptors: descriptors,
-                            users: usersDict
-                        )
-                        completionHandler(.success(response))
-                    case .failure(let error):
-                        completionHandler(.failure(error))
+                let usersDict = try self.user.serverProxy.getUsers(inAssetDescriptors: descriptors)
+                    .reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
+                        var result = partialResult
+                        result[serverUser.identifier] = serverUser
+                        return result
                     }
-                }
+                let response = SHAssetDownloadAuthorizationResponse(
+                    descriptors: descriptors,
+                    users: usersDict
+                )
+
+                completionHandler(.success(response))
             } catch {
                 completionHandler(.failure(error))
             }
@@ -188,49 +194,6 @@ public struct SHAssetsDownloadManager {
         }
     }
     
-    func startAuthorizedDownload(
-        of descriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
-    ) {
-        var usersDict = [UserIdentifier: any SHServerUser]()
-        var userIdentifiers = Set(descriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-        userIdentifiers.formUnion(Set(descriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-        
-        do {
-            usersDict = try SHUsersController(localUser: self.user).getUsers(
-                withIdentifiers: Array(userIdentifiers)
-            )
-        } catch {
-            log.error("Unable to fetch users mentioned in asset descriptors: \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        let dispatchGroup = DispatchGroup()
-        var errors = [Error]()
-        
-        for descriptor in descriptors {
-            dispatchGroup.enter()
-            self.downloadAsset(for: descriptor) { result in
-                switch result {
-                case .success(_):
-                    break
-                case .failure(let error):
-                    errors.append(error)
-                }
-                dispatchGroup.leave()
-            }
-        }
-        
-        dispatchGroup.notify(queue: .global()) {
-            if errors.isEmpty {
-                completionHandler(.success(usersDict))
-            } else {
-                completionHandler(.failure(errors.first!))
-            }
-        }
-    }
-    
     /// Downloads the asset for the given descriptor, decrypts it, and returns the decrypted version, or an error.
     /// - Parameters:
     ///   - descriptor: the descriptor for the assets to download
@@ -239,9 +202,8 @@ public struct SHAssetsDownloadManager {
         for descriptor: any SHAssetDescriptor,
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
-        Task(priority: .medium) {
+        Task {
             
-
             log.info("[downloadManager] downloading assets with identifier \(descriptor.globalIdentifier)")
             
             let start = CFAbsoluteTimeGetCurrent()
