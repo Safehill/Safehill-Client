@@ -86,33 +86,17 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch
     /// happen against the local server (instead of the remote server)
     /// - Returns: the list of descriptors
-    internal func fetchDescriptorsFromServer() throws -> [any SHAssetDescriptor] {
-        let group = DispatchGroup()
-        
-        var descriptors = [any SHAssetDescriptor]()
-        var error: Error? = nil
-        
-        group.enter()
+    internal func fetchDescriptorsFromServer(
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
+    ) {
         serverProxy.getLocalAssetDescriptors { result in
             switch result {
             case .success(let descs):
-                descriptors = descs
+                completionHandler(.success(descs))
             case .failure(let err):
-                error = err
+                completionHandler(.failure(err))
             }
-            group.leave()
         }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        
-        guard error == nil else {
-            throw error!
-        }
-        
-        return descriptors
     }
     
     internal override func getUsers(
@@ -382,78 +366,79 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        let fullDescriptorList: [any SHAssetDescriptor]
-        do {
-            fullDescriptorList = try self.fetchDescriptorsFromServer()
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        self.log.debug("[\(type(of: self))] original descriptors: \(fullDescriptorList.count)")
-        self.processDescriptors(fullDescriptorList, qos: qos) { result in
+        self.fetchDescriptorsFromServer {
+            result in
             switch result {
             case .failure(let error):
-                self.log.error("[\(type(of: self))] failed to fetch local descriptors: \(error.localizedDescription)")
-                let downloaderDelegates = self.downloaderDelegates
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didCompleteDownloadCycle(with: .failure(error))
-                    })
-                }
                 completionHandler(.failure(error))
-            case .success(let filteredDescriptors):
-#if DEBUG
-                /// 
-                /// The `SHLocalDownloadOperation` doesn't deal with request authorizations.
-                /// The `SHRemoteDownloadOperation` is responsible for it.
-                /// The `didReceiveAssetDescriptors(_:referencing:)` delegate method is called 
-                /// with descriptors from known users only.
-                /// Hence, the decryption should only happen for those, and - in turn - we only want to call the downloader
-                /// delegate for assets that are not from known users. No assets not referenced in the call to
-                /// `didReceiveAssetDescriptors(_:referencing:)` should be referenced in `didStartDownloadOfAsset`, `didCompleteDownloadOfAsset` or `didFailDownloadOfAsset`.
-                ///
-                /// The reason why the `didReceiveAssetDescriptors` method is called with descriptors for known users
-                /// is because the `SHRemoteDownloadOperation` treats differently known (not needing authorization) and unknown users (needing authorization).
-                /// In order to avoid initiating/starting a download for an asset from an unknown user,
-                /// `didReceiveAssetDescriptors` should never reference those.
-                ///
-                let filteredDescriptorsFromKnownUsersByGid = filteredDescriptors.fromRetrievableUsers.filter({
-                    filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
-                })
-                let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
-                self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
-#endif
-                self.processAssetsInDescriptors(
-                    descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
-                    qos: qos
-                ) { secondResult in
-                    
-                    switch secondResult {
-                    case .success(let descriptorsToDecrypt):
-#if DEBUG
-                        let delta1 = Set(filteredDescriptorsFromKnownUsersByGid.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
-                        let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
-                        self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
-#endif
-                        self.decryptFromLocalStore(
-                            descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
-                            filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
-                        ) {
-                            thirdResult in
-                            
-                            let downloaderDelegates = self.downloaderDelegates
-                            self.delegatesQueue.async {
-                                downloaderDelegates.forEach({
-                                    $0.didCompleteDownloadCycle(with: thirdResult)
-                                })
-                            }
-                            
-                            completionHandler(thirdResult)
-                        }
-                        
+                return
+            case .success(let fullDescriptorList):
+                self.log.debug("[\(type(of: self))] original descriptors: \(fullDescriptorList.count)")
+                self.processDescriptors(fullDescriptorList, qos: qos) { result in
+                    switch result {
                     case .failure(let error):
+                        self.log.error("[\(type(of: self))] failed to fetch local descriptors: \(error.localizedDescription)")
+                        let downloaderDelegates = self.downloaderDelegates
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didCompleteDownloadCycle(with: .failure(error))
+                            })
+                        }
                         completionHandler(.failure(error))
+                    case .success(let filteredDescriptors):
+        #if DEBUG
+                        ///
+                        /// The `SHLocalDownloadOperation` doesn't deal with request authorizations.
+                        /// The `SHRemoteDownloadOperation` is responsible for it.
+                        /// The `didReceiveAssetDescriptors(_:referencing:)` delegate method is called
+                        /// with descriptors from known users only.
+                        /// Hence, the decryption should only happen for those, and - in turn - we only want to call the downloader
+                        /// delegate for assets that are not from known users. No assets not referenced in the call to
+                        /// `didReceiveAssetDescriptors(_:referencing:)` should be referenced in `didStartDownloadOfAsset`, `didCompleteDownloadOfAsset` or `didFailDownloadOfAsset`.
+                        ///
+                        /// The reason why the `didReceiveAssetDescriptors` method is called with descriptors for known users
+                        /// is because the `SHRemoteDownloadOperation` treats differently known (not needing authorization) and unknown users (needing authorization).
+                        /// In order to avoid initiating/starting a download for an asset from an unknown user,
+                        /// `didReceiveAssetDescriptors` should never reference those.
+                        ///
+                        let filteredDescriptorsFromKnownUsersByGid = filteredDescriptors.fromRetrievableUsers.filter({
+                            filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
+                        })
+                        let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
+                        self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
+        #endif
+                        self.processAssetsInDescriptors(
+                            descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
+                            qos: qos
+                        ) { secondResult in
+                            
+                            switch secondResult {
+                            case .success(let descriptorsToDecrypt):
+        #if DEBUG
+                                let delta1 = Set(filteredDescriptorsFromKnownUsersByGid.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
+                                let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
+                                self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
+        #endif
+                                self.decryptFromLocalStore(
+                                    descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
+                                    filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
+                                ) {
+                                    thirdResult in
+                                    
+                                    let downloaderDelegates = self.downloaderDelegates
+                                    self.delegatesQueue.async {
+                                        downloaderDelegates.forEach({
+                                            $0.didCompleteDownloadCycle(with: thirdResult)
+                                        })
+                                    }
+                                    
+                                    completionHandler(thirdResult)
+                                }
+                                
+                            case .failure(let error):
+                                completionHandler(.failure(error))
+                            }
+                        }
                     }
                 }
             }
