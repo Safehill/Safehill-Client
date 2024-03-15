@@ -98,6 +98,8 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
                 let end = CFAbsoluteTimeGetCurrent()
                 log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to generate an asset global identifier")
                 
+                log.debug("[SHApplePhotoAsset] generated gid for localIdentifier=\(self.phAsset.localIdentifier) targetSize=(\(targetSize.width)x\(targetSize.height) is \(self.calculatedGlobalIdentifier!). data=\(data.base64EncodedString())")
+                
                 self.calculatedGlobalIdentifier = hash
             }
         }
@@ -105,8 +107,6 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         guard error == nil else {
             throw error!
         }
-        
-        log.debug("[SHApplePhotoAsset] generated gid for localIdentifier=\(self.phAsset.localIdentifier) targetSize=(\(targetSize.width)x\(targetSize.height) is \(self.calculatedGlobalIdentifier!)")
         
         return self.calculatedGlobalIdentifier!
     }
