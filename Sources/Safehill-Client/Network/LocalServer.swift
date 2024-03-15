@@ -589,6 +589,10 @@ struct LocalServer : SHServerAPI {
                         log.error("failed to retrieve sharing information for asset \(globalIdentifier): \(error)")
                     }
                     
+                    if groupInfoById.isEmpty || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+                        log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
+                    }
+                    
                     let sharingInfo = SHGenericDescriptorSharingInfo(
                         sharedByUserIdentifier: sharedBy,
                         sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
@@ -754,7 +758,9 @@ struct LocalServer : SHServerAPI {
                 sharingInfo: SHGenericDescriptorSharingInfo(
                     sharedByUserIdentifier: self.requestor.identifier,
                     sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
-                    groupInfoById: [:]
+                    groupInfoById: [
+                        groupId: SHGenericAssetGroupInfo(name: nil, createdAt: Date())
+                    ]
                 )
             )
             guard descriptorsByGlobalId[encryptedAsset.globalIdentifier] == nil else {
