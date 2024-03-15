@@ -105,6 +105,9 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         guard error == nil else {
             throw error!
         }
+        
+        log.debug("[SHApplePhotoAsset] generated gid for localIdentifier=\(phAsset.localIdentifier) targetSize=\(targetSize) is \(self.calculatedGlobalIdentifier)")
+        
         return self.calculatedGlobalIdentifier!
     }
     
