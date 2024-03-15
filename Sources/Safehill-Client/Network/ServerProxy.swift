@@ -117,10 +117,6 @@ extension SHServerProxy {
         self.localServer.runDataMigrations(completionHandler: completionHandler)
     }
     
-    public func localDataCleanup(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.localServer.runDataCleanup(completionHandler: completionHandler)
-    }
-    
 }
 
 

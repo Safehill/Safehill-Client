@@ -130,41 +130,6 @@ extension LocalServer {
     }
     
     ///
-    /// Data cleanup to perform at application launch when requested, for data that can be re-generated on sync:
-    ///
-    /// 1. Remove from the download queue
-    /// 2. Remove from the download authorization queue
-    /// 3. Remove from the knowledgegraph
-    ///
-    public func runDataCleanup(
-        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
-    ) {
-        let queuesToClear = BackgroundOperationQueue.OperationType.allCases
-        for queueType in queuesToClear {
-            do {
-                let queue = try BackgroundOperationQueue.of(type: queueType)
-                let _ = try queue.removeAll()
-            } catch {
-                log.warning("failed to remove items from the \(queueType.identifier) queue")
-                completionHandler(.failure(error))
-                return
-            }
-        }
-        
-        do {
-            guard let graph = SHDBManager.sharedInstance.graph else {
-                throw KBError.databaseNotReady
-            }
-            let _ = try graph.removeAll()
-            completionHandler(.success(()))
-        }
-        catch {
-            log.warning("Failed to reinitialize the graph: \(error.localizedDescription)")
-            completionHandler(.failure(error))
-        }
-    }
-    
-    ///
     /// Run migration of data from earlier to newer version format
     ///
     /// - Parameter completionHandler: the callback method

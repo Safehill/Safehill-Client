@@ -256,6 +256,18 @@ struct LocalServer : SHServerAPI {
         }
         
         assetStore.removeAll(completionHandler: completionHandler)
+        
+        let queuesToClear = BackgroundOperationQueue.OperationType.allCases
+        for queueType in queuesToClear {
+            do {
+                let queue = try BackgroundOperationQueue.of(type: queueType)
+                let _ = try queue.removeAll()
+            } catch {
+                log.error("failed to remove items from the \(queueType.identifier) queue")
+                completionHandler(.failure(error))
+                return
+            }
+        }
     }
     
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ()) {
