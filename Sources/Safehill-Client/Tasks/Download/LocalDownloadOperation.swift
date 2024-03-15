@@ -106,13 +106,17 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     }
     
     ///
-    /// For all the descriptors whose originator user is `self.user`, notify the restoration delegate
-    /// about all groups that need to be restored along with the queue item identifiers for each `groupId`.
+    /// For all the descriptors whose originator user is _this_ user, notify the restoration delegate
+    /// about all groups that need to be restored.
     /// Uploads and shares will be reported separately, according to the contract in the delegate.
+    /// Because these assets exist in the local server, the assumption is that they will also be present in the
+    /// upload and history queues, so they don't need to be re-created, as it happens in the sister method
+    /// `SHRemoteDownloadOperation::restoreQueueItems(descriptorsByGlobalIdentifier:qos:completionHandler:)`
     ///
     /// - Parameters:
     ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
     ///   - completionHandler: the callback method
+    ///
     func restoreQueueItems(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
@@ -123,9 +127,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
-        let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
+        let descriptors = original.values.filter({
+            filteringKeys.contains($0.globalIdentifier)
+            && $0.sharingInfo.sharedByUserIdentifier == self.user.identifier
+            && $0.localIdentifier != nil
+        })
         
-        guard descriptorsByGlobalIdentifier.count > 0 else {
+        guard descriptors.count > 0 else {
             completionHandler(.success(()))
             return
         }
@@ -135,16 +143,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             restorationDelegate.didStartRestoration()
         }
         
-        var uploadLocalAssetIdByGroupId = [String: Set<String>]()
-        var shareLocalAssetIdsByGroupId = [String: Set<String>]()
-        var userIdsInvolvedInRestoration = Set<String>()
+        var uploadLocalAssetIdByGroupId = [String: Set<LocalIdentifier>]()
+        var shareLocalAssetIdsByGroupId = [String: Set<LocalIdentifier>]()
+        var userIdsInvolvedInRestoration = Set<UserIdentifier>()
         
-        for (_, descriptor) in descriptorsByGlobalIdentifier {
-            guard descriptor.sharingInfo.sharedByUserIdentifier == user.identifier else {
-                continue
-            }
+        for descriptor in descriptors {
             
-            // TODO: Is it possible for the local identifier not to exist? What happens when the asset is only on the server, and not in the local library?
             guard let localIdentifier = descriptor.localIdentifier else {
                 continue
             }

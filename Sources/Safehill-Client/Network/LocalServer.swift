@@ -877,6 +877,16 @@ struct LocalServer : SHServerAPI {
             }
         }
         
+        do {
+            try SHKGQuery.ingest(
+                Array(descriptorsByGlobalIdentifier.values),
+                receiverUserId: self.requestor.identifier
+            )
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
         writeBatch.write { (result: Result) in
             switch result {
             case .success():

@@ -324,11 +324,10 @@ extension SHServerProxy {
         self.remoteServer.getUsers(withHashedPhoneNumbers: hashedPhoneNumbers, completionHandler: completionHandler)
     }
     
-    func getUsers(inAssetDescriptors descriptors: [any SHAssetDescriptor]) throws -> [any SHServerUser] {
-        let group = DispatchGroup()
-        var response = [any SHServerUser]()
-        var error: Error? = nil
-        
+    func getUsers(
+        inAssetDescriptors descriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Result<[any SHServerUser], Error>) -> Void
+    ) {
         var userIdsSet = Set<String>()
         for descriptor in descriptors {
             userIdsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
@@ -337,27 +336,14 @@ extension SHServerProxy {
         userIdsSet.remove(self.remoteServer.requestor.identifier)
         let userIds = Array(userIdsSet)
 
-        group.enter()
         self.getUsers(withIdentifiers: userIds) { result in
             switch result {
             case .success(let serverUsers):
-                response = serverUsers
+                completionHandler(.success(serverUsers))
             case .failure(let err):
-                log.error("failed to fetch users from server when calculating diff: \(err.localizedDescription)")
-                error = err
+                completionHandler(.failure(err))
             }
-            group.leave()
         }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        return response
     }
     
     public func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()) {

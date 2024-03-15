@@ -152,18 +152,26 @@ public struct SHAssetsDownloadManager {
                 
                 try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
                 
-                let usersDict = try self.user.serverProxy.getUsers(inAssetDescriptors: descriptors)
-                    .reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
-                        var result = partialResult
-                        result[serverUser.identifier] = serverUser
-                        return result
-                    }
-                let response = SHAssetDownloadAuthorizationResponse(
-                    descriptors: descriptors,
-                    users: usersDict
-                )
+                self.user.serverProxy.getUsers(inAssetDescriptors: descriptors) {
+                    getUsersResult in
+                    switch getUsersResult {
+                    case .success(let users):
+                        let usersById = users.reduce([UserIdentifier: any SHServerUser]()) { partialResult, serverUser in
+                            var result = partialResult
+                            result[serverUser.identifier] = serverUser
+                            return result
+                        }
+                        let response = SHAssetDownloadAuthorizationResponse(
+                            descriptors: descriptors,
+                            users: usersById
+                        )
 
-                completionHandler(.success(response))
+                        completionHandler(.success(response))
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+                    
             } catch {
                 completionHandler(.failure(error))
             }
