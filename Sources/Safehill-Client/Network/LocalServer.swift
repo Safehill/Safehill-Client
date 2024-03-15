@@ -559,7 +559,7 @@ struct LocalServer : SHServerAPI {
                     }
                     
                     var groupInfoById = [String: SHAssetGroupInfo]()
-                    var sharedWithUsersInGroup = [String: String]()
+                    var sharedWithUsersInGroup = [UserIdentifier: String]()
                     
                     do {
                         let condition = KBGenericCondition(
@@ -601,7 +601,7 @@ struct LocalServer : SHServerAPI {
                         log.error("failed to retrieve sharing information for asset \(globalIdentifier): \(error)")
                     }
                     
-                    if groupInfoById.isEmpty || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+                    if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
                         log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
                     }
                     
