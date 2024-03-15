@@ -390,7 +390,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         }
                         completionHandler(.failure(error))
                     case .success(let filteredDescriptors):
-        #if DEBUG
+                        let filteredDescriptorsFromKnownUsersByGid = filteredDescriptors.fromRetrievableUsers.filter({
+                            filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
+                        })
+#if DEBUG
                         ///
                         /// The `SHLocalDownloadOperation` doesn't deal with request authorizations.
                         /// The `SHRemoteDownloadOperation` is responsible for it.
@@ -405,12 +408,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         /// In order to avoid initiating/starting a download for an asset from an unknown user,
                         /// `didReceiveAssetDescriptors` should never reference those.
                         ///
-                        let filteredDescriptorsFromKnownUsersByGid = filteredDescriptors.fromRetrievableUsers.filter({
-                            filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
-                        })
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
-        #endif
+#endif
                         self.processAssetsInDescriptors(
                             descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
                             qos: qos
@@ -418,11 +418,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             
                             switch secondResult {
                             case .success(let descriptorsToDecrypt):
-        #if DEBUG
+#if DEBUG
                                 let delta1 = Set(filteredDescriptorsFromKnownUsersByGid.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
                                 let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
                                 self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
-        #endif
+#endif
                                 self.decryptFromLocalStore(
                                     descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
                                     filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
