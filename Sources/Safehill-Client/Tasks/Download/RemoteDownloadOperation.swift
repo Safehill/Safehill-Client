@@ -564,9 +564,13 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         }
     }
     
-    private func recreateLocalAssetsAndQueueItems(for globalIdentifiers: [GlobalIdentifier],
-                                                  descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor]) {
+    private func recreateLocalAssetsAndQueueItems(
+        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        filteringKeys globalIdentifiers: [GlobalIdentifier],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         guard globalIdentifiers.count > 0, descriptorsByGlobalIdentifier.count > 0 else {
+            completionHandler(.success(()))
             return
         }
         
@@ -590,7 +594,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     uploadState: .completed
                 ) { localCreationResult in
                     switch localCreationResult {
-                    case .success(_):
+                    case .success:
                         do {
                             try SHKGQuery.ingest(Array(descriptorsByGlobalIdentifier.values), receiverUserId: self.user.identifier)
                         } catch {
@@ -607,16 +611,21 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                                 descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                                 usersReferenced: usersReferenced
                             )
+                            
+                            completionHandler(.success(()))
                         } catch {
-                            self.log.warning("[\(type(of: self))] failed to fetch users from remote server when restoring items in local library but not in local server")
+                            self.log.error("[\(type(of: self))] failed to fetch users from remote server when restoring items in local library but not in local server. \(error.localizedDescription)")
+                            completionHandler(.failure(error))
                         }
                         
                     case .failure(let error):
-                        self.log.warning("[\(type(of: self))] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                        self.log.error("[\(type(of: self))] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. \(error.localizedDescription)")
+                        completionHandler(.failure(error))
                     }
                 }
             case .failure(let error):
-                self.log.warning("[\(type(of: self))] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                self.log.error("[\(type(of: self))] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
+                completionHandler(.failure(error))
             }
         }
     }
@@ -803,59 +812,73 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         /// (1)
         ///
         
-        let globalIdentifiersNotOnLocalSharedBySelfInApplePhotoLibrary = sharedBySelfGlobalIdentifiers
-            .subtract(nonApplePhotoLibrarySharedBySelfGlobalIdentifiers)
-        
-        self.recreateLocalAssetsAndQueueItems(
-            for: globalIdentifiersNotOnLocalSharedBySelfInApplePhotoLibrary,
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier
-        )
-        
-        
-        /// 
-        /// (2)
-        ///
-        
-        /// Collect all items ready to download, starting from the ones shared by self
-        var descriptorsReadyToDownload = nonApplePhotoLibrarySharedBySelfGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
-        
-        ///
-        /// FOR THE ONES SHARED BY OTHER USERS
-        /// Queue for download and decryption assets:
-        /// - not shared by self
-        /// - not in the Apple Photos Library
-        ///
-        /// If any of them is from an "unknown" user (a user you never received anything from) they require authorization.
-        /// If they do, the `checkIfAuthorizationRequired(forAssetsIn:completionHandler:)` adds them
-        /// to a special queue for authorization.
-        /// For the rest (from "known" users), this method returns their descriptor as "ready to download".
-        /// Those ready to download will be sent back to the caller to start download and decryption. In particular:
-        /// - When run on a `SHRemoteDownloadOperation`, the caller eventually calls `downloadAssets(for:completionHandler:)` using this list to dowload them from remote server and decrypt.
-        /// - When run on a `SHLocalDownloadOperation`, the caller calls
-        /// `decryptFromLocalStore(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`
-        /// which is performing the decryption from the local store (downloading from local doesn't make sense)
-        ///
-        
+        var restorationError: Error? = nil
         group.enter()
-        self.checkIfAuthorizationRequired(
-            forAssetsIn: sharedByOthersGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
-        ) { result in
+        self.recreateLocalAssetsAndQueueItems(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+            filteringKeys: sharedBySelfGlobalIdentifiers
+        ) {
+            result in
             switch result {
-            case .success(let descs):
-                /// Add the ones shared by others that can be downloaded to the "ready to download" set
-                descriptorsReadyToDownload.append(contentsOf: descs)
-            case .failure(let failure):
-                errors.append(failure)
+            case .success:
+                break
+            case .failure(let error):
+                restorationError = error
             }
             group.leave()
         }
         
-        group.notify(queue: DispatchQueue.global(qos: qos)) {
-            if errors.count > 0 {
-                self.log.error("[\(type(of: self))] failed downloading assets with errors: \(errors.map({ $0.localizedDescription }).joined(separator: ","))")
-                completionHandler(.failure(errors.first!))
-            } else {
-                completionHandler(.success(descriptorsReadyToDownload))
+        group.notify(queue: .global(qos: qos)) {
+            guard restorationError == nil else {
+                completionHandler(.failure(restorationError!))
+                return
+            }
+            
+            ///
+            /// (2)
+            ///
+            
+            /// Collect all items ready to download, starting from the ones shared by self
+            var descriptorsReadyToDownload = nonApplePhotoLibrarySharedBySelfGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
+            
+            ///
+            /// FOR THE ONES SHARED BY OTHER USERS
+            /// Queue for download and decryption assets:
+            /// - not shared by self
+            /// - not in the Apple Photos Library
+            ///
+            /// If any of them is from an "unknown" user (a user you never received anything from) they require authorization.
+            /// If they do, the `checkIfAuthorizationRequired(forAssetsIn:completionHandler:)` adds them
+            /// to a special queue for authorization.
+            /// For the rest (from "known" users), this method returns their descriptor as "ready to download".
+            /// Those ready to download will be sent back to the caller to start download and decryption. In particular:
+            /// - When run on a `SHRemoteDownloadOperation`, the caller eventually calls `downloadAssets(for:completionHandler:)` using this list to dowload them from remote server and decrypt.
+            /// - When run on a `SHLocalDownloadOperation`, the caller calls
+            /// `decryptFromLocalStore(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`
+            /// which is performing the decryption from the local store (downloading from local doesn't make sense)
+            ///
+            
+            group.enter()
+            self.checkIfAuthorizationRequired(
+                forAssetsIn: sharedByOthersGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
+            ) { result in
+                switch result {
+                case .success(let descs):
+                    /// Add the ones shared by others that can be downloaded to the "ready to download" set
+                    descriptorsReadyToDownload.append(contentsOf: descs)
+                case .failure(let failure):
+                    errors.append(failure)
+                }
+                group.leave()
+            }
+            
+            group.notify(queue: DispatchQueue.global(qos: qos)) {
+                if errors.count > 0 {
+                    self.log.error("[\(type(of: self))] failed downloading assets with errors: \(errors.map({ $0.localizedDescription }).joined(separator: ","))")
+                    completionHandler(.failure(errors.first!))
+                } else {
+                    completionHandler(.success(descriptorsReadyToDownload))
+                }
             }
         }
     }
