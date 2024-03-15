@@ -92,7 +92,9 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     }
     
     private static func predicate(for filters: [SHPhotosFilter]) -> NSPredicate {
-        var predicate = SHPhotosIndexer.cameraRollPredicate()
+        var predicate = NSPredicate(format: "(mediaType = %d || mediaType = %d)",
+                                    PHAssetMediaType.image.rawValue,
+                                    PHAssetMediaType.unknown.rawValue)
         
         for filter in filters {
             switch filter {
