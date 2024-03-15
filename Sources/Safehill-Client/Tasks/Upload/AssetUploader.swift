@@ -288,7 +288,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                         asset: encryptedAsset,
                         with: uploadRequest.groupId,
                         filterVersions: versions,
-                        force: false
+                        force: true
                     )
             } catch {
                 log.error("failed to upload asset for item with localIdentifier \(localIdentifier). Dequeueing item, as to let the user control the retry. error=\(error.localizedDescription)")
