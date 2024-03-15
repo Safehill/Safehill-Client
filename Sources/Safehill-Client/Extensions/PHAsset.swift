@@ -16,7 +16,7 @@ public extension NSImage {
 }
 #endif
 
-let imageSizeForGlobalIdCalculation = CGSize(width: 320.0, height: 320.0)
+let imageSizeForGlobalIdCalculation = CGSize(width: 240.0, height: 240.0)
 
 
 public enum NSUIImage {
