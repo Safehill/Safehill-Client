@@ -18,7 +18,8 @@ let package = Package(
         .package(url: "https://github.com/Safehill/Safehill-Crypto", exact: "1.1.21"),
         .package(url: "https://github.com/gennarinoos/KnowledgeBase.git", exact: "0.9.20"),
         .package(url: "https://github.com/jpsim/Yams.git", .upToNextMajor(from: "5.0.5")),
-        .package(url: "https://github.com/marmelroy/PhoneNumberKit", .upToNextMajor(from: "3.4.5"))
+        .package(url: "https://github.com/marmelroy/PhoneNumberKit", .upToNextMajor(from: "3.4.5")),
+        .package(url: "https://github.com/ameingast/cocoaimagehashing", .upToNextMajor(from: "1.9.0")),
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -29,7 +30,8 @@ let package = Package(
                 "Safehill-Crypto",
                 "KnowledgeBase",
                 "Yams",
-                "PhoneNumberKit"
+                "PhoneNumberKit",
+                .product(name: "CocoaImageHashing", package: "cocoaimagehashing")
             ]
         ),
         .testTarget(
