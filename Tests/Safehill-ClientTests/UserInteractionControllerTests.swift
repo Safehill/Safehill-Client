@@ -94,6 +94,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
     }
     
+    func retrieveLastMessage(inThread threadId: String, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
+        self.localServer.retrieveLastMessage(inThread: threadId, completionHandler: completionHandler)
+    }
+    
     func retrieveUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
         self.localServer.retrieveUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }

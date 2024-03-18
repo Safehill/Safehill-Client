@@ -1916,6 +1916,78 @@ struct LocalServer : SHServerAPI {
         )
     }
     
+    private static func toMessageOutput(_ messageKvt: KBKVPairWithTimestamp) throws -> MessageOutputDTO {
+        guard let serializedMessage = messageKvt.value as? Data else {
+            throw SHBackgroundOperationError.unexpectedData(messageKvt.value)
+        }
+        
+        let unarchiver: NSKeyedUnarchiver
+        if #available(macOS 10.13, *) {
+            unarchiver = try NSKeyedUnarchiver(forReadingFrom: serializedMessage)
+        } else {
+            unarchiver = NSKeyedUnarchiver(forReadingWith: serializedMessage)
+        }
+        guard let message = unarchiver.decodeObject(
+            of: DBSecureSerializableUserMessage.self,
+            forKey: NSKeyedArchiveRootObjectKey
+        ) else {
+            throw SHBackgroundOperationError.unexpectedData(serializedMessage)
+        }
+        
+        return MessageOutputDTO(
+            interactionId: message.interactionId,
+            senderUserIdentifier: message.senderUserIdentifier,
+            inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: message.inReplyToInteractionId,
+            encryptedMessage: message.encryptedMessage,
+            createdAt: message.createdAt
+        )
+    }
+    
+    private static func toReactionOutput(_ reactionKvt: KBKVPairWithTimestamp) -> ReactionOutputDTO? {
+        let key = reactionKvt.key
+        var interactionId: String? = nil
+        var senderId: String? = nil
+        var inReplyToAssetGid: String? = nil
+        var inReplyToInteractionGid: String? = nil
+        
+        let keyComponents = key.components(separatedBy: "::")
+        guard keyComponents.count == 6 else {
+            log.warning("invalid reaction key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+            return nil
+        }
+        guard let reactionTypeInt = reactionKvt.value as? Int,
+              let reactionType = ReactionType(rawValue: reactionTypeInt) else {
+            log.warning("unexpected value in reactions DB: \(String(describing: reactionKvt.value))")
+            return nil
+        }
+        
+        senderId = keyComponents[2]
+        interactionId = keyComponents[5]
+        
+        guard let senderId = senderId,
+              let interactionId = interactionId else {
+            log.warning("invalid key format in reactions DB: \(key)")
+            return nil
+        }
+        
+        if !keyComponents[3].isEmpty {
+            inReplyToInteractionGid = keyComponents[3]
+        }
+        if !keyComponents[4].isEmpty {
+            inReplyToAssetGid = keyComponents[4]
+        }
+        
+        return ReactionOutputDTO(
+            interactionId: interactionId,
+            senderUserIdentifier: senderId,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGid,
+            inReplyToInteractionId: inReplyToInteractionGid,
+            reactionType: reactionType,
+            addedAt: reactionKvt.timestamp.iso8601withFractionalSeconds
+        )
+    }
+    
     private func retrieveInteractions(
         anchorType: SHInteractionAnchor,
         anchorId: String,
@@ -1968,6 +2040,9 @@ struct LocalServer : SHServerAPI {
                             .and(KBGenericCondition(.endsWith, value: "::\(refMessageId)", negated: true))
                     )
                 }
+                
+                log.debug("retrieving reactions (page=\(page), per=\(per)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
+                
                 reactionStore.keyValuesAndTimestamps(
                     forKeysMatching: condition,
                     paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
@@ -1977,48 +2052,9 @@ struct LocalServer : SHServerAPI {
                     case .success(let reactionKvts):
                         var reactions = [ReactionOutputDTO]()
                         reactionKvts.forEach({
-                            let key = $0.key
-                            var interactionId: String? = nil
-                            var senderId: String? = nil
-                            var inReplyToAssetGid: String? = nil
-                            var inReplyToInteractionGid: String? = nil
-                            
-                            let keyComponents = key.components(separatedBy: "::")
-                            guard keyComponents.count == 6 else {
-                                log.warning("invalid reaction key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
-                                return
+                            if let output = LocalServer.toReactionOutput($0) {
+                                reactions.append(output)
                             }
-                            guard let reactionTypeInt = $0.value as? Int,
-                                  let reactionType = ReactionType(rawValue: reactionTypeInt) else {
-                                log.warning("unexpected value in reactions DB: \(String(describing: $0.value))")
-                                return
-                            }
-                            
-                            senderId = keyComponents[2]
-                            interactionId = keyComponents[5]
-                            
-                            guard let senderId = senderId,
-                                  let interactionId = interactionId else {
-                                log.warning("invalid key format in reactions DB: \(key)")
-                                return
-                            }
-                            
-                            if !keyComponents[3].isEmpty {
-                                inReplyToInteractionGid = keyComponents[3]
-                            }
-                            if !keyComponents[4].isEmpty {
-                                inReplyToAssetGid = keyComponents[4]
-                            }
-                            
-                            let output = ReactionOutputDTO(
-                                interactionId: interactionId,
-                                senderUserIdentifier: senderId,
-                                inReplyToAssetGlobalIdentifier: inReplyToAssetGid,
-                                inReplyToInteractionId: inReplyToInteractionGid,
-                                reactionType: reactionType,
-                                addedAt: $0.timestamp.iso8601withFractionalSeconds
-                            )
-                            reactions.append(output)
                         })
                         
                         log.debug("retrieving messages (page=\(page), per=\(per)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
@@ -2036,32 +2072,8 @@ struct LocalServer : SHServerAPI {
                                 
                                 for messageKvt in messageKvts {
                                     do {
-                                        guard let serializedMessage = messageKvt.value as? Data else {
-                                            throw SHBackgroundOperationError.unexpectedData(messageKvt.value)
-                                        }
-                                        
-                                        let unarchiver: NSKeyedUnarchiver
-                                        if #available(macOS 10.13, *) {
-                                            unarchiver = try NSKeyedUnarchiver(forReadingFrom: serializedMessage)
-                                        } else {
-                                            unarchiver = NSKeyedUnarchiver(forReadingWith: serializedMessage)
-                                        }
-                                        guard let message = unarchiver.decodeObject(
-                                            of: DBSecureSerializableUserMessage.self,
-                                            forKey: NSKeyedArchiveRootObjectKey
-                                        ) else {
-                                            continue
-                                        }
-                                        
                                         messages.append(
-                                            MessageOutputDTO(
-                                                interactionId: message.interactionId,
-                                                senderUserIdentifier: message.senderUserIdentifier,
-                                                inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
-                                                inReplyToInteractionId: message.inReplyToInteractionId,
-                                                encryptedMessage: message.encryptedMessage,
-                                                createdAt: message.createdAt
-                                            )
+                                            try LocalServer.toMessageOutput(messageKvt)
                                         )
                                     } catch {
                                         log.error("failed to retrieve message with key \(messageKvt.key)")
@@ -2082,6 +2094,64 @@ struct LocalServer : SHServerAPI {
                                 completionHandler(.failure(err))
                             }
                         }
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+            }
+        }
+    }
+    
+    func retrieveLastMessage(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        self.retrieveUserEncryptionDetails(anchorType: .thread, anchorId: threadId) {
+            encryptionDetailsResult in
+            switch encryptionDetailsResult {
+            case .failure(let err):
+                completionHandler(.failure(err))
+            case .success(let e2eeResult):
+                guard let encryptionDetails = e2eeResult else {
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(threadId)))
+                    return
+                }
+                
+                let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::")
+                
+                messagesQueue.keyValuesAndTimestamps(
+                    forKeysMatching: condition,
+                    paginate: KBPaginationOptions(limit: 1, offset: 0),
+                    sort: .descending
+                ) { messagesResult in
+                    switch messagesResult {
+                    case .success(let messageKvts):
+                        var messages = [MessageOutputDTO]()
+                        
+                        if let messageKvt = messageKvts.first {
+                            do {
+                                let message = try LocalServer.toMessageOutput(messageKvt)
+                                messages.append(message)
+                            } catch {
+                                completionHandler(.failure(error))
+                                return
+                            }
+                        }
+                        
+                        let result = InteractionsGroupDTO(
+                            messages: messages,
+                            reactions: [],
+                            ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
+                            encryptedSecret: encryptionDetails.encryptedSecret,
+                            secretPublicSignature: encryptionDetails.secretPublicSignature,
+                            senderPublicSignature: encryptionDetails.senderPublicSignature
+                        )
+                        completionHandler(.success(result))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }

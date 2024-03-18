@@ -266,6 +266,39 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         )
     }
     
+    public func retrieveLastMessage(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<SHDecryptedMessage?, Error>) -> Void
+    ) {
+        self.serverProxy.retrieveLastMessage(inThread: threadId) { result in
+            switch result {
+            case .success(let interactionsGroup):
+                let encryptionDetails = EncryptionDetailsClass(
+                    ephemeralPublicKey: interactionsGroup.ephemeralPublicKey,
+                    encryptedSecret: interactionsGroup.encryptedSecret,
+                    secretPublicSignature: interactionsGroup.secretPublicSignature,
+                    senderPublicSignature: interactionsGroup.senderPublicSignature
+                )
+                
+                let messages: [SHDecryptedMessage]
+                do {
+                    messages = try self.decryptMessages(
+                        interactionsGroup.messages,
+                        usingEncryptionDetails: encryptionDetails
+                    )
+                } catch {
+                    log.error("failed to decrypt messages in thread \(threadId, privacy: .public)")
+                    completionHandler(.failure(error))
+                    return
+                }
+                
+                completionHandler(.success(messages.first))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
     public func retrieveInteractions(
         inGroup groupId: String,
         underMessage messageId: String? = nil,

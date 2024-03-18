@@ -90,6 +90,11 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     )
     
+    func retrieveLastMessage(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
     func getThread(
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
@@ -1309,6 +1314,13 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
         self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    public func retrieveLastMessage(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveLastMessage(inThread: threadId, completionHandler: completionHandler)
     }
     
     public func retrieveInteractions(
