@@ -2021,6 +2021,8 @@ struct LocalServer : SHServerAPI {
                             reactions.append(output)
                         })
                         
+                        log.debug("retrieving messages (page=\(page), per=\(per)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
+                        
                         messagesQueue.keyValuesAndTimestamps(
                             forKeysMatching: condition,
                             paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
@@ -2029,6 +2031,8 @@ struct LocalServer : SHServerAPI {
                             switch messagesResult {
                             case .success(let messageKvts):
                                 var messages = [MessageOutputDTO]()
+                                
+                                log.debug("found \(messageKvts) messages for \(anchorType.rawValue) with id \(anchorId)")
                                 
                                 for messageKvt in messageKvts {
                                     do {
