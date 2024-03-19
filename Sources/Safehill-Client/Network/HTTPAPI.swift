@@ -516,7 +516,7 @@ struct SHServerHTTPAPI : SHServerAPI {
 
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
-        filteringGroupIds: [String]? = nil,
+        filteringGroupIds: [String]?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         let parameters = [

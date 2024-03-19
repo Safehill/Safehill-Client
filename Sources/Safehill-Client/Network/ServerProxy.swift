@@ -505,6 +505,7 @@ extension SHServerProxy {
     /// - Parameter completionHandler: the callback method
     func getRemoteAssetDescriptors(
         for globalIdentifiers: [GlobalIdentifier]? = nil,
+        filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         let handleServerResult = { (serverResult: Result<[any SHAssetDescriptor], Error>) in
@@ -527,7 +528,10 @@ extension SHServerProxy {
         }
         
         if let globalIdentifiers {
-            self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: globalIdentifiers) {
+            self.remoteServer.getAssetDescriptors(
+                forAssetGlobalIdentifiers: globalIdentifiers,
+                filteringGroupIds: filteringGroups
+            ) {
                 handleServerResult($0)
             }
         } else {
@@ -594,7 +598,8 @@ extension SHServerProxy {
         /// Get the remote descriptor from the remote server
         ///
         self.remoteServer.getAssetDescriptors(
-            forAssetGlobalIdentifiers: globalIdentifiers
+            forAssetGlobalIdentifiers: globalIdentifiers,
+            filteringGroupIds: nil
         ) { result in
             switch result {
             case .success(let descriptors):
@@ -828,7 +833,10 @@ extension SHServerProxy {
             var descriptorsByAssetGlobalId: [String: any SHAssetDescriptor] = [:]
             
             group.enter()
-            self.remoteServer.getAssetDescriptors(forAssetGlobalIdentifiers: assetIdentifiersToFetch) {
+            self.remoteServer.getAssetDescriptors(
+                forAssetGlobalIdentifiers: assetIdentifiersToFetch,
+                filteringGroupIds: nil
+            ) {
                 result in
                 switch result {
                 case .success(let descriptors):
