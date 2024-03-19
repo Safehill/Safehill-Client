@@ -72,9 +72,11 @@ public protocol SHServerAPI {
     /// Get descriptors for specific asset global identifiers
     /// - Parameters:
     ///   - forAssetGlobalIdentifiers: the asset gids
+    ///   - filteringGroupIds: only returns assets that are shared via the group ids, and restricts the group information returned to these group ids
     ///   - completionHandler: the callback method
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
+        filteringGroupIds: [String]?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     )
     

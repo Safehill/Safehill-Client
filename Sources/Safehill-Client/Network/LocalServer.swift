@@ -435,17 +435,22 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier],
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+    func getAssetDescriptors(
+        forAssetGlobalIdentifiers: [GlobalIdentifier],
+        filteringGroupIds: [String]?,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
         self.getAssetDescriptors(
             forAssetGlobalIdentifiers: forAssetGlobalIdentifiers,
+            filteringGroupIds: nil, // TODO: Implement group filtering
             since: nil,
             completionHandler: completionHandler
         )
     }
     
-    func getAssetDescriptors(since: Date,
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+    func getAssetDescriptors(
+        since: Date,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
         // TODO: Filter with the since Date
         self.getAssetDescriptors(
             forAssetGlobalIdentifiers: nil,
@@ -454,9 +459,12 @@ struct LocalServer : SHServerAPI {
         )
     }
     
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-                             since: Date? = nil,
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+    func getAssetDescriptors(
+        forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+        filteringGroupIds: [String]? = nil,
+        since: Date? = nil,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return

@@ -514,10 +514,14 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
 
-    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier],
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
+    func getAssetDescriptors(
+        forAssetGlobalIdentifiers: [GlobalIdentifier],
+        filteringGroupIds: [String]? = nil,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
         let parameters = [
-            "globalIdentifiers": forAssetGlobalIdentifiers
+            "globalIdentifiers": forAssetGlobalIdentifiers,
+            "groupIds": filteringGroupIds ?? []
         ]
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
