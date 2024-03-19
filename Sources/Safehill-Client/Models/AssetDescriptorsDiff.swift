@@ -107,22 +107,31 @@ struct AssetDescriptorsDiff {
                 if localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
                     if userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] == nil 
                     {
+                        let remoteDescGroupInfo = remoteDescriptor.sharingInfo.groupInfoById[groupId]
+                        if remoteDescGroupInfo == nil {
+                            log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). sharedWithUserIdentifiersInGroup=\(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup)")
+                        }
                         userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
                             from: localDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: [userId: groupId],
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
-                                name: remoteDescriptor.sharingInfo.groupInfoById[groupId]!.name,
-                                createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                                name: remoteDescGroupInfo?.name,
+                                createdAt: remoteDescGroupInfo?.createdAt
                             )]
                         )
                     } else {
+                        let remoteDescGroupInfo = remoteDescriptor.sharingInfo.groupInfoById[groupId]
+                        if remoteDescGroupInfo == nil {
+                            log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). sharedWithUserIdentifiersInGroup=\(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup)")
+                        }
+                        
                         var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
                         newDict[userId] = groupId
                         
                         var newGroupInfoDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
-                            name: remoteDescriptor.sharingInfo.groupInfoById[groupId]!.name,
-                            createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt
+                            name: newGroupInfoDict[groupId]?.name ?? remoteDescGroupInfo?.name,
+                            createdAt: newGroupInfoDict[groupId]?.createdAt ?? remoteDescGroupInfo?.createdAt
                         )
                         
                         userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
