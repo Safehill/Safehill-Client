@@ -480,8 +480,15 @@ extension SHServerProxy {
         }
     }
     
-    func getLocalAssetDescriptors(completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
-        self.localServer.getAssetDescriptors { result in
+    func getLocalAssetDescriptors(
+        for globalIdentifiers: [GlobalIdentifier]? = nil,
+        filteringGroups: [String]? = nil,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
+        self.localServer.getAssetDescriptors(
+            forAssetGlobalIdentifiers: globalIdentifiers,
+            filteringGroupIds: filteringGroups
+        ) { result in
             switch result {
             case .failure(let err):
                 completionHandler(.failure(err))

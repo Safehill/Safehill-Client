@@ -86,7 +86,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch
     /// happen against the local server (instead of the remote server)
     /// - Returns: the list of descriptors
-    internal func fetchDescriptorsFromServer(
+    internal func fetchDescriptorsFromLocalServer(
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         serverProxy.getLocalAssetDescriptors { result in
@@ -365,12 +365,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    public override func runOnce(
-        for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
+    public func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        self.fetchDescriptorsFromServer {
+        self.fetchDescriptorsFromLocalServer {
             result in
             switch result {
             case .failure(let error):

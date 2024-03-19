@@ -441,7 +441,7 @@ struct LocalServer : SHServerAPI {
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
         self.getAssetDescriptors(
             forAssetGlobalIdentifiers: forAssetGlobalIdentifiers,
-            filteringGroupIds: nil, // TODO: Implement group filtering
+            filteringGroupIds: nil,
             since: nil,
             completionHandler: completionHandler
         )
@@ -451,10 +451,9 @@ struct LocalServer : SHServerAPI {
         since: Date,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        // TODO: Filter with the since Date
         self.getAssetDescriptors(
             forAssetGlobalIdentifiers: nil,
-            since: nil,
+            since: since,
             completionHandler: completionHandler
         )
     }
@@ -465,6 +464,7 @@ struct LocalServer : SHServerAPI {
         since: Date? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
+        // TODO: Filter with the since Date
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -593,13 +593,17 @@ struct LocalServer : SHServerAPI {
                                 /// 3) asset identifier
                                 
                                 if components.count == 4, let groupId = value["groupId"] {
-                                    sharedWithUsersInGroup[components[1]] = groupId
+                                    if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
+                                        sharedWithUsersInGroup[components[1]] = groupId
+                                    }
                                 } else {
                                     log.error("failed to retrieve sharing information for asset \(globalIdentifier). Invalid format")
                                 }
                                 
                                 if let groupId = value["groupId"], let groupCreationDate = value["groupCreationDate"] {
-                                    groupInfoById[groupId] = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate.iso8601withFractionalSeconds)
+                                    if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
+                                        groupInfoById[groupId] = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate.iso8601withFractionalSeconds)
+                                    }
                                 }
                             }
                         } else {
@@ -611,6 +615,15 @@ struct LocalServer : SHServerAPI {
                     
                     if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
                         log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
+                    }
+                    
+                    if groupInfoById.isEmpty {
+                        /// 
+                        /// If there is no info about any group, don't add the descriptor
+                        /// Because the filtering on groups returned no results for this asset,
+                        /// the asset will not be included.
+                        /// 
+                        continue
                     }
                     
                     let sharingInfo = SHGenericDescriptorSharingInfo(
