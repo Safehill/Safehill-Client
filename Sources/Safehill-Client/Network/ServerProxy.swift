@@ -320,8 +320,10 @@ extension SHServerProxy {
         )
     }
     
-    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], 
-                  completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
+    public func getUsers(
+        withHashedPhoneNumbers hashedPhoneNumbers: [String],
+        completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()
+    ) {
         self.remoteServer.getUsers(withHashedPhoneNumbers: hashedPhoneNumbers, completionHandler: completionHandler)
     }
     

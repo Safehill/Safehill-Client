@@ -333,6 +333,18 @@ final class Safehill_SerializationTests: XCTestCase {
         XCTAssertEqual(serializedAuthedUser.identifier, expectedUser.identifier)
         XCTAssertEqual(serializedAuthedUser.publicKeyData.base64EncodedString(), expectedUser.publicKeyData.base64EncodedString())
         XCTAssertEqual(serializedAuthedUser.publicSignatureData.base64EncodedString(), expectedUser.publicSignatureData.base64EncodedString())
+    }
+    
+    func testDeserializeStatic() throws {
+        let serialized = """
+{"keychainPrefix":"com.gf.safehill","shUser":{"privateKeyData":"MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgtA51VKyxCkzCK97wwKWZ1+ltGe/pv50tQSJ7E/UndMuhRANCAATLabwjjg1l8xDA9qACj2Z3Y7n9qK6DMpJ8GFPeppAexDcUyC3OhcNtOTbbEj5rQSokgDoUw9vdh5+HUU3dK7i1","privateSignatureData":"MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg/UaTD+mekl+1U0y8HkW/846FoBA7Gmjo/F+996WF56+hRANCAASKfGLlI/zbGrW1LVdkVphC76YXWYVTjVE2tsJ8yVXtYn+QJ5wwdSvZr+cUv57LATeKcOhjk1yIxPqVkHACfU+r"}}
+"""
+        let jsonDecoder = JSONDecoder()
+        
+        let deserializedUser = try jsonDecoder.decode(SHLocalUser.self, from: serialized.data(using: .utf8)!)
+        
+        print(deserializedUser.name)
+        print(deserializedUser.identifier)
         
     }
     
