@@ -12,7 +12,7 @@ public protocol SHLocalUserProtocol : SHServerUser {
     static func authTokenKeychainLabel(keychainPrefix: String) -> String
     
     func deauthenticate() throws
-    func destroy() throws
+    func destroy(synchronizable: Bool) throws
     
     func createShareablePayload(
         from data: Data,
@@ -60,21 +60,25 @@ extension SHLocalUserProtocol {
     }
     
     internal static func deleteKeys(
-        _ keychainPrefix: String
+        _ keychainPrefix: String,
+        synchronizable: Bool
     ) throws {
         /// Delete the keys
         let keysKeychainLabel = Self.keysKeychainLabel(keychainPrefix: keychainPrefix)
-        try SHLocalCryptoUser.deleteKeysInKeychain(withLabel: keysKeychainLabel)
+        try SHLocalCryptoUser.deleteKeysInKeychain(
+            withLabel: keysKeychainLabel,
+            synchronizable: synchronizable
+        )
     }
     
     public func deauthenticate() throws {
         try Self.deleteAuthToken(self.keychainPrefix)
     }
     
-    public func destroy() throws {
+    public func destroy(synchronizable: Bool) throws {
         try Self.deleteAuthToken(self.keychainPrefix)
         try Self.deleteProtocolSalt(self.keychainPrefix)
-        try Self.deleteKeys(self.keychainPrefix)
+        try Self.deleteKeys(self.keychainPrefix, synchronizable: synchronizable)
     }
 }
 

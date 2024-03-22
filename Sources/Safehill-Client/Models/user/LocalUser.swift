@@ -72,8 +72,12 @@ public struct SHLocalUser: SHLocalUserProtocol {
     /// Initializes a SHLocalUser and the corresponding keychain element.
     /// Creates a key pair if none exists in the keychain with label `keysKeychainLabel`,
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
-    /// - Parameter keychainPrefix:the keychain prefix
-    public static func restore(keychainPrefix: String) throws -> SHLocalUser {
+    ///
+    /// - Parameter keychainPrefix: the keychain prefix
+    /// - Parameter synchronizable: see `kSecAttrSynchronizable`. Whether the item to retrieve in the keychain
+    /// was stored to be synchronized to other devices through iCloud
+    ///
+    public static func restore(keychainPrefix: String, synchronizable: Bool) throws -> SHLocalUser {
         let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
         let authTokenLabel = SHLocalUser.authTokenKeychainLabel(keychainPrefix: keychainPrefix)
         let saltKeychainLabel = SHLocalUser.saltKeychainLabel(keychainPrefix: keychainPrefix)
@@ -96,7 +100,10 @@ public struct SHLocalUser: SHLocalUserProtocol {
         }
         
         return SHLocalUser(
-            shUser: try SHLocalCryptoUser(usingKeychainEntryWithLabel: keysKeychainLabel),
+            shUser: try SHLocalCryptoUser(
+                usingKeychainEntryWithLabel: keysKeychainLabel,
+                synchronizable: synchronizable
+            ),
             authToken: authToken,
             maybeEncryptionProtocolSalt: salt,
             keychainPrefix: keychainPrefix

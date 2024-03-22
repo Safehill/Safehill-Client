@@ -226,7 +226,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let _ = try SHDBManager.sharedInstance.messageQueue?.removeAll()
         
         for keychainPrefix in ["com.gf.safehill.client.testUser", "com.gf.safehill.client.recipient1"] {
-            try? SHLocalUser.deleteKeys(keychainPrefix)
+            try? SHLocalUser.deleteKeys(keychainPrefix, synchronizable: false)
             try? SHLocalUser.deleteProtocolSalt(keychainPrefix)
             try? SHLocalUser.deleteAuthToken(keychainPrefix)
         }
