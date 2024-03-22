@@ -10,8 +10,10 @@ extension SHLocalUser {
     ///
     public static func upgradeKeychain(keychainPrefix: String) throws {
         
+        let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
+        
         let (privateKey, privateSignature) = try SHLocalCryptoUser.keysInKeychain(
-            label: keychainPrefix,
+            label: keysKeychainLabel,
             synchronizable: true
         )
         
@@ -20,14 +22,14 @@ extension SHLocalUser {
         }
         
         let (oldPrivateKey, oldPrivateSignature) = try SHLocalCryptoUser.keysInKeychain(
-            label: keychainPrefix,
+            label: keysKeychainLabel,
             synchronizable: false
         )
         
         if privateKey == nil, let oldPrivateKey {
             try SHLocalCryptoUser.storeKeyInKeychain(
                 oldPrivateKey,
-                label: keychainPrefix,
+                label: keysKeychainLabel,
                 synchronizable: true,
                 force: true
             )
@@ -36,14 +38,14 @@ extension SHLocalUser {
         if privateSignature == nil, let oldPrivateSignature {
             try SHLocalCryptoUser.storeSignatureInKeychain(
                 oldPrivateSignature,
-                label: keychainPrefix,
+                label: keysKeychainLabel,
                 synchronizable: true,
                 force: true
             )
         }
         
         try SHLocalCryptoUser.deleteKeysInKeychain(
-            withLabel: keychainPrefix,
+            withLabel: keysKeychainLabel,
             synchronizable: false
         )
     }
