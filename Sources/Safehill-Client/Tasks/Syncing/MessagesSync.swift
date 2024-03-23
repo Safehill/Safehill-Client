@@ -25,6 +25,7 @@ extension SHSyncOperation {
         
         guard messagesToUpdate.count > 0 else {
             completionHandler(.success(()))
+            return
         }
         
         log.debug("[sync] syncing messages in \(anchor.rawValue) \(anchorId). toUpdate=\(messagesToUpdate.count)")
