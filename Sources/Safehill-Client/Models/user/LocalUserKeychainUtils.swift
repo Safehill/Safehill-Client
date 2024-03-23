@@ -25,6 +25,36 @@ extension SHLocalUser {
     }
     
     ///
+    /// Force copy the items from the non-synchronized keychain to the iCloud-synchronizable keychain
+    ///
+    public static func copyLocalKeychainToSync(keychainPrefix: String) throws {
+        
+        let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
+        
+        let (localPrivateKey, localPrivateSignature) = try SHLocalCryptoUser.keysInKeychain(
+            label: keysKeychainLabel,
+            synchronizable: false
+        )
+        
+        guard let localPrivateKey, let localPrivateSignature else {
+            return
+        }
+        
+        try SHLocalCryptoUser.storeKeyInKeychain(
+            localPrivateKey,
+            label: keysKeychainLabel,
+            synchronizable: true,
+            force: true
+        )
+        try SHLocalCryptoUser.storeSignatureInKeychain(
+            localPrivateSignature,
+            label: keysKeychainLabel,
+            synchronizable: true,
+            force: true
+        )
+    }
+    
+    ///
     /// Force copy the items from the iCloud-synchronizable keychain to the the non-synchronized one
     ///
     public static func copySyncKeychainToLocal(keychainPrefix: String) throws {
@@ -49,7 +79,7 @@ extension SHLocalUser {
         try SHLocalCryptoUser.storeSignatureInKeychain(
             syncPrivateSignature,
             label: keysKeychainLabel,
-            synchronizable: true,
+            synchronizable: false,
             force: true
         )
     }
