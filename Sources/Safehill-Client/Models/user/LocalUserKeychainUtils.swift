@@ -4,49 +4,53 @@ import CryptoKit
 extension SHLocalUser {
     
     ///
-    /// If the user key and signature are missing from the iCloud-synchronizable keychain,
-    /// but they are present in the non-syncronizable keychain,
-    /// copy the items from the latter to the former, and delete such keys from the latter.
+    /// If the user key and signature are missing from the non-synchronized keychain,
+    /// but they are present in the iCloud-synchronizable keychain,
+    /// copy the items from the latter to the former.
     ///
-    public static func upgradeKeychain(keychainPrefix: String) throws {
+    public static func syncKeychainItemsIfMissing(keychainPrefix: String) throws {
         
         let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
         
         let (privateKey, privateSignature) = try SHLocalCryptoUser.keysInKeychain(
             label: keysKeychainLabel,
-            synchronizable: true
+            synchronizable: false
         )
         
         if privateKey != nil, privateSignature != nil {
             return
         }
         
-        let (oldPrivateKey, oldPrivateSignature) = try SHLocalCryptoUser.keysInKeychain(
+        try self.copySyncKeychainToLocal(keychainPrefix: keychainPrefix)
+    }
+    
+    ///
+    /// Force copy the items from the iCloud-synchronizable keychain to the the non-synchronized one
+    ///
+    public static func copySyncKeychainToLocal(keychainPrefix: String) throws {
+        
+        let keysKeychainLabel = SHLocalUser.keysKeychainLabel(keychainPrefix: keychainPrefix)
+        
+        let (syncPrivateKey, syncPrivateSignature) = try SHLocalCryptoUser.keysInKeychain(
             label: keysKeychainLabel,
-            synchronizable: false
+            synchronizable: true
         )
         
-        if privateKey == nil, let oldPrivateKey {
-            try SHLocalCryptoUser.storeKeyInKeychain(
-                oldPrivateKey,
-                label: keysKeychainLabel,
-                synchronizable: true,
-                force: true
-            )
+        guard let syncPrivateKey, let syncPrivateSignature else {
+            return
         }
         
-        if privateSignature == nil, let oldPrivateSignature {
-            try SHLocalCryptoUser.storeSignatureInKeychain(
-                oldPrivateSignature,
-                label: keysKeychainLabel,
-                synchronizable: true,
-                force: true
-            )
-        }
-        
-        try SHLocalCryptoUser.deleteKeysInKeychain(
-            withLabel: keysKeychainLabel,
-            synchronizable: false
+        try SHLocalCryptoUser.storeKeyInKeychain(
+            syncPrivateKey,
+            label: keysKeychainLabel,
+            synchronizable: false,
+            force: true
+        )
+        try SHLocalCryptoUser.storeSignatureInKeychain(
+            syncPrivateSignature,
+            label: keysKeychainLabel,
+            synchronizable: true,
+            force: true
         )
     }
 }
