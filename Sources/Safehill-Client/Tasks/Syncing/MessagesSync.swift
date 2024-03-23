@@ -23,60 +23,62 @@ extension SHSyncOperation {
             }
         }
         
+        guard messagesToUpdate.count > 0 else {
+            completionHandler(.success(()))
+        }
+        
         log.debug("[sync] syncing messages in \(anchor.rawValue) \(anchorId). toUpdate=\(messagesToUpdate.count)")
         let dispatchGroup = DispatchGroup()
         
-        if messagesToUpdate.count > 0 {
-            let callback = { (addMessagesResult: Result<[MessageOutputDTO], Error>) in
-                switch addMessagesResult {
-                case .failure(let failure):
-                    self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
-                    errors.append(failure)
-                case .success(let messages):
-                    let threadsDelegates = self.threadsDelegates
-                    self.delegatesQueue.async {
-                        switch anchor {
-                        case .group:
-                            threadsDelegates.forEach({
-                                $0.didReceiveMessages(
-                                    messages,
-                                    inGroup: anchorId,
-                                    encryptionDetails: encryptionDetails
-                                )
-                            })
-                        case .thread:
-                            threadsDelegates.forEach({
-                                $0.didReceiveMessages(
-                                    messages,
-                                    inThread: anchorId,
-                                    encryptionDetails: encryptionDetails
-                                )
-                            })
-                        }
+        let callback = { (addMessagesResult: Result<[MessageOutputDTO], Error>) in
+            switch addMessagesResult {
+            case .failure(let failure):
+                self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
+                errors.append(failure)
+            case .success(let messages):
+                let threadsDelegates = self.threadsDelegates
+                self.delegatesQueue.async {
+                    switch anchor {
+                    case .group:
+                        threadsDelegates.forEach({
+                            $0.didReceiveMessages(
+                                messages,
+                                inGroup: anchorId,
+                                encryptionDetails: encryptionDetails
+                            )
+                        })
+                    case .thread:
+                        threadsDelegates.forEach({
+                            $0.didReceiveMessages(
+                                messages,
+                                inThread: anchorId,
+                                encryptionDetails: encryptionDetails
+                            )
+                        })
                     }
                 }
             }
-            
-            dispatchGroup.enter()
-            switch anchor {
-            case .group:
-                serverProxy.localServer.addMessages(
-                    messagesToUpdate,
-                    inGroup: anchorId
-                ) {
-                    self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
-                    callback($0)
-                    dispatchGroup.leave()
-                }
-            case .thread:
-                serverProxy.localServer.addMessages(
-                    messagesToUpdate,
-                    inThread: anchorId
-                ) {
-                    self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
-                    callback($0)
-                    dispatchGroup.leave()
-                }
+        }
+        
+        dispatchGroup.enter()
+        switch anchor {
+        case .group:
+            serverProxy.localServer.addMessages(
+                messagesToUpdate,
+                inGroup: anchorId
+            ) {
+                self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
+                callback($0)
+                dispatchGroup.leave()
+            }
+        case .thread:
+            serverProxy.localServer.addMessages(
+                messagesToUpdate,
+                inThread: anchorId
+            ) {
+                self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
+                callback($0)
+                dispatchGroup.leave()
             }
         }
         
