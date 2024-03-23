@@ -103,12 +103,13 @@ extension SHSyncOperation {
             }
             
             let syncInteractionsInThread = { 
-                (thread: ConversationThreadOutputDTO, completionHandler: @escaping () -> Void) in
+                (thread: ConversationThreadOutputDTO, callback: @escaping () -> Void) in
                 
                 self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
                     if case .failure(let err) = result {
                         self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                     }
+                    callback()
                 }
             }
             
