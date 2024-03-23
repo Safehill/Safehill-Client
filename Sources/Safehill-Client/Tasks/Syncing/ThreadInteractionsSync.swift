@@ -102,12 +102,13 @@ extension SHSyncOperation {
                 lastKnownThreadUpdateAt = nil
             }
             
-            let syncInteractionsInThread = { (thread: ConversationThreadOutputDTO) in
+            let syncInteractionsInThread = { 
+                (thread: ConversationThreadOutputDTO, completionHandler: @escaping () -> Void) in
+                
                 self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
                     if case .failure(let err) = result {
                         self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                     }
-                    dispatchGroup.leave()
                 }
             }
             
@@ -124,14 +125,18 @@ extension SHSyncOperation {
                     self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
                         switch createResult {
                         case .success:
-                            syncInteractionsInThread(thread)
+                            syncInteractionsInThread(thread) {
+                                dispatchGroup.leave()
+                            }
                         case .failure(let err):
                             self.log.error("error locally creating thread \(thread.threadId). \(err.localizedDescription)")
+                            dispatchGroup.leave()
                         }
-                        dispatchGroup.leave()
                     }
                 } else {
-                    syncInteractionsInThread(thread)
+                    syncInteractionsInThread(thread) {
+                        dispatchGroup.leave()
+                    }
                 }
             }
             
