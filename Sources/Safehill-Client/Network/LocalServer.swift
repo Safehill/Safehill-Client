@@ -2098,7 +2098,7 @@ struct LocalServer : SHServerAPI {
                             case .success(let messageKvts):
                                 var messages = [MessageOutputDTO]()
                                 
-                                log.debug("found \(messageKvts) messages for \(anchorType.rawValue) with id \(anchorId)")
+                                log.debug("found \(messageKvts.count) messages for \(anchorType.rawValue) with id \(anchorId)")
                                 
                                 for messageKvt in messageKvts {
                                     do {
