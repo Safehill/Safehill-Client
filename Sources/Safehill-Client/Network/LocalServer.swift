@@ -1906,16 +1906,16 @@ struct LocalServer : SHServerAPI {
     func retrieveInteractions(
         inGroup groupId: String,
         underMessage messageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveInteractions(
             anchorType: .group,
             anchorId: groupId,
             underMessage: messageId,
-            per: per,
-            page: page,
+            before: before,
+            limit: limit,
             completionHandler: completionHandler
         )
     }
@@ -1923,16 +1923,16 @@ struct LocalServer : SHServerAPI {
     func retrieveInteractions(
         inThread threadId: String,
         underMessage messageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveInteractions(
             anchorType: .thread,
             anchorId: threadId,
             underMessage: messageId,
-            per: per,
-            page: page,
+            before: before,
+            limit: limit,
             completionHandler: completionHandler
         )
     }
@@ -2013,8 +2013,8 @@ struct LocalServer : SHServerAPI {
         anchorType: SHInteractionAnchor,
         anchorId: String,
         underMessage refMessageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
@@ -2062,11 +2062,19 @@ struct LocalServer : SHServerAPI {
                     )
                 }
                 
-                log.debug("retrieving reactions (page=\(page), per=\(per)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
+                log.debug("retrieving reactions (before=\(before?.iso8601withFractionalSeconds ?? "nil"), limit=\(limit)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
+                
+                let timeCondition: KBTimestampCondition?
+                if let before {
+                    timeCondition = KBTimestampCondition(.before, value: before)
+                } else {
+                    timeCondition = nil
+                }
                 
                 reactionStore.keyValuesAndTimestamps(
                     forKeysMatching: condition,
-                    paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
+                    timestampMatching: timeCondition,
+                    paginate: KBPaginationOptions(limit: limit, offset: 0),
                     sort: .descending
                 ) { reactionsResult in
                     switch reactionsResult {
@@ -2078,11 +2086,12 @@ struct LocalServer : SHServerAPI {
                             }
                         })
                         
-                        log.debug("retrieving messages (page=\(page), per=\(per)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
+                        log.debug("retrieving messages (before=\(before?.iso8601withFractionalSeconds ?? "nil"), limit=\(limit)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
                         
                         messagesQueue.keyValuesAndTimestamps(
                             forKeysMatching: condition,
-                            paginate: KBPaginationOptions(limit: per, offset: per * (page-1)),
+                            timestampMatching: timeCondition,
+                            paginate: KBPaginationOptions(limit: limit, offset: 0),
                             sort: .descending
                         ) { messagesResult in
                             switch messagesResult {
@@ -2147,6 +2156,7 @@ struct LocalServer : SHServerAPI {
                 
                 messagesQueue.keyValuesAndTimestamps(
                     forKeysMatching: condition,
+                    timestampMatching: nil,
                     paginate: KBPaginationOptions(limit: 1, offset: 0),
                     sort: .descending
                 ) { messagesResult in
@@ -2184,7 +2194,8 @@ struct LocalServer : SHServerAPI {
     func retrieveMessages(
         inGroup groupId: String,
         underMessage underMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
@@ -2193,7 +2204,8 @@ struct LocalServer : SHServerAPI {
     func retrieveMessages(
         inThread threadId: String,
         underMessage underMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))

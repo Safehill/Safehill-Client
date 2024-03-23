@@ -1110,16 +1110,16 @@ struct SHServerHTTPAPI : SHServerAPI {
     func retrieveInteractions(
         inGroup groupId: String,
         underMessage messageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveInteractions(
             anchorType: .group,
             anchorId: groupId,
             underMessage: messageId,
-            per: per,
-            page: page,
+            before: before,
+            limit: limit,
             completionHandler: completionHandler
         )
     }
@@ -1127,16 +1127,16 @@ struct SHServerHTTPAPI : SHServerAPI {
     func retrieveInteractions(
         inThread threadId: String,
         underMessage messageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveInteractions(
             anchorType: .thread,
             anchorId: threadId,
             underMessage: messageId,
-            per: per,
-            page: page,
+            before: before,
+            limit: limit,
             completionHandler: completionHandler
         )
     }
@@ -1145,13 +1145,15 @@ struct SHServerHTTPAPI : SHServerAPI {
         anchorType: SHInteractionAnchor,
         anchorId: String,
         underMessage refMessageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
+        // TODO: Implement BEFORE condition
+        
         var parameters = [
-            "per": per,
-            "page": page
+            "per": limit,
+            "page": 1
         ] as [String: Any]
         
         if let refMessageId {
@@ -1167,14 +1169,16 @@ struct SHServerHTTPAPI : SHServerAPI {
     func retrieveMessages(
         inGroup groupId: String,
         underMessage underMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveMessages(
             anchorType: .group,
             anchorId: groupId,
             underMessage: underMessageId,
-            after: afterMessageId,
+            before: before,
+            limit: limit,
             completionHandler: completionHandler
         )
     }
@@ -1182,14 +1186,16 @@ struct SHServerHTTPAPI : SHServerAPI {
     func retrieveMessages(
         inThread threadId: String,
         underMessage underMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         self.retrieveMessages(
             anchorType: .thread,
             anchorId: threadId,
             underMessage: underMessageId,
-            after: afterMessageId,
+            before: before,
+            limit: limit,
             completionHandler: completionHandler
         )
     }
@@ -1198,18 +1204,23 @@ struct SHServerHTTPAPI : SHServerAPI {
         anchorType: SHInteractionAnchor,
         anchorId: String,
         underMessage refMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
         var parameters = [
-            "lastKnownMessageId": afterMessageId
+            "limit": limit
         ] as [String: Any]
+        
+        if let before {
+            parameters["before"] = before.iso8601withFractionalSeconds
+        }
         
         if let refMessageId {
             parameters["referencedInteractionId"] = refMessageId
         }
         
-        self.post("interactions/messages/\(anchorType.rawValue)/\(anchorId)",
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)/messages",
                   parameters: parameters,
                   requiresAuthentication: true,
                   completionHandler: completionHandler)

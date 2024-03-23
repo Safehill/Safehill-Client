@@ -82,12 +82,12 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func retrieveInteractions(inGroup groupId: String, underMessage messageId: String?, per: Int, page: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
-        self.localServer.retrieveInteractions(inGroup: groupId, underMessage: messageId, per: per, page: page, completionHandler: completionHandler)
+    func retrieveInteractions(inGroup groupId: String, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
+        self.localServer.retrieveInteractions(inGroup: groupId, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
     }
     
-    func retrieveInteractions(inThread threadId: String, underMessage messageId: String?, per: Int, page: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
-        self.localServer.retrieveInteractions(inThread: threadId, underMessage: messageId, per: per, page: page, completionHandler: completionHandler)
+    func retrieveInteractions(inThread threadId: String, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
+        self.localServer.retrieveInteractions(inThread: threadId, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
     }
     
     func countLocalInteractions(inGroup groupId: String, completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()) {
@@ -443,7 +443,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         wait(for: [expectation2], timeout: 5.0)
         
         let expectation3 = XCTestExpectation(description: "retrieve group interactions")
-        controller.retrieveInteractions(inGroup: groupId, per: 10, page: 1) {
+        controller.retrieveInteractions(inGroup: groupId, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -610,7 +610,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         ///
         
         let expectation3 = XCTestExpectation(description: "retrieve thread interactions")
-        controller1.retrieveInteractions(inThread: threadId, per: 10, page: 1) {
+        controller1.retrieveInteractions(inThread: threadId, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -678,7 +678,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             user: authenticatedUser2,
             serverProxy: serverProxy2
         )
-        controller2.retrieveInteractions(inThread: threadId, per: 10, page: 1) {
+        controller2.retrieveInteractions(inThread: threadId, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -710,14 +710,20 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let messageReplyText = "This is the reply to your first message"
         
+        var messageSentAt = Date.distantPast
+        
         let expectation5 = XCTestExpectation(description: "send a reply in the thread")
         controller2.send(
             message: messageReplyText,
             inThread: threadId
         ) { result in
-            if case .failure(let err) = result {
+            switch result {
+            case .failure(let err):
                 XCTFail(err.localizedDescription)
+            case .success(let messageOutput):
+                messageSentAt = messageOutput.createdAt!.iso8601withFractionalSeconds!
             }
+            
             expectation5.fulfill()
         }
 
@@ -725,7 +731,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let expectation6 = XCTestExpectation(description: "retrieve interactions in thread from recipient1")
         
-        controller2.retrieveInteractions(inThread: threadId, per: 10, page: 1) {
+        controller2.retrieveInteractions(inThread: threadId, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -767,7 +773,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let expectation8 = XCTestExpectation(description: "retrieve interactions with offset")
         let expectation9 = XCTestExpectation(description: "retrieve interactions with limit and offset")
         
-        controller2.retrieveInteractions(inThread: threadId, per: 1, page: 1) {
+        controller2.retrieveInteractions(inThread: threadId, before: nil, limit: 1) {
             result in
             switch result {
             case .failure(let err):
@@ -791,7 +797,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             expectation7.fulfill()
         }
         
-        controller2.retrieveInteractions(inThread: threadId, per: 1, page: 2) {
+        controller2.retrieveInteractions(inThread: threadId, before: messageSentAt, limit: 2) {
             result in
             switch result {
             case .failure(let err):
@@ -815,7 +821,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             expectation8.fulfill()
         }
         
-        controller2.retrieveInteractions(inThread: threadId, per: 2, page: 2) {
+        controller2.retrieveInteractions(inThread: threadId, before: messageSentAt, limit: 2) {
             result in
             switch result {
             case .failure(let err):
@@ -838,7 +844,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         writeBatchTestUser.set(value: mockServerTestUserEncryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature")
         try writeBatchTestUser.write()
         
-        controller1.retrieveInteractions(inThread: threadId, per: 3, page: 1) {
+        controller1.retrieveInteractions(inThread: threadId, before: nil, limit: 3) {
             result in
             switch result {
             case .failure(let err):

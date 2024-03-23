@@ -312,14 +312,14 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - groupId: the group identifier
     ///   - refMessageId: if a nested thread, the message it's nested under
-    ///   - per: the limit
-    ///   - page: the page
+    ///   - before: (optional query modifier) retrieve only messages with creation date lower than this date. Defaults to NOW
+    ///   - limit: limits the number of results returned
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inGroup groupId: String,
         underMessage refMessageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
@@ -327,34 +327,34 @@ public protocol SHServerAPI {
     /// Optionally specify the anchor message, if this is a reply to another message (sub-thread)
     /// - Parameters:
     ///   - groupId: the group identifier
-    ///   - per: the number of items to retrieve
-    ///   - page: the page number, because results are paginated
+    ///   - before: (optional query modifier) retrieve only messages with creation date lower than this date. Defaults to NOW
+    ///   - limit: limits the number of results returned
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inThread threadId: String,
         underMessage refMessageId: String?,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
     /// Retrieves all the messages for a group id.
-    /// Provides the last known message id to retrieve only the messages after that one.
     ///
     /// - Parameters:
     ///   - groupId: the group identifier
     ///   - refMessageId: if a nested thread, the message it's nested under
-    ///   - afterInteractionId: the last interaction known
+    ///   - before: (optional query modifier) retrieve only messages with creation date lower than this date. Defaults to NOW
+    ///   - limit: limits the number of results returned
     ///   - completionHandler: the callback method
     func retrieveMessages(
         inGroup groupId: String,
         underMessage refMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
     /// Retrieves all the messages for in a thread.
-    /// Provides the last known message id to retrieve only the messages after that one.
     ///
     /// - Parameters:
     ///   - groupId: the group identifier
@@ -364,7 +364,8 @@ public protocol SHServerAPI {
     func retrieveMessages(
         inThread threadId: String,
         underMessage refMessageId: String?,
-        after afterMessageId: String,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     

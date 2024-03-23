@@ -302,15 +302,16 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveInteractions(
         inGroup groupId: String,
         underMessage messageId: String? = nil,
-        per: Int,
-        page: Int,
+        before: Date? = nil,
+        limit: Int,
         completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
     ) {
         self.retrieveInteractions(
             inAnchor: .group,
             anchorId: groupId,
             underMessage: messageId,
-            per: per, page: page
+            before: before,
+            limit: limit
         ) { result in
             switch result {
             case .success(let res):
@@ -324,15 +325,16 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveInteractions(
         inThread threadId: String,
         underMessage messageId: String? = nil,
-        per: Int,
-        page: Int,
+        before: Date? = nil,
+        limit: Int,
         completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
     ) {
         self.retrieveInteractions(
             inAnchor: .thread,
             anchorId: threadId,
             underMessage: messageId,
-            per: per, page: page
+            before: before,
+            limit: limit
         ) { result in
             switch result {
             case .success(let res):
@@ -347,11 +349,13 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inAnchor anchor: SHInteractionAnchor,
         anchorId: String,
         underMessage messageId: String? = nil,
-        per: Int,
-        page: Int,
+        before: Date?,
+        limit: Int,
         completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
-        log.debug("[SHUserInteractionController] retriving interactions for \(anchor.rawValue) \(anchorId) underMessage=\(messageId ?? "nil") (per=\(per),page=\(page))")
+        log.debug("""
+[SHUserInteractionController] retriving interactions for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
+""")
         
         let callback = { (result: Result<InteractionsGroupDTO, Error>) in
             switch result {
@@ -430,16 +434,16 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             self.serverProxy.retrieveInteractions(
                 inThread: anchorId,
                 underMessage: messageId,
-                per: per,
-                page: page,
+                before: before,
+                limit: limit,
                 completionHandler: callback
             )
         case .group:
             self.serverProxy.retrieveInteractions(
                 inGroup: anchorId,
                 underMessage: messageId,
-                per: per,
-                page: page,
+                before: before,
+                limit: limit,
                 completionHandler: callback
             )
         }
