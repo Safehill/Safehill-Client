@@ -374,7 +374,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                         usingEncryptionDetails: encryptionDetails
                     )
                 } catch {
-                    log.error("failed to decrypt messages in \(anchor.rawValue) \(anchorId, privacy: .public)")
+                    log.error("failed to retrieve user information for \(anchor.rawValue, privacy: .public) \(anchorId, privacy: .public)")
                     completionHandler(.failure(error))
                     return
                 }
@@ -658,7 +658,7 @@ extension SHUserInteractionController {
                     signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
                 )
             } catch {
-                log.error("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderUserIdentifier!)")
+                log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderUserIdentifier!). error=\(error.localizedDescription)")
                 continue
             }
             guard let decryptedMessage = String(data: decryptedData, encoding: .utf8) else {
