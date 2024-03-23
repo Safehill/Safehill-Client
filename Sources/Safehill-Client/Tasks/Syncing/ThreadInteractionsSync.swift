@@ -128,6 +128,7 @@ extension SHSyncOperation {
                         case .failure(let err):
                             self.log.error("error locally creating thread \(thread.threadId). \(err.localizedDescription)")
                         }
+                        dispatchGroup.leave()
                     }
                 } else {
                     syncInteractionsInThread(thread)
