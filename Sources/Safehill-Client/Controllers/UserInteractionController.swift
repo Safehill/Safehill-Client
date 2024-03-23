@@ -351,6 +351,8 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         page: Int,
         completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
+        log.debug("[SHUserInteractionController] retriving interactions for \(anchor.rawValue) \(anchorId) underMessage=\(messageId ?? "nil") (per=\(per),page=\(page))")
+        
         let callback = { (result: Result<InteractionsGroupDTO, Error>) in
             switch result {
             case .success(let interactionsGroup):
