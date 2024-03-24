@@ -1,6 +1,11 @@
 import Foundation
 import os
 
+/// 
+/// Responsible for syncing:
+/// - full list of threads with server
+/// - LAST 20 interactions in each
+///
 public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-INTERACTIONS-SYNC")
@@ -45,7 +50,7 @@ public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, 
             assetsDelegates: self.assetsSyncDelegates,
             threadsDelegates: self.threadsSyncDelegates
         )
-        syncOperation.syncThreadInteractions(qos: qos, completionHandler: completionHandler)
+        syncOperation.syncLastThreadInteractions(qos: qos, completionHandler: completionHandler)
     }
     
     public override func main() {

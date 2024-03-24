@@ -2299,8 +2299,8 @@ struct LocalServer : SHServerAPI {
             }
         }
         
-        if result.isEmpty {
-            completionHandler(.failure(firstError!))
+        if let firstError {
+            completionHandler(.failure(firstError))
         } else {
             completionHandler(.success(result))
         }

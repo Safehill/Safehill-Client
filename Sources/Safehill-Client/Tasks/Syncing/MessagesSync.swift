@@ -64,7 +64,7 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         switch anchor {
         case .group:
-            serverProxy.localServer.addMessages(
+            serverProxy.addLocalMessages(
                 messagesToUpdate,
                 inGroup: anchorId
             ) {
@@ -73,7 +73,7 @@ extension SHSyncOperation {
                 dispatchGroup.leave()
             }
         case .thread:
-            serverProxy.localServer.addMessages(
+            serverProxy.addLocalMessages(
                 messagesToUpdate,
                 inThread: anchorId
             ) {

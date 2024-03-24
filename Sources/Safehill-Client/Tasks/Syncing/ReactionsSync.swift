@@ -55,13 +55,13 @@ extension SHSyncOperation {
             
             switch anchor {
             case .group:
-                serverProxy.localServer.addReactions(
+                serverProxy.addLocalReactions(
                     reactionsToUpdate,
                     inGroup: anchorId,
                     completionHandler: callback
                 )
             case .thread:
-                serverProxy.localServer.addReactions(
+                serverProxy.addLocalReactions(
                     reactionsToUpdate,
                     inThread: anchorId,
                     completionHandler: callback

@@ -53,7 +53,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             encryptedMessage: message.encryptedMessage,
             createdAt: Date().iso8601withFractionalSeconds
         )
-        self.localServer.addMessages([messageOutput], inGroup: groupId) { result in
+        self.addLocalMessages([messageOutput], inGroup: groupId) { result in
             switch result {
             case .success(let messages):
                 completionHandler(.success(messages.first!))
@@ -72,7 +72,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             encryptedMessage: message.encryptedMessage,
             createdAt: Date().iso8601withFractionalSeconds
         )
-        self.localServer.addMessages([messageOutput], inThread: threadId) { result in
+        self.addLocalMessages([messageOutput], inThread: threadId) { result in
             switch result {
             case .success(let messages):
                 completionHandler(.success(messages.first!))
@@ -211,6 +211,50 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func removeReaction(_ reaction: ReactionInput, inGroup groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.removeReactions([reaction], inGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    func addLocalMessages(_ messages: [MessageInput], inGroup groupId: String, completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()) {
+        self.localServer.addMessages(
+            messages,
+            inGroup: groupId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func addLocalMessages(_ messages: [MessageInput], inThread threadId: String, completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()) {
+        self.localServer.addMessages(
+            messages,
+            inThread: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func addLocalReactions(_ reactions: [ReactionInput], inGroup groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+        self.localServer.addReactions(reactions, inGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    func addLocalReactions(_ reactions: [ReactionInput], inThread threadId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+        self.localServer.addReactions(reactions, inThread: threadId, completionHandler: completionHandler)
+    }
+    
+    func retrieveRemoteInteractions(inGroup groupId: String, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
+        self.localServer.retrieveInteractions(
+            inGroup: groupId,
+            underMessage: messageId,
+            before: before,
+            limit: limit,
+            completionHandler: completionHandler
+        )
+    }
+    
+    func retrieveRemoteInteractions(inThread threadId: String, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()) {
+        self.localServer.retrieveInteractions(
+            inThread: threadId,
+            underMessage: messageId,
+            before: before,
+            limit: limit,
+            completionHandler: completionHandler
+        )
     }
 }
 
@@ -821,7 +865,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             expectation8.fulfill()
         }
         
-        controller2.retrieveInteractions(inThread: threadId, before: messageSentAt, limit: 2) {
+        controller2.retrieveInteractions(inThread: threadId, before: .distantPast, limit: 2) {
             result in
             switch result {
             case .failure(let err):

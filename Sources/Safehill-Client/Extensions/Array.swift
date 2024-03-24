@@ -8,3 +8,14 @@ extension Array where Element: Hashable {
         return Array(thisSet)
     }
 }
+
+public extension Array {
+    mutating func append(missingContentsFrom other: [Element],
+                         compareUsing isEqual: (Element, Element) -> Bool) {
+        for b in other {
+            if self.contains(where: { a in isEqual(a, b) }) == false {
+                self.append(b)
+            }
+        }
+    }
+}

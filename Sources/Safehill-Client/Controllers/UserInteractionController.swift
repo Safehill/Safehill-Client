@@ -357,75 +357,157 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
 [SHUserInteractionController] retriving interactions for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
 """)
         
-        let callback = { (result: Result<InteractionsGroupDTO, Error>) in
-            switch result {
-            case .success(let interactionsGroup):
-                let encryptionDetails = EncryptionDetailsClass(
-                    ephemeralPublicKey: interactionsGroup.ephemeralPublicKey,
-                    encryptedSecret: interactionsGroup.encryptedSecret,
-                    secretPublicSignature: interactionsGroup.secretPublicSignature,
-                    senderPublicSignature: interactionsGroup.senderPublicSignature
+        let process = { (interactionsGroup: InteractionsGroupDTO) in
+            let encryptionDetails = EncryptionDetailsClass(
+                ephemeralPublicKey: interactionsGroup.ephemeralPublicKey,
+                encryptedSecret: interactionsGroup.encryptedSecret,
+                secretPublicSignature: interactionsGroup.secretPublicSignature,
+                senderPublicSignature: interactionsGroup.senderPublicSignature
+            )
+            
+            let messages: [SHDecryptedMessage]
+            do {
+                messages = try self.decryptMessages(
+                    interactionsGroup.messages,
+                    usingEncryptionDetails: encryptionDetails
                 )
-                
-                let messages: [SHDecryptedMessage]
-                do {
-                    messages = try self.decryptMessages(
-                        interactionsGroup.messages,
-                        usingEncryptionDetails: encryptionDetails
-                    )
-                } catch {
-                    log.error("failed to retrieve user information for \(anchor.rawValue, privacy: .public) \(anchorId, privacy: .public)")
-                    completionHandler(.failure(error))
-                    return
-                }
-                
-                let reactions: [SHReaction]
-                do {
-                    let usersController = SHUsersController(localUser: self.user)
-                    let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
-                    let usersDict: [UserIdentifier: any SHServerUser] = try usersController
-                        .getUsers(withIdentifiers: userIds)
-                    
-                    reactions = interactionsGroup.reactions.compactMap({
-                        reaction in
-                        guard let sender = usersDict[reaction.senderUserIdentifier!] else {
-                            return nil
-                        }
-                        
-                        return SHReaction(
-                            interactionId: reaction.interactionId!,
-                            sender: sender,
-                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
-                            inReplyToInteractionId: reaction.inReplyToInteractionId,
-                            reactionType: reaction.reactionType,
-                            addedAt: reaction.addedAt!.iso8601withFractionalSeconds!
-                        )
-                    })
-                } catch {
-                    log.error("failed to fetch reactions in \(anchor.rawValue) \(anchorId, privacy: .public)")
-                    completionHandler(.failure(error))
-                    return
-                }
-                
-                let result: SHInteractionsCollectionProtocol
-                switch anchor {
-                case .thread:
-                    result = SHConversationThreadInteractions(
-                        threadId: anchorId,
-                        messages: messages,
-                        reactions: reactions
-                    )
-                case .group:
-                    result = SHAssetsGroupInteractions(
-                        groupId: anchorId,
-                        messages: messages,
-                        reactions: reactions
-                    )
-                }
-                completionHandler(.success(result))
-                
-            case .failure(let error):
+            } catch {
+                log.error("failed to retrieve user information for \(anchor.rawValue, privacy: .public) \(anchorId, privacy: .public)")
                 completionHandler(.failure(error))
+                return
+            }
+            
+            let reactions: [SHReaction]
+            do {
+                let usersController = SHUsersController(localUser: self.user)
+                let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
+                let usersDict: [UserIdentifier: any SHServerUser] = try usersController
+                    .getUsers(withIdentifiers: userIds)
+                
+                reactions = interactionsGroup.reactions.compactMap({
+                    reaction in
+                    guard let sender = usersDict[reaction.senderUserIdentifier!] else {
+                        return nil
+                    }
+                    
+                    return SHReaction(
+                        interactionId: reaction.interactionId!,
+                        sender: sender,
+                        inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                        inReplyToInteractionId: reaction.inReplyToInteractionId,
+                        reactionType: reaction.reactionType,
+                        addedAt: reaction.addedAt!.iso8601withFractionalSeconds!
+                    )
+                })
+            } catch {
+                log.error("failed to fetch reactions senders in \(anchor.rawValue) \(anchorId, privacy: .public)")
+                completionHandler(.failure(error))
+                return
+            }
+            
+            let result: SHInteractionsCollectionProtocol
+            switch anchor {
+            case .thread:
+                result = SHConversationThreadInteractions(
+                    threadId: anchorId,
+                    messages: messages,
+                    reactions: reactions
+                )
+            case .group:
+                result = SHAssetsGroupInteractions(
+                    groupId: anchorId,
+                    messages: messages,
+                    reactions: reactions
+                )
+            }
+            
+            completionHandler(.success(result))
+        }
+        
+        let cacheAndProcess = { (localInteractionsGroup: InteractionsGroupDTO) in
+            if localInteractionsGroup.messages.count >= limit,
+               localInteractionsGroup.reactions.count >= limit {
+                process(localInteractionsGroup)
+            }
+            else {
+                log.debug("""
+[SHUserInteractionController] reached limit on local interactions for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit)). Fetching more from the remote server.
+""")
+                
+                var interactionsGroup = localInteractionsGroup
+                
+                let lastLocalMessageAt = localInteractionsGroup
+                    .messages
+                    .sorted(by: { a, b in
+                        (a.createdAt?.iso8601withFractionalSeconds ?? .distantPast)
+                            .compare(b.createdAt?.iso8601withFractionalSeconds ?? .distantPast)
+                        == .orderedDescending
+                    })
+                    .first?
+                    .createdAt?.iso8601withFractionalSeconds
+                
+                ///
+                /// If we couldn't get to `limit` by just pulling from local server,
+                /// check there aren't more from the remote server.
+                /// If so, save them locally after fetching them from the remote server
+                ///
+                
+                let dispatchGroup = DispatchGroup()
+                
+                dispatchGroup.enter()
+                
+                self.startCachingInteractions(
+                    anchor,
+                    anchorId: anchorId,
+                    underMessage: messageId,
+                    before: lastLocalMessageAt ?? before,
+                    limit: limit,
+                    localInteractionsGroup: localInteractionsGroup
+                ) { result in
+                    switch result {
+                    case .success((let missingMessages, let missingReactions)):
+                        if missingMessages.count + missingReactions.count > 0 {
+                            var messages = localInteractionsGroup.messages
+                            if messages.count < limit {
+                                for missing in missingMessages {
+                                    messages.append(missing)
+                                    if messages.count == limit {
+                                        break
+                                    }
+                                }
+                            }
+                            var reactions = localInteractionsGroup.reactions
+                            if reactions.count < limit {
+                                for missing in missingReactions {
+                                    reactions.append(missing)
+                                    if reactions.count == limit {
+                                        break
+                                    }
+                                }
+                            }
+                            
+                            log.debug("""
+[SHUserInteractionController] Found \(missingMessages.count) more messages and \(missingReactions.count) reactions on the remote server. Cached them.
+""")
+                            
+                            interactionsGroup = InteractionsGroupDTO(
+                                messages: messages,
+                                reactions: reactions,
+                                ephemeralPublicKey: localInteractionsGroup.ephemeralPublicKey,
+                                encryptedSecret: localInteractionsGroup.encryptedSecret,
+                                secretPublicSignature: localInteractionsGroup.secretPublicSignature,
+                                senderPublicSignature: localInteractionsGroup.senderPublicSignature
+                            )
+                        }
+                    case .failure:
+                        break
+                    }
+                    dispatchGroup.leave()
+                }
+                
+                dispatchGroup.notify(queue: .global()) {
+                    process(interactionsGroup)
+                }
             }
         }
         
@@ -435,17 +517,29 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 inThread: anchorId,
                 underMessage: messageId,
                 before: before,
-                limit: limit,
-                completionHandler: callback
-            )
+                limit: limit
+            ) { result in
+                switch result {
+                case .success(let localInteractionsGroup):
+                    cacheAndProcess(localInteractionsGroup)
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            }
         case .group:
             self.serverProxy.retrieveInteractions(
                 inGroup: anchorId,
                 underMessage: messageId,
                 before: before,
-                limit: limit,
-                completionHandler: callback
-            )
+                limit: limit
+            ) { result in
+                switch result {
+                case .success(let localInteractionsGroup):
+                    cacheAndProcess(localInteractionsGroup)
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            }
         }
     }
     
@@ -678,5 +772,105 @@ extension SHUserInteractionController {
         }
         
         return decryptedMessages
+    }
+}
+
+
+extension SHUserInteractionController {
+    
+    func startCachingInteractions(
+        _ anchor: SHInteractionAnchor,
+        anchorId: String,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        localInteractionsGroup: InteractionsGroupDTO,
+        completionHandler: @escaping (Result<([MessageOutputDTO], [ReactionOutputDTO]), Error>) -> Void
+    ) {
+        let process = { (remoteInteractionsGroup: InteractionsGroupDTO) in
+            
+            let localReactionIds = localInteractionsGroup.reactions.map({ $0.interactionId })
+            let localMessageIds = localInteractionsGroup.messages.map({ $0.interactionId })
+            let missingReactions = remoteInteractionsGroup.reactions.filter({
+                localReactionIds.contains($0.interactionId) == false
+            })
+            let missingMessages = remoteInteractionsGroup.messages.filter({
+                localMessageIds.contains($0.interactionId) == false
+            })
+            
+            switch anchor {
+            case .thread:
+                self.serverProxy.addLocalReactions(
+                    missingReactions,
+                    inThread: anchorId
+                ) { res in
+                    if case .failure(let failure) = res {
+                        log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                    }
+                }
+                
+                self.serverProxy.addLocalMessages(
+                    missingMessages,
+                    inThread: anchorId
+                ) { res in
+                    if case .failure(let failure) = res {
+                        log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                    }
+                }
+            case .group:
+                self.serverProxy.addLocalReactions(
+                    missingReactions,
+                    inGroup: anchorId
+                ) { res in
+                    if case .failure(let failure) = res {
+                        log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                    }
+                }
+                
+                self.serverProxy.addLocalMessages(
+                    missingMessages,
+                    inGroup: anchorId
+                ) { res in
+                    if case .failure(let failure) = res {
+                        log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                    }
+                }
+            }
+            
+            completionHandler(.success((missingMessages, missingReactions)))
+        }
+        
+        switch anchor {
+        case .group:
+            self.serverProxy.retrieveRemoteInteractions(
+                inGroup: anchorId,
+                underMessage: messageId,
+                before: before,
+                limit: limit
+            ) { result in
+                
+                switch result {
+                case .success(let remoteInteractionsGroup):
+                    process(remoteInteractionsGroup)
+                case .failure(let err):
+                    completionHandler(.failure(err))
+                }
+            }
+        case .thread:
+            self.serverProxy.retrieveRemoteInteractions(
+                inThread: anchorId,
+                underMessage: messageId,
+                before: before,
+                limit: limit
+            ) { result in
+                
+                switch result {
+                case .success(let remoteInteractionsGroup):
+                    process(remoteInteractionsGroup)
+                case .failure(let err):
+                    completionHandler(.failure(err))
+                }
+            }
+        }
     }
 }

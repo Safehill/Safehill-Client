@@ -59,6 +59,30 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     )
     
+    func addLocalMessages(
+        _ messages: [MessageInput],
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    )
+    
+    func addLocalMessages(
+        _ messages: [MessageInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    )
+    
+    func addLocalReactions(
+        _ reactions: [ReactionInput],
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    )
+    
+    func addLocalReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    )
+    
     func retrieveInteractions(
         inGroup groupId: String,
         underMessage messageId: String?,
@@ -68,6 +92,22 @@ public protocol SHServerProxyProtocol {
     )
     
     func retrieveInteractions(
+        inThread threadId: String,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveRemoteInteractions(
+        inGroup groupId: String,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveRemoteInteractions(
         inThread threadId: String,
         underMessage messageId: String?,
         before: Date?,
@@ -1188,6 +1228,30 @@ extension SHServerProxy {
         }
     }
     
+    public func addLocalReactions(
+        _ reactions: [ReactionInput],
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.localServer.addReactions(
+            reactions, 
+            inGroup: groupId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    public func addLocalReactions(
+        _ reactions: [ReactionInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+    ) {
+        self.localServer.addReactions(
+            reactions,
+            inThread: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
     public func addReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,
@@ -1200,8 +1264,10 @@ extension SHServerProxy {
                 /// Pass the output of the reaction creation on the server to the local server
                 /// The output (rather than the input) is required, as an interaction identifier needs to be stored
                 ///
-                self.localServer.addReactions(reactionsOutput,
-                                              inGroup: groupId) { localResult in
+                self.addLocalReactions(
+                    reactionsOutput,
+                    inGroup: groupId
+                ) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1225,8 +1291,10 @@ extension SHServerProxy {
                 /// Pass the output of the reaction creation on the server to the local server
                 /// The output (rather than the input) is required, as an interaction identifier needs to be stored
                 ///
-                self.localServer.addReactions(reactionsOutput,
-                                              inThread: threadId) { localResult in
+                self.addLocalReactions(
+                    reactionsOutput,
+                    inThread: threadId
+                ) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1278,6 +1346,30 @@ extension SHServerProxy {
         }
     }
     
+    public func addLocalMessages(
+        _ messages: [MessageInput],
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.localServer.addMessages(
+            messages,
+            inGroup: groupId,
+            completionHandler: completionHandler
+        )
+    }
+    
+    public func addLocalMessages(
+        _ messages: [MessageInput],
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
+    ) {
+        self.localServer.addMessages(
+            messages,
+            inThread: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
     public func addMessage(
         _ message: MessageInputDTO,
         inGroup groupId: String,
@@ -1291,7 +1383,7 @@ extension SHServerProxy {
                     return
                 }
                 completionHandler(.success(messageOutput))
-                self.localServer.addMessages([messageOutput], inGroup: groupId) { localResult in
+                self.addLocalMessages([messageOutput], inGroup: groupId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1315,7 +1407,7 @@ extension SHServerProxy {
                     return
                 }
                 completionHandler(.success(messageOutput))
-                self.localServer.addMessages([messageOutput], inThread: threadId) { localResult in
+                self.addLocalMessages([messageOutput], inThread: threadId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }

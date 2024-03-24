@@ -3,7 +3,7 @@ import Foundation
 extension SHSyncOperation {
     
     public func runOnceForThreads(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.syncThreadInteractions(qos: qos) { result in
+        self.syncLastThreadInteractions(qos: qos) { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
                 completionHandler(.failure(err))
@@ -17,7 +17,7 @@ extension SHSyncOperation {
     ///
     /// - Parameter descriptorsByGlobalIdentifier: the descriptors retrieved from server, from which to collect all unique groups
     ///
-    func syncThreadInteractions(
+    func syncLastThreadInteractions(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -122,7 +122,14 @@ extension SHSyncOperation {
                 
                 dispatchGroup.enter()
                 
-                if localThreads.contains(where: { $0.threadId == thread.threadId }) == false {
+                let correspondingLocalThread = localThreads
+                    .first(where: { $0.threadId == thread.threadId })
+                
+                if let correspondingLocalThread, correspondingLocalThread.lastUpdatedAt == thread.lastUpdatedAt {
+                    syncInteractionsInThread(thread) {
+                        dispatchGroup.leave()
+                    }
+                } else {
                     self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
                         switch createResult {
                         case .success:
@@ -133,10 +140,6 @@ extension SHSyncOperation {
                             self.log.error("error locally creating thread \(thread.threadId). \(err.localizedDescription)")
                             dispatchGroup.leave()
                         }
-                    }
-                } else {
-                    syncInteractionsInThread(thread) {
-                        dispatchGroup.leave()
                     }
                 }
             }
