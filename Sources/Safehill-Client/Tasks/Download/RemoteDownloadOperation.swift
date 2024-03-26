@@ -1175,8 +1175,8 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     public func runOnce(
-        for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-        filteringGroups groupIds: [String]? = nil,
+        for assetGlobalIdentifiers: [GlobalIdentifier]?,
+        filteringGroups groupIds: [String]?,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
@@ -1204,6 +1204,13 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 }
             }
         }
+    }
+    
+    public func runOnce(
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+    ) {
+        self.runOnce(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
     }
     
     public override func main() {
