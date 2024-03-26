@@ -105,7 +105,7 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         self.serverProxy.retrieveRemoteInteractions(
             inGroup: groupId,
-            filtering: nil,
+            ofType: nil,
             underMessage: nil,
             before: nil,
             limit: 50
@@ -130,7 +130,7 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         serverProxy.retrieveInteractions(
             inGroup: groupId,
-            filtering: nil,
+            ofType: nil,
             underMessage: nil,
             before: nil,
             limit: 50

@@ -1109,7 +1109,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1118,7 +1118,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .group,
             anchorId: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1128,7 +1128,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1137,7 +1137,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .thread,
             anchorId: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1148,7 +1148,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     private func retrieveInteractions(
         anchorType: SHInteractionAnchor,
         anchorId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,
@@ -1167,8 +1167,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["referencedInteractionId"] = refMessageId
         }
         
-        if let filtering {
-            parameters["type"] = filtering.rawValue
+        if let type {
+            parameters["type"] = type.rawValue
         }
         
         self.post("interactions/\(anchorType.rawValue)/\(anchorId)",

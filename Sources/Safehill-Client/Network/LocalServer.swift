@@ -1905,7 +1905,7 @@ struct LocalServer : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1914,7 +1914,7 @@ struct LocalServer : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .group,
             anchorId: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1924,7 +1924,7 @@ struct LocalServer : SHServerAPI {
     
     func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1933,7 +1933,7 @@ struct LocalServer : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .thread,
             anchorId: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -2016,7 +2016,7 @@ struct LocalServer : SHServerAPI {
     private func retrieveInteractions(
         anchorType: SHInteractionAnchor,
         anchorId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,
@@ -2155,7 +2155,7 @@ struct LocalServer : SHServerAPI {
             var reactions = [ReactionOutputDTO]()
             var messages = [MessageOutputDTO]()
             
-            if filtering == nil || filtering == .message {
+            if type == nil || type == .message {
                 dispatchGroup.enter()
                 retrieveMessages { result in
                     switch result {
@@ -2168,7 +2168,7 @@ struct LocalServer : SHServerAPI {
                 }
             }
                 
-            if filtering == nil || filtering == .reaction {
+            if type == nil || type == .reaction {
                 dispatchGroup.enter()
                 retrieveReactions { result in
                     switch result {

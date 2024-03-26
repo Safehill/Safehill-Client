@@ -305,7 +305,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     public func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType? = nil,
+        ofType type: InteractionType? = nil,
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
@@ -314,7 +314,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.retrieveInteractions(
             inAnchor: .group,
             anchorId: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit
@@ -330,7 +330,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     public func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType? = nil,
+        ofType type: InteractionType? = nil,
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
@@ -339,7 +339,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.retrieveInteractions(
             inAnchor: .thread,
             anchorId: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit
@@ -356,14 +356,14 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     func retrieveInteractions(
         inAnchor anchor: SHInteractionAnchor,
         anchorId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String? = nil,
         before: Date?,
         limit: Int,
         completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         log.debug("""
-[SHUserInteractionController] retrieving interactions (\(filtering?.rawValue ?? "messages+reactions")) for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
+[SHUserInteractionController] retrieving interactions (\(type?.rawValue ?? "messages+reactions")) for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
 """)
         
         let process = { (interactionsGroup: InteractionsGroupDTO) in
@@ -436,7 +436,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         let cacheAndProcess = { (localInteractionsGroup: InteractionsGroupDTO) in
             var skipFetchAndCache: Bool = true
             
-            switch filtering {
+            switch type {
             case .message:
                 skipFetchAndCache = localInteractionsGroup.messages.count >= limit
             case .reaction:
@@ -481,7 +481,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 self.startCachingInteractions(
                     anchor,
                     anchorId: anchorId,
-                    filtering: filtering,
+                    ofType: type,
                     underMessage: messageId,
                     before: lastLocalMessageAt ?? before,
                     limit: limit,
@@ -538,7 +538,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         case .thread:
             self.serverProxy.retrieveInteractions(
                 inThread: anchorId,
-                filtering: filtering,
+                ofType: type,
                 underMessage: messageId,
                 before: before,
                 limit: limit
@@ -553,7 +553,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         case .group:
             self.serverProxy.retrieveInteractions(
                 inGroup: anchorId,
-                filtering: filtering,
+                ofType: type,
                 underMessage: messageId,
                 before: before,
                 limit: limit
@@ -806,7 +806,7 @@ extension SHUserInteractionController {
     func startCachingInteractions(
         _ anchor: SHInteractionAnchor,
         anchorId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -878,7 +878,7 @@ extension SHUserInteractionController {
         case .group:
             self.serverProxy.retrieveRemoteInteractions(
                 inGroup: anchorId,
-                filtering: filtering,
+                ofType: type,
                 underMessage: messageId,
                 before: before,
                 limit: 100
@@ -894,7 +894,7 @@ extension SHUserInteractionController {
         case .thread:
             self.serverProxy.retrieveRemoteInteractions(
                 inThread: anchorId,
-                filtering: filtering,
+                ofType: type,
                 underMessage: messageId,
                 before: before,
                 limit: 100

@@ -318,7 +318,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,
@@ -334,7 +334,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,

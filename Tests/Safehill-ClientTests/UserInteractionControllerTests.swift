@@ -84,7 +84,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -92,7 +92,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     ) {
         self.localServer.retrieveInteractions(
             inGroup: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -102,7 +102,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -110,7 +110,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     ) {
         self.localServer.retrieveInteractions(
             inThread: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -273,7 +273,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func retrieveRemoteInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -281,7 +281,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     ) {
         self.localServer.retrieveInteractions(
             inGroup: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -291,7 +291,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func retrieveRemoteInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -299,7 +299,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     ) {
         self.localServer.retrieveInteractions(
             inThread: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -537,7 +537,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         wait(for: [expectation2], timeout: 5.0)
         
         let expectation3 = XCTestExpectation(description: "retrieve group interactions")
-        controller.retrieveInteractions(inGroup: groupId, filtering: nil, before: nil, limit: 10) {
+        controller.retrieveInteractions(inGroup: groupId, ofType: nil, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -704,7 +704,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         ///
         
         let expectation3 = XCTestExpectation(description: "retrieve thread interactions")
-        controller1.retrieveInteractions(inThread: threadId, filtering: nil, before: nil, limit: 10) {
+        controller1.retrieveInteractions(inThread: threadId, ofType: nil, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -772,7 +772,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             user: authenticatedUser2,
             serverProxy: serverProxy2
         )
-        controller2.retrieveInteractions(inThread: threadId, filtering: nil, before: nil, limit: 10) {
+        controller2.retrieveInteractions(inThread: threadId, ofType: nil, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -825,7 +825,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let expectation6 = XCTestExpectation(description: "retrieve interactions in thread from recipient1")
         
-        controller2.retrieveInteractions(inThread: threadId, filtering: nil, before: nil, limit: 10) {
+        controller2.retrieveInteractions(inThread: threadId, ofType: nil, before: nil, limit: 10) {
             result in
             switch result {
             case .failure(let err):
@@ -867,7 +867,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let expectation8 = XCTestExpectation(description: "retrieve interactions with offset")
         let expectation9 = XCTestExpectation(description: "retrieve interactions with limit and offset")
         
-        controller2.retrieveInteractions(inThread: threadId, filtering: nil, before: nil, limit: 1) {
+        controller2.retrieveInteractions(inThread: threadId, ofType: nil, before: nil, limit: 1) {
             result in
             switch result {
             case .failure(let err):
@@ -893,7 +893,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         controller2.retrieveInteractions(
             inThread: threadId,
-            filtering: nil,
+            ofType: nil,
             before: messageSentAt,
             limit: 2
         ) {
@@ -922,7 +922,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         controller2.retrieveInteractions(
             inThread: threadId,
-            filtering: nil,
+            ofType: nil,
             before: .distantPast,
             limit: 2
         ) {
@@ -950,7 +950,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         controller1.retrieveInteractions(
             inThread: threadId,
-            filtering: nil,
+            ofType: nil,
             before: nil,
             limit: 3
         ) {
@@ -996,7 +996,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         controller1.retrieveInteractions(
             inThread: threadId,
-            filtering: .message,
+            ofType: .message,
             before: nil,
             limit: 3
         ) {
@@ -1037,7 +1037,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         controller1.retrieveInteractions(
             inThread: threadId,
-            filtering: .reaction,
+            ofType: .reaction,
             before: nil,
             limit: 3
         ) {

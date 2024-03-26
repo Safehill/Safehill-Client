@@ -85,7 +85,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -94,7 +94,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -103,7 +103,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveRemoteInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -112,7 +112,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveRemoteInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1438,7 +1438,7 @@ extension SHServerProxy {
     
     public func retrieveInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1446,7 +1446,7 @@ extension SHServerProxy {
     ) {
         self.localServer.retrieveInteractions(
             inGroup: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1456,7 +1456,7 @@ extension SHServerProxy {
     
     public func retrieveInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1464,7 +1464,7 @@ extension SHServerProxy {
     ) {
         self.localServer.retrieveInteractions(
             inThread: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1474,7 +1474,7 @@ extension SHServerProxy {
     
     public func retrieveRemoteInteractions(
         inGroup groupId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1482,7 +1482,7 @@ extension SHServerProxy {
     ) {
         self.remoteServer.retrieveInteractions(
             inGroup: groupId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit
@@ -1498,7 +1498,7 @@ extension SHServerProxy {
     
     public func retrieveRemoteInteractions(
         inThread threadId: String,
-        filtering: InteractionType?,
+        ofType type: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1506,7 +1506,7 @@ extension SHServerProxy {
     ) {
         self.remoteServer.retrieveInteractions(
             inThread: threadId,
-            filtering: filtering,
+            ofType: type,
             underMessage: messageId,
             before: before,
             limit: limit
