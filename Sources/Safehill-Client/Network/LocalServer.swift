@@ -1905,6 +1905,7 @@ struct LocalServer : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1913,6 +1914,7 @@ struct LocalServer : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .group,
             anchorId: groupId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1922,6 +1924,7 @@ struct LocalServer : SHServerAPI {
     
     func retrieveInteractions(
         inThread threadId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1930,6 +1933,7 @@ struct LocalServer : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .thread,
             anchorId: threadId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -2012,6 +2016,7 @@ struct LocalServer : SHServerAPI {
     private func retrieveInteractions(
         anchorType: SHInteractionAnchor,
         anchorId: String,
+        filtering: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,
@@ -2027,49 +2032,68 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        ///
+        /// KEY FORMAT:
+        /// `{anchor_type}::{anchor_id}::{sender_id}::{ref_interaction_id}::{ref_asset_id}::{interaction_id}`
+        /// - `anchor_type`: either "thread' or "group", for threads and shares, respectively
+        /// - `anchor_id`: either the `threadId` or the `groupId`, to identify a thread or a share, respectively
+        /// - `sender_id`: the user public identifier, author of the interaction
+        /// - `ref_interaction_id`: a pointer to the interaction this interaction references (for replies to messages the origin message id)
+        /// - `ref_asset_id`: a pointer to the global asset identifer this interaction references
+        /// - `interaction_id`: the unique interaction identifier as provided by the server
+        ///
+        
+        var condition = KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::")
+        if let refMessageId {
+            condition = condition.and(
+                KBGenericCondition(.contains, value: "::\(refMessageId)::")
+                    .and(KBGenericCondition(.endsWith, value: "::\(refMessageId)", negated: true))
+            )
+        }
+        
+        let timeCondition: KBTimestampCondition?
+        if let before {
+            timeCondition = KBTimestampCondition(.before, value: before)
+        } else {
+            timeCondition = nil
+        }
+        
+        let dispatchGroup = DispatchGroup()
+        var error: Error? = nil
+        var encryptionDetails: RecipientEncryptionDetailsDTO? = nil
+        
+        dispatchGroup.enter()
         self.retrieveUserEncryptionDetails(anchorType: anchorType, anchorId: anchorId) {
             encryptionDetailsResult in
             switch encryptionDetailsResult {
             case .failure(let err):
-                completionHandler(.failure(err))
+                error = err
             case .success(let e2eeResult):
-                guard let encryptionDetails = e2eeResult else {
-                    switch anchorType {
-                    case .group:
-                        completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(anchorId)))
-                    case .thread:
-                        completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(anchorId)))
-                    }
-                    return
+                encryptionDetails = e2eeResult
+            }
+            dispatchGroup.leave()
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            guard error == nil else {
+                completionHandler(.failure(error!))
+                return
+            }
+            
+            guard let encryptionDetails else {
+                switch anchorType {
+                case .group:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(anchorId)))
+                case .thread:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(anchorId)))
                 }
-                
-                ///
-                /// KEY FORMAT:
-                /// `{anchor_type}::{anchor_id}::{sender_id}::{ref_interaction_id}::{ref_asset_id}::{interaction_id}`
-                /// - `anchor_type`: either "thread' or "group", for threads and shares, respectively
-                /// - `anchor_id`: either the `threadId` or the `groupId`, to identify a thread or a share, respectively
-                /// - `sender_id`: the user public identifier, author of the interaction
-                /// - `ref_interaction_id`: a pointer to the interaction this interaction references (for replies to messages the origin message id)
-                /// - `ref_asset_id`: a pointer to the global asset identifer this interaction references
-                /// - `interaction_id`: the unique interaction identifier as provided by the server
-                ///
-                
-                var condition = KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::")
-                if let refMessageId {
-                    condition = condition.and(
-                        KBGenericCondition(.contains, value: "::\(refMessageId)::")
-                            .and(KBGenericCondition(.endsWith, value: "::\(refMessageId)", negated: true))
-                    )
-                }
+                return
+            }
+            
+            let retrieveReactions = {
+                (callback: @escaping (Result<[ReactionOutputDTO], Error>) -> Void) in
                 
                 log.debug("retrieving reactions (before=\(before?.iso8601withFractionalSeconds ?? "nil"), limit=\(limit)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
-                
-                let timeCondition: KBTimestampCondition?
-                if let before {
-                    timeCondition = KBTimestampCondition(.before, value: before)
-                } else {
-                    timeCondition = nil
-                }
                 
                 reactionStore.keyValuesAndTimestamps(
                     forKeysMatching: condition,
@@ -2085,49 +2109,93 @@ struct LocalServer : SHServerAPI {
                                 reactions.append(output)
                             }
                         })
+                        callback(.success(reactions))
                         
-                        log.debug("retrieving messages (before=\(before?.iso8601withFractionalSeconds ?? "nil"), limit=\(limit)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
-                        
-                        messagesQueue.keyValuesAndTimestamps(
-                            forKeysMatching: condition,
-                            timestampMatching: timeCondition,
-                            paginate: KBPaginationOptions(limit: limit, offset: 0),
-                            sort: .descending
-                        ) { messagesResult in
-                            switch messagesResult {
-                            case .success(let messageKvts):
-                                var messages = [MessageOutputDTO]()
-                                
-                                log.debug("found \(messageKvts.count) messages for \(anchorType.rawValue) with id \(anchorId)")
-                                
-                                for messageKvt in messageKvts {
-                                    do {
-                                        messages.append(
-                                            try LocalServer.toMessageOutput(messageKvt)
-                                        )
-                                    } catch {
-                                        log.error("failed to retrieve message with key \(messageKvt.key)")
-                                        continue
-                                    }
-                                }
-                                
-                                let result = InteractionsGroupDTO(
-                                    messages: messages,
-                                    reactions: reactions,
-                                    ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
-                                    encryptedSecret: encryptionDetails.encryptedSecret,
-                                    secretPublicSignature: encryptionDetails.secretPublicSignature,
-                                    senderPublicSignature: encryptionDetails.senderPublicSignature
-                                )
-                                completionHandler(.success(result))
-                            case .failure(let err):
-                                completionHandler(.failure(err))
-                            }
-                        }
                     case .failure(let err):
-                        completionHandler(.failure(err))
+                        callback(.failure(err))
                     }
                 }
+            }
+            
+            let retrieveMessages = { 
+                (callback: @escaping (Result<[MessageOutputDTO], Error>) -> Void) in
+                
+                log.debug("retrieving messages (before=\(before?.iso8601withFractionalSeconds ?? "nil"), limit=\(limit)) in descending order for \(anchorType.rawValue) with id \(anchorId)")
+                
+                messagesQueue.keyValuesAndTimestamps(
+                    forKeysMatching: condition,
+                    timestampMatching: timeCondition,
+                    paginate: KBPaginationOptions(limit: limit, offset: 0),
+                    sort: .descending
+                ) { messagesResult in
+                    switch messagesResult {
+                    case .success(let messageKvts):
+                        var messages = [MessageOutputDTO]()
+                        
+                        log.debug("found \(messageKvts.count) messages for \(anchorType.rawValue) with id \(anchorId)")
+                        
+                        for messageKvt in messageKvts {
+                            do {
+                                messages.append(
+                                    try LocalServer.toMessageOutput(messageKvt)
+                                )
+                            } catch {
+                                log.error("failed to retrieve message with key \(messageKvt.key)")
+                                continue
+                            }
+                        }
+                        callback(.success(messages))
+                        
+                    case .failure(let err):
+                        callback(.failure(err))
+                    }
+                }
+            }
+            
+            var reactions = [ReactionOutputDTO]()
+            var messages = [MessageOutputDTO]()
+            
+            if filtering == nil || filtering == .message {
+                dispatchGroup.enter()
+                retrieveMessages { result in
+                    switch result {
+                    case .success(let m):
+                        messages = m
+                    case .failure(let err):
+                        error = err
+                    }
+                    dispatchGroup.leave()
+                }
+            }
+                
+            if filtering == nil || filtering == .reaction {
+                dispatchGroup.enter()
+                retrieveReactions { result in
+                    switch result {
+                    case .success(let r):
+                        reactions = r
+                    case .failure(let err):
+                        error = err
+                    }
+                    dispatchGroup.leave()
+                }
+            }
+                
+            dispatchGroup.notify(queue: .global()) {
+                guard error == nil else {
+                    completionHandler(.failure(error!))
+                    return
+                }
+                
+                let result = InteractionsGroupDTO(
+                    messages: messages,
+                    reactions: reactions,
+                    ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
+                    encryptedSecret: encryptionDetails.encryptedSecret,
+                    secretPublicSignature: encryptionDetails.secretPublicSignature,
+                    senderPublicSignature: encryptionDetails.senderPublicSignature
+                )
+                completionHandler(.success(result))
             }
         }
     }
@@ -2189,26 +2257,6 @@ struct LocalServer : SHServerAPI {
                 }
             }
         }
-    }
-    
-    func retrieveMessages(
-        inGroup groupId: String,
-        underMessage underMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func retrieveMessages(
-        inThread threadId: String,
-        underMessage underMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func addMessages(

@@ -171,6 +171,7 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         self.serverProxy.retrieveRemoteInteractions(
             inThread: threadId,
+            filtering: nil,
             underMessage: nil,
             before: nil,
             limit: 20
@@ -195,6 +196,7 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         serverProxy.retrieveInteractions(
             inThread: threadId,
+            filtering: nil,
             underMessage: nil,
             before: nil,
             limit: 20

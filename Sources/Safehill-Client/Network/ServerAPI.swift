@@ -311,12 +311,14 @@ public protocol SHServerAPI {
     /// Retrieves all the messages and reactions for a group id. Results are paginated and returned in reverse cronological order.
     /// - Parameters:
     ///   - groupId: the group identifier
+    ///   - filtering: messages-only, or reactions-only, or both if nil
     ///   - refMessageId: if a nested thread, the message it's nested under
     ///   - before: (optional query modifier) retrieve only messages with creation date lower than this date. Defaults to NOW
     ///   - limit: limits the number of results returned
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,
@@ -332,37 +334,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func retrieveInteractions(
         inThread threadId: String,
-        underMessage refMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    /// Retrieves all the messages for a group id.
-    ///
-    /// - Parameters:
-    ///   - groupId: the group identifier
-    ///   - refMessageId: if a nested thread, the message it's nested under
-    ///   - before: (optional query modifier) retrieve only messages with creation date lower than this date. Defaults to NOW
-    ///   - limit: limits the number of results returned
-    ///   - completionHandler: the callback method
-    func retrieveMessages(
-        inGroup groupId: String,
-        underMessage refMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    /// Retrieves all the messages for in a thread.
-    ///
-    /// - Parameters:
-    ///   - groupId: the group identifier
-    ///   - refMessageId: if a nested thread, the message it's nested under
-    ///   - afterInteractionId: the last interaction known
-    ///   - completionHandler: the callback method
-    func retrieveMessages(
-        inThread threadId: String,
+        filtering: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,

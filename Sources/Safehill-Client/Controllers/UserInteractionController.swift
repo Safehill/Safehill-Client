@@ -4,6 +4,10 @@ import CryptoKit
 
 public typealias InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]], messages: Int)
 
+public enum InteractionType: String {
+    case message = "message", reaction = "reaction"
+}
+
 
 public struct SHUserInteractionController {
     
@@ -301,6 +305,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     public func retrieveInteractions(
         inGroup groupId: String,
+        filtering: InteractionType? = nil,
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
@@ -309,6 +314,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.retrieveInteractions(
             inAnchor: .group,
             anchorId: groupId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit
@@ -324,6 +330,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     public func retrieveInteractions(
         inThread threadId: String,
+        filtering: InteractionType? = nil,
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
@@ -332,6 +339,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.retrieveInteractions(
             inAnchor: .thread,
             anchorId: threadId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit
@@ -348,13 +356,14 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     func retrieveInteractions(
         inAnchor anchor: SHInteractionAnchor,
         anchorId: String,
+        filtering: InteractionType?,
         underMessage messageId: String? = nil,
         before: Date?,
         limit: Int,
         completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         log.debug("""
-[SHUserInteractionController] retriving interactions for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
+[SHUserInteractionController] retrieving interactions (\(filtering?.rawValue ?? "messages+reactions")) for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
 """)
         
         let process = { (interactionsGroup: InteractionsGroupDTO) in
@@ -425,8 +434,21 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         }
         
         let cacheAndProcess = { (localInteractionsGroup: InteractionsGroupDTO) in
-            if localInteractionsGroup.messages.count >= limit,
-               localInteractionsGroup.reactions.count >= limit {
+            var skipFetchAndCache: Bool = true
+            
+            switch filtering {
+            case .message:
+                skipFetchAndCache = localInteractionsGroup.messages.count >= limit
+            case .reaction:
+                skipFetchAndCache = localInteractionsGroup.reactions.count >= limit
+            case .none:
+                skipFetchAndCache = (
+                    localInteractionsGroup.reactions.count >= limit
+                    && localInteractionsGroup.messages.count >= limit
+                )
+            }
+            
+            if skipFetchAndCache {
                 process(localInteractionsGroup)
             }
             else {
@@ -459,6 +481,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 self.startCachingInteractions(
                     anchor,
                     anchorId: anchorId,
+                    filtering: filtering,
                     underMessage: messageId,
                     before: lastLocalMessageAt ?? before,
                     limit: limit,
@@ -515,6 +538,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         case .thread:
             self.serverProxy.retrieveInteractions(
                 inThread: anchorId,
+                filtering: filtering,
                 underMessage: messageId,
                 before: before,
                 limit: limit
@@ -529,6 +553,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         case .group:
             self.serverProxy.retrieveInteractions(
                 inGroup: anchorId,
+                filtering: filtering,
                 underMessage: messageId,
                 before: before,
                 limit: limit
@@ -781,6 +806,7 @@ extension SHUserInteractionController {
     func startCachingInteractions(
         _ anchor: SHInteractionAnchor,
         anchorId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -800,39 +826,47 @@ extension SHUserInteractionController {
             
             switch anchor {
             case .thread:
-                self.serverProxy.addLocalReactions(
-                    missingReactions,
-                    inThread: anchorId
-                ) { res in
-                    if case .failure(let failure) = res {
-                        log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                if missingReactions.isEmpty == false {
+                    self.serverProxy.addLocalReactions(
+                        missingReactions,
+                        inThread: anchorId
+                    ) { res in
+                        if case .failure(let failure) = res {
+                            log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                        }
                     }
                 }
                 
-                self.serverProxy.addLocalMessages(
-                    missingMessages,
-                    inThread: anchorId
-                ) { res in
-                    if case .failure(let failure) = res {
-                        log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                if missingMessages.isEmpty == false {
+                    self.serverProxy.addLocalMessages(
+                        missingMessages,
+                        inThread: anchorId
+                    ) { res in
+                        if case .failure(let failure) = res {
+                            log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                        }
                     }
                 }
             case .group:
-                self.serverProxy.addLocalReactions(
-                    missingReactions,
-                    inGroup: anchorId
-                ) { res in
-                    if case .failure(let failure) = res {
-                        log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                if missingReactions.isEmpty == false {
+                    self.serverProxy.addLocalReactions(
+                        missingReactions,
+                        inGroup: anchorId
+                    ) { res in
+                        if case .failure(let failure) = res {
+                            log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                        }
                     }
                 }
                 
-                self.serverProxy.addLocalMessages(
-                    missingMessages,
-                    inGroup: anchorId
-                ) { res in
-                    if case .failure(let failure) = res {
-                        log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                if missingMessages.isEmpty == false {
+                    self.serverProxy.addLocalMessages(
+                        missingMessages,
+                        inGroup: anchorId
+                    ) { res in
+                        if case .failure(let failure) = res {
+                            log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                        }
                     }
                 }
             }
@@ -844,9 +878,10 @@ extension SHUserInteractionController {
         case .group:
             self.serverProxy.retrieveRemoteInteractions(
                 inGroup: anchorId,
+                filtering: filtering,
                 underMessage: messageId,
                 before: before,
-                limit: limit
+                limit: 100
             ) { result in
                 
                 switch result {
@@ -859,9 +894,10 @@ extension SHUserInteractionController {
         case .thread:
             self.serverProxy.retrieveRemoteInteractions(
                 inThread: anchorId,
+                filtering: filtering,
                 underMessage: messageId,
                 before: before,
-                limit: limit
+                limit: 100
             ) { result in
                 
                 switch result {

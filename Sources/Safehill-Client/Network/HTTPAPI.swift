@@ -1109,6 +1109,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1117,6 +1118,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .group,
             anchorId: groupId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1126,6 +1128,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func retrieveInteractions(
         inThread threadId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1134,6 +1137,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.retrieveInteractions(
             anchorType: .thread,
             anchorId: threadId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1144,72 +1148,15 @@ struct SHServerHTTPAPI : SHServerAPI {
     private func retrieveInteractions(
         anchorType: SHInteractionAnchor,
         anchorId: String,
+        filtering: InteractionType?,
         underMessage refMessageId: String?,
         before: Date?,
         limit: Int,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     ) {
-        // TODO: Implement BEFORE condition
-        
         var parameters = [
             "per": limit,
             "page": 1
-        ] as [String: Any]
-        
-        if let refMessageId {
-            parameters["referencedInteractionId"] = refMessageId
-        }
-        
-        self.post("interactions/\(anchorType.rawValue)/\(anchorId)", 
-                  parameters: parameters,
-                  requiresAuthentication: true,
-                  completionHandler: completionHandler)
-    }
-    
-    func retrieveMessages(
-        inGroup groupId: String,
-        underMessage underMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.retrieveMessages(
-            anchorType: .group,
-            anchorId: groupId,
-            underMessage: underMessageId,
-            before: before,
-            limit: limit,
-            completionHandler: completionHandler
-        )
-    }
-    
-    func retrieveMessages(
-        inThread threadId: String,
-        underMessage underMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.retrieveMessages(
-            anchorType: .thread,
-            anchorId: threadId,
-            underMessage: underMessageId,
-            before: before,
-            limit: limit,
-            completionHandler: completionHandler
-        )
-    }
-    
-    private func retrieveMessages(
-        anchorType: SHInteractionAnchor,
-        anchorId: String,
-        underMessage refMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        var parameters = [
-            "limit": limit
         ] as [String: Any]
         
         if let before {
@@ -1220,7 +1167,11 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["referencedInteractionId"] = refMessageId
         }
         
-        self.post("interactions/\(anchorType.rawValue)/\(anchorId)/messages",
+        if let filtering {
+            parameters["type"] = filtering.rawValue
+        }
+        
+        self.post("interactions/\(anchorType.rawValue)/\(anchorId)",
                   parameters: parameters,
                   requiresAuthentication: true,
                   completionHandler: completionHandler)

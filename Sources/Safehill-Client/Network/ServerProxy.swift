@@ -85,6 +85,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -93,6 +94,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveInteractions(
         inThread threadId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -101,6 +103,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveRemoteInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -109,6 +112,7 @@ public protocol SHServerProxyProtocol {
     
     func retrieveRemoteInteractions(
         inThread threadId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1434,6 +1438,7 @@ extension SHServerProxy {
     
     public func retrieveInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1441,6 +1446,7 @@ extension SHServerProxy {
     ) {
         self.localServer.retrieveInteractions(
             inGroup: groupId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1450,6 +1456,7 @@ extension SHServerProxy {
     
     public func retrieveInteractions(
         inThread threadId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1457,6 +1464,7 @@ extension SHServerProxy {
     ) {
         self.localServer.retrieveInteractions(
             inThread: threadId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit,
@@ -1466,6 +1474,7 @@ extension SHServerProxy {
     
     public func retrieveRemoteInteractions(
         inGroup groupId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1473,29 +1482,8 @@ extension SHServerProxy {
     ) {
         self.remoteServer.retrieveInteractions(
             inGroup: groupId,
+            filtering: filtering,
             underMessage: messageId,
-            before: before,
-            limit: limit
-        ) { remoteResult in
-            switch remoteResult {
-            case .success(let remoteInteractions):
-                completionHandler(.success(remoteInteractions))
-            case .failure(let failure):
-                completionHandler(.failure(failure))
-            }
-        }
-    }
-    
-    public func retrieveRemoteMessages(
-        inGroup groupId: String,
-        underMessage underMessageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.remoteServer.retrieveMessages(
-            inGroup: groupId,
-            underMessage: underMessageId,
             before: before,
             limit: limit
         ) { remoteResult in
@@ -1510,6 +1498,7 @@ extension SHServerProxy {
     
     public func retrieveRemoteInteractions(
         inThread threadId: String,
+        filtering: InteractionType?,
         underMessage messageId: String?,
         before: Date?,
         limit: Int,
@@ -1517,28 +1506,7 @@ extension SHServerProxy {
     ) {
         self.remoteServer.retrieveInteractions(
             inThread: threadId,
-            underMessage: messageId,
-            before: before,
-            limit: limit
-        ) { remoteResult in
-            switch remoteResult {
-            case .success(let remoteInteractions):
-                completionHandler(.success(remoteInteractions))
-            case .failure(let failure):
-                completionHandler(.failure(failure))
-            }
-        }
-    }
-    
-    public func retrieveRemoteMessages(
-        inThread threadId: String,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.remoteServer.retrieveMessages(
-            inThread: threadId,
+            filtering: filtering,
             underMessage: messageId,
             before: before,
             limit: limit

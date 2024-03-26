@@ -105,9 +105,10 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         self.serverProxy.retrieveRemoteInteractions(
             inGroup: groupId,
+            filtering: nil,
             underMessage: nil,
             before: nil,
-            limit: 10000
+            limit: 50
         ) { result in
             switch result {
             case .failure(let err):
@@ -129,9 +130,10 @@ extension SHSyncOperation {
         dispatchGroup.enter()
         serverProxy.retrieveInteractions(
             inGroup: groupId,
+            filtering: nil,
             underMessage: nil,
             before: nil,
-            limit: 10000
+            limit: 50
         ) { localResult in
             switch localResult {
             case .failure(let err):
