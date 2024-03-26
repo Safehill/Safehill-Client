@@ -577,4 +577,29 @@ public struct SHKGQuery {
         // TODO: Implement negated triple conditions
         return []
     }
+    
+    public static func assetGlobalIdentifiers(
+        correspondingTo localIdentifiers: [LocalIdentifier]
+    ) throws -> [GlobalIdentifier] {
+        var globalIdentifiers = [GlobalIdentifier]()
+        
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            var condition = KBTripleCondition(value: false)
+            for localIdentifier in localIdentifiers {
+                condition = condition.or(KBTripleCondition(
+                    subject: nil,
+                    predicate: SHKGPredicate.localAssetIdEquivalent.rawValue,
+                    object: localIdentifier
+                ))
+            }
+            
+            globalIdentifiers = try graph.triples(matching: condition).map({ $0.subject })
+        }
+        
+        return globalIdentifiers
+    }
 }
