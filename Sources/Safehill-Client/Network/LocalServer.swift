@@ -600,9 +600,10 @@ struct LocalServer : SHServerAPI {
                                     log.error("failed to retrieve sharing information for asset \(globalIdentifier). Invalid format")
                                 }
                                 
-                                if let groupId = value["groupId"], let groupCreationDate = value["groupCreationDate"] {
+                                if let groupId = value["groupId"] {
+                                    let groupCreationDate = value["groupCreationDate"]
                                     if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
-                                        groupInfoById[groupId] = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate.iso8601withFractionalSeconds)
+                                        groupInfoById[groupId] = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate?.iso8601withFractionalSeconds)
                                     }
                                 }
                             }
@@ -830,11 +831,11 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId specified in descriptor for asset to create for sender user: userId=\(descriptor.sharingInfo.sharedByUserIdentifier)")))
                 return
             }
-            guard let senderGroupIdInfo = descriptor.sharingInfo.groupInfoById[senderUploadGroupId],
-                  let senderGroupCreatedAt = senderGroupIdInfo.createdAt
-            else {
-                completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId info or creation date set for sender group id \(senderUploadGroupId)")))
-                return
+            let senderGroupIdInfo = descriptor.sharingInfo.groupInfoById[senderUploadGroupId]
+            let senderGroupCreatedAt = senderGroupIdInfo?.createdAt
+            
+            if senderGroupCreatedAt == nil {
+                log.critical("No groupId info or creation date set for sender group id \(senderUploadGroupId)")
             }
             
             for encryptedVersion in asset.encryptedVersions.values {
@@ -891,12 +892,12 @@ struct LocalServer : SHServerAPI {
                                ].joined(separator: "::")
                 )
                 
-                let sharedVersionDetails: [String: String] = [
+                let sharedVersionDetails: [String: String?] = [
                     "senderEncryptedSecret": encryptedVersion.encryptedSecret.base64EncodedString(),
                     "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
                     "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
                     "groupId": senderUploadGroupId,
-                    "groupCreationDate": senderGroupCreatedAt.iso8601withFractionalSeconds
+                    "groupCreationDate": senderGroupCreatedAt?.iso8601withFractionalSeconds
                 ]
                 writeBatch.set(
                     value: sharedVersionDetails,
@@ -912,17 +913,17 @@ struct LocalServer : SHServerAPI {
                         continue
                     }
                     
-                    guard let recipientGroupInfo = descriptor.sharingInfo.groupInfoById[recipientGroupId],
-                          let recipientShareDate = recipientGroupInfo.createdAt
-                    else {
-                        completionHandler(.failure(SHAssetStoreError.invalidRequest("No groupId info or creation date set for recipient \(recipientUserId) group id \(recipientGroupId)")))
-                        return
+                    let recipientGroupInfo = descriptor.sharingInfo.groupInfoById[recipientGroupId]
+                    let recipientShareDate = recipientGroupInfo?.createdAt
+                    
+                    if recipientShareDate == nil {
+                        log.critical("No groupId info or creation date set for recipient \(recipientUserId) group id \(recipientGroupId)")
                     }
                     
                     writeBatch.set(
                         value: [
                             "groupId": recipientGroupId,
-                            "groupCreationDate": recipientShareDate.iso8601withFractionalSeconds
+                            "groupCreationDate": recipientShareDate?.iso8601withFractionalSeconds
                         ],
                         for: [
                             "receiver",
