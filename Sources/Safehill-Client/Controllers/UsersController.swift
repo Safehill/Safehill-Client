@@ -9,7 +9,7 @@ internal class ServerUserCache {
     static var shared = ServerUserCache()
     
     private var cache = NSCache<NSString, SHRemoteUserClass>()
-    private var evictors = [String: Timer]()
+//    private var evictors = [String: Timer]()
     
     private init() {}
     
@@ -30,23 +30,23 @@ internal class ServerUserCache {
             for user in users {
                 let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
                 self.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
-                self.evictors[user.identifier]?.invalidate()
-                self.evictors.removeValue(forKey: user.identifier)
+//                self.evictors[user.identifier]?.invalidate()
+//                self.evictors.removeValue(forKey: user.identifier)
             }
             
-            DispatchQueue.main.async {
-                for (i, user) in users.enumerated() {
-                    // Cache retention policy: TTL = 2 minutes
-                    self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
-                                                                          repeats: false,
-                                                                          block: { (timer) in
-                        self.writeQueue.sync(flags: .barrier) {
-                            self.cache.removeObject(forKey: NSString(string: user.identifier))
-                            timer.invalidate()
-                        }
-                    })
-                }
-            }
+//            DispatchQueue.main.async {
+//                for (i, user) in users.enumerated() {
+//                    // Cache retention policy: TTL = 2 minutes
+//                    self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
+//                                                                          repeats: false,
+//                                                                          block: { (timer) in
+//                        self.writeQueue.sync(flags: .barrier) {
+//                            self.cache.removeObject(forKey: NSString(string: user.identifier))
+//                            timer.invalidate()
+//                        }
+//                    })
+//                }
+//            }
         }
     }
     
@@ -54,7 +54,7 @@ internal class ServerUserCache {
         writeQueue.sync(flags: .barrier) {
             for userIdentifier in userIdentifiers {
                 self.cache.removeObject(forKey: NSString(string: userIdentifier))
-                self.evictors[userIdentifier]?.invalidate()
+//                self.evictors[userIdentifier]?.invalidate()
             }
         }
     }
