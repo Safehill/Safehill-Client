@@ -761,6 +761,18 @@ extension SHUserInteractionController {
     
     public func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
+        usingEncryptionDetails encryptionDetails: EncryptionDetailsClass
+    ) async throws -> [SHDecryptedMessage] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.decryptMessages(encryptedMessages, usingEncryptionDetails: encryptionDetails) {
+                result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+    
+    public func decryptMessages(
+        _ encryptedMessages: [MessageOutputDTO],
         usingEncryptionDetails encryptionDetails: EncryptionDetailsClass,
         completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
     ) {
