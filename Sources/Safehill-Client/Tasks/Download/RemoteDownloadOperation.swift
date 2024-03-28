@@ -185,9 +185,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     internal func getUsers(
-        withIdentifiers userIdentifiers: [UserIdentifier]
-    ) throws -> [UserIdentifier: any SHServerUser] {
-        try SHUsersController(localUser: self.user).getUsers(withIdentifiers: userIdentifiers)
+        withIdentifiers userIdentifiers: [UserIdentifier],
+        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
+    ) {
+        SHUsersController(localUser: self.user).getUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
     }
     
     ///
@@ -249,76 +250,75 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             /// Fetch from server users information (`SHServerUser` objects)
             /// for all user identifiers found in all descriptors shared by OTHER known users
             ///
-            var usersDict = [UserIdentifier: any SHServerUser]()
             var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
             userIdentifiers.formUnion(filteredDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier })
             
-            do {
-                usersDict = try self.getUsers(withIdentifiers: Array(userIdentifiers))
-            } catch {
-                self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
-                completionHandler(.failure(error))
-                return
-            }
-            
-            ///
-            /// Filter out the descriptor that reference any user that could not be retrieved
-            ///
-            let filteredDescriptorsFromRetrievableUsers = filteredDescriptors.filter { desc in
-                if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
-                    return false
-                }
-                for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                    if usersDict[sharedWithUserId] == nil {
-                        return false
+            self.getUsers(withIdentifiers: Array(userIdentifiers)) { result in
+                switch result {
+                case .failure(let error):
+                    self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                case .success(let usersDict):
+                    ///
+                    /// Filter out the descriptor that reference any user that could not be retrieved
+                    ///
+                    let filteredDescriptorsFromRetrievableUsers = filteredDescriptors.filter { desc in
+                        if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
+                            return false
+                        }
+                        for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                            if usersDict[sharedWithUserId] == nil {
+                                return false
+                            }
+                        }
+                        return true
                     }
+                    
+                    /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
+                    /// filter out the ones whose sender is unknown.
+                    /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
+                    senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
+                    let knownUsers: [UserIdentifier: Bool]
+                    do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+                    catch {
+                        self.log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
+                        completionHandler(.failure(error))
+                        return
+                    }
+                    
+                    let descriptorsFromKnownUsers = filteredDescriptorsFromRetrievableUsers.filter {
+                        knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
+                    }
+                    
+                    ///
+                    /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by other known users**.
+                    /// The ones shared by THIS user will be restored through the restoration delegate.
+                    ///
+                    let userDictsImmutable = usersDict
+                    let downloaderDelegates = self.downloaderDelegates
+                    self.delegatesQueue.async {
+                        downloaderDelegates.forEach({
+                            $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
+                                                          referencing: userDictsImmutable)
+                        })
+                    }
+                    
+                    var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
+                    for descriptor in filteredDescriptorsFromRetrievableUsers {
+                        descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
+                        ///
+                        /// Limit based on the task configuration
+                        ///
+                        if let limit = self.limit, descriptorsByGlobalIdentifier.count > limit {
+                            break
+                        }
+                    }
+                    completionHandler(.success((
+                        fromRetrievableUsers: descriptorsByGlobalIdentifier,
+                        fromKnownUsers: descriptorsFromKnownUsers.map({ $0.globalIdentifier })
+                    )))
                 }
-                return true
             }
-            
-            /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
-            /// filter out the ones whose sender is unknown.
-            /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-            senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
-            let knownUsers: [UserIdentifier: Bool]
-            do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
-            catch {
-                log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
-                completionHandler(.failure(error))
-                return
-            }
-            
-            let descriptorsFromKnownUsers = filteredDescriptorsFromRetrievableUsers.filter {
-                knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
-            }
-            
-            ///
-            /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by other known users**.
-            /// The ones shared by THIS user will be restored through the restoration delegate.
-            ///
-            let userDictsImmutable = usersDict
-            let downloaderDelegates = self.downloaderDelegates
-            self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                                  referencing: userDictsImmutable)
-                })
-            }
-            
-            var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-            for descriptor in filteredDescriptorsFromRetrievableUsers {
-                descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
-                ///
-                /// Limit based on the task configuration
-                ///
-                if let limit = self.limit, descriptorsByGlobalIdentifier.count > limit {
-                    break
-                }
-            }
-            completionHandler(.success((
-                fromRetrievableUsers: descriptorsByGlobalIdentifier,
-                fromKnownUsers: descriptorsFromKnownUsers.map({ $0.globalIdentifier })
-            )))
         }
     }
     
@@ -382,6 +382,65 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     ///
+    /// For downloads waiting explicit authorization:
+    /// - descriptors are added to the unauthorized download queue
+    /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
+    /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
+    ///
+    /// When the authorization comes (via `SHAssetDownloadController::authorizeDownloads(for:completionHandler:)`):
+    /// - the downloads will move from the unauthorized to the authorized queue
+    /// - the delegate method `handleAssetDescriptorResults(for:user:)` is called
+    ///
+    private func waitForAuthorization(
+        _ unauthorizedDownloadDescriptors: [any SHAssetDescriptor],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard unauthorizedDownloadDescriptors.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
+        let downloadsManager = SHAssetsDownloadManager(user: self.user)
+        downloadsManager.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
+            switch result {
+            case .failure(let error):
+                if case SHBackgroundOperationError.alreadyProcessed = error {
+                    // TODO: When running on a cron, avoid notifying delegates about authorizations over and over
+                    break
+                } else {
+                    self.log.critical("[\(type(of: self))] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
+                }
+            default:
+                break
+            }
+            
+            var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
+            
+            SHUsersController(localUser: self.user).getUsers(
+                withIdentifiers: Array(userIdentifiers)
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                case .success(let usersDict):
+                    let downloaderDelegates = self.downloaderDelegates
+                    self.delegatesQueue.async {
+                        downloaderDelegates.forEach({
+                            $0.didReceiveAuthorizationRequest(
+                                for: unauthorizedDownloadDescriptors,
+                                referencing: usersDict
+                            )
+                        })
+                    }
+                    completionHandler(.success(()))
+                }
+            }
+        }
+    }
+    
+    ///
     /// Request authorization for the ones that need authorization, and return the assets that are authorized to start downloading.
     /// A download needs explicit authorization from the user if the sender has never shared an asset with this user before.
     /// Once the link is established, all other downloads won't need authorization.
@@ -437,68 +496,19 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         
         self.log.info("[\(type(of: self))] of \(notEnqueuedAsUnauthorized.count) need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count)")
         
-        let downloadsManager = SHAssetsDownloadManager(user: self.user)
-        
-        if unauthorizedDownloadDescriptors.count > 0 {
-            ///
-            /// For downloads waiting explicit authorization:
-            /// - descriptors are added to the unauthorized download queue
-            /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
-            /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
-            ///
-            /// When the authorization comes (via `SHAssetDownloadController::authorizeDownloads(for:completionHandler:)`):
-            /// - the downloads will move from the unauthorized to the authorized queue
-            /// - the delegate method `handleAssetDescriptorResults(for:user:)` is called
-            ///
-            downloadsManager.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
-                switch result {
-                case .failure(let error):
-                    if case SHBackgroundOperationError.alreadyProcessed = error {
-                        // TODO: When running on a cron, avoid notifying delegates about authorizations over and over
-                        break
-                    } else {
-                        self.log.critical("[\(type(of: self))] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
-                    }
-                default:
-                    break
-                }
-                
-                var usersDict = [UserIdentifier: any SHServerUser]()
-                var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-                userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-                
-                do {
-                    usersDict = try SHUsersController(localUser: self.user).getUsers(
-                        withIdentifiers: Array(userIdentifiers)
-                    )
-                } catch {
-                    self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
-                    completionHandler(.failure(error))
-                    return
-                }
-
-                let downloaderDelegates = self.downloaderDelegates
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didReceiveAuthorizationRequest(
-                            for: unauthorizedDownloadDescriptors,
-                            referencing: usersDict
-                        )
-                    })
-                }
+        self.waitForAuthorization(unauthorizedDownloadDescriptors) { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                ///
+                /// For downloads that don't need authorization:
+                /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
+                /// - descriptors are returned
+                /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
+                ///
+                completionHandler(.success(authorizedDownloadDescriptors))
             }
-        }
-        
-        if authorizedDownloadDescriptors.count > 0 {
-            ///
-            /// For downloads that don't need authorization:
-            /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
-            /// - descriptors are returned
-            /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
-            ///
-            completionHandler(.success(authorizedDownloadDescriptors))
-        } else {
-            completionHandler(.success([]))
         }
     }
     

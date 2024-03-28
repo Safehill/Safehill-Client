@@ -80,19 +80,20 @@ public struct SHAssetsDownloadManager {
                     completionHandler(.failure(SHHTTPError.ClientError.notFound))
                     return
                 }
-                do {
-                    let localAssetStore = SHLocalAssetStoreController(
-                        user: self.user
-                    )
-                    let decryptedAsset = try localAssetStore.decryptedAsset(
-                        encryptedAsset: encryptedAsset,
-                        quality: quality,
-                        descriptor: descriptor
-                    )
-                    completionHandler(.success(decryptedAsset))
-                }
-                catch {
-                    completionHandler(.failure(error))
+                let localAssetStore = SHLocalAssetStoreController(
+                    user: self.user
+                )
+                localAssetStore.decryptedAsset(
+                    encryptedAsset: encryptedAsset,
+                    quality: quality,
+                    descriptor: descriptor
+                ) { result in
+                    switch result {
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    case .success(let decryptedAsset):
+                        completionHandler(.success(decryptedAsset))
+                    }
                 }
             case .failure(let err):
                 log.critical("unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")

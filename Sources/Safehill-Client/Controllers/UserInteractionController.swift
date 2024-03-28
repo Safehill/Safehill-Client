@@ -284,19 +284,18 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                     senderPublicSignature: interactionsGroup.senderPublicSignature
                 )
                 
-                let messages: [SHDecryptedMessage]
-                do {
-                    messages = try self.decryptMessages(
-                        interactionsGroup.messages,
-                        usingEncryptionDetails: encryptionDetails
-                    )
-                } catch {
-                    log.error("failed to decrypt messages in thread \(threadId, privacy: .public)")
-                    completionHandler(.failure(error))
-                    return
+                self.decryptMessages(
+                    interactionsGroup.messages,
+                    usingEncryptionDetails: encryptionDetails
+                ) { result in
+                    switch result {
+                    case .success(let messages):
+                        completionHandler(.success(messages.first))
+                    case .failure(let error):
+                        log.error("failed to decrypt last message in thread \(threadId, privacy: .public)")
+                        completionHandler(.failure(error))
+                    }
                 }
-                
-                completionHandler(.success(messages.first))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
@@ -374,63 +373,79 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 senderPublicSignature: interactionsGroup.senderPublicSignature
             )
             
-            let messages: [SHDecryptedMessage]
-            do {
-                messages = try self.decryptMessages(
-                    interactionsGroup.messages,
-                    usingEncryptionDetails: encryptionDetails
-                )
-            } catch {
-                log.error("failed to retrieve user information for \(anchor.rawValue, privacy: .public) \(anchorId, privacy: .public)")
-                completionHandler(.failure(error))
-                return
+            var messages = [SHDecryptedMessage]()
+            var reactions = [SHReaction]()
+            var error: Error? = nil
+            
+            let dispatchGroup = DispatchGroup()
+            
+            dispatchGroup.enter()
+            self.decryptMessages(
+                interactionsGroup.messages,
+                usingEncryptionDetails: encryptionDetails
+            ) { result in
+                switch result {
+                case .failure(let err):
+                    log.error("failed to retrieve user information for \(anchor.rawValue, privacy: .public) \(anchorId, privacy: .public): \(err.localizedDescription)")
+                    error = err
+                case .success(let msgs):
+                    messages = msgs
+                }
+                dispatchGroup.leave()
             }
             
-            let reactions: [SHReaction]
-            do {
-                let usersController = SHUsersController(localUser: self.user)
-                let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
-                let usersDict: [UserIdentifier: any SHServerUser] = try usersController
-                    .getUsers(withIdentifiers: userIds)
-                
-                reactions = interactionsGroup.reactions.compactMap({
-                    reaction in
-                    guard let sender = usersDict[reaction.senderUserIdentifier!] else {
-                        return nil
+            dispatchGroup.enter()
+            let usersController = SHUsersController(localUser: self.user)
+            let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
+            usersController.getUsers(withIdentifiers: userIds) {
+                result in
+                switch result {
+                case .failure(let err):
+                    log.error("failed to fetch reactions senders in \(anchor.rawValue) \(anchorId, privacy: .public): \(err.localizedDescription)")
+                    error = err
+                case .success(let usersDict):
+                    reactions = interactionsGroup.reactions.compactMap({
+                        reaction in
+                        guard let sender = usersDict[reaction.senderUserIdentifier!] else {
+                            return nil
+                        }
+                        
+                        return SHReaction(
+                            interactionId: reaction.interactionId!,
+                            sender: sender,
+                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                            inReplyToInteractionId: reaction.inReplyToInteractionId,
+                            reactionType: reaction.reactionType,
+                            addedAt: reaction.addedAt!.iso8601withFractionalSeconds!
+                        )
+                    })
+                }
+                dispatchGroup.leave()
+            }
+            
+            dispatchGroup.notify(queue: .global()) {
+                if let error {
+                    completionHandler(.failure(error))
+                } else {
+                    let result: SHInteractionsCollectionProtocol
+                    switch anchor {
+                    case .thread:
+                        result = SHConversationThreadInteractions(
+                            threadId: anchorId,
+                            messages: messages,
+                            reactions: reactions
+                        )
+                    case .group:
+                        result = SHAssetsGroupInteractions(
+                            groupId: anchorId,
+                            messages: messages,
+                            reactions: reactions
+                        )
                     }
                     
-                    return SHReaction(
-                        interactionId: reaction.interactionId!,
-                        sender: sender,
-                        inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
-                        inReplyToInteractionId: reaction.inReplyToInteractionId,
-                        reactionType: reaction.reactionType,
-                        addedAt: reaction.addedAt!.iso8601withFractionalSeconds!
-                    )
-                })
-            } catch {
-                log.error("failed to fetch reactions senders in \(anchor.rawValue) \(anchorId, privacy: .public)")
-                completionHandler(.failure(error))
-                return
+                    completionHandler(.success(result))
+                }
             }
-            
-            let result: SHInteractionsCollectionProtocol
-            switch anchor {
-            case .thread:
-                result = SHConversationThreadInteractions(
-                    threadId: anchorId,
-                    messages: messages,
-                    reactions: reactions
-                )
-            case .group:
-                result = SHAssetsGroupInteractions(
-                    groupId: anchorId,
-                    messages: messages,
-                    reactions: reactions
-                )
-            }
-            
-            completionHandler(.success(result))
         }
         
         let cacheAndProcess = { (localInteractionsGroup: InteractionsGroupDTO) in
@@ -746,13 +761,13 @@ extension SHUserInteractionController {
     
     public func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
-        usingEncryptionDetails encryptionDetails: EncryptionDetailsClass
-    ) throws -> [SHDecryptedMessage] {
+        usingEncryptionDetails encryptionDetails: EncryptionDetailsClass,
+        completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
+    ) {
         guard let salt = self.user.maybeEncryptionProtocolSalt else {
-            throw SHLocalUserError.missingProtocolSalt
+            completionHandler(.failure(SHLocalUserError.missingProtocolSalt))
+            return
         }
-        
-        var decryptedMessages = [SHDecryptedMessage]()
         
         let shareablePayload = SHShareablePayload(
             ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
@@ -760,50 +775,57 @@ extension SHUserInteractionController {
             signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
         )
         
-        let usersWithMessagesKeyedById = try SHUsersController(localUser: self.user).getUsers(
+         SHUsersController(localUser: self.user).getUsers(
             withIdentifiers: encryptedMessages.map({ $0.senderUserIdentifier! })
-        )
-        
-        for encryptedMessage in encryptedMessages {
-            guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderUserIdentifier!] else {
-                log.warning("couldn't find user with identifier \(encryptedMessage.senderUserIdentifier!)")
-                continue
-            }
-            guard let createdAt = encryptedMessage.createdAt?.iso8601withFractionalSeconds else {
-                log.warning("message doesn't have a valid timestamp \(encryptedMessage.createdAt ?? "nil")")
-                continue
-            }
-            
-            let decryptedData: Data
-            
-            do {
-                decryptedData = try SHUserContext(user: self.user.shUser).decrypt(
-                    Data(base64Encoded: encryptedMessage.encryptedMessage)!,
-                    usingEncryptedSecret: shareablePayload,
-                    protocolSalt: salt,
-                    signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
-                )
-            } catch {
-                log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderUserIdentifier!). error=\(error.localizedDescription)")
-                continue
-            }
-            guard let decryptedMessage = String(data: decryptedData, encoding: .utf8) else {
-                log.warning("decoding of message with interactionId=\(encryptedMessage.interactionId!) failed")
-                continue
-            }
-            
-            let decryptedMessageObject = SHDecryptedMessage(
-                interactionId: encryptedMessage.interactionId!,
-                sender: sender,
-                inReplyToAssetGlobalIdentifier: encryptedMessage.inReplyToAssetGlobalIdentifier,
-                inReplyToInteractionId: encryptedMessage.inReplyToInteractionId,
-                message: decryptedMessage,
-                createdAt: createdAt
-            )
-            decryptedMessages.append(decryptedMessageObject)
-        }
-        
-        return decryptedMessages
+         ) { result in
+             switch result {
+             case .failure(let error):
+                 completionHandler(.failure(error))
+             case .success(let usersWithMessagesKeyedById):
+                 var decryptedMessages = [SHDecryptedMessage]()
+                 
+                 for encryptedMessage in encryptedMessages {
+                     guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderUserIdentifier!] else {
+                         log.warning("couldn't find user with identifier \(encryptedMessage.senderUserIdentifier!)")
+                         continue
+                     }
+                     guard let createdAt = encryptedMessage.createdAt?.iso8601withFractionalSeconds else {
+                         log.warning("message doesn't have a valid timestamp \(encryptedMessage.createdAt ?? "nil")")
+                         continue
+                     }
+                     
+                     let decryptedData: Data
+                     
+                     do {
+                         decryptedData = try SHUserContext(user: self.user.shUser).decrypt(
+                             Data(base64Encoded: encryptedMessage.encryptedMessage)!,
+                             usingEncryptedSecret: shareablePayload,
+                             protocolSalt: salt,
+                             signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
+                         )
+                     } catch {
+                         log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderUserIdentifier!). error=\(error.localizedDescription)")
+                         continue
+                     }
+                     guard let decryptedMessage = String(data: decryptedData, encoding: .utf8) else {
+                         log.warning("decoding of message with interactionId=\(encryptedMessage.interactionId!) failed")
+                         continue
+                     }
+                     
+                     let decryptedMessageObject = SHDecryptedMessage(
+                         interactionId: encryptedMessage.interactionId!,
+                         sender: sender,
+                         inReplyToAssetGlobalIdentifier: encryptedMessage.inReplyToAssetGlobalIdentifier,
+                         inReplyToInteractionId: encryptedMessage.inReplyToInteractionId,
+                         message: decryptedMessage,
+                         createdAt: createdAt
+                     )
+                     decryptedMessages.append(decryptedMessageObject)
+                 }
+                 
+                 completionHandler(.success(decryptedMessages))
+             }
+         }
     }
 }
 

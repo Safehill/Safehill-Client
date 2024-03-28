@@ -119,9 +119,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         allLocalDescriptors: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        let remoteUsersById: [UserIdentifier: any SHServerUser]
-        
+    ) { 
         ///
         /// Get all users referenced in either local or remote descriptors (excluding THIS user)
         ///
@@ -135,80 +133,81 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         ///
         /// Get the `SHServerUser` for each of the users mentioned in the remote descriptors
         ///
-        do {
-            remoteUsersById = try SHUsersController(localUser: self.user).getUsers(
-                withIdentifiers: userIdsInRemoteDescriptors
-            )
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        ///
-        /// Don't consider users that can't be retrieved by the `SHUserController`.
-        /// This is just an extra measure on the client in case the server returns users that are deleted or deactivated.
-        ///
-        userIdsInRemoteDescriptorsSet = userIdsInRemoteDescriptorsSet.intersection(remoteUsersById.keys)
-        
-        ///
-        /// Remove all users that no longer exist on the server from the local server and the graph
-        ///
-        let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
-        if uIdsToRemoveFromLocal.count > 0 {
-            log.info("removing user ids from local store and the graph \(uIdsToRemoveFromLocal)")
-            do {
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                // TODO: Re-enable this
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-//                try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
-            } catch {
-                log.warning("error removing local users, but this operation will be retried")
+        SHUsersController(localUser: self.user).getUsers(withIdentifiers: userIdsInRemoteDescriptors) {
+            result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let remoteUsersById):
+                ///
+                /// Don't consider users that can't be retrieved by the `SHUserController`.
+                /// This is just an extra measure on the client in case the server returns users that are deleted or deactivated.
+                ///
+                userIdsInRemoteDescriptorsSet = userIdsInRemoteDescriptorsSet.intersection(remoteUsersById.keys)
+                
+                ///
+                /// Remove all users that no longer exist on the server from the local server and the graph
+                ///
+                let uIdsToRemoveFromLocal = Array(userIdsInLocalDescriptorsSet.subtracting(userIdsInRemoteDescriptorsSet))
+                if uIdsToRemoveFromLocal.count > 0 {
+                    self.log.info("removing user ids from local store and the graph \(uIdsToRemoveFromLocal)")
+                    do {
+                        /// ** !!!!!!!!!! **
+                        /// ** !!!!!!!!!! **
+                        /// ** !!!!!!!!!! **
+                        // TODO: Re-enable this
+                        /// ** !!!!!!!!!! **
+                        /// ** !!!!!!!!!! **
+                        /// ** !!!!!!!!!! **
+        //                try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
+                    } catch {
+                        self.log.warning("error removing local users, but this operation will be retried")
+                    }
+                }
+                
+                ///
+                /// Get all the asset identifiers and user identifiers mentioned in the remote descriptors
+                ///
+                let assetIdToUserIds = allRemoteDescriptors
+                    .reduce([GlobalIdentifier: [any SHServerUser]]()) { partialResult, descriptor in
+                        var result = partialResult
+                        var userIdList = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                        userIdList.append(descriptor.sharingInfo.sharedByUserIdentifier)
+                        result[descriptor.globalIdentifier] = userIdList.compactMap({ remoteUsersById[$0] })
+                        return result
+                    }
+                
+                let assetsDelegates = self.assetsSyncDelegates
+                self.delegatesQueue.async {
+                    assetsDelegates.forEach({
+                        $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
+                    })
+                }
+                
+                ///
+                /// Remove all users that don't exist on the server from any blacklist
+                ///
+                /// If a user that was in the blacklist no longer exists on the server
+                /// that user can be safely removed from the blacklist,
+                /// as well as all downloads from that user currently awaiting authorization
+                ///
+                Task(priority: qos.toTaskPriority()) {
+                    await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
+                        userIdentifiers: userIdsInRemoteDescriptors
+                    )
+                }
+                
+                do {
+                    try SHAssetsDownloadManager.cleanEntriesNotIn(
+                        allSharedAssetIds: Array(assetIdToUserIds.keys),
+                        allUserIds: userIdsInRemoteDescriptors
+                    )
+                    completionHandler(.success(()))
+                } catch {
+                    self.log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                }
             }
-        }
-        
-        ///
-        /// Get all the asset identifiers and user identifiers mentioned in the remote descriptors
-        ///
-        let assetIdToUserIds = allRemoteDescriptors
-            .reduce([GlobalIdentifier: [any SHServerUser]]()) { partialResult, descriptor in
-                var result = partialResult
-                var userIdList = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
-                userIdList.append(descriptor.sharingInfo.sharedByUserIdentifier)
-                result[descriptor.globalIdentifier] = userIdList.compactMap({ remoteUsersById[$0] })
-                return result
-            }
-        
-        let assetsDelegates = self.assetsSyncDelegates
-        self.delegatesQueue.async {
-            assetsDelegates.forEach({
-                $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
-            })
-        }
-        
-        ///
-        /// Remove all users that don't exist on the server from any blacklist
-        ///
-        /// If a user that was in the blacklist no longer exists on the server
-        /// that user can be safely removed from the blacklist,
-        /// as well as all downloads from that user currently awaiting authorization
-        ///
-        Task(priority: qos.toTaskPriority()) {
-            await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
-                userIdentifiers: userIdsInRemoteDescriptors
-            )
-        }
-        
-        do {
-            try SHAssetsDownloadManager.cleanEntriesNotIn(
-                allSharedAssetIds: Array(assetIdToUserIds.keys),
-                allUserIds: userIdsInRemoteDescriptors
-            )
-        } catch {
-            log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
         }
     }
     

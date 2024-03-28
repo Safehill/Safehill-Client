@@ -79,10 +79,12 @@ public class SHUsersController {
     /// - Parameter userIdentifiers: the user identifiers to fetch
     /// - Returns: the best effort to retrieve the requested identifiers from cache
     public func getCachedUsers(
-        withIdentifiers userIdentifiers: [UserIdentifier]
-    ) throws -> [UserIdentifier: any SHServerUser] {
+        withIdentifiers userIdentifiers: [UserIdentifier],
+        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
+    ) {
         guard userIdentifiers.count > 0 else {
-            return [:]
+            completionHandler(.success([:]))
+            return
         }
         
         var users = [UserIdentifier: any SHServerUser]()
@@ -96,13 +98,11 @@ public class SHUsersController {
             }
         }
         
-        if missingUserIds.isEmpty {
-            return users
+        guard missingUserIds.isEmpty == false else {
+            completionHandler(.success(users))
+            return
         }
         
-        let group = DispatchGroup()
-        
-        group.enter()
         serverProxy.getLocalUsers(withIdentifiers: missingUserIds) {
             result in
             switch result {
@@ -110,15 +110,22 @@ public class SHUsersController {
                 for serverUser in serverUsers {
                     users[serverUser.identifier] = serverUser
                 }
+                completionHandler(.success(users))
             case .failure(let err):
                 log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
-                break
+                completionHandler(.failure(err))
             }
-            group.leave()
         }
-        
-        let _ = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        return users
+    }
+    
+    public func getUsers(
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) async throws -> [UserIdentifier: any SHServerUser] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.getUsers(withIdentifiers: userIdentifiers) { result in
+                continuation.resume(with: result)
+            }
+        }
     }
     
     /// Retrieve the users from either the in-memory cache or the server.
@@ -128,11 +135,12 @@ public class SHUsersController {
     /// - Parameter userIdentifiers: the user identifiers to fetch
     /// - Returns: the users requested or throws an error
     public func getUsers(
-        withIdentifiers userIdentifiers: [UserIdentifier]
-    ) throws -> [UserIdentifier: any SHServerUser] {
-        
+        withIdentifiers userIdentifiers: [UserIdentifier],
+        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
+    ) {
         guard userIdentifiers.count > 0 else {
-            return [:]
+            completionHandler(.success([:]))
+            return
         }
         
         var users = [UserIdentifier: any SHServerUser]()
@@ -147,15 +155,9 @@ public class SHUsersController {
         }
         
         if missingUserIds.isEmpty {
-            return users
+            completionHandler(.success(users))
         }
         
-        users = [:]
-        
-        var error: Error? = nil
-        let group = DispatchGroup()
-        
-        group.enter()
         serverProxy.getUsers(
             withIdentifiers: userIdentifiers
         ) { result in
@@ -164,23 +166,12 @@ public class SHUsersController {
                 for serverUser in serverUsers {
                     users[serverUser.identifier] = serverUser
                 }
+                ServerUserCache.shared.cache(users: Array(users.values))
+                completionHandler(.success(users))
             case .failure(let err):
-                error = err
+                completionHandler(.failure(err))
             }
-            group.leave()
         }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        ServerUserCache.shared.cache(users: Array(users.values))
-        
-        return users
     }
     
     /*

@@ -96,6 +96,45 @@ public struct SHLocalAssetStoreController {
         }
     }
     
+    private func decryptedAsssetInternal(
+        encryptedAsset: any SHEncryptedAsset,
+        quality: SHAssetQuality,
+        descriptor: any SHAssetDescriptor,
+        completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
+    ) {
+        if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
+            do {
+                let decryptedAsset = try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: self.user)
+                completionHandler(.success(decryptedAsset))
+            } catch {
+                completionHandler(.failure(error))
+            }
+        } else {
+            SHUsersController(localUser: self.user).getUsers(
+                withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier]
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                case .success(let usersDict):
+                    guard usersDict.count == 1, let serverUser = usersDict.values.first,
+                          serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
+                    else {
+                        completionHandler(.failure(SHBackgroundOperationError.unexpectedData(usersDict)))
+                        return
+                    }
+                    
+                    do {
+                        let decryptedAsset = try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: serverUser)
+                        completionHandler(.success(decryptedAsset))
+                    } catch {
+                        completionHandler(.failure(error))
+                    }
+                }
+            }
+        }
+    }
+    
     /// Decrypt an asset version (quality) given its encrypted counterpart and its descriptor
     /// ```
     /// let localAssetsStore = SHLocalAssetStoreController(user: self.user)
@@ -123,44 +162,39 @@ public struct SHLocalAssetStoreController {
     public func decryptedAsset(
         encryptedAsset: any SHEncryptedAsset,
         quality: SHAssetQuality,
-        descriptor d: (any SHAssetDescriptor)? = nil
-    ) throws -> any SHDecryptedAsset
-    {
-        let descriptor: any SHAssetDescriptor
-        if d == nil {
-            var dd: (any SHAssetDescriptor)? = nil
-            let semaphore = DispatchSemaphore(value: 0)
+        descriptor: (any SHAssetDescriptor)? = nil,
+        completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
+    ) {
+        if let descriptor {
+            self.decryptedAsssetInternal(
+                encryptedAsset: encryptedAsset,
+                quality: quality,
+                descriptor: descriptor,
+                completionHandler: completionHandler
+            )
+        } else {
             self.serverProxy.getLocalAssetDescriptors { result in
-                if case .success(let descriptors) = result {
-                    dd = descriptors.first(
+                switch result {
+                
+                case .success(let descriptors):
+                    guard let foundDescriptor = descriptors.first(
                         where: { $0.globalIdentifier == encryptedAsset.globalIdentifier }
+                    ) else {
+                        completionHandler(.failure(SHBackgroundOperationError.missingAssetInLocalServer(encryptedAsset.globalIdentifier)))
+                        return
+                    }
+                    self.decryptedAsssetInternal(
+                        encryptedAsset: encryptedAsset,
+                        quality: quality,
+                        descriptor: foundDescriptor,
+                        completionHandler: completionHandler
                     )
+                    
+                case .failure(let error):
+                    completionHandler(.failure(error))
                 }
-                semaphore.signal()
             }
-            let _ = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            guard dd != nil else {
-                throw SHBackgroundOperationError.missingAssetInLocalServer(encryptedAsset.globalIdentifier)
-            }
-            descriptor = dd!
-        } else {
-            descriptor = d!
         }
-        
-        var sender: SHServerUser? = nil
-        if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-            sender = self.user
-        } else {
-            let usersDict = try SHUsersController(localUser: self.user).getUsers(withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier])
-            guard usersDict.count == 1, let serverUser = usersDict.values.first,
-                  serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
-            else {
-                throw SHBackgroundOperationError.unexpectedData(usersDict)
-            }
-            sender = serverUser
-        }
-        
-        return try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: sender!)
     }
     
     /// Returns a list of `SHAssetQuality` corresponding to the versions that are stored encrypted in the local asset store,
