@@ -67,40 +67,59 @@ extension SHAuthenticatedLocalUser {
     ///   - recipients: the list of users the asset should be made shareable to
     ///   - groupId: the unique identifier of the share request
     /// - Returns: the `SHShareableEncryptedAsset`
-    func shareableEncryptedAsset(globalIdentifier: String,
-                                 versions: [SHAssetQuality],
-                                 recipients: [any SHServerUser],
-                                 groupId: String) throws -> any SHShareableEncryptedAsset {
+    func shareableEncryptedAsset(
+        globalIdentifier: String,
+        versions: [SHAssetQuality],
+        recipients: [any SHServerUser],
+        groupId: String,
+        completionHandler: @escaping (Result<any SHShareableEncryptedAsset, Error>) -> Void
+    ) {
         let localAssetStoreController = SHLocalAssetStoreController(user: self)
-        let privateSecret = try localAssetStoreController.retrieveCommonEncryptionKey(for: globalIdentifier)
-        var shareableVersions = [SHShareableEncryptedAssetVersion]()
         
-        for recipient in recipients {
-            ///
-            /// Encrypt the secret using the recipient's public key
-            /// so that it can be stored securely on the server
-            ///
-            let encryptedAssetSecret = try self.createShareablePayload(
-                from: privateSecret,
-                toShareWith: recipient
-            )
-            
-            for quality in versions {
-                let shareableVersion = SHGenericShareableEncryptedAssetVersion(
-                    quality: quality,
-                    userPublicIdentifier: recipient.identifier,
-                    encryptedSecret: encryptedAssetSecret.cyphertext,
-                    ephemeralPublicKey: encryptedAssetSecret.ephemeralPublicKeyData,
-                    publicSignature: encryptedAssetSecret.signature
+        localAssetStoreController.retrieveCommonEncryptionKey(for: globalIdentifier) {
+            result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let privateSecret):
+                var shareableVersions = [SHShareableEncryptedAssetVersion]()
+                
+                for recipient in recipients {
+                    do {
+                        ///
+                        /// Encrypt the secret using the recipient's public key
+                        /// so that it can be stored securely on the server
+                        ///
+                        let encryptedAssetSecret = try self.createShareablePayload(
+                            from: privateSecret,
+                            toShareWith: recipient
+                        )
+                        
+                        for quality in versions {
+                            let shareableVersion = SHGenericShareableEncryptedAssetVersion(
+                                quality: quality,
+                                userPublicIdentifier: recipient.identifier,
+                                encryptedSecret: encryptedAssetSecret.cyphertext,
+                                ephemeralPublicKey: encryptedAssetSecret.ephemeralPublicKeyData,
+                                publicSignature: encryptedAssetSecret.signature
+                            )
+                            shareableVersions.append(shareableVersion)
+                        }
+                        
+                    } catch {
+                        completionHandler(.failure(error))
+                        return
+                    }
+                }
+                
+                let shareableEncryptedAsset = SHGenericShareableEncryptedAsset(
+                    globalIdentifier: globalIdentifier,
+                    sharedVersions: shareableVersions,
+                    groupId: groupId
                 )
-                shareableVersions.append(shareableVersion)
+                
+                completionHandler(.success(shareableEncryptedAsset))
             }
         }
-        
-        return SHGenericShareableEncryptedAsset(
-            globalIdentifier: globalIdentifier,
-            sharedVersions: shareableVersions,
-            groupId: groupId
-        )
     }
 }

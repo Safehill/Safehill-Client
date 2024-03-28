@@ -162,31 +162,24 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     private func storeSecrets(
         request: SHEncryptionForSharingRequestQueueItem,
-        globalIdentifier: String
-    ) throws {
-        let shareableEncryptedAsset = try self.user.shareableEncryptedAsset(
+        globalIdentifier: String,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.user.shareableEncryptedAsset(
             globalIdentifier: globalIdentifier,
             versions: request.versions,
             recipients: request.sharedWith,
             groupId: request.groupId
-        )
-        
-        var error: Error? = nil
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        serverProxy.shareAssetLocally(shareableEncryptedAsset) { result in
-            if case .failure(let err) = result {
-                error = err
+        ) { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let shareableEncryptedAsset):
+                self.serverProxy.shareAssetLocally(
+                    shareableEncryptedAsset,
+                    completionHandler: completionHandler
+                )
             }
-            semaphore.signal()
-        }
-        
-        let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
         }
     }
     
@@ -229,6 +222,62 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
+    private func initializeGroupAndThread(
+        shareRequest: SHEncryptionForSharingRequestQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        var errorInitializingGroup: Error? = nil
+        var errorInitializingThread: Error? = nil
+        let dispatchGroup = DispatchGroup()
+        
+        var usersAndSelf = shareRequest.sharedWith
+        usersAndSelf.append(self.user)
+        
+        self.log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+        dispatchGroup.enter()
+        self.interactionsController.setupGroupEncryptionDetails(
+            groupId: shareRequest.groupId,
+            with: usersAndSelf
+        ) { initializeGroupResult in
+            switch initializeGroupResult {
+            case .failure(let error):
+                errorInitializingGroup = error
+            default: break
+            }
+            dispatchGroup.leave()
+        }
+        
+        self.log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+        dispatchGroup.enter()
+        self.interactionsController.setupThread(
+            with: usersAndSelf
+        ) {
+            setupThreadResult in
+            switch setupThreadResult {
+            case .success(let serverThread):
+                let threadsDelegates = self.threadsDelegates
+                self.delegatesQueue.async {
+                    threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
+                }
+            case .failure(let error):
+                errorInitializingThread = error
+            }
+            dispatchGroup.leave()
+        }
+        
+        dispatchGroup.notify(queue: .global(qos: .background)) {
+            guard errorInitializingGroup == nil,
+                  errorInitializingThread == nil else {
+                self.log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
+                // Mark as failed on any other error
+                completionHandler(.failure(errorInitializingGroup ?? errorInitializingThread!))
+                return
+            }
+            
+            completionHandler(.success(()))
+        }
+    }
+    
     private func process(_ item: KBQueueItem) {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
         
@@ -249,122 +298,21 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
             return
         }
-
-        do {
-            ///
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            let globalIdentifier = try shareRequest.asset.retrieveOrGenerateGlobalIdentifier()
-            
-            guard shareRequest.sharedWith.count > 0 else {
-                log.error("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers")
-                fatalError("sharingWith emtpy. No sharing info")
-            }
-            
-            log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
-            
-            if shareRequest.isBackground == false {
-                for delegate in assetDelegates {
-                    if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(queueItemIdentifier: shareRequest.identifier)
-                    }
-                }
-            }
-            
-            ///
-            /// Store sharing information in the local server proxy
-            ///
+        
+        let handleError = { (error: Error) in
+            self.log.critical("Error in SHARE asset: \(error.localizedDescription)")
             do {
-                log.info("storing encryption secrets for asset \(globalIdentifier) for OTHER users in local server proxy")
-                
-                try self.storeSecrets(request: shareRequest, globalIdentifier: globalIdentifier)
-                
-                log.info("successfully stored asset \(globalIdentifier) sharing information in local server proxy")
-            } catch {
-                log.error("failed to locally share encrypted item \(item.identifier) with users \(shareRequest.sharedWith.map { $0.identifier }): \(error.localizedDescription)")
-                throw SHBackgroundOperationError.fatalError("failed to store secrets")
-            }
-            
-            ///
-            /// Share using Safehill Server API
-            ///
-#if DEBUG
-            guard ErrorSimulator.percentageShareFailures == 0
-                    || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
-                log.debug("simulating SHARE failure")
-                throw SHBackgroundOperationError.fatalError("share failed")
-            }
-#endif
-            
-            do {
-                try self.share(globalIdentifier: globalIdentifier, via: shareRequest)
-            } catch {
-                log.error("failed to share with users \(shareRequest.sharedWith.map { $0.identifier })")
-                throw SHBackgroundOperationError.fatalError("share failed")
-            }
-            
-            if shareRequest.isBackground == false {
-                var errorInitializingGroup: Error? = nil
-                var errorInitializingThread: Error? = nil
-                let dispatchGroup = DispatchGroup()
-                
-                var usersAndSelf = shareRequest.sharedWith
-                usersAndSelf.append(self.user)
-                
-                log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
-                dispatchGroup.enter()
-                self.interactionsController.setupGroupEncryptionDetails(
-                    groupId: shareRequest.groupId,
-                    with: usersAndSelf,
-                    completionHandler: { initializeGroupResult in
-                        switch initializeGroupResult {
-                        case .failure(let error):
-                            errorInitializingGroup = error
-                        default: break
-                        }
-                        dispatchGroup.leave()
-                    }
+                try self.markAsFailed(
+                    encryptionRequest: shareRequest,
+                    queueItem: item
                 )
-                
-                log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
-                dispatchGroup.enter()
-                self.interactionsController.setupThread(
-                    with: usersAndSelf
-                ) {
-                    setupThreadResult in
-                    switch setupThreadResult {
-                    case .success(let serverThread):
-                        let threadsDelegates = self.threadsDelegates
-                        self.delegatesQueue.async {
-                            threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
-                        }
-                    case .failure(let error):
-                        errorInitializingThread = error
-                    }
-                    dispatchGroup.leave()
-                }
-                
-                let dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-                guard dispatchResult == .success else {
-                    // Retry (by not dequeueing) on timeout
-                    throw SHBackgroundOperationError.timedOut
-                }
-                guard errorInitializingGroup == nil,
-                      errorInitializingThread == nil else {
-                    log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
-                    // Mark as failed on any other error
-                    throw errorInitializingGroup ?? errorInitializingThread!
-                }
-                
-                // Ingest into the graph
-                try SHKGQuery.ingestShare(
-                    of: globalIdentifier,
-                    from: self.user.identifier,
-                    to: shareRequest.sharedWith.map({ $0.identifier })
-                )
+            } catch {
+                self.log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
+                // TODO: Handle
             }
-            
+        }
+        
+        let handleSuccess = { (globalIdentifier: GlobalIdentifier) in
             do {
                 try self.markAsSuccessful(
                     item: item,
@@ -372,19 +320,98 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     globalIdentifier: globalIdentifier
                 )
             } catch {
-                log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
-                throw error
+                self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
+                handleError(error)
             }
+        }
+        
+        guard shareRequest.sharedWith.count > 0 else {
+            handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers"))
+            return
+        }
+        
+        log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
+        
+        if shareRequest.isBackground == false {
+            for delegate in assetDelegates {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didStartSharing(queueItemIdentifier: shareRequest.identifier)
+                }
+            }
+        }
+        
+        let globalIdentifier: GlobalIdentifier
+
+        do {
+            ///
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            globalIdentifier = try shareRequest.asset.retrieveOrGenerateGlobalIdentifier()
         } catch {
-            log.critical("Error in SHARE asset: \(error.localizedDescription)")
-            do {
-                try self.markAsFailed(
-                    encryptionRequest: shareRequest,
-                    queueItem: item
-                )
-            } catch {
-                log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
-                // TODO: Handle
+            handleError(error)
+            return
+        }
+        
+        ///
+        /// Store sharing information in the local server proxy
+        ///
+        log.info("storing encryption secrets for asset \(globalIdentifier) for OTHER users in local server proxy")
+        self.storeSecrets(request: shareRequest, globalIdentifier: globalIdentifier) {
+            result in
+            
+            switch result {
+            case .failure(let error):
+                handleError(error)
+                return
+            case .success:
+                self.log.info("successfully stored asset \(globalIdentifier) sharing information in local server proxy")
+                
+                ///
+                /// Share using Safehill Server API
+                ///
+#if DEBUG
+                guard ErrorSimulator.percentageShareFailures == 0
+                        || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
+                    self.log.debug("simulating SHARE failure")
+                    let error = SHBackgroundOperationError.fatalError("share failed")
+                    handleError(error)
+                    return
+                }
+#endif
+                
+                do {
+                    try self.share(globalIdentifier: globalIdentifier, via: shareRequest)
+                } catch {
+                    let error = SHBackgroundOperationError.fatalError("share failed")
+                    handleError(error)
+                    return
+                }
+                
+                if shareRequest.isBackground == false {
+                    self.initializeGroupAndThread(shareRequest: shareRequest) { result in
+                        switch result {
+                        case .failure(let error):
+                            self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
+                            // Mark as failed on any other error
+                            handleError(error)
+                        case .success:
+                            do {
+                                // Ingest into the graph
+                                try SHKGQuery.ingestShare(
+                                    of: globalIdentifier,
+                                    from: self.user.identifier,
+                                    to: shareRequest.sharedWith.map({ $0.identifier })
+                                )
+                                handleSuccess(globalIdentifier)
+                            } catch {
+                                handleError(error)
+                            }
+                        }
+                    }
+                } else {
+                    handleSuccess(globalIdentifier)
+                }
             }
         }
     }

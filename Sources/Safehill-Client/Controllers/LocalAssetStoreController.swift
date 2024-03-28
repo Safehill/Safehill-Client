@@ -42,24 +42,32 @@ public struct SHLocalAssetStoreController {
     public func encryptedAsset(
         with globalIdentifier: GlobalIdentifier,
         versions: [SHAssetQuality]? = nil,
-        cacheHiResolution: Bool
-    ) throws -> any SHEncryptedAsset
-    {
-        let result = try self.encryptedAssets(with: [globalIdentifier],
-                                              versions: versions,
-                                              cacheHiResolution: cacheHiResolution)
-        guard let asset = result[globalIdentifier] else {
-            throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
+        cacheHiResolution: Bool,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<any SHEncryptedAsset, Error>) -> Void
+    ) {
+        self.encryptedAssets(
+            with: [globalIdentifier],
+            versions: versions,
+            cacheHiResolution: cacheHiResolution,
+            qos: qos
+        ) { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let dict):
+                completionHandler(.success(dict[globalIdentifier]!))
+            }
         }
-        return asset
     }
     
     public func encryptedAssets(
         with globalIdentifiers: [GlobalIdentifier],
         versions: [SHAssetQuality]? = nil,
-        cacheHiResolution: Bool
-    ) throws -> [GlobalIdentifier: any SHEncryptedAsset]
-    {
+        cacheHiResolution: Bool,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> Void
+    ) {
         var assets = [GlobalIdentifier: any SHEncryptedAsset]()
         var error: Error? = nil
         
@@ -79,17 +87,13 @@ public struct SHLocalAssetStoreController {
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
+        group.notify(queue: .global(qos: qos)) {
+            if let error {
+                completionHandler(.failure(error))
+            } else {
+                completionHandler(.success(assets))
+            }
         }
-        
-        guard error == nil else {
-            throw error!
-        }
-
-        return assets
     }
     
     /// Decrypt an asset version (quality) given its encrypted counterpart and its descriptor
@@ -236,33 +240,51 @@ extension SHLocalAssetStoreController {
     /// - Returns: the decrypted shared secret for this asset
     /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
     ///
-    func retrieveCommonEncryptionKey(for globalIdentifier: String) throws -> Data {
+    func retrieveCommonEncryptionKey(
+        for globalIdentifier: String,
+        completionHandler: @escaping (Result<Data, Error>) -> Void
+    ) {
         guard let encryptionProtocolSalt = self.user.maybeEncryptionProtocolSalt else {
-            throw SHLocalUserError.missingProtocolSalt
+            completionHandler(.failure(SHLocalUserError.missingProtocolSalt))
+            return
         }
         
         let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions. Any SHAssetQuality will return the same value
         
-        let encryptedAsset = try self.encryptedAsset(
+        self.encryptedAsset(
             with: globalIdentifier,
             versions: [quality],
-            cacheHiResolution: false
-        )
-        
-        guard let version = encryptedAsset.encryptedVersions[quality] else {
-            log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
-            throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
+            cacheHiResolution: false,
+            qos: .default
+        ) { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let encryptedAsset):
+                guard let version = encryptedAsset.encryptedVersions[quality] else {
+                    log.error("failed to retrieve shared secret for asset \(globalIdentifier)")
+                    completionHandler(.failure(SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)))
+                    return
+                }
+                
+                let encryptedSecret = SHShareablePayload(
+                    ephemeralPublicKeyData: version.publicKeyData,
+                    cyphertext: version.encryptedSecret,
+                    signature: version.publicSignatureData
+                )
+                
+                do {
+                    let encryptionKey = try SHUserContext(user: self.user.shUser).decryptSecret(
+                        usingEncryptedSecret: encryptedSecret,
+                        protocolSalt: encryptionProtocolSalt,
+                        signedWith: self.user.publicSignatureData
+                    )
+                    
+                    completionHandler(.success(encryptionKey))
+                } catch {
+                    completionHandler(.failure(error))
+                }
+            }
         }
-        
-        let encryptedSecret = SHShareablePayload(
-            ephemeralPublicKeyData: version.publicKeyData,
-            cyphertext: version.encryptedSecret,
-            signature: version.publicSignatureData
-        )
-        return try SHUserContext(user: self.user.shUser).decryptSecret(
-            usingEncryptedSecret: encryptedSecret,
-            protocolSalt: encryptionProtocolSalt,
-            signedWith: self.user.publicSignatureData
-        )
     }
 }

@@ -211,6 +211,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     internal func decryptFromLocalStore(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         guard original.count > 0 else {
@@ -228,79 +229,81 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         self.log.debug("[\(type(of: self))] attempting to decrypt following assets from local store: \(Array(descriptorsByGlobalIdentifier.keys))")
         
         let localAssetsStore = SHLocalAssetStoreController(user: self.user)
-        let encryptedAssets: [GlobalIdentifier: any SHEncryptedAsset]
-        do {
-            encryptedAssets = try localAssetsStore.encryptedAssets(
-                with: Array(descriptorsByGlobalIdentifier.keys),
-                versions: [.lowResolution],
-                cacheHiResolution: false
-            )
-        } catch {
-            self.log.error("[\(type(of: self))] unable to fetch local assets: \(error.localizedDescription)")
-            completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
-            return
-        }
         
-        var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
-        
-        for (globalAssetId, encryptedAsset) in encryptedAssets {
-            guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
-                log.critical("[\(type(of: self))] malformed descriptorsByGlobalIdentifier")
-                completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptorsByGlobalIdentifier")))
-                return
-            }
-            
-            guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
-                log.critical("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
-                completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
-                return
-            }
-            
-            let downloaderDelegates = self.downloaderDelegates
-            self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                               descriptor: descriptor,
-                                               in: groupId)
-                })
-            }
-            
-            do {
-                let decryptedAsset = try localAssetsStore.decryptedAsset(
-                    encryptedAsset: encryptedAsset,
-                    quality: .lowResolution,
-                    descriptor: descriptor
-                )
+        localAssetsStore.encryptedAssets(
+            with: Array(descriptorsByGlobalIdentifier.keys),
+            versions: [.lowResolution],
+            cacheHiResolution: false,
+            qos: qos
+        ) {
+            result in
+            switch result {
+            case .failure(let error):
+                self.log.error("[\(type(of: self))] unable to fetch local assets: \(error.localizedDescription)")
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
+            case .success(let encryptedAssets):
+                var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
                 
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didFetchLowResolutionAsset(decryptedAsset)
-                    })
-                    downloaderDelegates.forEach({
-                        $0.didCompleteDownloadOfAsset(
-                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                            in: groupId
+                for (globalAssetId, encryptedAsset) in encryptedAssets {
+                    guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
+                        self.log.critical("[\(type(of: self))] malformed descriptorsByGlobalIdentifier")
+                        completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptorsByGlobalIdentifier")))
+                        return
+                    }
+                    
+                    guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                        self.log.critical("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
+                        completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
+                        return
+                    }
+                    
+                    let downloaderDelegates = self.downloaderDelegates
+                    self.delegatesQueue.async {
+                        downloaderDelegates.forEach({
+                            $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
+                                                       descriptor: descriptor,
+                                                       in: groupId)
+                        })
+                    }
+                    
+                    do {
+                        let decryptedAsset = try localAssetsStore.decryptedAsset(
+                            encryptedAsset: encryptedAsset,
+                            quality: .lowResolution,
+                            descriptor: descriptor
                         )
-                    })
+                        
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didFetchLowResolutionAsset(decryptedAsset)
+                            })
+                            downloaderDelegates.forEach({
+                                $0.didCompleteDownloadOfAsset(
+                                    withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                                    in: groupId
+                                )
+                            })
+                        }
+                        
+                        successfullyDecrypted.append((decryptedAsset, descriptor))
+                    } catch {
+                        self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                        
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didFailDownloadOfAsset(
+                                    withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                                    in: groupId,
+                                    with: error
+                                )
+                            })
+                        }
+                    }
                 }
                 
-                successfullyDecrypted.append((decryptedAsset, descriptor))
-            } catch {
-                self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
-                
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didFailDownloadOfAsset(
-                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                            in: groupId,
-                            with: error
-                        )
-                    })
-                }
+                completionHandler(.success(successfullyDecrypted))
             }
         }
-        
-        completionHandler(.success(successfullyDecrypted))
     }
     
     override internal func processForDownload(
@@ -424,7 +427,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
 #endif
                                 self.decryptFromLocalStore(
                                     descriptorsByGlobalIdentifier: filteredDescriptorsFromKnownUsersByGid,
-                                    filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier })
+                                    filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier }),
+                                    qos: qos
                                 ) {
                                     thirdResult in
                                     

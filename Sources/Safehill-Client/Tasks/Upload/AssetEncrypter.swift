@@ -157,7 +157,8 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         with globalIdentifier: String,
         usingPrivateSecret privateSecret: Data,
         recipients: [SHServerUser],
-        request: SHEncryptionRequestQueueItem) throws -> any SHEncryptedAsset
+        request: SHEncryptionRequestQueueItem
+    ) throws -> any SHEncryptedAsset
     {
         let versions = request.versions
         
@@ -343,88 +344,20 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             return
         }
         
-        var globalIdentifier: GlobalIdentifier? = nil
+        let handleError = { (globalIdentifier: GlobalIdentifier?, error: Error) in
+            self.log.error("FAIL in AssetEncrypter: \(error.localizedDescription)")
+            
+            if let globalIdentifier {
+                do {
+                    try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
+                } catch {
+                    self.log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
+                    // TODO: Handle
+                }
+            }
+        }
         
-        do {
-            let asset = encryptionRequest.asset
-            let encryptedAsset: any SHEncryptedAsset
-            
-            if encryptionRequest.isBackground == false {
-                for delegate in assetDelegates {
-                    if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
-                    }
-                }
-            }
-            
-            /// 
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
-            
-            if encryptionRequest.isBackground == false {
-                ///
-                /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
-                /// ingest that identifier into the graph as a provisional share.
-                ///
-                try SHKGQuery.ingestProvisionalShare(
-                    of: globalIdentifier!,
-                    localIdentifier: encryptionRequest.localIdentifier,
-                    from: self.user.identifier,
-                    to: encryptionRequest.sharedWith.map({ $0.identifier })
-                )
-            }
-            
-            
-            ///
-            /// The symmetric key is used to encrypt this asset (all of its version) moving forward.
-            /// For assets that are already in the local store, do a best effort to retrieve the key from the store.
-            /// The first time the asset the `retrieveCommonEncryptionKey` will throw a `missingAssetInLocalServer` error, so a new one is generated.
-            /// The key is stored unencrypted in the local database, but it's encrypted for each user (including self)
-            /// before leaving the device (at remote asset saving or sharing time)
-            ///
-            let privateSecret: SymmetricKey
-            do {
-                let privateSecretData = try SHLocalAssetStoreController(user: self.user)
-                    .retrieveCommonEncryptionKey(for: globalIdentifier!)
-                privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
-            } catch SHBackgroundOperationError.missingAssetInLocalServer(_) {
-                privateSecret = SymmetricKey(size: .bits256)
-            }
-            
-            encryptedAsset = try self.generateEncryptedAsset(
-                for: asset,
-                with: globalIdentifier!,
-                usingPrivateSecret: privateSecret.rawRepresentation,
-                recipients: [self.user],
-                request: encryptionRequest
-            )
-            
-            var error: Error? = nil
-            let group = DispatchGroup()
-            
-            log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
-            
-            group.enter()
-            serverProxy.localServer.create(
-                assets: [encryptedAsset],
-                groupId: encryptionRequest.groupId,
-                filterVersions: nil
-            ) { result in
-                if case .failure(let err) = result {
-                    error = err
-                }
-                group.leave()
-            }
-            
-            let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-            guard dispatchResult == .success, error == nil else {
-                log.error("failed to store data for localIdentifier \(asset.phAsset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
-                
-                throw SHBackgroundOperationError.fatalError("failed to create local asset")
-            }
-            
+        let handleSuccess = { (encryptedAsset: any SHEncryptedAsset) in
             ///
             /// Encryption is completed.
             /// Create an item in the history queue for this upload, and remove the one in the upload queue
@@ -436,15 +369,137 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
                     globalIdentifier: encryptedAsset.globalIdentifier
                 )
             } catch {
-                log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
-                throw error
+                self.log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
+                handleError(encryptedAsset.globalIdentifier, error)
             }
+        }
+        
+        let asset = encryptionRequest.asset
+        let globalIdentifier: GlobalIdentifier
+        
+        do {
+            ///
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
         } catch {
+            handleError(nil, error)
+            return
+        }
+        
+        if encryptionRequest.isBackground == false {
+            for delegate in assetDelegates {
+                if let delegate = delegate as? SHAssetEncrypterDelegate {
+                    delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
+                }
+            }
+            
             do {
-                try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
+                ///
+                /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
+                /// ingest that identifier into the graph as a provisional share.
+                ///
+                try SHKGQuery.ingestProvisionalShare(
+                    of: globalIdentifier,
+                    localIdentifier: encryptionRequest.localIdentifier,
+                    from: self.user.identifier,
+                    to: encryptionRequest.sharedWith.map({ $0.identifier })
+                )
             } catch {
-                log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
-                // TODO: Handle
+                handleError(globalIdentifier, error)
+                return
+            }
+        }
+        
+        ///
+        /// The symmetric key is used to encrypt this asset (all of its version) moving forward.
+        /// For assets that are already in the local store, do a best effort to retrieve the key from the store.
+        /// The first time the asset the `retrieveCommonEncryptionKey` will throw a `missingAssetInLocalServer` error, so a new one is generated.
+        /// The key is stored unencrypted in the local database, but it's encrypted for each user (including self)
+        /// before leaving the device (at remote asset saving or sharing time)
+        ///
+        var privateSecret: SymmetricKey? = nil
+        var secretRetrievalError: Error? = nil
+        let dispatchGroup = DispatchGroup()
+        
+        dispatchGroup.enter()
+        SHLocalAssetStoreController(user: self.user).retrieveCommonEncryptionKey(
+            for: globalIdentifier
+        ) {
+            result in
+            switch result {
+            case .failure(let error):
+                switch error {
+                case SHBackgroundOperationError.missingAssetInLocalServer(_):
+                    privateSecret = SymmetricKey(size: .bits256)
+                default:
+                    secretRetrievalError = error
+                }
+            case .success(let privateSecretData):
+                do {
+                    privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
+                } catch {
+                    secretRetrievalError = error
+                }
+            }
+            
+            dispatchGroup.leave()
+        }
+        
+        guard secretRetrievalError == nil else {
+            handleError(globalIdentifier, secretRetrievalError!)
+            return
+        }
+        guard let privateSecret else {
+            handleError(globalIdentifier, SHBackgroundOperationError.fatalError("failed to retrieve secret"))
+            return
+        }
+        
+        dispatchGroup.notify(queue: .global(qos: .background)) {
+            
+            let encryptedAsset: any SHEncryptedAsset
+            
+            do {
+                encryptedAsset = try self.generateEncryptedAsset(
+                    for: asset,
+                    with: globalIdentifier,
+                    usingPrivateSecret: privateSecret.rawRepresentation,
+                    recipients: [self.user],
+                    request: encryptionRequest
+                )
+            } catch {
+                handleError(globalIdentifier, error)
+                return
+            }
+            
+            var error: Error? = nil
+            let group = DispatchGroup()
+            
+            self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
+            
+            group.enter()
+            self.serverProxy.localServer.create(
+                assets: [encryptedAsset],
+                groupId: encryptionRequest.groupId,
+                filterVersions: nil
+            ) { result in
+                if case .failure(let err) = result {
+                    error = err
+                }
+                group.leave()
+            }
+            
+            group.notify(queue: .global(qos: .background)) {
+                guard error == nil else {
+                    self.log.error("failed to store data for localIdentifier \(asset.phAsset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
+                    
+                    let error = SHBackgroundOperationError.fatalError("failed to create local asset")
+                    handleError(globalIdentifier, error)
+                    return
+                }
+                
+                handleSuccess(encryptedAsset)
             }
         }
     }

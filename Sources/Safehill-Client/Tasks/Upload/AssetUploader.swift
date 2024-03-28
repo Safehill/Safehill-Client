@@ -255,71 +255,80 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         let localIdentifier = uploadRequest.localIdentifier
         let versions = uploadRequest.versions
         
-        do {
-            log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
-            let encryptedAsset: any SHEncryptedAsset
-            do {
-                encryptedAsset = try self.localAssetStoreController
-                    .encryptedAsset(
-                        with: globalIdentifier,
-                        versions: versions,
-                        cacheHiResolution: false
-                    )
-            } catch {
-                log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
-                throw SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
-            }
-            
-            guard globalIdentifier == encryptedAsset.globalIdentifier else {
-                throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-            }
-            
-#if DEBUG
-            guard ErrorSimulator.percentageUploadFailures == 0
-                  || arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
-                log.debug("simulating CREATE ASSET failure")
-                throw SHBackgroundOperationError.fatalError("failed to create server asset")
-            }
-#endif
-            let serverAsset: SHServerAsset
-            do {
-                serverAsset = try SHAssetStoreController(user: self.user)
-                    .upload(
-                        asset: encryptedAsset,
-                        with: uploadRequest.groupId,
-                        filterVersions: versions,
-                        force: true
-                    )
-            } catch {
-                log.error("failed to upload asset for item with localIdentifier \(localIdentifier). Dequeueing item, as to let the user control the retry. error=\(error.localizedDescription)")
-                throw SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
-            }
-            
-            guard globalIdentifier == serverAsset.globalIdentifier else {
-                throw SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-            }
-            
-            ///
-            /// Upload is completed.
-            /// Create an item in the history queue for this upload, and remove the one in the upload queue
-            ///
-            do {
-                try self.markAsSuccessful(
-                    item: item,
-                    uploadRequest: uploadRequest
-                )
-            } catch {
-                log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-                // TODO: Handle
-            }
-        } catch {
+        let handleError = { (error: Error) in
+            self.log.error("\(error.localizedDescription).")
             do {
                 try self.markAsFailed(item: item,
                                       uploadRequest: uploadRequest,
                                       error: error)
             } catch {
-                log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
+                self.log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
                 // TODO: Handle
+            }
+        }
+        
+        log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
+        self.localAssetStoreController.encryptedAsset(
+            with: globalIdentifier,
+            versions: versions,
+            cacheHiResolution: false,
+            qos: .background
+        ) { result in
+            
+            switch result {
+            case .failure(let error):
+                self.log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
+                handleError(error)
+            case .success(let encryptedAsset):
+                guard globalIdentifier == encryptedAsset.globalIdentifier else {
+                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    handleError(error)
+                    return
+                }
+                
+#if DEBUG
+                guard ErrorSimulator.percentageUploadFailures == 0
+                      || arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
+                    self.log.debug("simulating CREATE ASSET failure")
+                    let error = SHBackgroundOperationError.fatalError("failed to create server asset")
+                    handleError(error)
+                    return
+                }
+#endif
+                let serverAsset: SHServerAsset
+                do {
+                    serverAsset = try SHAssetStoreController(user: self.user)
+                        .upload(
+                            asset: encryptedAsset,
+                            with: uploadRequest.groupId,
+                            filterVersions: versions,
+                            force: true
+                        )
+                } catch {
+                    let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
+                    handleError(error)
+                    return
+                }
+                
+                guard globalIdentifier == serverAsset.globalIdentifier else {
+                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    handleError(error)
+                    return
+                }
+                
+                ///
+                /// Upload is completed.
+                /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                ///
+                do {
+                    try self.markAsSuccessful(
+                        item: item,
+                        uploadRequest: uploadRequest
+                    )
+                } catch {
+                    self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                    handleError(error)
+                }
             }
         }
     }
