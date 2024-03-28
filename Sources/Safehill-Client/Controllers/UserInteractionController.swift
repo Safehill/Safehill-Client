@@ -831,6 +831,10 @@ extension SHUserInteractionController {
                 localMessageIds.contains($0.interactionId) == false
             })
             
+            log.debug("""
+[SHUserInteractionController] Started from \(localInteractionsGroup.messages.count) messages and \(localInteractionsGroup.reactions.count) reactions. Retrieved \(remoteInteractionsGroup.messages.count) messages and \(remoteInteractionsGroup.reactions.count) reactions from remote server. \(missingMessages.count) messages and \(missingReactions.count) are not in local
+""")
+            
             let dispatchGroup = DispatchGroup()
             
             switch anchor {
@@ -842,7 +846,7 @@ extension SHUserInteractionController {
                         inThread: anchorId
                     ) { res in
                         if case .failure(let failure) = res {
-                            log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                            log.critical("[SHUserInteractionController] failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
                         }
                         dispatchGroup.leave()
                     }
@@ -855,7 +859,7 @@ extension SHUserInteractionController {
                         inThread: anchorId
                     ) { res in
                         if case .failure(let failure) = res {
-                            log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                            log.critical("[SHUserInteractionController] failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
                         }
                         dispatchGroup.leave()
                     }
@@ -868,7 +872,7 @@ extension SHUserInteractionController {
                         inGroup: anchorId
                     ) { res in
                         if case .failure(let failure) = res {
-                            log.critical("failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                            log.critical("[SHUserInteractionController] failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
                         }
                         dispatchGroup.leave()
                     }
@@ -881,7 +885,7 @@ extension SHUserInteractionController {
                         inGroup: anchorId
                     ) { res in
                         if case .failure(let failure) = res {
-                            log.critical("failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
+                            log.critical("[SHUserInteractionController] failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
                         }
                         dispatchGroup.leave()
                     }
