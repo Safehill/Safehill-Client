@@ -1002,9 +1002,16 @@ struct LocalServer : SHServerAPI {
         
         for (globalIdentifier, shareDiff) in userIdsToAddToAssetGids {
             for (recipientUserId, groupId) in shareDiff.groupIdByRecipientId {
+                guard let groupInfo = shareDiff.groupInfoById[groupId] else {
+                    log.critical("group information missing for group \(groupId) when calling addAssetRecipients(basedOn:versions:completionHandler:)")
+                    continue
+                }
                 for version in versions {
                     writeBatch.set(
-                        value: ["groupId": groupId],
+                        value: [
+                            "groupId": groupId,
+                            "groupCreationDate": groupInfo.createdAt?.iso8601withFractionalSeconds
+                        ],
                         for: [
                             "receiver",
                             recipientUserId,
