@@ -445,60 +445,67 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: .background)) {
-            
-            guard secretRetrievalError == nil else {
-                handleError(globalIdentifier, secretRetrievalError!)
-                return
-            }
-            guard let privateSecret else {
-                handleError(globalIdentifier, SHBackgroundOperationError.fatalError("failed to retrieve secret"))
-                return
-            }
-            
-            let encryptedAsset: any SHEncryptedAsset
-            
-            do {
-                encryptedAsset = try self.generateEncryptedAsset(
-                    for: asset,
-                    with: globalIdentifier,
-                    usingPrivateSecret: privateSecret.rawRepresentation,
-                    recipients: [self.user],
-                    request: encryptionRequest
-                )
-            } catch {
-                handleError(globalIdentifier, error)
-                return
-            }
-            
-            var error: Error? = nil
-            
-            self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
-            
-            dispatchGroup.enter()
-            self.serverProxy.localServer.create(
-                assets: [encryptedAsset],
-                groupId: encryptionRequest.groupId,
-                filterVersions: nil
-            ) { result in
-                if case .failure(let err) = result {
-                    error = err
-                }
-                dispatchGroup.leave()
-            }
-            
-            dispatchGroup.notify(queue: .global(qos: .background)) {
-                guard error == nil else {
-                    self.log.error("failed to store data for localIdentifier \(asset.phAsset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
-                    
-                    let error = SHBackgroundOperationError.fatalError("failed to create local asset")
-                    handleError(globalIdentifier, error)
-                    return
-                }
-                
-                handleSuccess(encryptedAsset)
-            }
+        var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            handleError(globalIdentifier, SHBackgroundOperationError.timedOut)
+            return
         }
+        
+        guard secretRetrievalError == nil else {
+            handleError(globalIdentifier, secretRetrievalError!)
+            return
+        }
+        guard let privateSecret else {
+            handleError(globalIdentifier, SHBackgroundOperationError.fatalError("failed to retrieve secret"))
+            return
+        }
+        
+        let encryptedAsset: any SHEncryptedAsset
+        
+        do {
+            encryptedAsset = try self.generateEncryptedAsset(
+                for: asset,
+                with: globalIdentifier,
+                usingPrivateSecret: privateSecret.rawRepresentation,
+                recipients: [self.user],
+                request: encryptionRequest
+            )
+        } catch {
+            handleError(globalIdentifier, error)
+            return
+        }
+        
+        var error: Error? = nil
+        
+        self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
+        
+        dispatchGroup.enter()
+        self.serverProxy.localServer.create(
+            assets: [encryptedAsset],
+            groupId: encryptionRequest.groupId,
+            filterVersions: nil
+        ) { result in
+            if case .failure(let err) = result {
+                error = err
+            }
+            dispatchGroup.leave()
+        }
+        
+        dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            handleError(globalIdentifier, SHBackgroundOperationError.timedOut)
+            return
+        }
+        
+        guard error == nil else {
+            self.log.error("failed to store data for localIdentifier \(asset.phAsset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
+            
+            let error = SHBackgroundOperationError.fatalError("failed to create local asset")
+            handleError(globalIdentifier, error)
+            return
+        }
+        
+        handleSuccess(encryptedAsset)
     }
     
     public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {

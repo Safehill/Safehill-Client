@@ -353,6 +353,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             return
         }
         
+        let semaphore = DispatchSemaphore(value: 0)
+        var processingError: Error? = nil
+        
         ///
         /// Store sharing information in the local server proxy
         ///
@@ -362,7 +365,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             switch result {
             case .failure(let error):
-                handleError(error)
+                processingError = error
+                semaphore.signal()
                 return
             case .success:
                 self.log.info("successfully stored asset \(globalIdentifier) sharing information in local server proxy")
@@ -374,8 +378,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 guard ErrorSimulator.percentageShareFailures == 0
                         || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
                     self.log.debug("simulating SHARE failure")
-                    let error = SHBackgroundOperationError.fatalError("share failed")
-                    handleError(error)
+                    processingError = SHBackgroundOperationError.fatalError("share failed")
+                    semaphore.signal()
                     return
                 }
 #endif
@@ -383,8 +387,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 do {
                     try self.share(globalIdentifier: globalIdentifier, via: shareRequest)
                 } catch {
-                    let error = SHBackgroundOperationError.fatalError("share failed")
-                    handleError(error)
+                    processingError = SHBackgroundOperationError.fatalError("share failed")
+                    semaphore.signal()
                     return
                 }
                 
@@ -394,7 +398,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                         case .failure(let error):
                             self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
                             // Mark as failed on any other error
-                            handleError(error)
+                            processingError = error
                         case .success:
                             do {
                                 // Ingest into the graph
@@ -403,16 +407,28 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                                     from: self.user.identifier,
                                     to: shareRequest.sharedWith.map({ $0.identifier })
                                 )
-                                handleSuccess(globalIdentifier)
                             } catch {
-                                handleError(error)
+                                processingError = error
                             }
+                            semaphore.signal()
                         }
                     }
                 } else {
-                    handleSuccess(globalIdentifier)
+                    semaphore.signal()
                 }
             }
+        }
+        
+        let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            handleError(SHBackgroundOperationError.timedOut)
+            return
+        }
+        
+        if let processingError {
+            handleError(processingError)
+        } else {
+            handleSuccess(globalIdentifier)
         }
     }
     

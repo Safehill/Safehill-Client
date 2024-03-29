@@ -267,6 +267,25 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             }
         }
         
+        let handleSuccess = {
+            ///
+            /// Upload is completed.
+            /// Create an item in the history queue for this upload, and remove the one in the upload queue
+            ///
+            do {
+                try self.markAsSuccessful(
+                    item: item,
+                    uploadRequest: uploadRequest
+                )
+            } catch {
+                self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                handleError(error)
+            }
+        }
+        
+        let semaphore = DispatchSemaphore(value: 0)
+        var processingError: Error? = nil
+        
         log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
         self.localAssetStoreController.encryptedAsset(
             with: globalIdentifier,
@@ -278,11 +297,12 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             switch result {
             case .failure(let error):
                 self.log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
-                handleError(error)
+                processingError = error
+                semaphore.signal()
             case .success(let encryptedAsset):
                 guard globalIdentifier == encryptedAsset.globalIdentifier else {
-                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-                    handleError(error)
+                    processingError = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    semaphore.signal()
                     return
                 }
                 
@@ -290,8 +310,8 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                 guard ErrorSimulator.percentageUploadFailures == 0
                       || arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
                     self.log.debug("simulating CREATE ASSET failure")
-                    let error = SHBackgroundOperationError.fatalError("failed to create server asset")
-                    handleError(error)
+                    processingError = SHBackgroundOperationError.fatalError("failed to create server asset")
+                    semaphore.signal()
                     return
                 }
 #endif
@@ -305,31 +325,31 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                             force: true
                         )
                 } catch {
-                    let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
-                    handleError(error)
+                    processingError = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
+                    semaphore.signal()
                     return
                 }
                 
                 guard globalIdentifier == serverAsset.globalIdentifier else {
-                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-                    handleError(error)
+                    processingError = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    semaphore.signal()
                     return
                 }
                 
-                ///
-                /// Upload is completed.
-                /// Create an item in the history queue for this upload, and remove the one in the upload queue
-                ///
-                do {
-                    try self.markAsSuccessful(
-                        item: item,
-                        uploadRequest: uploadRequest
-                    )
-                } catch {
-                    self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-                    handleError(error)
-                }
+                semaphore.signal()
             }
+        }
+        
+        let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
+        guard dispatchResult == .success else {
+            handleError(SHBackgroundOperationError.timedOut)
+            return
+        }
+        
+        if let processingError {
+            handleError(processingError)
+        } else {
+            handleSuccess()
         }
     }
     
