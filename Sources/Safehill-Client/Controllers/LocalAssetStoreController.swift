@@ -56,7 +56,11 @@ public struct SHLocalAssetStoreController {
             case .failure(let error):
                 completionHandler(.failure(error))
             case .success(let dict):
-                completionHandler(.success(dict[globalIdentifier]!))
+                guard let asset = dict[globalIdentifier] else {
+                    completionHandler(.failure(SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)))
+                    return
+                }
+                completionHandler(.success(asset))
             }
         }
     }
