@@ -447,16 +447,16 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             dispatchGroup.leave()
         }
         
-        guard secretRetrievalError == nil else {
-            handleError(globalIdentifier, secretRetrievalError!)
-            return
-        }
-        guard let privateSecret else {
-            handleError(globalIdentifier, SHBackgroundOperationError.fatalError("failed to retrieve secret"))
-            return
-        }
-        
         dispatchGroup.notify(queue: .global(qos: .background)) {
+            
+            guard secretRetrievalError == nil else {
+                handleError(globalIdentifier, secretRetrievalError!)
+                return
+            }
+            guard let privateSecret else {
+                handleError(globalIdentifier, SHBackgroundOperationError.fatalError("failed to retrieve secret"))
+                return
+            }
             
             let encryptedAsset: any SHEncryptedAsset
             
@@ -474,11 +474,10 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             }
             
             var error: Error? = nil
-            let group = DispatchGroup()
             
             self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
             
-            group.enter()
+            dispatchGroup.enter()
             self.serverProxy.localServer.create(
                 assets: [encryptedAsset],
                 groupId: encryptionRequest.groupId,
@@ -487,10 +486,10 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
                 if case .failure(let err) = result {
                     error = err
                 }
-                group.leave()
+                dispatchGroup.leave()
             }
             
-            group.notify(queue: .global(qos: .background)) {
+            dispatchGroup.notify(queue: .global(qos: .background)) {
                 guard error == nil else {
                     self.log.error("failed to store data for localIdentifier \(asset.phAsset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
                     
