@@ -43,8 +43,7 @@ public class SHSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDele
         /// Remove previously created file for upload once upload is done
         if let tempFolderURL = S3Proxy.tempFolderURL {
             let fileURL = tempFolderURL.appendingPathComponent(identifier)
-            let filePath = fileURL.path
-            try? FileManager.default.removeItem(atPath: filePath)
+            try? FileManager.default.removeItem(at: fileURL)
         }
         
         let _ = writeQueueAccessQueue.sync(flags: .barrier) {
@@ -154,7 +153,7 @@ struct S3Proxy {
         let fileURL = tempFolderURL.appendingPathComponent(fileName)
         let filePath = fileURL.path
         
-        try? FileManager.default.removeItem(atPath: filePath)
+        try? FileManager.default.removeItem(at: fileURL)
         if FileManager.default.createFile(atPath: filePath, contents: data, attributes: nil) {
             let task = backgroundSession.uploadTask(with: urlRequest, fromFile: fileURL)
             task.resume()
