@@ -116,15 +116,13 @@ struct S3Proxy {
     let presignedURL: String
     
     static var tempFolderURL: URL? {
-        if let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            do {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                return folder
-            } catch {
-                fatalError("failed to create temporary directory for uploads")
-            }
-        } else {
-            fatalError("failed to determine use cache directory for uploads")
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("uploads")
+        
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            return folder
+        } catch {
+            fatalError("failed to create temporary directory for uploads")
         }
     }
 
