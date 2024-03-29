@@ -347,13 +347,11 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         let handleError = { (globalIdentifier: GlobalIdentifier?, error: Error) in
             self.log.error("FAIL in AssetEncrypter: \(error.localizedDescription)")
             
-            if let globalIdentifier {
-                do {
-                    try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
-                } catch {
-                    self.log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
-                    // TODO: Handle
-                }
+            do {
+                try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
+            } catch {
+                self.log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
+                // TODO: Handle
             }
         }
         
