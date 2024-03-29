@@ -154,8 +154,9 @@ public class SHUsersController {
             }
         }
         
-        if missingUserIds.isEmpty {
+        guard missingUserIds.isEmpty == false else {
             completionHandler(.success(users))
+            return
         }
         
         serverProxy.getUsers(
