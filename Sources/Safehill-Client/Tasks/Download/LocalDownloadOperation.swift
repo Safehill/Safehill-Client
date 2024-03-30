@@ -380,25 +380,30 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        let handleFailure = { (error: Error) in
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
+                    $0.didCompleteDownloadCycle(with: .failure(error))
+                })
+            }
+            completionHandler(.failure(error))
+        }
+        
         self.fetchDescriptorsFromLocalServer {
             result in
             switch result {
             case .failure(let error):
-                completionHandler(.failure(error))
+                self.log.error("[\(type(of: self))] failed to fetch local descriptors: \(error.localizedDescription)")
+                handleFailure(error)
                 return
             case .success(let fullDescriptorList):
                 self.log.debug("[\(type(of: self))] original descriptors: \(fullDescriptorList.count)")
                 self.processDescriptors(fullDescriptorList, qos: qos) { result in
                     switch result {
                     case .failure(let error):
-                        self.log.error("[\(type(of: self))] failed to fetch local descriptors: \(error.localizedDescription)")
-                        let downloaderDelegates = self.downloaderDelegates
-                        self.delegatesQueue.async {
-                            downloaderDelegates.forEach({
-                                $0.didCompleteDownloadCycle(with: .failure(error))
-                            })
-                        }
-                        completionHandler(.failure(error))
+                        self.log.error("[\(type(of: self))] failed to process descriptors: \(error.localizedDescription)")
+                        handleFailure(error)
                     case .success(let filteredDescriptors):
                         let filteredDescriptorsFromKnownUsersByGid = filteredDescriptors.fromRetrievableUsers.filter({
                             filteredDescriptors.fromKnownUsers.contains($0.value.globalIdentifier)
@@ -451,7 +456,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                 }
                                 
                             case .failure(let error):
-                                completionHandler(.failure(error))
+                                handleFailure(error)
                             }
                         }
                     }

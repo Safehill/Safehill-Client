@@ -1171,15 +1171,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     return
                 }
                 
-                let result = Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>.success(successfullyDownloadedAssets)
-                let downloaderDelegates = self.downloaderDelegates
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didCompleteDownloadCycle(with: result)
-                    })
-                }
-                
-                completionHandler(result)
+                completionHandler(.success(successfullyDownloadedAssets))
             }
         }
     }
@@ -1190,8 +1182,18 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        let handleResult = { (result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) in
+            let downloaderDelegates = self.downloaderDelegates
+            self.delegatesQueue.async {
+                downloaderDelegates.forEach({
+                    $0.didCompleteDownloadCycle(with: result)
+                })
+            }
+            completionHandler(result)
+        }
+        
         guard self.user is SHAuthenticatedLocalUser else {
-            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            handleResult(.failure(SHLocalUserError.notAuthenticated))
             return
         }
         
@@ -1208,9 +1210,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 ), Error>) in
                 switch result {
                 case .success(let descriptors):
-                    self.process(descriptors, qos: qos, completionHandler: completionHandler)
+                    self.process(descriptors, qos: qos) { result in
+                        handleResult(result)
+                    }
                 case .failure(let error):
-                    completionHandler(.failure(error))
+                    handleResult(.failure(error))
                 }
             }
         }
