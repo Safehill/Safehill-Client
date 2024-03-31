@@ -407,7 +407,6 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
     public override func runOnce(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let dispatchGroup = DispatchGroup()
         let fetchQueue: KBQueueStore
         do {
             fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
@@ -417,34 +416,48 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
             return
         }
         
-        var count = 0
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
         
-        do {
-            while let item = try fetchQueue.peek() {
-                guard self.limit == 0 || count < self.limit else {
-                    break
-                }
-                
-                dispatchGroup.enter()
-                self.runOnce(for: item) { _ in
-                    dispatchGroup.leave()
-                }
-                
-                count += 1
-                
-                guard !self.isCancelled else {
-                    self.log.info("fetch task cancelled. Finishing")
-                    break
-                }
+        let interval = DateInterval(start: Date.distantPast, end: Date())
+        fetchQueue.peekItems(
+            createdWithin: interval,
+            limit: self.limit > 0 ? self.limit : nil
+        ) { result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
             }
-        } catch {
-            log.error("failed to fetch items from the FETCH queue: \(error.localizedDescription)")
+            group.leave()
         }
         
-        log.info("started \(count) FETCH operations")
-        
-        dispatchGroup.notify(queue: .global()) {
-            completionHandler(.success(()))
+        group.notify(queue: .global()) {
+            guard error == nil else {
+                self.log.critical("failed to retrieve items from FETCH queue. \(error!.localizedDescription)")
+                completionHandler(.failure(error!))
+                return
+            }
+            
+            var count = 0
+            
+            for item in queueItems {
+                count += 1
+                
+                group.enter()
+                self.runOnce(for: item) { _ in
+                    group.leave()
+                }
+            }
+            
+            group.notify(queue: .global()) {
+                completionHandler(.success(()))
+            }
+            
+            self.log.info("started \(count) FETCH operations")
         }
     }
 }
