@@ -1062,7 +1062,7 @@ extension SHServerProxy {
             case .success:
                 log.trace("encryption details for group \(groupId) saved to remote server. Updating local server")
                 /// Save the encryption details for all users on server
-                self.remoteServer.setGroupEncryptionDetails(
+                self.localServer.setGroupEncryptionDetails(
                     groupId: groupId,
                     recipientsEncryptionDetails: recipientsEncryptionDetails,
                     completionHandler: completionHandler
