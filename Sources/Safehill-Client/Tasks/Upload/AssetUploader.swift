@@ -52,9 +52,12 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         return uploadRequest
     }
     
-    public func markAsFailed(item: KBQueueItem,
-                             uploadRequest request: SHUploadRequestQueueItem,
-                             error: Error) throws {
+    public func markAsFailed(
+        item: KBQueueItem,
+        uploadRequest request: SHUploadRequestQueueItem,
+        error: Error,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let localIdentifier = request.localIdentifier
         let globalIdentifier = request.globalAssetId
         let versions = request.versions
@@ -66,12 +69,13 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
         
         do {
-            let queue = try BackgroundOperationQueue.of(type: .upload)
-            _ = try queue.dequeue(item: item)
+            let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+            _ = try uploadQueue.dequeue(item: item)
         }
         catch {
             log.error("asset \(localIdentifier) failed to upload but dequeuing from UPLOAD queue failed, so this operation will be attempted again.")
-            throw error
+            completionHandler(.failure(error))
+            return
         }
         
         self.markAsFailed(
@@ -83,23 +87,26 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             isBackground: request.isBackground
         )
         
-        self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-        
-        guard request.isBackground == false else {
-            /// Avoid other side-effects for background  `SHUploadRequestQueueItem`
-            return
-        }
-        
-        /// Notify the delegates
-        for delegate in delegates {
-            if let delegate = delegate as? SHAssetUploaderDelegate {
-                delegate.didFailUpload(queueItemIdentifier: request.identifier, error: error)
+        self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions) {
+            guard request.isBackground == false else {
+                /// Avoid other side-effects for background  `SHUploadRequestQueueItem`
+                completionHandler(.success(()))
+                return
             }
-            if users.count > 0 {
-                if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didFailSharing(queueItemIdentifier: request.identifier)
+            
+            /// Notify the delegates
+            for delegate in self.delegates {
+                if let delegate = delegate as? SHAssetUploaderDelegate {
+                    delegate.didFailUpload(queueItemIdentifier: request.identifier, error: error)
+                }
+                if users.count > 0 {
+                    if let delegate = delegate as? SHAssetSharerDelegate {
+                        delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                    }
                 }
             }
+            
+            completionHandler(.success(()))
         }
     }
     
@@ -119,8 +126,8 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         log.info("dequeueing item \(item.identifier) from the UPLOAD queue")
         
         do {
-            let queue = try BackgroundOperationQueue.of(type: .upload)
-            _ = try queue.dequeue(item: item)
+            let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+            _ = try uploadQueue.dequeue(item: item)
         } catch {
             log.warning("item \(item.identifier) was completed but dequeuing from UPLOAD queue failed. This task will be attempted again")
             throw error
@@ -220,8 +227,10 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
     }
     
-    func process(_ item: KBQueueItem) {
-        
+    func process(
+        _ item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let uploadRequest: SHUploadRequestQueueItem
         
         do {
@@ -234,13 +243,26 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             uploadRequest = content
         } catch {
             do {
-                let queue = try BackgroundOperationQueue.of(type: .upload)
-                _ = try queue.dequeue(item: item)
+                let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+                _ = try uploadQueue.dequeue(item: item)
             }
             catch {
                 log.warning("dequeuing failed of unexpected data in UPLOAD queue. This task will be attempted again.")
             }
+            completionHandler(.failure(error))
             return
+        }
+        
+        let handleError = { (error: Error) in
+            self.log.error("FAIL in UPLOAD: \(error.localizedDescription)")
+            
+            self.markAsFailed(
+                item: item,
+                uploadRequest: uploadRequest,
+                error: error
+            ) { _ in
+                completionHandler(.failure(error))
+            }
         }
         
         if uploadRequest.isBackground == false {
@@ -255,37 +277,6 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         let localIdentifier = uploadRequest.localIdentifier
         let versions = uploadRequest.versions
         
-        let handleError = { (error: Error) in
-            self.log.error("\(error.localizedDescription).")
-            do {
-                try self.markAsFailed(item: item,
-                                      uploadRequest: uploadRequest,
-                                      error: error)
-            } catch {
-                self.log.critical("failed to mark UPLOAD as failed. This will likely cause infinite loops")
-                // TODO: Handle
-            }
-        }
-        
-        let handleSuccess = {
-            ///
-            /// Upload is completed.
-            /// Create an item in the history queue for this upload, and remove the one in the upload queue
-            ///
-            do {
-                try self.markAsSuccessful(
-                    item: item,
-                    uploadRequest: uploadRequest
-                )
-            } catch {
-                self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-                handleError(error)
-            }
-        }
-        
-        let semaphore = DispatchSemaphore(value: 0)
-        var processingError: Error? = nil
-        
         log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
         self.localAssetStoreController.encryptedAsset(
             with: globalIdentifier,
@@ -297,12 +288,11 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             switch result {
             case .failure(let error):
                 self.log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
-                processingError = error
-                semaphore.signal()
+                handleError(error)
             case .success(let encryptedAsset):
                 guard globalIdentifier == encryptedAsset.globalIdentifier else {
-                    processingError = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-                    semaphore.signal()
+                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    handleError(error)
                     return
                 }
                 
@@ -310,8 +300,8 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                 guard ErrorSimulator.percentageUploadFailures == 0
                       || arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
                     self.log.debug("simulating CREATE ASSET failure")
-                    processingError = SHBackgroundOperationError.fatalError("failed to create server asset")
-                    semaphore.signal()
+                    let error = SHBackgroundOperationError.fatalError("failed to create server asset")
+                    handleError(error)
                     return
                 }
 #endif
@@ -325,36 +315,48 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                             force: true
                         )
                 } catch {
-                    processingError = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
-                    semaphore.signal()
+                    let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
+                    handleError(error)
                     return
                 }
                 
                 guard globalIdentifier == serverAsset.globalIdentifier else {
-                    processingError = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-                    semaphore.signal()
+                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    handleError(error)
                     return
                 }
                 
-                semaphore.signal()
+                ///
+                /// Upload is completed.
+                /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                ///
+                do {
+                    try self.markAsSuccessful(
+                        item: item,
+                        uploadRequest: uploadRequest
+                    )
+                } catch {
+                    self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                    handleError(error)
+                }
+                completionHandler(.success(()))
             }
-        }
-        
-        let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            handleError(SHBackgroundOperationError.timedOut)
-            return
-        }
-        
-        if let processingError {
-            handleError(processingError)
-        } else {
-            handleSuccess()
         }
     }
     
-    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
-        let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+    public func run(
+        forQueueItemIdentifiers queueItemIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let uploadQueue: KBQueueStore
+        
+        do {
+            uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+        } catch {
+            log.critical("failed to read from UPLOAD queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
         
         var queueItems = [KBQueueItem]()
         var error: Error? = nil
@@ -371,103 +373,100 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        for item in queueItems {
-            guard processingState(for: item.identifier) != .uploading else {
-                continue
+        group.notify(queue: .global()) {
+            guard error == nil else {
+                self.log.critical("failed to retrieve items from UPLOAD queue. \(error!.localizedDescription)")
+                completionHandler(.failure(error!))
+                return
             }
             
-            log.info("uploading item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.uploading, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] upload task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
-        }
-    }
-    
-    public func runOnce(maxItems: Int? = nil) throws {
-        var count = 0
-        let queue = try BackgroundOperationQueue.of(type: .upload)
-        
-        while let item = try queue.peek() {
-            guard maxItems == nil || count < maxItems! else {
-                break
-            }
-            guard processingState(for: item.identifier) != .uploading else {
-                continue
-            }
-            
-            log.info("uploading item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.uploading, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] upload task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
-            
-            count += 1
-        }
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        let items: [KBQueueItem]
-        
-        do {
-            let queue = try BackgroundOperationQueue.of(type: .upload)
-            items = try queue.peekNext(self.limit)
-        } catch {
-            log.error("failed to fetch items from the UPLOAD queue")
-            state = .finished
-            return
-        }
-        
-        for item in items {
-            guard processingState(for: item.identifier) != .uploading else {
-                break
-            }
-            
-            log.info("uploading item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.uploading, for: item.identifier)
-            
-            DispatchQueue.global().async { [self] in
-                guard !isCancelled else {
-                    log.info("upload task cancelled. Finishing")
-                    setProcessingState(nil, for: item.identifier)
-                    return
+            /// 
+            /// Don't start more than 5 every 500ms
+            ///
+            for itemChunk in queueItems.chunked(into: 5) {
+                for item in itemChunk {
+                    group.enter()
+                    self.runOnce(for: item) { _ in
+                        group.leave()
+                    }
                 }
                 
-                self.process(item)
-                log.info("[√] upload task completed for item \(item.identifier)")
-                
-                setProcessingState(nil, for: item.identifier)
+                let second: Double = 1000000
+                usleep(useconds_t(0.5 * second)) // 500ms
             }
             
-            guard !isCancelled else {
-                log.info("upload task cancelled. Finishing")
-                break
+            group.notify(queue: .global()) {
+                completionHandler(.success(()))
             }
         }
+    }
+    
+    func runOnce(
+        for item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard processingState(for: item.identifier) != .uploading else {
+            completionHandler(.failure(SHBackgroundOperationError.alreadyProcessed))
+            return
+        }
         
-        state = .finished
+        log.info("uploading item \(item.identifier) created at \(item.createdAt)")
+        setProcessingState(.uploading, for: item.identifier)
+        
+        self.process(item) { result in
+            if case .success = result {
+                self.log.info("[√] upload task completed for item \(item.identifier)")
+            } else {
+                self.log.error("[x] upload task failed for item \(item.identifier)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+            completionHandler(result)
+        }
+    }
+    
+    public override func runOnce(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let dispatchGroup = DispatchGroup()
+        let uploadQueue: KBQueueStore
+        do {
+            uploadQueue = try BackgroundOperationQueue.of(type: .upload)
+        } catch {
+            log.critical("failed to read from UPLOAD queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var count = 0
+        
+        do {
+            while let item = try uploadQueue.peek() {
+                guard self.limit == 0 || count < self.limit else {
+                    break
+                }
+                
+                dispatchGroup.enter()
+                self.runOnce(for: item) { _ in
+                    dispatchGroup.leave()
+                }
+                
+                count += 1
+                
+                guard !self.isCancelled else {
+                    self.log.info("upload task cancelled. Finishing")
+                    break
+                }
+            }
+        } catch {
+            log.error("failed to fetch items from the UPLOAD queue: \(error.localizedDescription)")
+        }
+        
+        log.info("started \(count) UPLOAD operations")
+        
+        dispatchGroup.notify(queue: .global()) {
+            completionHandler(.success(()))
+        }
     }
 }
 

@@ -53,17 +53,8 @@ public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, 
         syncOperation.syncLastThreadInteractions(qos: qos, completionHandler: completionHandler)
     }
     
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        self.runOnce(qos: .background) { _ in
-            self.state = .finished
-        }
+    public override func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.runOnce(qos: .background, completionHandler: completionHandler)
     }
 }
 

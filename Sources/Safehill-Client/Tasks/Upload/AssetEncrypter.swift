@@ -207,9 +207,9 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
     public func markAsFailed(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String?
-    ) throws
-    {
+        globalIdentifier: String?,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let localIdentifier = request.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
@@ -227,7 +227,8 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         }
         catch {
             log.warning("dequeuing failed of unexpected data in ENCRYPT queue. This task will be attempted again.")
-            throw error
+            completionHandler(.failure(error))
+            return
         }
         
         self.markAsFailed(
@@ -240,23 +241,26 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         )
         
         if let globalIdentifier = globalIdentifier {
-            self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions)
-        }
-        
-        guard request.isBackground == false else {
-            /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
-            return
-        }
-        
-        /// Notify the delegates
-        for delegate in assetDelegates {
-            if let delegate = delegate as? SHAssetEncrypterDelegate {
-                delegate.didFailEncryption(queueItemIdentifier: request.identifier)
-            }
-            if users.count > 0 {
-                if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didFailSharing(queueItemIdentifier: request.identifier)
+            self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions) {
+                guard request.isBackground == false else {
+                    /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
+                    completionHandler(.success(()))
+                    return
                 }
+                
+                /// Notify the delegates
+                for delegate in self.assetDelegates {
+                    if let delegate = delegate as? SHAssetEncrypterDelegate {
+                        delegate.didFailEncryption(queueItemIdentifier: request.identifier)
+                    }
+                    if users.count > 0 {
+                        if let delegate = delegate as? SHAssetSharerDelegate {
+                            delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                        }
+                    }
+                }
+                
+                completionHandler(.success(()))
             }
         }
     }
@@ -321,8 +325,10 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         }
     }
     
-    private func process(_ item: KBQueueItem) {
-        
+    private func process(
+        _ item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let encryptionRequest: SHEncryptionRequestQueueItem
         
         do {
@@ -341,35 +347,8 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             catch {
                 log.fault("dequeuing failed of unexpected data in ENCRYPT queue")
             }
+            completionHandler(.failure(error))
             return
-        }
-        
-        let handleError = { (globalIdentifier: GlobalIdentifier?, error: Error) in
-            self.log.error("FAIL in AssetEncrypter: \(error.localizedDescription)")
-            
-            do {
-                try self.markAsFailed(item: item, encryptionRequest: encryptionRequest, globalIdentifier: globalIdentifier)
-            } catch {
-                self.log.critical("failed to mark ENCRYPT as failed. This will likely cause infinite loops")
-                // TODO: Handle
-            }
-        }
-        
-        let handleSuccess = { (encryptedAsset: any SHEncryptedAsset) in
-            ///
-            /// Encryption is completed.
-            /// Create an item in the history queue for this upload, and remove the one in the upload queue
-            ///
-            do {
-                try self.markAsSuccessful(
-                    item: item,
-                    encryptionRequest: encryptionRequest,
-                    globalIdentifier: encryptedAsset.globalIdentifier
-                )
-            } catch {
-                self.log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
-                handleError(encryptedAsset.globalIdentifier, error)
-            }
         }
         
         let asset = encryptionRequest.asset
@@ -382,8 +361,19 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             ///
             globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
         } catch {
-            handleError(nil, error)
             return
+        }
+        
+        let handleError = { (error: Error) in
+            self.log.error("FAIL in ENCRYPT: \(error.localizedDescription)")
+            
+            self.markAsFailed(
+                item: item,
+                encryptionRequest: encryptionRequest,
+                globalIdentifier: globalIdentifier
+            ) { _ in
+                completionHandler(.failure(error))
+            }
         }
         
         if encryptionRequest.isBackground == false {
@@ -405,7 +395,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
                     to: encryptionRequest.sharedWith.map({ $0.identifier })
                 )
             } catch {
-                handleError(globalIdentifier, error)
+                handleError(error)
                 return
             }
         }
@@ -445,71 +435,73 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             dispatchGroup.leave()
         }
         
-        var dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            handleError(globalIdentifier, SHBackgroundOperationError.timedOut)
-            return
-        }
-        
-        guard secretRetrievalError == nil else {
-            handleError(globalIdentifier, secretRetrievalError!)
-            return
-        }
-        guard let privateSecret else {
-            handleError(globalIdentifier, SHBackgroundOperationError.fatalError("failed to retrieve secret"))
-            return
-        }
-        
-        let encryptedAsset: any SHEncryptedAsset
-        
-        do {
-            encryptedAsset = try self.generateEncryptedAsset(
-                for: asset,
-                with: globalIdentifier,
-                usingPrivateSecret: privateSecret.rawRepresentation,
-                recipients: [self.user],
-                request: encryptionRequest
-            )
-        } catch {
-            handleError(globalIdentifier, error)
-            return
-        }
-        
-        var error: Error? = nil
-        
-        self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
-        
-        dispatchGroup.enter()
-        self.serverProxy.localServer.create(
-            assets: [encryptedAsset],
-            groupId: encryptionRequest.groupId,
-            filterVersions: nil
-        ) { result in
-            if case .failure(let err) = result {
-                error = err
+        dispatchGroup.notify(queue: .global()) {
+            guard secretRetrievalError == nil else {
+                handleError(secretRetrievalError!)
+                return
             }
-            dispatchGroup.leave()
-        }
-        
-        dispatchResult = dispatchGroup.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            handleError(globalIdentifier, SHBackgroundOperationError.timedOut)
-            return
-        }
-        
-        guard error == nil else {
-            self.log.error("failed to store data for localIdentifier \(asset.phAsset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
+            guard let privateSecret else {
+                handleError(SHBackgroundOperationError.fatalError("failed to retrieve secret"))
+                return
+            }
             
-            let error = SHBackgroundOperationError.fatalError("failed to create local asset")
-            handleError(globalIdentifier, error)
-            return
+            let encryptedAsset: any SHEncryptedAsset
+            
+            do {
+                encryptedAsset = try self.generateEncryptedAsset(
+                    for: asset,
+                    with: globalIdentifier,
+                    usingPrivateSecret: privateSecret.rawRepresentation,
+                    recipients: [self.user],
+                    request: encryptionRequest
+                )
+            } catch {
+                handleError(error)
+                return
+            }
+            
+            self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
+            
+            self.serverProxy.localServer.create(
+                assets: [encryptedAsset],
+                groupId: encryptionRequest.groupId,
+                filterVersions: nil
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    handleError(error)
+                case .success(_):
+                    ///
+                    /// Encryption is completed.
+                    /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                    ///
+                    do {
+                        try self.markAsSuccessful(
+                            item: item,
+                            encryptionRequest: encryptionRequest,
+                            globalIdentifier: encryptedAsset.globalIdentifier
+                        )
+                    } catch {
+                        self.log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
+                        handleError(error)
+                    }
+                }
+            }
         }
-        
-        handleSuccess(encryptedAsset)
     }
     
-    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
-        let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+    public func run(
+        forQueueItemIdentifiers queueItemIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let encryptionQueue: KBQueueStore
+        
+        do {
+            encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
         
         var queueItems = [KBQueueItem]()
         var error: Error? = nil
@@ -526,103 +518,92 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        for item in queueItems {
-            guard processingState(for: item.identifier) != .encrypting else {
-                continue
+        group.notify(queue: .global()) {
+            guard error == nil else {
+                self.log.critical("failed to retrieve items from ENCRYPT queue. \(error!.localizedDescription)")
+                completionHandler(.failure(error!))
+                return
             }
             
-            log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
+            for item in queueItems {
+                group.enter()
+                self.runOnce(for: item) { _ in
+                    group.leave()
+                }
+            }
             
-            setProcessingState(.encrypting, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] encryption task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
+            group.notify(queue: .global()) {
+                completionHandler(.success(()))
+            }
         }
     }
     
-    public func runOnce(maxItems: Int? = nil) throws {
-        var count = 0
-        let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-        
-        while let item = try encryptionQueue.peek() {
-            guard maxItems == nil || count < maxItems! else {
-                break
-            }
-            guard processingState(for: item.identifier) != .encrypting else {
-                continue
-            }
-            
-            log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.encrypting, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] encryption task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
-            
-            count += 1
-        }
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
+    func runOnce(
+        for item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard processingState(for: item.identifier) != .encrypting else {
+            completionHandler(.failure(SHBackgroundOperationError.alreadyProcessed))
             return
         }
         
-        state = .executing
+        log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
+        setProcessingState(.encrypting, for: item.identifier)
         
-        let items: [KBQueueItem]
-
+        self.process(item) { result in
+            if case .success = result {
+                self.log.info("[√] encryption task completed for item \(item.identifier)")
+            } else {
+                self.log.error("[x] encryption task completed for item \(item.identifier)")
+            }
+        
+            setProcessingState(nil, for: item.identifier)
+            completionHandler(result)
+        }
+    }
+    
+    public override func runOnce(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let dispatchGroup = DispatchGroup()
+        let encryptionQueue: KBQueueStore
         do {
-            let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-            items = try encryptionQueue.peekNext(self.limit)
+            encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
         } catch {
-            log.error("failed to fetch items from the ENCRYPT queue")
-            state = .finished
+            log.critical("failed to read from ENCRYPT queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
             return
         }
         
-        for item in items {
-            guard processingState(for: item.identifier) != .encrypting else {
-                break
-            }
-            
-            log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.encrypting, for: item.identifier)
-            
-            DispatchQueue.global().async { [self] in
-                guard !isCancelled else {
-                    log.info("encryption task cancelled. Finishing")
-                    setProcessingState(nil, for: item.identifier)
-                    return
+        var count = 0
+        
+        do {
+            while let item = try encryptionQueue.peek() {
+                guard self.limit == 0 || count < self.limit else {
+                    break
                 }
                 
-                self.process(item)
-                log.info("[√] encryption task completed for item \(item.identifier)")
+                dispatchGroup.enter()
+                self.runOnce(for: item) { _ in
+                    dispatchGroup.leave()
+                }
                 
-                setProcessingState(nil, for: item.identifier)
-            }
+                count += 1
                 
-            guard !self.isCancelled else {
-                log.info("encryption task cancelled. Finishing")
-                break
+                guard !self.isCancelled else {
+                    self.log.info("encrypt task cancelled. Finishing")
+                    break
+                }
             }
+        } catch {
+            log.error("failed to fetch items from the ENCRYPT queue: \(error.localizedDescription)")
         }
         
-        state = .finished
+        log.info("started \(count) ENCRYPT operations")
+        
+        dispatchGroup.notify(queue: .global()) {
+            completionHandler(.success(()))
+        }
     }
 }
 

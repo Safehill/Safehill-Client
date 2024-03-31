@@ -43,10 +43,16 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func markAsFailed(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String?
-    ) throws
-    {
-        try self.markAsFailed(encryptionRequest: request, queueItem: item)
+        globalIdentifier: String?,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        do {
+            try self.markAsFailed(encryptionRequest: request, queueItem: item)
+            completionHandler(.success(()))
+        } catch {
+            completionHandler(.failure(error))
+        }
+        
     }
     
     public func markAsFailed(
@@ -185,11 +191,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     private func share(
         globalIdentifier: String,
-        via request: SHEncryptionForSharingRequestQueueItem
-    ) throws {
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
+        via request: SHEncryptionForSharingRequestQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         self.serverProxy.getLocalSharingInfo(
             forAssetIdentifier: globalIdentifier,
             for: request.sharedWith
@@ -197,28 +201,21 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             switch result {
             case .success(let shareableEncryptedAsset):
                 guard let shareableEncryptedAsset = shareableEncryptedAsset else {
-                    error = SHBackgroundOperationError.fatalError("Asset sharing information wasn't stored as expected during the encrypt step")
-                    group.leave()
+                    let error = SHBackgroundOperationError.fatalError("Asset sharing information wasn't stored as expected during the encrypt step")
+                    completionHandler(.failure(error))
                     return
                 }
+                
                 self.serverProxy.share(shareableEncryptedAsset) { shareResult in
                     if case .failure(let err) = shareResult {
-                        error = err
+                        completionHandler(.failure(err))
+                        return
                     }
-                    group.leave()
+                    completionHandler(.success(()))
                 }
-            case .failure(let err):
-                error = err
-                group.leave()
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
         }
     }
     
@@ -278,7 +275,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
-    private func process(_ item: KBQueueItem) {
+    private func process(
+        _ item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
         
         do {
@@ -296,6 +296,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             catch {
                 log.fault("dequeuing failed of unexpected data in SHARE queue. \(error.localizedDescription)")
             }
+            completionHandler(.failure(error))
             return
         }
         
@@ -310,19 +311,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 self.log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
                 // TODO: Handle
             }
-        }
-        
-        let handleSuccess = { (globalIdentifier: GlobalIdentifier) in
-            do {
-                try self.markAsSuccessful(
-                    item: item,
-                    encryptionRequest: shareRequest,
-                    globalIdentifier: globalIdentifier
-                )
-            } catch {
-                self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
-                handleError(error)
-            }
+            completionHandler(.failure(error))
         }
         
         guard shareRequest.sharedWith.count > 0 else {
@@ -353,9 +342,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             return
         }
         
-        let semaphore = DispatchSemaphore(value: 0)
-        var processingError: Error? = nil
-        
         ///
         /// Store sharing information in the local server proxy
         ///
@@ -365,8 +351,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             
             switch result {
             case .failure(let error):
-                processingError = error
-                semaphore.signal()
+                handleError(error)
                 return
             case .success:
                 self.log.info("successfully stored asset \(globalIdentifier) sharing information in local server proxy")
@@ -378,62 +363,77 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 guard ErrorSimulator.percentageShareFailures == 0
                         || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
                     self.log.debug("simulating SHARE failure")
-                    processingError = SHBackgroundOperationError.fatalError("share failed")
-                    semaphore.signal()
+                    let error = SHBackgroundOperationError.fatalError("share failed")
+                    handleError(error)
                     return
                 }
 #endif
                 
-                do {
-                    try self.share(globalIdentifier: globalIdentifier, via: shareRequest)
-                } catch {
-                    processingError = SHBackgroundOperationError.fatalError("share failed")
-                    semaphore.signal()
-                    return
-                }
-                
-                if shareRequest.isBackground == false {
-                    self.initializeGroupAndThread(shareRequest: shareRequest) { result in
-                        switch result {
-                        case .failure(let error):
-                            self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
-                            // Mark as failed on any other error
-                            processingError = error
-                        case .success:
-                            do {
-                                // Ingest into the graph
-                                try SHKGQuery.ingestShare(
-                                    of: globalIdentifier,
-                                    from: self.user.identifier,
-                                    to: shareRequest.sharedWith.map({ $0.identifier })
-                                )
-                            } catch {
-                                processingError = error
-                            }
-                            semaphore.signal()
-                        }
+                self.share(
+                    globalIdentifier: globalIdentifier,
+                    via: shareRequest
+                ) { result in
+                    if case .failure(let error) = result {
+                        handleError(error)
+                        return
                     }
-                } else {
-                    semaphore.signal()
+                    
+                    let handleSuccess = { (globalIdentifier: GlobalIdentifier) in
+                        do {
+                            try self.markAsSuccessful(
+                                item: item,
+                                encryptionRequest: shareRequest,
+                                globalIdentifier: globalIdentifier
+                            )
+                        } catch {
+                            self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
+                            handleError(error)
+                        }
+                        completionHandler(.success(()))
+                    }
+                    
+                    if shareRequest.isBackground == false {
+                        self.initializeGroupAndThread(shareRequest: shareRequest) { result in
+                            switch result {
+                            case .failure(let error):
+                                self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
+                                // Mark as failed on any other error
+                                handleError(error)
+                            case .success:
+                                do {
+                                    // Ingest into the graph
+                                    try SHKGQuery.ingestShare(
+                                        of: globalIdentifier,
+                                        from: self.user.identifier,
+                                        to: shareRequest.sharedWith.map({ $0.identifier })
+                                    )
+                                    handleSuccess(globalIdentifier)
+                                } catch {
+                                    handleError(error)
+                                }
+                            }
+                        }
+                    } else {
+                        handleSuccess(globalIdentifier)
+                    }
                 }
             }
         }
-        
-        let dispatchResult = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultNetworkTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            handleError(SHBackgroundOperationError.timedOut)
-            return
-        }
-        
-        if let processingError {
-            handleError(processingError)
-        } else {
-            handleSuccess(globalIdentifier)
-        }
     }
     
-    public override func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
-        let shareQueue = try BackgroundOperationQueue.of(type: .share)
+    public override func run(
+        forQueueItemIdentifiers queueItemIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let shareQueue: KBQueueStore
+        
+        do {
+            shareQueue = try BackgroundOperationQueue.of(type: .share)
+        } catch {
+            log.critical("failed to read from SHARE queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
         
         var queueItems = [KBQueueItem]()
         var error: Error? = nil
@@ -450,102 +450,92 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        for item in queueItems {
-            guard processingState(for: item.identifier) != .sharing else {
-                continue
+        group.notify(queue: .global()) {
+            guard error == nil else {
+                self.log.critical("failed to retrieve items from SHARE queue. \(error!.localizedDescription)")
+                completionHandler(.failure(error!))
+                return
             }
             
-            log.info("sharing item \(item.identifier) created at \(item.createdAt)")
+            for item in queueItems {
+                group.enter()
+                self.runOnce(for: item) { _ in
+                    group.leave()
+                }
+            }
             
-            setProcessingState(.sharing, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] share task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
+            group.notify(queue: .global()) {
+                completionHandler(.success(()))
+            }
         }
     }
     
-    public override func runOnce(maxItems: Int? = nil) throws {
-        var count = 0
-        let queue = try BackgroundOperationQueue.of(type: .share)
-        
-        while let item = try queue.peek() {
-            guard maxItems == nil || count < maxItems! else {
-                break
-            }
-            guard processingState(for: item.identifier) != .sharing else {
-                continue
-            }
-            
-            log.info("sharing item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.sharing, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] share task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
-            
-            count += 1
-        }
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
+    override func runOnce(
+        for item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard processingState(for: item.identifier) != .sharing else {
+            completionHandler(.failure(SHBackgroundOperationError.alreadyProcessed))
             return
         }
         
-        state = .executing
+        log.info("sharing item \(item.identifier) created at \(item.createdAt)")
+        setProcessingState(.sharing, for: item.identifier)
         
-        let items: [KBQueueItem]
+        self.process(item) { result in
+            if case .success = result {
+                self.log.info("[√] share task completed for item \(item.identifier)")
+            } else {
+                self.log.error("[x] share task failed for item \(item.identifier)")
+            }
+            
+            setProcessingState(nil, for: item.identifier)
+            completionHandler(result)
+        }
+    }
+    
+    public override func runOnce(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let dispatchGroup = DispatchGroup()
+        let shareQueue: KBQueueStore
+        do {
+            shareQueue = try BackgroundOperationQueue.of(type: .share)
+        } catch {
+            log.critical("failed to read from SHARE queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var count = 0
         
         do {
-            items = try BackgroundOperationQueue.of(type: .share).peekNext(self.limit)
-        } catch {
-            log.error("failed to fetch items from the ENCRYPT queue")
-            state = .finished
-            return
-        }
-        
-        for item in items {
-            guard processingState(for: item.identifier) != .sharing else {
-                break
-            }
-            
-            log.info("sharing item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.sharing, for: item.identifier)
-            
-            DispatchQueue.global().async { [self] in
-                guard !isCancelled else {
-                    log.info("share task cancelled. Finishing")
-                    setProcessingState(nil, for: item.identifier)
-                    return
+            while let item = try shareQueue.peek() {
+                guard self.limit == 0 || count < self.limit else {
+                    break
                 }
                 
-                self.process(item)
-                log.info("[√] share task completed for item \(item.identifier)")
+                dispatchGroup.enter()
+                self.runOnce(for: item) { _ in
+                    dispatchGroup.leave()
+                }
                 
-                setProcessingState(nil, for: item.identifier)
+                count += 1
+                
+                guard !self.isCancelled else {
+                    self.log.info("share task cancelled. Finishing")
+                    break
+                }
             }
-            
-            guard !self.isCancelled else {
-                log.info("share task cancelled. Finishing")
-                break
-            }
+        } catch {
+            log.error("failed to fetch items from the SHARE queue: \(error.localizedDescription)")
         }
         
-        state = .finished
+        log.info("started \(count) SHARE operations")
+        
+        dispatchGroup.notify(queue: .global()) {
+            completionHandler(.success(()))
+        }
     }
 }
 
