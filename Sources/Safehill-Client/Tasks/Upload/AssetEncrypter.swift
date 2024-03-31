@@ -554,7 +554,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             if case .success = result {
                 self.log.info("[√] encryption task completed for item \(item.identifier)")
             } else {
-                self.log.error("[x] encryption task completed for item \(item.identifier)")
+                self.log.error("[x] encryption task failed for item \(item.identifier)")
             }
         
             setProcessingState(nil, for: item.identifier)
