@@ -27,8 +27,8 @@ public func kSHSizeForQuality(quality: SHAssetQuality) -> CGSize {
 
 /* Set these to a value greater than 0 to randomly simulate failures */
 enum ErrorSimulator {
-    static let percentageUploadFailures: UInt32 = 0
-    static let percentageShareFailures: UInt32 = 0
+    static let percentageUploadFailures: UInt32 = 80
+    static let percentageShareFailures: UInt32 = 100
 }
 
 
