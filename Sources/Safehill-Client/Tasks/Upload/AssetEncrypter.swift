@@ -361,6 +361,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             ///
             globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
         } catch {
+            completionHandler(.failure(error))
             return
         }
         
@@ -481,6 +482,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
                             encryptionRequest: encryptionRequest,
                             globalIdentifier: encryptedAsset.globalIdentifier
                         )
+                        completionHandler(.success(()))
                     } catch {
                         self.log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
                         handleError(error)

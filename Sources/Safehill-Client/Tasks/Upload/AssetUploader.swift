@@ -335,11 +335,11 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
                         item: item,
                         uploadRequest: uploadRequest
                     )
+                    completionHandler(.success(()))
                 } catch {
                     self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
                     handleError(error)
                 }
-                completionHandler(.success(()))
             }
         }
     }
