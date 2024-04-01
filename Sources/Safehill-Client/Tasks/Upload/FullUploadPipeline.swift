@@ -89,30 +89,35 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             imageManager: imageManager
         )
         
+        log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
         fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
             guard case .success = result else {
                 completionHandler(result)
                 return
             }
             
+            log.debug("Running on-demand ENCRYPT for items \(queueItemIdentifiers)")
             encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
                 guard case .success = result else {
                     completionHandler(result)
                     return
                 }
                 
+                log.debug("Running on-demand UPLOAD for items \(queueItemIdentifiers)")
                 uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
                     guard case .success = result else {
                         completionHandler(result)
                         return
                     }
                     
+                    log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
                     fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
                         guard case .success = result else {
                             completionHandler(result)
                             return
                         }
                         
+                        log.debug("Running on-demand SHARE for items \(queueItemIdentifiers)")
                         shareOperation.run(
                             forQueueItemIdentifiers: queueItemIdentifiers,
                             completionHandler: completionHandler
@@ -201,6 +206,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             imageManager: imageManager,
             photoIndexer: photoIndexer
         )
+        log.debug("Running FETCH step")
         fetchOperation.runOnce(completionHandler: completionHandler)
     }
     
@@ -225,6 +231,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             limitPerRun: 0,
             imageManager: imageManager
         )
+        log.debug("Running ENCRYPT step")
         encryptOperation.runOnce(completionHandler: completionHandler)
     }
     
@@ -248,6 +255,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             delegates: assetsDelegates,
             limitPerRun: 0
         )
+        log.debug("Running UPLOAD step")
         uploadOperation.runOnce(completionHandler: completionHandler)
     }
     
@@ -272,6 +280,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             limitPerRun: 0,
             imageManager: imageManager
         )
+        log.debug("Running SHARE step")
         shareOperation.runOnce(completionHandler: completionHandler)
     }
 }
