@@ -164,6 +164,7 @@ extension SHOutboundBackgroundOperation {
         
         guard queueItems.isEmpty == false else {
             completionHandler(.success(()))
+            return
         }
         
         group.notify(queue: .global()) {
