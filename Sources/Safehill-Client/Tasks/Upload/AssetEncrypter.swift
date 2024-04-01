@@ -549,18 +549,43 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
             return
         }
         
-        log.info("encrypting item \(item.identifier) created at \(item.createdAt)")
+        let encryptionQueue: KBQueueStore
+        do {
+            encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
+        } catch {
+            log.critical("failed to read from ENCRYPT queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
         setProcessingState(.encrypting, for: item.identifier)
         
-        self.process(item) { result in
-            if case .success = result {
-                self.log.info("[√] encryption task completed for item \(item.identifier)")
-            } else {
-                self.log.error("[x] encryption task failed for item \(item.identifier)")
+        /// Check the item still exists in the queue
+        /// Because it was retrieved earlier it might already have been processed by a competing process
+        encryptionQueue.retrieveItem(withIdentifier: item.identifier) { result in
+            switch result {
+            case .success(let queuedItem):
+                guard let queuedItem else {
+                    setProcessingState(nil, for: item.identifier)
+                    completionHandler(.success(()))
+                    return
+                }
+                
+                self.log.info("encrypting item \(queuedItem.identifier) created at \(queuedItem.createdAt)")
+                
+                self.process(queuedItem) { result in
+                    if case .success = result {
+                        self.log.info("[√] encryption task completed for item \(queuedItem.identifier)")
+                    } else {
+                        self.log.error("[x] encryption task failed for item \(queuedItem.identifier)")
+                    }
+                    
+                    setProcessingState(nil, for: queuedItem.identifier)
+                    completionHandler(result)
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
-        
-            setProcessingState(nil, for: item.identifier)
-            completionHandler(result)
         }
     }
     
