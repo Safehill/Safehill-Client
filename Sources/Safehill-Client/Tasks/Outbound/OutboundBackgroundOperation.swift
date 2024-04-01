@@ -42,7 +42,7 @@ extension SHOutboundBackgroundOperation {
         
         let queue: KBQueueStore
         do {
-            queue = try BackgroundOperationQueue.of(type: .fetch)
+            queue = try BackgroundOperationQueue.of(type: self.operationType)
         } catch {
             log.critical("failed to read from \(self.operationType.identifier) queue. \(error.localizedDescription)")
             completionHandler(.failure(error))
