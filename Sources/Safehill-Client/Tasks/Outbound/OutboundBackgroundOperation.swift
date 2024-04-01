@@ -31,55 +31,6 @@ protocol SHOutboundBackgroundOperation {
 
 extension SHOutboundBackgroundOperation {
     
-    func run(
-        forQueueItemIdentifiers queueItemIdentifiers: [String],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        let queue: KBQueueStore
-        
-        do {
-            queue = try BackgroundOperationQueue.of(type: self.operationType)
-        } catch {
-            log.critical("failed to read from \(self.operationType.identifier) queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        queue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
-            result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from \(self.operationType.identifier) queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            for item in queueItems {
-                group.enter()
-                self.runOnce(for: item) { _ in
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-        }
-    }
-    
     func runOnce(
         for item: KBQueueItem,
         completionHandler: @escaping (Result<Void, Error>) -> Void
@@ -126,6 +77,57 @@ extension SHOutboundBackgroundOperation {
             case .failure(let error):
                 completionHandler(.failure(error))
             }
+        }
+    }
+    
+    func run(
+        forQueueItemIdentifiers queueItemIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let queue: KBQueueStore
+        
+        do {
+            queue = try BackgroundOperationQueue.of(type: self.operationType)
+        } catch {
+            log.critical("failed to read from \(self.operationType.identifier) queue. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var queueItems = [KBQueueItem]()
+        var error: Error? = nil
+        let group = DispatchGroup()
+        group.enter()
+        queue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
+            result in
+            switch result {
+            case .success(let items):
+                queueItems = items
+            case .failure(let err):
+                error = err
+            }
+            group.leave()
+        }
+        
+        group.notify(queue: .global()) {
+            guard error == nil else {
+                self.log.critical("failed to retrieve items from \(self.operationType.identifier) queue. \(error!.localizedDescription)")
+                completionHandler(.failure(error!))
+                return
+            }
+            
+            let semaphore = DispatchSemaphore(value: 0)
+            
+            for item in queueItems {
+                group.enter()
+                self.runOnce(for: item) { _ in
+                    semaphore.signal()
+                }
+                
+                semaphore.wait()
+            }
+            
+            completionHandler(.success(()))
         }
     }
     
@@ -176,9 +178,10 @@ extension SHOutboundBackgroundOperation {
                 self.runOnce(for: item) { _ in
                     semaphore.signal()
                 }
+                
+                semaphore.wait()
             }
             
-            semaphore.signal()
             completionHandler(.success(()))
             
             self.log.info("started \(count) \(self.operationType.identifier) operations")
