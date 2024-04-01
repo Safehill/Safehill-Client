@@ -1203,7 +1203,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         self.runOnce(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
     }
     
-    public override func runOnce(
+    public override func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runOnce(qos: .background) { result in

@@ -8,8 +8,6 @@ public protocol SHBackgroundOperationProtocol : Operation {
     /// Used when the same operation is recursed on the operation queue (see OperationQueueProcessor::repeat)
     /// - Returns: a new object initialized exactly as Self was
     func clone() -> SHBackgroundOperationProtocol
-    
-    func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void)
 }
 
 public protocol SHBackgroundQueueProcessorOperationProtocol : SHBackgroundOperationProtocol {
@@ -51,8 +49,8 @@ open class SHAbstractBackgroundOperation : Operation {
         return true
     }
     
-    public func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        fatalError("runOnce(completionHandler:) should be overridden in a SHAbstractBackgroundOperation subclass")
+    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        fatalError("run(completionHandler:) should be overridden in a SHAbstractBackgroundOperation subclass")
     }
     
     public override func main() {
@@ -63,7 +61,7 @@ open class SHAbstractBackgroundOperation : Operation {
         
         state = .executing
         
-        self.runOnce { _ in
+        self.run { _ in
             self.state = .finished
         }
     }

@@ -495,10 +495,10 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         }
     }
     
-    public override func runOnce(
+    public override func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        (self as SHOutboundBackgroundOperation).runOnce(completionHandler: completionHandler)
+        self.runOnce(completionHandler: completionHandler)
     }
 }
 

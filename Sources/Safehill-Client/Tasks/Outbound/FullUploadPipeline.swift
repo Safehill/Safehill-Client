@@ -130,7 +130,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         }
     }
     
-    public override func runOnce(
+    public override func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runFetchCycle { result in

@@ -237,7 +237,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         }
     }
     
-    public override func runOnce(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.runOnce(qos: .background, completionHandler: completionHandler)
     }
 }
