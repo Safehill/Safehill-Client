@@ -89,6 +89,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             imageManager: imageManager
         )
         
+        let log = self.log
+        
         log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
         fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
             guard case .success = result else {
