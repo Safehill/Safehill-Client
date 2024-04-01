@@ -162,6 +162,10 @@ extension SHOutboundBackgroundOperation {
             group.leave()
         }
         
+        guard queueItems.isEmpty == false else {
+            completionHandler(.success(()))
+        }
+        
         group.notify(queue: .global()) {
             guard error == nil else {
                 self.log.critical("failed to retrieve items from FETCH queue. \(error!.localizedDescription)")
