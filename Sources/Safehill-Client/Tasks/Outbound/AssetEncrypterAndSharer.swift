@@ -5,6 +5,9 @@ import KnowledgeBase
 
 internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
+    override var operationType: BackgroundOperationQueue.OperationType { .share }
+    override var processingState: ProcessingState { .sharing }
+    
     public override var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
     }
@@ -275,7 +278,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         }
     }
     
-    private func process(
+    internal override func process(
         _ item: KBQueueItem,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
@@ -418,161 +421,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     }
                 }
             }
-        }
-    }
-    
-    public override func run(
-        forQueueItemIdentifiers queueItemIdentifiers: [String],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        let shareQueue: KBQueueStore
-        
-        do {
-            shareQueue = try BackgroundOperationQueue.of(type: .share)
-        } catch {
-            log.critical("failed to read from SHARE queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        shareQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
-            result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from SHARE queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            for item in queueItems {
-                group.enter()
-                self.runOnce(for: item) { _ in
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-        }
-    }
-    
-    override func runOnce(
-        for item: KBQueueItem,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard processingState(for: item.identifier) != .sharing else {
-            completionHandler(.failure(SHBackgroundOperationError.alreadyProcessed))
-            return
-        }
-        
-        let shareQueue: KBQueueStore
-        do {
-            shareQueue = try BackgroundOperationQueue.of(type: .share)
-        } catch {
-            log.critical("failed to read from SHARE queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        setProcessingState(.sharing, for: item.identifier)
-        
-        /// Check the item still exists in the queue
-        /// Because it was retrieved earlier it might already have been processed by a competing process
-        shareQueue.retrieveItem(withIdentifier: item.identifier) { result in
-            switch result {
-            case .success(let queuedItem):
-                guard let queuedItem else {
-                    setProcessingState(nil, for: item.identifier)
-                    completionHandler(.success(()))
-                    return
-                }
-                
-                self.log.info("sharing item \(queuedItem.identifier) created at \(queuedItem.createdAt)")
-                
-                self.process(queuedItem) { result in
-                    if case .success = result {
-                        self.log.info("[√] share task completed for item \(queuedItem.identifier)")
-                    } else {
-                        self.log.error("[x] share task failed for item \(queuedItem.identifier)")
-                    }
-                    
-                    setProcessingState(nil, for: queuedItem.identifier)
-                    completionHandler(result)
-                }
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
-    }
-    
-    public override func runOnce(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        let shareQueue: KBQueueStore
-        do {
-            shareQueue = try BackgroundOperationQueue.of(type: .share)
-        } catch {
-            log.critical("failed to read from SHARE queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        
-        let interval = DateInterval(start: Date.distantPast, end: Date())
-        shareQueue.peekItems(
-            createdWithin: interval,
-            limit: self.limit > 0 ? self.limit : nil
-        ) { result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from SHARE queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            var count = 0
-            
-            for item in queueItems {
-                count += 1
-                
-                group.enter()
-                self.runOnce(for: item) { _ in
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-            
-            self.log.info("started \(count) SHARE operations")
         }
     }
 }

@@ -31,7 +31,10 @@ extension SHApplePhotoAsset {
     }
 }
 
-internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+    
+    var operationType: BackgroundOperationQueue.OperationType { .encryption }
+    var processingState: ProcessingState { .encrypting }
     
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-ENCRYPT")
@@ -325,7 +328,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         }
     }
     
-    private func process(
+    internal func process(
         _ item: KBQueueItem,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
@@ -492,158 +495,10 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHUploadSte
         }
     }
     
-    public func run(
-        forQueueItemIdentifiers queueItemIdentifiers: [String],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        let encryptionQueue: KBQueueStore
-        
-        do {
-            encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        encryptionQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
-            result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from ENCRYPT queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            for item in queueItems {
-                group.enter()
-                self.runOnce(for: item) { _ in
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-        }
-    }
-    
-    func runOnce(
-        for item: KBQueueItem,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard processingState(for: item.identifier) != .encrypting else {
-            completionHandler(.failure(SHBackgroundOperationError.alreadyProcessed))
-            return
-        }
-        
-        let encryptionQueue: KBQueueStore
-        do {
-            encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-        } catch {
-            log.critical("failed to read from ENCRYPT queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        setProcessingState(.encrypting, for: item.identifier)
-        
-        /// Check the item still exists in the queue
-        /// Because it was retrieved earlier it might already have been processed by a competing process
-        encryptionQueue.retrieveItem(withIdentifier: item.identifier) { result in
-            switch result {
-            case .success(let queuedItem):
-                guard let queuedItem else {
-                    setProcessingState(nil, for: item.identifier)
-                    completionHandler(.success(()))
-                    return
-                }
-                
-                self.log.info("encrypting item \(queuedItem.identifier) created at \(queuedItem.createdAt)")
-                
-                self.process(queuedItem) { result in
-                    if case .success = result {
-                        self.log.info("[√] encryption task completed for item \(queuedItem.identifier)")
-                    } else {
-                        self.log.error("[x] encryption task failed for item \(queuedItem.identifier)")
-                    }
-                    
-                    setProcessingState(nil, for: queuedItem.identifier)
-                    completionHandler(result)
-                }
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
-    }
-    
     public override func runOnce(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let encryptionQueue: KBQueueStore
-        do {
-            encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-        } catch {
-            log.critical("failed to read from ENCRYPT queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        
-        let interval = DateInterval(start: Date.distantPast, end: Date())
-        encryptionQueue.peekItems(
-            createdWithin: interval,
-            limit: self.limit > 0 ? self.limit : nil
-        ) { result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from ENCRYPT queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            var count = 0
-            
-            for item in queueItems {
-                count += 1
-                
-                group.enter()
-                self.runOnce(for: item) { _ in
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-            
-            self.log.info("started \(count) ENCRYPT operations")
-        }
+        (self as SHOutboundBackgroundOperation).runOnce(completionHandler: completionHandler)
     }
 }
 

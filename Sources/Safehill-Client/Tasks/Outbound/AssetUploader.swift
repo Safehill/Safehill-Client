@@ -3,7 +3,11 @@ import os
 import KnowledgeBase
 
 
-internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+    
+    let operationType = BackgroundOperationQueue.OperationType.upload
+    let processingState = ProcessingState.uploading
+    
     
     let log = Logger(subsystem: "com.gf.safehill", category: "BG-UPLOAD")
     
@@ -344,167 +348,10 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHUploadStepBac
         }
     }
     
-    public func run(
-        forQueueItemIdentifiers queueItemIdentifiers: [String],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        let uploadQueue: KBQueueStore
-        
-        do {
-            uploadQueue = try BackgroundOperationQueue.of(type: .upload)
-        } catch {
-            log.critical("failed to read from UPLOAD queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        uploadQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
-            result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from UPLOAD queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            /// 
-            /// Don't start more than 5 every 500ms
-            ///
-            for itemChunk in queueItems.chunked(into: 5) {
-                for item in itemChunk {
-                    group.enter()
-                    self.runOnce(for: item) { _ in
-                        group.leave()
-                    }
-                }
-                
-                let second: Double = 1000000
-                usleep(useconds_t(0.5 * second)) // 500ms
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-        }
-    }
-    
-    func runOnce(
-        for item: KBQueueItem,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard processingState(for: item.identifier) != .uploading else {
-            completionHandler(.failure(SHBackgroundOperationError.alreadyProcessed))
-            return
-        }
-        
-        let uploadQueue: KBQueueStore
-        do {
-            uploadQueue = try BackgroundOperationQueue.of(type: .upload)
-        } catch {
-            log.critical("failed to read from UPLOAD queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        setProcessingState(.uploading, for: item.identifier)
-        
-        /// Check the item still exists in the queue
-        /// Because it was retrieved earlier it might already have been processed by a competing process
-        uploadQueue.retrieveItem(withIdentifier: item.identifier) { result in
-            switch result {
-            case .success(let queuedItem):
-                guard let queuedItem else {
-                    setProcessingState(nil, for: item.identifier)
-                    completionHandler(.success(()))
-                    return
-                }
-                
-                self.log.info("uploading item \(queuedItem.identifier) created at \(queuedItem.createdAt)")
-                
-                self.process(queuedItem) { result in
-                    if case .success = result {
-                        self.log.info("[√] upload task completed for item \(queuedItem.identifier)")
-                    } else {
-                        self.log.error("[x] upload task failed for item \(queuedItem.identifier)")
-                    }
-                    
-                    setProcessingState(nil, for: queuedItem.identifier)
-                    completionHandler(result)
-                }
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
-    }
-    
     public override func runOnce(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let uploadQueue: KBQueueStore
-        do {
-            uploadQueue = try BackgroundOperationQueue.of(type: .upload)
-        } catch {
-            log.critical("failed to read from UPLOAD queue. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        
-        let interval = DateInterval(start: Date.distantPast, end: Date())
-        uploadQueue.peekItems(
-            createdWithin: interval,
-            limit: self.limit > 0 ? self.limit : nil
-        ) { result in
-            switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global()) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from UPLOAD queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            var count = 0
-            
-            for item in queueItems {
-                count += 1
-                
-                group.enter()
-                self.runOnce(for: item) { _ in
-                    group.leave()
-                }
-            }
-            
-            group.notify(queue: .global()) {
-                completionHandler(.success(()))
-            }
-            
-            self.log.info("started \(count) UPLOAD operations")
-        }
+        (self as SHOutboundBackgroundOperation).runOnce(completionHandler: completionHandler)
     }
 }
 
