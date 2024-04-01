@@ -131,7 +131,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: .background)) {
+        dispatchGroup.notify(queue: .global()) {
             guard remoteError == nil else {
                 completionHandler(.failure(remoteError!))
                 return

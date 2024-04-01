@@ -41,6 +41,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
     }
     
     private func fetchDescriptors(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<(
             remote: [any SHAssetDescriptor],
             local: [any SHAssetDescriptor]
@@ -83,7 +84,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: .background)) {
+        dispatchGroup.notify(queue: .global(qos: qos)) {
             guard remoteError == nil else {
                 completionHandler(.failure(remoteError!))
                 return
@@ -216,7 +217,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         DispatchQueue.global(qos: qos).async {
-            self.fetchDescriptors {
+            self.fetchDescriptors(qos: qos) {
                 (result: Result<(
                     remote: [any SHAssetDescriptor],
                     local: [any SHAssetDescriptor]

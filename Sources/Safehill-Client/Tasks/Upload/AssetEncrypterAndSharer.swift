@@ -230,7 +230,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         var usersAndSelf = shareRequest.sharedWith
         usersAndSelf.append(self.user)
         
-        self.log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+        self.log.debug("creating or updating group for request \(shareRequest.identifier)")
         dispatchGroup.enter()
         self.interactionsController.setupGroupEncryptionDetails(
             groupId: shareRequest.groupId,
@@ -244,7 +244,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             dispatchGroup.leave()
         }
         
-        self.log.debug("creating or updating encryption details for request \(shareRequest.identifier)")
+        self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
         dispatchGroup.enter()
         self.interactionsController.setupThread(
             with: usersAndSelf
@@ -262,7 +262,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: .background)) {
+        dispatchGroup.notify(queue: .global()) {
             guard errorInitializingGroup == nil,
                   errorInitializingThread == nil else {
                 self.log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
