@@ -49,6 +49,23 @@ open class SHAbstractBackgroundOperation : Operation {
         return true
     }
     
+    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        fatalError("run(completionHandler:) should be overridden in a SHAbstractBackgroundOperation subclass")
+    }
+    
+    public override func main() {
+        guard !self.isCancelled else {
+            state = .finished
+            return
+        }
+        
+        state = .executing
+        
+        self.run { _ in
+            self.state = .finished
+        }
+    }
+    
     public override func start() {
         guard !self.isCancelled else {
             state = .finished

@@ -8,7 +8,8 @@ protocol SHUploadStepBackgroundOperation {
     
     func markLocalAssetAsFailed(
         globalIdentifier: GlobalIdentifier,
-        versions: [SHAssetQuality]
+        versions: [SHAssetQuality],
+        completionHandler: @escaping () -> Void
     )
     
     func markAsFailed(
@@ -23,7 +24,10 @@ protocol SHUploadStepBackgroundOperation {
 
 extension SHUploadStepBackgroundOperation {
     
-    func markLocalAssetAsFailed(globalIdentifier: String, versions: [SHAssetQuality]) {
+    func markLocalAssetAsFailed(
+        globalIdentifier: String, versions: [SHAssetQuality],
+        completionHandler: @escaping () -> Void
+    ) {
         let group = DispatchGroup()
         for quality in versions {
             group.enter()
@@ -38,10 +42,8 @@ extension SHUploadStepBackgroundOperation {
             }
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        if dispatchResult != .success {
-            self.log.critical("failed to mark local asset \(globalIdentifier) as failed in local server: \(SHBackgroundOperationError.timedOut.localizedDescription)")
+        group.notify(queue: .global()) {
+            completionHandler()
         }
     }
     

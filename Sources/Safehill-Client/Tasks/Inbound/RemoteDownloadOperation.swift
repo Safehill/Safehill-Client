@@ -73,33 +73,6 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         )
     }
     
-    internal func fetchApplePhotosLibraryAssets(for localIdentifiers: [String]) throws -> PHFetchResult<PHAsset>? {
-        let group = DispatchGroup()
-        var fetchResult: PHFetchResult<PHAsset>? = nil
-        var appleLibraryFetchError: Error? = nil
-        
-        group.enter()
-        self.photoIndexer.fetchAllAssets(withFilters: [.withLocalIdentifiers(localIdentifiers)]) { result in
-            switch result {
-            case .success(let fullFetchResult):
-                fetchResult = fullFetchResult
-            case .failure(let err):
-                appleLibraryFetchError = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard appleLibraryFetchError == nil else {
-            throw appleLibraryFetchError!
-        }
-        
-        return fetchResult
-    }
-    
     internal func fetchDescriptors(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroups: [String]? = nil,
@@ -158,7 +131,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: .background)) {
+        dispatchGroup.notify(queue: .global()) {
             guard remoteError == nil else {
                 completionHandler(.failure(remoteError!))
                 return
@@ -350,35 +323,38 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         let localIdentifiersInDescriptors = descriptorsByGlobalIdentifier.values.compactMap({ $0.localIdentifier })
         var phAssetsByLocalIdentifier = [String: PHAsset]()
         
-        do {
-            let fetchResult = try self.fetchApplePhotosLibraryAssets(for: localIdentifiersInDescriptors)
-            fetchResult?.enumerateObjects { phAsset, _, _ in
-                phAssetsByLocalIdentifier[phAsset.localIdentifier] = phAsset
+        self.photoIndexer.fetchAllAssets(withFilters: [.withLocalIdentifiers(localIdentifiersInDescriptors)]) {
+            result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+                return
+            case .success(let fetchResult):
+                fetchResult?.enumerateObjects { phAsset, _, _ in
+                    phAssetsByLocalIdentifier[phAsset.localIdentifier] = phAsset
+                }
+                
+                var filteredGlobalIdentifiers = [GlobalIdentifier]()
+                var globalToPHAsset = [GlobalIdentifier: PHAsset]()
+                for descriptor in descriptorsByGlobalIdentifier.values {
+                    if let localId = descriptor.localIdentifier,
+                       let phAsset = phAssetsByLocalIdentifier[localId] {
+                        globalToPHAsset[descriptor.globalIdentifier] = phAsset
+                    } else {
+                        filteredGlobalIdentifiers.append(descriptor.globalIdentifier)
+                    }
+                }
+                
+                let downloaderDelegates = self.downloaderDelegates
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
+                        $0.didIdentify(globalToLocalAssets: globalToPHAsset)
+                    })
+                }
+                
+                completionHandler(.success(filteredGlobalIdentifiers))
             }
-        } catch {
-            completionHandler(.failure(error))
-            return
         }
-        
-        var filteredGlobalIdentifiers = [GlobalIdentifier]()
-        var globalToPHAsset = [GlobalIdentifier: PHAsset]()
-        for descriptor in descriptorsByGlobalIdentifier.values {
-            if let localId = descriptor.localIdentifier,
-               let phAsset = phAssetsByLocalIdentifier[localId] {
-                globalToPHAsset[descriptor.globalIdentifier] = phAsset
-            } else {
-                filteredGlobalIdentifiers.append(descriptor.globalIdentifier)
-            }
-        }
-        
-        let downloaderDelegates = self.downloaderDelegates
-        self.delegatesQueue.async {
-            downloaderDelegates.forEach({
-                $0.didIdentify(globalToLocalAssets: globalToPHAsset)
-            })
-        }
-        
-        completionHandler(.success(filteredGlobalIdentifiers))
     }
     
     ///
@@ -1227,16 +1203,15 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         self.runOnce(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
     }
     
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        self.runOnce(qos: .background) { _ in
-            self.state = .finished
+    public override func run(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.runOnce(qos: .background) { result in
+            if case .failure(let failure) = result {
+                completionHandler(.failure(failure))
+            } else {
+                completionHandler(.success(()))
+            }
         }
     }
 }

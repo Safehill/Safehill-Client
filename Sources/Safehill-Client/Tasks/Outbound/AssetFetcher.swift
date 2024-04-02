@@ -4,7 +4,11 @@ import KnowledgeBase
 import Photos
 import os
 
-internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+    
+    let operationType = BackgroundOperationQueue.OperationType.fetch
+    let processingState = ProcessingState.fetching
+    
     
     public var log: Logger {
         Logger(subsystem: "com.gf.safehill", category: "BG-FETCH")
@@ -53,50 +57,35 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
         return fetchRequest
     }
     
-    private func retrieveAsset(fetchRequest request: SHLocalFetchRequestQueueItem) throws -> SHApplePhotoAsset {
+    private func retrieveAsset(
+        fetchRequest request: SHLocalFetchRequestQueueItem,
+        completionHandler: @escaping (Result<SHApplePhotoAsset, Error>) -> Void
+    ) {
         let localIdentifier = request.localIdentifier
         
-        var photoAsset: SHApplePhotoAsset? = nil
-        
         if let value = try? photoIndexer.index?.value(for: localIdentifier) as? SHApplePhotoAsset {
-            return value
+            completionHandler(.success(value))
+            return
         }
         
-        var error: Error? = nil
-        let group = DispatchGroup()
-        
-        group.enter()
         photoIndexer.fetchAsset(withLocalIdentifier: localIdentifier) { result in
             switch result {
-            case .failure(let err):
-                error = err
-                group.leave()
-                return
+            case .failure(let error):
+                completionHandler(.failure(error))
             case .success(let maybePHAsset):
                 guard let phAsset = maybePHAsset else {
-                    error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
-                    group.leave()
+                    let error = SHBackgroundOperationError.fatalError("No asset with local identifier \(localIdentifier)")
+                    completionHandler(.failure(error))
                     return
                 }
                 
-                photoAsset = SHApplePhotoAsset(
+                let photoAsset = SHApplePhotoAsset(
                     for: phAsset,
                     usingCachingImageManager: self.imageManager
                 )
-                
-                group.leave()
+                completionHandler(.success(photoAsset))
             }
         }
-        
-        let dispatchResult = group.wait(timeout: .now() + .seconds(5))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        return photoAsset!
     }
     
     public func markAsFailed(
@@ -239,7 +228,10 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
         }
     }
     
-    private func process(_ item: KBQueueItem) {
+    internal func process(
+        _ item: KBQueueItem,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let fetchRequest: SHLocalFetchRequestQueueItem
         
         do {
@@ -247,7 +239,8 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
             guard let content = content as? SHLocalFetchRequestQueueItem else {
                 log.error("unexpected data found in FETCH queue. Dequeueing")
                 // Delegates can't be called as item content can't be read and it will be silently removed from the queue
-                throw SHBackgroundOperationError.unexpectedData(item.content)
+                completionHandler(.failure(SHBackgroundOperationError.unexpectedData(item.content)))
+                return
             }
             fetchRequest = content
         } catch {
@@ -255,7 +248,20 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
             catch {
                 log.fault("dequeuing failed of unexpected data in FETCH queue. \(error.localizedDescription)")
             }
+            completionHandler(.failure(error))
             return
+        }
+        
+        let handleError = { (error: Error) in
+            self.log.critical("Error in FETCH asset: \(error.localizedDescription)")
+            do {
+                try self.markAsFailed(fetchRequest: fetchRequest,
+                                      queueItem: item)
+            } catch {
+                self.log.critical("failed to mark FETCH as failed. This will likely cause infinite loops. \(error.localizedDescription)")
+                // TODO: Handle
+            }
+            completionHandler(.failure(error))
         }
         
         do {
@@ -286,160 +292,53 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHBackgroun
                     }
                 }
             }
-            
-            let photoAsset = try self.retrieveAsset(fetchRequest: fetchRequest)
-            
-            if let gid = fetchRequest.globalIdentifier {
-                ///
-                /// Some `SHLocalFetchRequestQueueItem` have a global identifier set
-                /// for instance when these items are enqueued from an `SHUploadOperation`,
-                /// or when it's a share for an asset that is already on the server
-                ///
-                try photoAsset.setGlobalIdentifier(gid)
-            } else {
-                ///
-                /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
-                /// along with the queue item being enqueued in `markAsSuccessful`
-                ///
-                let _ = try photoAsset.retrieveOrGenerateGlobalIdentifier()
-            }
-            
-            do {
-                try self.markAsSuccessful(
-                    photoAsset: photoAsset,
-                    fetchRequest: fetchRequest,
-                    queueItem: item
-                )
-            } catch {
-                log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
-                throw error
-            }
         } catch {
-            log.critical("Error in FETCH asset: \(error.localizedDescription)")
-            do {
-                try self.markAsFailed(fetchRequest: fetchRequest,
-                                      queueItem: item)
-            } catch {
-                log.critical("failed to mark FETCH as failed. This will likely cause infinite loops. \(error.localizedDescription)")
-                // TODO: Handle
-            }
+            handleError(error)
         }
-        
-    }
-    
-    public func run(forQueueItemIdentifiers queueItemIdentifiers: [String]) throws {
-        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
-        
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        fetchQueue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
-            result in
+            
+        self.retrieveAsset(fetchRequest: fetchRequest) { result in
             switch result {
-            case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        guard error == nil else {
-            throw error!
-        }
-        
-        for item in queueItems {
-            guard processingState(for: item.identifier) != .fetching else {
-                continue
-            }
-            
-            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
-            
-            setProcessingState(.fetching, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] fetch task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
-        }
-    }
-    
-    public func runOnce(maxItems: Int? = nil) throws {
-        var count = 0
-        let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
-        
-        while let item = try fetchQueue.peek() {
-            guard maxItems == nil || count < maxItems! else {
-                break
-            }
-            guard processingState(for: item.identifier) != .fetching else {
-                continue
-            }
-            
-            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
-            setProcessingState(.fetching, for: item.identifier)
-            
-            self.process(item)
-            log.info("[√] fetch task completed for item \(item.identifier)")
-            
-            setProcessingState(nil, for: item.identifier)
-            
-            count += 1
-        }
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        let items: [KBQueueItem]
-        
-        do {
-            let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
-            items = try fetchQueue.peekNext(self.limit)
-        } catch {
-            log.error("failed to fetch items from the FETCH queue")
-            state = .finished
-            return
-        }
-        
-        for item in items {
-            guard processingState(for: item.identifier) != .fetching else {
-                break
-            }
-            
-            log.info("fetching item \(item.identifier) created at \(item.createdAt)")
-            setProcessingState(.fetching, for: item.identifier)
-            
-            DispatchQueue.global().async { [self] in
-                guard !isCancelled else {
-                    log.info("fetch task cancelled. Finishing")
-                    setProcessingState(nil, for: item.identifier)
-                    return
+            case .success(let photoAsset):
+                do {
+                    if let gid = fetchRequest.globalIdentifier {
+                        ///
+                        /// Some `SHLocalFetchRequestQueueItem` have a global identifier set
+                        /// for instance when these items are enqueued from an `SHUploadOperation`,
+                        /// or when it's a share for an asset that is already on the server
+                        ///
+                        try photoAsset.setGlobalIdentifier(gid)
+                    } else {
+                        ///
+                        /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
+                        /// along with the queue item being enqueued in `markAsSuccessful`
+                        ///
+                        let _ = try photoAsset.retrieveOrGenerateGlobalIdentifier()
+                    }
+                    
+                    do {
+                        try self.markAsSuccessful(
+                            photoAsset: photoAsset,
+                            fetchRequest: fetchRequest,
+                            queueItem: item
+                        )
+                        completionHandler(.success(()))
+                    } catch {
+                        self.log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
+                        handleError(error)
+                    }
+                } catch {
+                    handleError(error)
                 }
-                
-                self.process(item)
-                log.info("[√] fetch task completed for item \(item.identifier)")
-                
-                setProcessingState(nil, for: item.identifier)
-            }
-                
-            guard !self.isCancelled else {
-                log.info("fetch task cancelled. Finishing")
-                break
+            case .failure(let failure):
+                handleError(failure)
             }
         }
-        
-        state = .finished
+    }
+    
+    public override func run(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.runOnce(completionHandler: completionHandler)
     }
 }
 

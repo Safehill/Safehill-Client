@@ -227,7 +227,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
-    private func runOnce(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    private func runOnce(
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         
         ///
         /// Get the descriptors from the local server
@@ -266,6 +269,10 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 completionHandler(.failure(err))
             }
         }
+    }
+    
+    public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.runOnce(qos: .background, completionHandler: completionHandler)
     }
     
     public func runOnce(
@@ -308,19 +315,6 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                     }
                 }
             }
-        }
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        self.runOnce(qos: .background) { result in
-            self.state = .finished
         }
     }
 }

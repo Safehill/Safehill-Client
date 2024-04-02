@@ -45,9 +45,12 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         )
     }
     
-    public func run(forAssetLocalIdentifiers localIdentifiers: [String],
-                    groupId: String,
-                    sharedWith: [SHServerUser]) throws {
+    public func run(
+        forAssetLocalIdentifiers localIdentifiers: [String],
+        groupId: String,
+        sharedWith: [SHServerUser],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let versions = SHAbstractShareableGroupableQueueItem.recommendedVersions(forSharingWith: sharedWith)
         let queueItemIdentifiers = localIdentifiers.map({
             SHUploadPipeline.queueItemIdentifier(groupId: groupId,
@@ -56,14 +59,12 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
                                                  users: sharedWith)
         })
         
-        
         let fetchOperation = SHLocalFetchOperation(
             delegates: assetsDelegates,
             limitPerRun: 0,
             imageManager: imageManager,
             photoIndexer: photoIndexer
         )
-        try fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
         
         let encryptOperation = SHEncryptionOperation(
             user: self.user,
@@ -72,7 +73,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             limitPerRun: 0,
             imageManager: imageManager
         )
-        try encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
         
         let uploadOperation = SHUploadOperation(
             user: self.user,
@@ -80,9 +80,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             delegates: assetsDelegates,
             limitPerRun: 0
         )
-        try uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
-        
-        try fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
         
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
@@ -91,35 +88,109 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             limitPerRun: 0,
             imageManager: imageManager
         )
-        try shareOperation.run(forQueueItemIdentifiers: queueItemIdentifiers)
-    }
-    
-    public func runOnce() throws {
         
-        state = .executing
+        let log = self.log
         
-        let step: ((() throws -> Void, String) -> Void) = { throwingMethod, methodIdentifier in
-            do { try throwingMethod() }
-            catch {
-                self.log.critical("error running step '\(methodIdentifier)': \(error.localizedDescription)")
-            }
-            guard !self.isCancelled else {
-                self.log.info("upload pipeline cancelled. Finishing")
-                self.state = .finished
+        log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
+        fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+            guard case .success = result else {
+                completionHandler(result)
                 return
             }
+            
+            log.debug("Running on-demand ENCRYPT for items \(queueItemIdentifiers)")
+            encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+                guard case .success = result else {
+                    completionHandler(result)
+                    return
+                }
+                
+                log.debug("Running on-demand UPLOAD for items \(queueItemIdentifiers)")
+                uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+                    guard case .success = result else {
+                        completionHandler(result)
+                        return
+                    }
+                    
+                    log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
+                    fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+                        guard case .success = result else {
+                            completionHandler(result)
+                            return
+                        }
+                        
+                        log.debug("Running on-demand SHARE for items \(queueItemIdentifiers)")
+                        shareOperation.run(
+                            forQueueItemIdentifiers: queueItemIdentifiers,
+                            completionHandler: completionHandler
+                        )
+                    }
+                }
+            }
         }
-        
-        step(runFetchCycle, "FetchForEncryptionUpload")
-        step(runEncryptionCycle, "Encryption")
-        step(runUploadCycle, "Upload")
-        step(runFetchCycle, "FetchForEncryptionShare")
-        step(runShareCycle, "Share")
-        
-        state = .finished
     }
     
-    private func runFetchCycle() throws {
+    public override func run(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.runFetchCycle { result in
+            switch result {
+            case .failure(let error):
+                self.log.critical("error running FETCH step: \(error.localizedDescription)")
+                completionHandler(.failure(error))
+            case .success:
+                guard !self.isCancelled else {
+                    self.log.info("upload pipeline cancelled. Finishing")
+                    completionHandler(.success(()))
+                    return
+                }
+                self.runEncryptionCycle { result in
+                    switch result {
+                    case .failure(let error):
+                        self.log.critical("error running ENCRYPT step: \(error.localizedDescription)")
+                        completionHandler(.failure(error))
+                    case .success:
+                        guard !self.isCancelled else {
+                            self.log.info("upload pipeline cancelled. Finishing")
+                            completionHandler(.success(()))
+                            return
+                        }
+                        self.runUploadCycle { result in
+                            switch result {
+                            case .failure(let error):
+                                self.log.critical("error running UPLOAD step: \(error.localizedDescription)")
+                                completionHandler(.failure(error))
+                            case .success:
+                                guard !self.isCancelled else {
+                                    self.log.info("upload pipeline cancelled. Finishing")
+                                    completionHandler(.success(()))
+                                    return
+                                }
+                                self.runFetchCycle { result in
+                                    switch result {
+                                    case .failure(let error):
+                                        self.log.critical("error running step FETCH': \(error.localizedDescription)")
+                                        completionHandler(.failure(error))
+                                    case .success:
+                                        guard !self.isCancelled else {
+                                            self.log.info("upload pipeline cancelled. Finishing")
+                                            completionHandler(.success(()))
+                                            return
+                                        }
+                                        self.runShareCycle(completionHandler: completionHandler)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func runFetchCycle(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
@@ -133,14 +204,17 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         
         let fetchOperation = SHLocalFetchOperation(
             delegates: assetsDelegates,
-            limitPerRun: 0,
+            limitPerRun: limit ?? 0,
             imageManager: imageManager,
             photoIndexer: photoIndexer
         )
-        try fetchOperation.runOnce(maxItems: limit)
+        log.debug("Running FETCH step")
+        fetchOperation.runOnce(completionHandler: completionHandler)
     }
     
-    private func runEncryptionCycle() throws {
+    private func runEncryptionCycle(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
@@ -159,10 +233,13 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             limitPerRun: 0,
             imageManager: imageManager
         )
-        try encryptOperation.runOnce(maxItems: limit)
+        log.debug("Running ENCRYPT step")
+        encryptOperation.runOnce(completionHandler: completionHandler)
     }
     
-    private func runUploadCycle() throws {
+    private func runUploadCycle(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
@@ -180,10 +257,13 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             delegates: assetsDelegates,
             limitPerRun: 0
         )
-        try uploadOperation.runOnce(maxItems: limit)
+        log.debug("Running UPLOAD step")
+        uploadOperation.runOnce(completionHandler: completionHandler)
     }
     
-    private func runShareCycle() throws {
+    private func runShareCycle(
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
         
         if parallelization == .conservative {
@@ -202,24 +282,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
             limitPerRun: 0,
             imageManager: imageManager
         )
-        try shareOperation.runOnce(maxItems: limit)
-    }
-    
-    public override func main() {
-        guard !self.isCancelled else {
-            state = .finished
-            return
-        }
-        
-        state = .executing
-        
-        do {
-            try self.runOnce()
-        } catch {
-            log.error("failed to run full upload pipeline. \(error.localizedDescription)")
-        }
-        
-        state = .finished
+        log.debug("Running SHARE step")
+        shareOperation.runOnce(completionHandler: completionHandler)
     }
 }
 

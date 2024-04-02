@@ -8,6 +8,7 @@ public enum InteractionType: String {
     case message = "message", reaction = "reaction"
 }
 
+let E2eCreationSerialQueue = DispatchQueue(label: "com.safehill.encryptAndShare.e2eCreation")
 
 public struct SHUserInteractionController {
     
@@ -42,88 +43,90 @@ public struct SHUserInteractionController {
         with users: [SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void
     ) {
-        guard let authedUser = self.user as? SHAuthenticatedLocalUser else {
-            completionHandler(.failure(SHLocalUserError.notAuthenticated))
-            return
-        }
-        
-        guard users.contains(where: { $0.identifier == self.user.identifier }) else {
-            completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
-            return
-        }
-        
-        self.serverProxy.getThread(withUsers: users) { result in
-            switch result {
-            case .failure(let error):
-                log.error("failed to fetch thread with users \(users.map({ $0.identifier })) from remote server")
-                completionHandler(.failure(error))
-            case .success(let conversationThread):
-                let symmetricKey: SymmetricKey
-                
-                if let conversationThread {
-                    log.info("found thread with users \(users.map({ $0.identifier })) from remote")
-                    do {
-                        let encryptionDetails = conversationThread.encryptionDetails
-                        let shareablePayload = SHShareablePayload(
-                            ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
-                            cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
-                            signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
-                        )
-                        let decryptedSecret: Data
-                        
+        E2eCreationSerialQueue.async {
+            guard let authedUser = self.user as? SHAuthenticatedLocalUser else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
+                return
+            }
+            
+            guard users.contains(where: { $0.identifier == self.user.identifier }) else {
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
+                return
+            }
+            
+            self.serverProxy.getThread(withUsers: users) { result in
+                switch result {
+                case .failure(let error):
+                    log.error("failed to fetch thread with users \(users.map({ $0.identifier })) from remote server")
+                    completionHandler(.failure(error))
+                case .success(let conversationThread):
+                    let symmetricKey: SymmetricKey
+                    
+                    if let conversationThread {
+                        log.info("found thread with users \(users.map({ $0.identifier })) from remote")
                         do {
-                            decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
-                                usingEncryptedSecret: shareablePayload,
-                                protocolSalt: authedUser.encryptionProtocolSalt,
-                                signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
+                            let encryptionDetails = conversationThread.encryptionDetails
+                            let shareablePayload = SHShareablePayload(
+                                ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
+                                cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
+                                signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
                             )
-                        } catch SHCypher.DecryptionError.authenticationError {
-                            log.warning("group details were force-updated on the server. Attempting to decrypt the secret using this user's public signature instead of the one recorded by the server")
-                            decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
-                                usingEncryptedSecret: shareablePayload,
-                                protocolSalt: authedUser.encryptionProtocolSalt,
-                                signedWith: authedUser.publicSignatureData
-                            )
+                            let decryptedSecret: Data
+                            
+                            do {
+                                decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
+                                    usingEncryptedSecret: shareablePayload,
+                                    protocolSalt: authedUser.encryptionProtocolSalt,
+                                    signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
+                                )
+                            } catch SHCypher.DecryptionError.authenticationError {
+                                log.warning("group details were force-updated on the server. Attempting to decrypt the secret using this user's public signature instead of the one recorded by the server")
+                                decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
+                                    usingEncryptedSecret: shareablePayload,
+                                    protocolSalt: authedUser.encryptionProtocolSalt,
+                                    signedWith: authedUser.publicSignatureData
+                                )
+                            }
+                            
+                            symmetricKey = SymmetricKey(data: decryptedSecret)
+                        } catch {
+                            log.critical("""
+failed to initialize E2EE details for new users in thread \(conversationThread.threadId). error=\(error.localizedDescription)
+""")
+                            completionHandler(.failure(error))
+                            return
                         }
-                        
-                        symmetricKey = SymmetricKey(data: decryptedSecret)
+                    } else {
+                        log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier }))")
+                        symmetricKey = createNewSecret()
+                    }
+                    
+                    var usersAndSelf = users
+                    if users.contains(where: { $0.identifier == authedUser.identifier }) == false {
+                        usersAndSelf.append(authedUser)
+                    }
+                    
+                    do {
+                        let recipientsEncryptionDetails = try newRecipientEncryptionDetails(
+                            from: symmetricKey,
+                            for: usersAndSelf,
+                            anchor: .thread,
+                            anchorId: conversationThread?.threadId
+                        )
+                        log.debug("generated recipients encryptionDetails \(recipientsEncryptionDetails.map({ "R=\($0.recipientUserIdentifier) ES=\($0.encryptedSecret), EPK=\($0.ephemeralPublicKey) SSig=\($0.secretPublicSignature) USig=\($0.senderPublicSignature)" }))")
+                        log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier }))")
+                        self.serverProxy.createOrUpdateThread(
+                            name: nil,
+                            recipientsEncryptionDetails: recipientsEncryptionDetails,
+                            completionHandler: completionHandler
+                        )
                     } catch {
                         log.critical("""
-failed to initialize E2EE details for new users in thread \(conversationThread.threadId). error=\(error.localizedDescription)
+failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "<NEW>"). error=\(error.localizedDescription)
 """)
                         completionHandler(.failure(error))
                         return
                     }
-                } else {
-                    log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier }))")
-                    symmetricKey = createNewSecret()
-                }
-                
-                var usersAndSelf = users
-                if users.contains(where: { $0.identifier == authedUser.identifier }) == false {
-                    usersAndSelf.append(authedUser)
-                }
-                
-                do {
-                    let recipientsEncryptionDetails = try newRecipientEncryptionDetails(
-                        from: symmetricKey,
-                        for: usersAndSelf,
-                        anchor: .thread,
-                        anchorId: conversationThread?.threadId
-                    )
-                    log.debug("generated recipients encryptionDetails \(recipientsEncryptionDetails.map({ "R=\($0.recipientUserIdentifier) ES=\($0.encryptedSecret), EPK=\($0.ephemeralPublicKey) SSig=\($0.secretPublicSignature) USig=\($0.senderPublicSignature)" }))")
-                    log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier }))")
-                    self.serverProxy.createOrUpdateThread(
-                        name: nil,
-                        recipientsEncryptionDetails: recipientsEncryptionDetails,
-                        completionHandler: completionHandler
-                    )
-                } catch {
-                    log.critical("""
-failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "<NEW>"). error=\(error.localizedDescription)
-""")
-                    completionHandler(.failure(error))
-                    return
                 }
             }
         }
@@ -163,50 +166,52 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         with users: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        guard self.user as? SHAuthenticatedLocalUser != nil else {
-            completionHandler(.failure(SHLocalUserError.notAuthenticated))
-            return
-        }
-        
-        guard users.contains(where: { $0.identifier == self.user.identifier }) else {
-            completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
-            return
-        }
-        
-        var symmetricKey: SymmetricKey?
-        
-        do {
-            symmetricKey = try self.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
-        } catch {
-            log.critical("""
+        E2eCreationSerialQueue.async {
+            guard self.user as? SHAuthenticatedLocalUser != nil else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
+                return
+            }
+            
+            guard users.contains(where: { $0.identifier == self.user.identifier }) else {
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
+                return
+            }
+            
+            var symmetricKey: SymmetricKey?
+            
+            do {
+                symmetricKey = try self.fetchSymmetricKey(forAnchor: .group, anchorId: groupId)
+            } catch {
+                log.critical("""
 failed to fetch symmetric key for self user for existing group \(groupId): \(error.localizedDescription)
 """)
-            completionHandler(.failure(error))
-            return
-        }
-        
-        if symmetricKey == nil {
-            log.debug("generating a new secret for group with id \(groupId)")
-            symmetricKey = createNewSecret()
-        }
-        
-        do {
-            self.serverProxy.setupGroupEncryptionDetails(
-                groupId: groupId,
-                recipientsEncryptionDetails: try self.newRecipientEncryptionDetails(
-                    from: symmetricKey!,
-                    for: users,
-                    anchor: .group,
-                    anchorId: groupId
-                ),
-                completionHandler: completionHandler
-            )
-        } catch {
-            log.critical("""
+                completionHandler(.failure(error))
+                return
+            }
+            
+            if symmetricKey == nil {
+                log.debug("generating a new secret for group with id \(groupId)")
+                symmetricKey = createNewSecret()
+            }
+            
+            do {
+                self.serverProxy.setupGroupEncryptionDetails(
+                    groupId: groupId,
+                    recipientsEncryptionDetails: try self.newRecipientEncryptionDetails(
+                        from: symmetricKey!,
+                        for: users,
+                        anchor: .group,
+                        anchorId: groupId
+                    ),
+                    completionHandler: completionHandler
+                )
+            } catch {
+                log.critical("""
 failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identifier })). error=\(error.localizedDescription)
 """)
-            completionHandler(.failure(error))
-            return
+                completionHandler(.failure(error))
+                return
+            }
         }
     }
     
