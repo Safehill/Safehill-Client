@@ -54,7 +54,7 @@ public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, 
     }
     
     public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: .background, completionHandler: completionHandler)
+        self.runOnce(qos: .default, completionHandler: completionHandler)
     }
 }
 

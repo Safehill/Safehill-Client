@@ -80,7 +80,7 @@ extension SHSyncOperation {
                         removalDispatchGroup.leave()
                     }
                 }
-                removalDispatchGroup.notify(queue: .global(qos: .background)) {
+                removalDispatchGroup.notify(queue: .global(qos: qos)) {
                     self.log.info("threads to remove: \(threadIdsToRemoveLocally.count), removed: \(removedCount)")
                 }
             }

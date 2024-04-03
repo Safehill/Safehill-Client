@@ -1206,7 +1206,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     public override func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        self.runOnce(qos: .background) { result in
+        self.runOnce(qos: .default) { result in
             if case .failure(let failure) = result {
                 completionHandler(.failure(failure))
             } else {
