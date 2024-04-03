@@ -286,7 +286,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
             with: globalIdentifier,
             versions: versions,
             cacheHiResolution: false,
-            qos: .background
+            qos: .default
         ) { result in
             
             switch result {
