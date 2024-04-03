@@ -165,7 +165,7 @@ struct AssetDescriptorsDiff {
                         var newDict = userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
                         newDict[userId] = groupId
                         
-                        var newGroupInfoDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
+                        var newGroupInfoDict = userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
                             name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
                             createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt
