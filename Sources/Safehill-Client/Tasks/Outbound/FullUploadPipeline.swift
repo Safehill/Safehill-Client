@@ -51,12 +51,21 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         sharedWith: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let versions = SHAbstractShareableGroupableQueueItem.recommendedVersions(forSharingWith: sharedWith)
-        let queueItemIdentifiers = localIdentifiers.map({
-            SHUploadPipeline.queueItemIdentifier(groupId: groupId,
-                                                 assetLocalIdentifier: $0,
-                                                 versions: versions,
-                                                 users: sharedWith)
+        let queueItemIdentifiers = localIdentifiers.flatMap({
+            [
+                SHUploadPipeline.queueItemIdentifier(
+                    groupId: groupId,
+                    assetLocalIdentifier: $0,
+                    versions: [.lowResolution, .midResolution],
+                    users: sharedWith
+                ),
+                SHUploadPipeline.queueItemIdentifier(
+                    groupId: groupId,
+                    assetLocalIdentifier: $0,
+                    versions: [.lowResolution, .hiResolution],
+                    users: sharedWith
+                )
+            ]
         })
         
         let fetchOperation = SHLocalFetchOperation(
