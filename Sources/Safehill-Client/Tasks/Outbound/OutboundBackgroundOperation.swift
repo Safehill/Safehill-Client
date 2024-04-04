@@ -65,10 +65,11 @@ extension SHOutboundBackgroundOperation {
                 self.log.info("\(self.operationType.identifier) item \(queuedItem.identifier) created at \(queuedItem.createdAt)")
                 
                 self.process(queuedItem) { result in
-                    if case .success = result {
+                    switch result {
+                    case .success:
                         self.log.info("[√] \(self.operationType.identifier) task completed for item \(queuedItem.identifier)")
-                    } else {
-                        self.log.error("[x] \(self.operationType.identifier) task failed for item \(queuedItem.identifier)")
+                    case .failure(let error):
+                        self.log.critical("[x] \(self.operationType.identifier) task failed for item \(queuedItem.identifier): \(error.localizedDescription)")
                     }
                     
                     setProcessingState(nil, for: queuedItem.identifier)
