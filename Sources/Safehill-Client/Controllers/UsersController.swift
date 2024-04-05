@@ -73,7 +73,7 @@ public class SHUsersController {
     }
     
     /// Retrieve from either the in-memory or the on-disk cache only.
-    /// **Best effort** to retrieve users locally (maybe when there's no connection to get them from the server?)
+    /// Best effort to retrieve users **locally** (maybe when there's no connection to get them from the server?)
     /// Doesn't cache the result in memory.
     ///
     /// - Parameter userIdentifiers: the user identifiers to fetch
@@ -114,6 +114,45 @@ public class SHUsersController {
             case .failure(let err):
                 log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
                 completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    /// Best effort to retrieve users from **either local or remote server**.
+    /// The `getUsers` call fails if not all users can be retrieved
+    /// (i.e. not all are in local, and the user is not yet authenticated to talk to the remote server).
+    ///
+    /// - Parameters:
+    ///   - identifiers: the user identifiers
+    ///   - completionHandler: the map identifier to user
+    public func getUsersOrCached(
+        with identifiers: [UserIdentifier],
+        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
+    ) {
+        let usersController = SHUsersController(localUser: self.localUser)
+        usersController.getUsers(withIdentifiers: identifiers) {
+            result in
+            switch result {
+            case .failure(let error):
+                switch error {
+                case SHLocalUserError.notAuthenticated:
+                    break
+                default:
+                    log.warning("[\(type(of: self))] failed fetch users from server, falling back to **best effort** user cache: \(error.localizedDescription)")
+                }
+                
+                usersController.getCachedUsers(withIdentifiers: identifiers) {
+                    cachedResult in
+                    switch cachedResult {
+                    case .failure(let error):
+                        log.error("[\(type(of: self))] failed to update thread lists because users couldn't be fetched: \(error.localizedDescription)")
+                        completionHandler(.failure(error))
+                    case .success(let usersDict):
+                        completionHandler(.success(usersDict))
+                    }
+                }
+            case .success(let usersByIdentifier):
+                completionHandler(.success(usersByIdentifier))
             }
         }
     }

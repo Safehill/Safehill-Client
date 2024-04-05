@@ -103,7 +103,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         withIdentifiers userIdentifiers: [UserIdentifier],
         completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
     ) {
-        SHUsersController(localUser: self.user).getCachedUsers(withIdentifiers: userIdentifiers, completionHandler: completionHandler)
+        SHUsersController(localUser: self.user).getUsersOrCached(with: userIdentifiers, completionHandler: completionHandler)
     }
     
     ///
