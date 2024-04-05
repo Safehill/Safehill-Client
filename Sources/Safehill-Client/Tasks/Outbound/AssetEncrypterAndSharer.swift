@@ -150,18 +150,20 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             /// Remove items in the `FailedShareQueue` for the same identifier
             let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: successfulShare.identifier))
             
-            /// Remove items in the `ShareHistoryQueue` for the same asset identifier and group identifier but different users
-            /// The contract with the client when adding users to an existing share is to ask to share with both new and old users.
-            /// Which, in turn, means that the old share history item can be safely removed once the new one is inserted,
-            /// as the new one will have both old and new users.
-            let _ = try successfulShareQueue.removeValues(
-                forKeysMatching: KBGenericCondition(
-                    .beginsWith, 
-                    value: [
-                        localIdentifier, groupId
-                    ].joined(separator: "+")
+            if request.isBackground == false {
+                /// Remove items in the `ShareHistoryQueue` for the same asset identifier and group identifier but different users
+                /// The contract with the client when adding users to an existing share is to ask to share with both new and old users.
+                /// Which, in turn, means that the old share history item can be safely removed once the new one is inserted,
+                /// as the new one will have both old and new users.
+                let _ = try successfulShareQueue.removeValues(
+                    forKeysMatching: KBGenericCondition(
+                        .beginsWith,
+                        value: [
+                            localIdentifier, groupId
+                        ].joined(separator: "+")
+                    )
                 )
-            )
+            }
             
             try successfulShare.enqueue(in: successfulShareQueue)
         }
