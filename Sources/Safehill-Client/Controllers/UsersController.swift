@@ -129,8 +129,7 @@ public class SHUsersController {
         with identifiers: [UserIdentifier],
         completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
     ) {
-        let usersController = SHUsersController(localUser: self.localUser)
-        usersController.getUsers(withIdentifiers: identifiers) {
+        self.getUsers(withIdentifiers: identifiers) {
             result in
             switch result {
             case .failure(let error):
@@ -141,14 +140,17 @@ public class SHUsersController {
                     log.warning("[\(type(of: self))] failed fetch users from server, falling back to **best effort** user cache: \(error.localizedDescription)")
                 }
                 
-                usersController.getCachedUsers(withIdentifiers: identifiers) {
+                self.getCachedUsers(withIdentifiers: identifiers) {
                     cachedResult in
                     switch cachedResult {
                     case .failure(let error):
                         log.error("[\(type(of: self))] failed to update thread lists because users couldn't be fetched: \(error.localizedDescription)")
                         completionHandler(.failure(error))
-                    case .success(let usersDict):
-                        completionHandler(.success(usersDict))
+                    case .success(var usersByIdentifier):
+                        if usersByIdentifier[self.localUser.identifier] == nil {
+                            usersByIdentifier[self.localUser.identifier] = self.localUser
+                        }
+                        completionHandler(.success(usersByIdentifier))
                     }
                 }
             case .success(let usersByIdentifier):
