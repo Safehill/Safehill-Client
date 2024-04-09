@@ -47,6 +47,7 @@ struct GenericFailureResponse: Decodable {
 struct SHServerHTTPAPI : SHServerAPI {
     
     let requestor: SHLocalUserProtocol
+    static let urlSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
     init(requestor: SHLocalUserProtocol) {
         self.requestor = requestor
@@ -103,7 +104,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         var stopTime = startTime
         var bytesReceived = 0
         
-        URLSession(configuration: SafehillServerDefaultURLSessionConfiguration).dataTask(with: request) { data, response, error in
+        Self.urlSession.dataTask(with: request) { data, response, error in
             
             guard error == nil else {
                 if let err = error as? URLError {
