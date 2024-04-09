@@ -35,7 +35,7 @@ public extension SHKeychain {
         // Treat the key data as a generic password.
         let query = [kSecClass: kSecClassGenericPassword,
                      kSecAttrAccount: account,
-                     kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked,
+                     kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock,
                      kSecUseDataProtectionKeychain: true,
                      kSecValueData: tokenData] as [String: Any]
 
