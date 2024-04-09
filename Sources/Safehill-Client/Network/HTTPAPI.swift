@@ -47,7 +47,7 @@ struct GenericFailureResponse: Decodable {
 struct SHServerHTTPAPI : SHServerAPI {
     
     let requestor: SHLocalUserProtocol
-    static let urlSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
+    static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
     init(requestor: SHLocalUserProtocol) {
         self.requestor = requestor
@@ -91,9 +91,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         return components.url!
     }
     
-    static func makeRequest<T: Decodable>(request: URLRequest,
-                                          decodingResponseAs type: T.Type,
-                                          completionHandler: @escaping (Result<T, Error>) -> Void) {
+    static func makeRequest<T: Decodable>(
+        request: URLRequest,
+        usingSession urlSession: URLSession,
+        decodingResponseAs type: T.Type,
+        completionHandler: @escaping (Result<T, Error>) -> Void
+    ) {
 //        log.trace("""
 //"\(request.httpMethod!) \(request.url!),
 //headers=\(request.allHTTPHeaderFields ?? [:]),
@@ -104,7 +107,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         var stopTime = startTime
         var bytesReceived = 0
         
-        Self.urlSession.dataTask(with: request) { data, response, error in
+        urlSession.dataTask(with: request) { data, response, error in
             
             guard error == nil else {
                 if let err = error as? URLError {
@@ -235,7 +238,12 @@ struct SHServerHTTPAPI : SHServerAPI {
             request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         }
         
-        SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
+        SHServerHTTPAPI.makeRequest(
+            request: request,
+            usingSession: Self.safehillURLSession,
+            decodingResponseAs: T.self,
+            completionHandler: completionHandler
+        )
     }
     
     private func route<T: Decodable>(_ route: String,
@@ -265,7 +273,12 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: T.self, completionHandler: completionHandler)
+        SHServerHTTPAPI.makeRequest(
+            request: request,
+            usingSession: Self.safehillURLSession,
+            decodingResponseAs: T.self,
+            completionHandler: completionHandler
+        )
     }
     
     func post<T: Decodable>(_ route: String,

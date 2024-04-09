@@ -43,6 +43,22 @@ internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfigurati
     return configuration
 }
 
+internal var CDNServerDefaultURLSessionConfiguration: URLSessionConfiguration {
+    let configuration = URLSessionConfiguration.default
+    
+    /// Fail immediately if there is no connectivity. Re-attempts are managed in the app
+    configuration.waitsForConnectivity = true
+    
+    /// Defaults to `false` to only allow WiFi/Ethernet. Set it to `true`
+    configuration.allowsCellularAccess = true
+    /// Set to `false` to prevent your app from using network interfaces that the system considers expensive. Set it to `true`
+    configuration.allowsExpensiveNetworkAccess = true
+    /// Indicates whether connections may use the network when the user has specified Low Data Mode.
+    configuration.allowsConstrainedNetworkAccess = true
+    
+    return configuration
+}
+
 internal func CDNServerDefaultBackgroundURLSessionConfiguration(with sessionIdentifier: String) -> URLSessionConfiguration {
     let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
     

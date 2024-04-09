@@ -115,6 +115,8 @@ extension SHSessionDelegate: URLSessionDownloadDelegate {
 struct S3Proxy {
     let presignedURL: String
     
+    static let S3URLSession = URLSession(configuration: CDNServerDefaultURLSessionConfiguration)
+    
     static var tempFolderURL: URL? {
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("uploads")
         
@@ -220,8 +222,11 @@ struct S3Proxy {
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
         log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
 
-        SHServerHTTPAPI.makeRequest(request: request,
-                                    decodingResponseAs: NoReply.self) { result in
+        SHServerHTTPAPI.makeRequest(
+            request: request,
+            usingSession: Self.S3URLSession,
+            decodingResponseAs: NoReply.self
+        ) { result in
             switch result {
             case .success(_):
                 log.info("successfully uploaded to \(presignedURL)")
@@ -264,8 +269,11 @@ struct S3Proxy {
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
         log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
         
-        SHServerHTTPAPI.makeRequest(request: request,
-                                    decodingResponseAs: NoReply.self) { result in
+        SHServerHTTPAPI.makeRequest(
+            request: request,
+            usingSession: Self.S3URLSession,
+            decodingResponseAs: NoReply.self
+        ) { result in
             switch result {
             case .success(_):
                 log.info("successfully uploaded to \(presignedURL)")
@@ -308,7 +316,11 @@ struct S3Proxy {
         
         log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName) from S3 using request \(request.httpMethod!) \(request.url!)")
         
-        SHServerHTTPAPI.makeRequest(request: request, decodingResponseAs: Data.self) { result in
+        SHServerHTTPAPI.makeRequest(
+            request: request,
+            usingSession: Self.S3URLSession,
+            decodingResponseAs: Data.self
+        ) { result in
             switch result {
             case .success(let data):
                 let versionsDict = [
