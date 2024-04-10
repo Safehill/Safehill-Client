@@ -2,6 +2,7 @@ import Foundation
 import Photos
 import KnowledgeBase
 
+public let kSHPhotosPreferencesUserDefaults = "com.gf.safehill.PhotosAssetCache"
 public let kSHPhotosAssetCacheStoreName = "com.gf.safehill.PhotosAssetCache"
 let kSHPhotosAuthorizationStatusKey = "com.gf.safehill.indexer.photos.authorizationStatus"
 
@@ -24,7 +25,7 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
         "\(self.hashValue)"
     }
     
-    private let photosIndexerDefaults = KBKVStore.userDefaultsStore()!
+    private let preferencesUserDefaults = UserDefaults(suiteName: kSHPhotosPreferencesUserDefaults)!
     private var delegates = [String: SHPhotoAssetChangeDelegate]()
     
     /// The index of `SHApplePhotoAsset`s
@@ -35,21 +36,17 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
     
     public var authorizationStatus: PHAuthorizationStatus {
         get {
-            do {
-                let savedAuthStatus = try self.photosIndexerDefaults.value(for: kSHPhotosAuthorizationStatusKey)
-                if let savedAuthStatus = savedAuthStatus as? Int {
-                    return PHAuthorizationStatus(rawValue: savedAuthStatus) ?? .notDetermined
-                }
-            } catch {}
+            let savedAuthStatus = self.preferencesUserDefaults.value(forKey: kSHPhotosAuthorizationStatusKey)
+            if let savedAuthStatus = savedAuthStatus as? Int {
+                return PHAuthorizationStatus(rawValue: savedAuthStatus) ?? .notDetermined
+            }
             return .notDetermined
         }
         set {
-            do {
-                try self.photosIndexerDefaults.set(value: newValue.rawValue,
-                                                   for: kSHPhotosAuthorizationStatusKey)
-            } catch {
-                log.warning("Unable to record kSHPhotosAuthorizationStatusKey status in UserDefaults KBKVStore")
-            }
+            self.preferencesUserDefaults.set(
+                newValue.rawValue,
+                forKey: kSHPhotosAuthorizationStatusKey
+            )
             if [.authorized, .limited].contains(newValue) {
                 PHPhotoLibrary.shared().register(self as PHPhotoLibraryChangeObserver)
                 PHPhotoLibrary.shared().register(self as PHPhotoLibraryAvailabilityObserver)
