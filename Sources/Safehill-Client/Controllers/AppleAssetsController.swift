@@ -65,6 +65,10 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
         self.requestAuthorization { _ in }
     }
     
+    deinit {
+        self.preferencesUserDefaults.removeObject(forKey: kSHPhotosAuthorizationStatusKey)
+    }
+    
     public func requestAuthorization(completionHandler: @escaping (PHAuthorizationStatus) -> Void) {
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
             self.authorizationStatus = status
