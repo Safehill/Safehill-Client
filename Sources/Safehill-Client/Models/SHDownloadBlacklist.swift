@@ -4,7 +4,7 @@ import Foundation
 
 public actor SHDownloadBlacklist {
     
-    let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
+    static let kSHUsersBlacklistKey = "com.gf.safehill.user.blacklist"
     
     public static var shared = SHDownloadBlacklist()
     
@@ -13,28 +13,22 @@ public actor SHDownloadBlacklist {
     
     var repeatedDownloadFailuresByAssetId = [GlobalIdentifier: Int]()
     
-    private let blacklistUserStorage = KBKVStore.userDefaultsStore()!
+    private let blacklistUserStorage = UserDefaults(suiteName: kSHUsersBlacklistKey)!
     internal var blacklistedUsers: [UserIdentifier] {
         get {
-            do {
-                let savedList = try self.blacklistUserStorage.value(
-                    for: kSHUsersBlacklistKey
-                )
-                if let savedList = savedList as? [UserIdentifier] {
-                    return savedList
-                }
-            } catch {}
+            let savedList = self.blacklistUserStorage.value(
+                forKey: Self.kSHUsersBlacklistKey
+            )
+            if let savedList = savedList as? [UserIdentifier] {
+                return savedList
+            }
             return []
         }
         set {
-            do {
-                try self.blacklistUserStorage.set(
-                    value: newValue,
-                    for: kSHUsersBlacklistKey
-                )
-            } catch {
-                log.warning("unable to record kSHUserBlacklistKey status in UserDefaults KBKVStore")
-            }
+            self.blacklistUserStorage.set(
+                newValue,
+                forKey: Self.kSHUsersBlacklistKey
+            )
         }
     }
     
@@ -99,7 +93,7 @@ public actor SHDownloadBlacklist {
     }
     
     func deepClean() throws {
-        let _ = try self.blacklistUserStorage.removeAll()
+        self.blacklistUserStorage.removeObject(forKey: Self.kSHUsersBlacklistKey)
         repeatedDownloadFailuresByAssetId.removeAll()
     }
 }
