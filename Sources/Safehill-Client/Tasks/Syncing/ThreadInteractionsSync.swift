@@ -207,8 +207,8 @@ extension SHSyncOperation {
                     shouldCreateE2EEDetailsLocally = true
                 } else {
                     error = err
+                    self.log.error("failed to retrieve local interactions for thread \(threadId)")
                 }
-                self.log.error("failed to retrieve local interactions for thread \(threadId)")
             case .success(let localInteractions):
                 localMessages = localInteractions.messages
                 localReactions = localInteractions.reactions
