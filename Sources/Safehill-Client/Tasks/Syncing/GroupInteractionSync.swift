@@ -140,9 +140,9 @@ extension SHSyncOperation {
                 if case SHBackgroundOperationError.missingE2EEDetailsForGroup(_) = err {
                     shouldCreateE2EEDetailsLocally = true
                 } else {
+                    self.log.error("failed to retrieve local interactions for groupId \(groupId): \(err.localizedDescription)")
                     errors.append(err)
                 }
-                self.log.error("failed to retrieve local interactions for groupId \(groupId): \(err.localizedDescription)")
             case .success(let localInteractions):
                 localMessages = localInteractions.messages
                 localReactions = localInteractions.reactions
