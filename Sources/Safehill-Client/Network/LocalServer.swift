@@ -1472,7 +1472,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let threadOutputDtoById = kvPairs.reduce([String: ConversationThreadOutputDTO](), { (partialResult, pair) in
+        let list = kvPairs.reduce([String: ConversationThreadOutputDTO](), { (partialResult, pair) in
             let (key, value) = pair
             
             let components = key.components(separatedBy: "::")
@@ -1527,9 +1527,9 @@ struct LocalServer : SHServerAPI {
             result[threadId] = ConversationThreadOutputDTO(
                 threadId: threadId,
                 name: name ?? result[threadId]?.name,
-                creatorPublicIdentifier: creatorPublicId,
+                creatorPublicIdentifier: creatorPublicId ?? result[threadId]?.creatorPublicIdentifier,
                 membersPublicIdentifier: membersPublicIdentifiers ?? result[threadId]?.membersPublicIdentifier ?? [],
-                createdAt: createdAt?.iso8601withFractionalSeconds ?? Date().iso8601withFractionalSeconds,
+                createdAt: createdAt?.iso8601withFractionalSeconds ?? result[threadId]?.createdAt ?? Date().iso8601withFractionalSeconds,
                 lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds ?? result[threadId]?.lastUpdatedAt,
                 encryptionDetails: RecipientEncryptionDetailsDTO(
                     recipientUserIdentifier: self.requestor.identifier,
@@ -1545,7 +1545,7 @@ struct LocalServer : SHServerAPI {
             .values
         
         var filteredList = [ConversationThreadOutputDTO]()
-        for element in threadOutputDtoById {
+        for element in list {
             if (
                 element.membersPublicIdentifier.isEmpty
                 || element.encryptionDetails.ephemeralPublicKey.isEmpty
