@@ -81,15 +81,24 @@ extension LocalServer {
                         let assetToUsers: [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]
                         assetToUsers = try SHKGQuery.usersConnectedTo(assets: Array(uniqueAssetGidsChunk))
                         
+                        let relevantRemoteDescriptors = remoteDescriptors.filter({ uniqueAssetGidsChunk.contains($0.globalIdentifier) })
+                        
+                        let sendersInBatch = Array(Set(relevantRemoteDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })))
+                        let knownUsersInBatch = try SHKGQuery.areUsersKnown(withIdentifiers: sendersInBatch)
+                        
                         ///
                         /// Additions and Edits
                         ///
-                        let relevantRemoteDescriptors = remoteDescriptors.filter({ uniqueAssetGidsChunk.contains($0.globalIdentifier) })
                         for remoteDescriptor in relevantRemoteDescriptors {
+                            let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
+                            
+                            guard (knownUsersInBatch[sender] ?? false) == true else {
+                                continue
+                            }
+                            
                             let assetGid = remoteDescriptor.globalIdentifier
                             
                             if assetToUsers[assetGid] == nil {
-                                let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
                                 let recipients = Array(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
                                 log.info("[graph-sync] missing triples from <asset:\(assetGid)> <from:\(sender)> <to:\(recipients)>")
                                 if dryRun == false {
