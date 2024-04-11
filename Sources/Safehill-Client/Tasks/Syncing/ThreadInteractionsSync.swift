@@ -30,7 +30,7 @@ extension SHSyncOperation {
         /// Pull all threads
         ///
         dispatchGroup.enter()
-        self.serverProxy.listThreads(filteringUnknown: false) { result in
+        self.serverProxy.listThreads(filteringUnknownUsers: false) { result in
             switch result {
             case .success(let threadList):
                 allThreads = threadList
@@ -90,7 +90,7 @@ extension SHSyncOperation {
             ///
             var threadsFromKnownUsers = [ConversationThreadOutputDTO]()
             do {
-                let threadsFromKnownUsers = try self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads)
+                threadsFromKnownUsers = try self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads)
             } catch {
                 completionHandler(.failure(error))
                 return
@@ -100,10 +100,11 @@ extension SHSyncOperation {
             let threadsFromUnknownUsers = allThreads.filter({
                 threadIdsFromknownUsers.contains($0.threadId) == false
             })
-            let unauthorizedUsers = Set(threadsFromUnknownUsers.map({ $0.creatorPublicIdentifier }))
+            var unauthorizedUsers = Set(threadsFromUnknownUsers.compactMap({ $0.creatorPublicIdentifier }))
             unauthorizedUsers.remove(self.user.identifier)
+            let threadsDelegates = self.threadsDelegates
             self.delegatesQueue.async {
-                threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: unauthorizedUsers) })
+                threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: Array(unauthorizedUsers)) })
             }
             
             ///
@@ -166,7 +167,6 @@ extension SHSyncOperation {
                 }
             }
             
-            let threadsDelegates = self.threadsDelegates
             dispatchGroup.notify(queue: .global()) {
                 self.delegatesQueue.async {
                     threadsDelegates.forEach({ $0.didUpdateThreadsList(allThreads) })

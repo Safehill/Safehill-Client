@@ -6,6 +6,7 @@ public protocol SHServerProxyProtocol {
     init(user: SHLocalUserProtocol)
     
     func listThreads(
+        filteringUnknownUsers: Bool,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     )
     
@@ -1120,51 +1121,46 @@ extension SHServerProxy {
         _ serverThreads: [ConversationThreadOutputDTO]
     ) throws -> [ConversationThreadOutputDTO] {
         let threadCreatorUserIds = Array(Set(serverThreads
-            .flatMap({ $0.creatorPublicIdentifier })
-            .compactMap({ $0 })
+            .compactMap({ $0.creatorPublicIdentifier })
         ))
         
-        do {
-            var threadIdsToFilter = [String]()
-            let knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: threadCreatorUserIds)
-            for thread in serverThreads {
-                guard threadIdsToFilter.contains(thread.threadId) else {
-                    continue
-                }
-                
-                for memberId in thread.membersPublicIdentifier {
-                    if memberId == self.remoteServer.requestor.identifier {
-                        continue
-                    }
-                    if (knownUsers[memberId] ?? false) == false {
-                        log.info("filtering thread \(thread.threadId) because user \(memberId) is not a connection")
-                        threadIdsToFilter.append(thread.threadId)
-                        break
-                    }
-                }
+        var threadIdsToFilter = [String]()
+        let knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: threadCreatorUserIds)
+        for thread in serverThreads {
+            guard threadIdsToFilter.contains(thread.threadId) else {
+                continue
             }
             
-            return serverThreads.filter({ threadIdsToFilter.contains($0.threadId) == false })))
-        } catch {
-            completionHandler(.failure(error))
+            for memberId in thread.membersPublicIdentifier {
+                if memberId == self.remoteServer.requestor.identifier {
+                    continue
+                }
+                if (knownUsers[memberId] ?? false) == false {
+                    log.info("filtering thread \(thread.threadId) because user \(memberId) is not a connection")
+                    threadIdsToFilter.append(thread.threadId)
+                    break
+                }
+            }
         }
+        
+        return serverThreads.filter({ threadIdsToFilter.contains($0.threadId) == false })
     }
     
     public func listThreads(
-        filteringUnknown: Bool = true,
+        filteringUnknownUsers: Bool = true,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
         self.remoteServer.listThreads { remoteResult in
             switch remoteResult {
             case .success(let serverThreads):
-                guard filteringUnknown else {
+                guard filteringUnknownUsers else {
                     completionHandler(.success(serverThreads))
                     return
                 }
                 
                 do {
-                    let filteredThreads = self.filterThreadsCreatedByUnknownUsers(serverThreads)
-                    completionHandler(.success(serverThreads)
+                    let filteredThreads = try self.filterThreadsCreatedByUnknownUsers(serverThreads)
+                    completionHandler(.success(filteredThreads))
                 } catch {
                     completionHandler(.failure(error))
                 }

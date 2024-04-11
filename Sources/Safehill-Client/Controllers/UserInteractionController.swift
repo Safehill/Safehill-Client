@@ -33,7 +33,10 @@ public struct SHUserInteractionController {
     public func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
     ) {
-        self.serverProxy.listThreads(completionHandler: completionHandler)
+        self.serverProxy.listThreads(
+            filteringUnknownUsers: true,
+            completionHandler: completionHandler
+        )
     }
     
     public func listLocalThreads(
