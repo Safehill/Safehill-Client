@@ -30,7 +30,7 @@ extension SHSyncOperation {
         /// Pull all threads
         ///
         dispatchGroup.enter()
-        self.serverProxy.listThreads { result in
+        self.serverProxy.listThreads(filteringUnknown: false) { result in
             switch result {
             case .success(let threadList):
                 allThreads = threadList
@@ -41,7 +41,7 @@ extension SHSyncOperation {
         }
         
         dispatchGroup.enter()
-        self.serverProxy.localServer.listThreads { result in
+        self.serverProxy.listLocalThreads { result in
             switch result {
             case .success(let threadList):
                 localThreads = threadList
@@ -86,9 +86,31 @@ extension SHSyncOperation {
             }
             
             ///
+            /// Request authorization for unknown users that messaged this user
+            ///
+            var threadsFromKnownUsers = [ConversationThreadOutputDTO]()
+            do {
+                let threadsFromKnownUsers = try self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads)
+            } catch {
+                completionHandler(.failure(error))
+                return
+            }
+            
+            let threadIdsFromknownUsers = threadsFromKnownUsers.map({ $0.threadId })
+            let threadsFromUnknownUsers = allThreads.filter({
+                threadIdsFromknownUsers.contains($0.threadId) == false
+            })
+            let unauthorizedUsers = Set(threadsFromUnknownUsers.map({ $0.creatorPublicIdentifier }))
+            unauthorizedUsers.remove(self.user.identifier)
+            self.delegatesQueue.async {
+                threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: unauthorizedUsers) })
+            }
+            
+            ///
             /// Add remote threads locally and sync their interactions.
             /// Max date of local threads is the **last known date**
             ///
+            
             var lastKnownThreadUpdateAt: Date? = localThreads
                 .sorted(by: {
                     let a = ($0.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
@@ -113,7 +135,7 @@ extension SHSyncOperation {
                 }
             }
             
-            for thread in allThreads {
+            for thread in threadsFromKnownUsers {
                 if let lastKnown = lastKnownThreadUpdateAt,
                    let lastUpdated = thread.lastUpdatedAt?.iso8601withFractionalSeconds,
                    lastUpdated.compare(lastKnown) == .orderedAscending {
