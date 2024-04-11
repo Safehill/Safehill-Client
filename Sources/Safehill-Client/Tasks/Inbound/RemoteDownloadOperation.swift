@@ -1091,6 +1091,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
 #endif
                     
+                    guard descriptorsReadyToDownload.isEmpty == false else {
+                        dispatchGroup.leave()
+                        return
+                    }
+                    
                     do {
                         try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)
                     } catch {

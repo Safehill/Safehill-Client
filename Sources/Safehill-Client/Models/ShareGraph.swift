@@ -225,11 +225,11 @@ public struct SHKGQuery {
             let userIds = Array(cache.keys)
             for userId in userIds {
                 if let cachedValue = cache[userId] {
-                    let newAssetsGids = Set(globalIdentifiers).intersection(cachedValue)
+                    let newAssetsGids = cachedValue.subtracting(globalIdentifiers)
                     if newAssetsGids.isEmpty {
                         cache.removeValue(forKey: userId)
                     } else {
-                        cache[userId]!.subtract(globalIdentifiers)
+                        cache[userId] = newAssetsGids
                     }
                 }
             }
