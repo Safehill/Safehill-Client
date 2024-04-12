@@ -88,90 +88,90 @@ extension SHSyncOperation {
             ///
             /// Request authorization for unknown users that messaged this user
             ///
-            var threadsFromKnownUsers = [ConversationThreadOutputDTO]()
-            do {
-                threadsFromKnownUsers = try self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads)
-            } catch {
-                completionHandler(.failure(error))
-                return
-            }
-            
-            let threadIdsFromknownUsers = threadsFromKnownUsers.map({ $0.threadId })
-            let threadsFromUnknownUsers = allThreads.filter({
-                threadIdsFromknownUsers.contains($0.threadId) == false
-            })
-            var unauthorizedUsers = Set(threadsFromUnknownUsers.compactMap({ $0.creatorPublicIdentifier }))
-            unauthorizedUsers.remove(self.user.identifier)
-            let threadsDelegates = self.threadsDelegates
-            self.delegatesQueue.async {
-                threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: Array(unauthorizedUsers)) })
-            }
-            
-            ///
-            /// Add remote threads locally and sync their interactions.
-            /// Max date of local threads is the **last known date**
-            ///
-            
-            var lastKnownThreadUpdateAt: Date? = localThreads
-                .sorted(by: {
-                    let a = ($0.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
-                    let b = ($1.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
-                    return a.compare(b) == .orderedAscending
-                })
-                .last?
-                .lastUpdatedAt?
-                .iso8601withFractionalSeconds
-            if lastKnownThreadUpdateAt == .distantPast {
-                lastKnownThreadUpdateAt = nil
-            }
-            
-            let syncInteractionsInThread = { 
-                (thread: ConversationThreadOutputDTO, callback: @escaping () -> Void) in
-                
-                self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
-                    if case .failure(let err) = result {
-                        self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
+            self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads) { result in
+                switch result {
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                case .success(var threadsFromKnownUsers):
+                    
+                    let threadIdsFromknownUsers = threadsFromKnownUsers.map({ $0.threadId })
+                    let threadsFromUnknownUsers = allThreads.filter({
+                        threadIdsFromknownUsers.contains($0.threadId) == false
+                    })
+                    var unauthorizedUsers = Set(threadsFromUnknownUsers.compactMap({ $0.creatorPublicIdentifier }))
+                    unauthorizedUsers.remove(self.user.identifier)
+                    let threadsDelegates = self.threadsDelegates
+                    self.delegatesQueue.async {
+                        threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: Array(unauthorizedUsers)) })
                     }
-                    callback()
-                }
-            }
-            
-            for thread in threadsFromKnownUsers {
-                if let lastKnown = lastKnownThreadUpdateAt,
-                   let lastUpdated = thread.lastUpdatedAt?.iso8601withFractionalSeconds,
-                   lastUpdated.compare(lastKnown) == .orderedAscending {
-                    continue
-                }
-                
-                dispatchGroup.enter()
-                
-                let correspondingLocalThread = localThreads
-                    .first(where: { $0.threadId == thread.threadId })
-                
-                if let correspondingLocalThread, correspondingLocalThread.lastUpdatedAt == thread.lastUpdatedAt {
-                    syncInteractionsInThread(thread) {
-                        dispatchGroup.leave()
+                    
+                    ///
+                    /// Add remote threads locally and sync their interactions.
+                    /// Max date of local threads is the **last known date**
+                    ///
+                    
+                    var lastKnownThreadUpdateAt: Date? = localThreads
+                        .sorted(by: {
+                            let a = ($0.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
+                            let b = ($1.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
+                            return a.compare(b) == .orderedAscending
+                        })
+                        .last?
+                        .lastUpdatedAt?
+                        .iso8601withFractionalSeconds
+                    if lastKnownThreadUpdateAt == .distantPast {
+                        lastKnownThreadUpdateAt = nil
                     }
-                } else {
-                    self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
-                        switch createResult {
-                        case .success:
+                    
+                    let syncInteractionsInThread = {
+                        (thread: ConversationThreadOutputDTO, callback: @escaping () -> Void) in
+                        
+                        self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
+                            if case .failure(let err) = result {
+                                self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
+                            }
+                            callback()
+                        }
+                    }
+                    
+                    for thread in threadsFromKnownUsers {
+                        if let lastKnown = lastKnownThreadUpdateAt,
+                           let lastUpdated = thread.lastUpdatedAt?.iso8601withFractionalSeconds,
+                           lastUpdated.compare(lastKnown) == .orderedAscending {
+                            continue
+                        }
+                        
+                        dispatchGroup.enter()
+                        
+                        let correspondingLocalThread = localThreads
+                            .first(where: { $0.threadId == thread.threadId })
+                        
+                        if let correspondingLocalThread, correspondingLocalThread.lastUpdatedAt == thread.lastUpdatedAt {
                             syncInteractionsInThread(thread) {
                                 dispatchGroup.leave()
                             }
-                        case .failure(let err):
-                            self.log.error("error locally creating thread \(thread.threadId). \(err.localizedDescription)")
-                            dispatchGroup.leave()
+                        } else {
+                            self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
+                                switch createResult {
+                                case .success:
+                                    syncInteractionsInThread(thread) {
+                                        dispatchGroup.leave()
+                                    }
+                                case .failure(let err):
+                                    self.log.error("error locally creating thread \(thread.threadId). \(err.localizedDescription)")
+                                    dispatchGroup.leave()
+                                }
+                            }
                         }
                     }
+                    
+                    dispatchGroup.notify(queue: .global()) {
+                        self.delegatesQueue.async {
+                            threadsDelegates.forEach({ $0.didUpdateThreadsList(threadsFromKnownUsers) })
+                        }
+                        completionHandler(.success(()))
+                    }
                 }
-            }
-            
-            dispatchGroup.notify(queue: .global()) {
-                self.delegatesQueue.async {
-                    threadsDelegates.forEach({ $0.didUpdateThreadsList(threadsFromKnownUsers) })
-                }
-                completionHandler(.success(()))
             }
         }
     }

@@ -111,7 +111,7 @@ public struct SHAssetsDownloadManager {
     ///   - userId: the user identifier
     ///   - completionHandler: the callback method
     public func authorizeDownloads(
-        from userId: String,
+        from userId: UserIdentifier,
         completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void
     ) {
         guard self.user is SHAuthenticatedLocalUser else {
@@ -152,6 +152,7 @@ public struct SHAssetsDownloadManager {
                 let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
                 
                 try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+                try SHKGQuery.recordExplicitAuthorization(by: self.user.identifier, for: userId)
                 
                 self.user.serverProxy.getUsers(inAssetDescriptors: descriptors) {
                     getUsersResult in

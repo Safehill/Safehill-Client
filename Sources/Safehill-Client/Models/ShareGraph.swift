@@ -6,6 +6,7 @@ public enum SHKGPredicate: String {
     case localAssetIdEquivalent = "localAssetIdEquivalent"
     case shares = "shares"
     case sharedWith = "sharedWith"
+    case authorized = "authorized"
 }
 
 var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
@@ -15,9 +16,21 @@ public struct SHKGQuery {
     
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
     
+    /// Determines which user is known.
+    ///
+    ///
+    /// The definition of a known user is:
+    /// - At least one asset has been shared previously from this user to the other user
+    /// - At least one asset has been shared previously from the other user to this user
+    /// - An explicit authorization record exists
+    ///
+    /// - Parameters:
+    ///   - userIds: the list of user identifiers to check
+    ///   - completionHandler: the callback, returning the "known" value by user identifier
     public static func areUsersKnown(withIdentifiers userIds: [UserIdentifier]) throws -> [UserIdentifier: Bool] {
         var result = [UserIdentifier: Bool]()
         
+        /// An asset is shared with the user -> KNOWN
         let sharedBy = try SHKGQuery.assetGlobalIdentifiers(
             sharedBy: userIds,
             filterOutInProgress: false
@@ -36,6 +49,30 @@ public struct SHKGQuery {
             }
         }
         
+        /// An explicit authorization record exists for user -> KNOWN
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            var condition = KBTripleCondition(value: false)
+            for userId in userIds {
+                condition = condition.or(
+                    KBTripleCondition(
+                        subject: nil,
+                        predicate: SHKGPredicate.authorized.rawValue,
+                        object: userId
+                    )
+                )
+            }
+            for triple in try graph.triples(matching: condition) {
+                if userIds.contains(triple.object) {
+                    result[triple.object] = true
+                }
+            }
+        }
+        
+        /// All other cases -> UNKNOWN
         for userId in userIds {
             if result[userId] == nil {
                 result[userId] = false
@@ -47,6 +84,39 @@ public struct SHKGQuery {
 #endif
         
         return result
+    }
+    
+    internal static func recordExplicitAuthorization(
+        by authorizer: UserIdentifier,
+        for authorizee: UserIdentifier
+    ) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            try graph.entity(withIdentifier: authorizer)
+                .link(
+                    to: graph.entity(withIdentifier: authorizee),
+                    withPredicate: SHKGPredicate.authorized.rawValue
+                )
+        }
+    }
+    
+    internal static func removeExplicitAuthorizationRecord(
+        for authorizee: UserIdentifier
+    ) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            try graph.removeTriples(matching: KBTripleCondition(
+                subject: nil,
+                predicate: SHKGPredicate.authorized.rawValue,
+                object: authorizee
+            ))
+        }
     }
     
     internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: UserIdentifier) throws {
