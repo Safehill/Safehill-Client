@@ -1257,15 +1257,7 @@ extension SHServerProxy {
                 self.remoteServer.getThread(withId: threadId) { remoteResult in
                     switch remoteResult {
                     case .success(let remoteThread):
-                        if let remoteThread {
-                            self.localServer.createOrUpdateThread(
-                                serverThread: remoteThread
-                            ) { _ in
-                                completionHandler(.success(remoteThread.encryptionDetails))
-                            }
-                        } else {
-                            completionHandler(.success(nil))
-                        }
+                        completionHandler(.success(remoteThread?.encryptionDetails))
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }
