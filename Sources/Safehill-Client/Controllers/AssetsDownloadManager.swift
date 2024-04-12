@@ -134,7 +134,11 @@ public struct SHAssetsDownloadManager {
             await SHDownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
             
             do {
-                let assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
+                var assetGIdList = [GlobalIdentifier]()
+                do {
+                    assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
+                } catch SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId {}
+                
                 guard assetGIdList.count > 0 else {
                     let response = SHAssetDownloadAuthorizationResponse(
                         descriptors: [],
