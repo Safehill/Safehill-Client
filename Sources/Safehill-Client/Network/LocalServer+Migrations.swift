@@ -138,12 +138,14 @@ extension LocalServer {
         }
     }
     
-    ///
-    /// Run migration of data from earlier to newer version format
-    ///
-    /// - Parameter completionHandler: the callback method
-    ///
-    public func runDataMigrations(completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
+    /// Run migration of data in local databases
+    /// - Parameters:
+    ///   - currentBuild: the current client build, if available
+    ///   - completionHandler: the callback
+    public func runDataMigrations(
+        currentBuild: Int?,
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
+    ) {
         dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
         ///
@@ -152,6 +154,12 @@ extension LocalServer {
         
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             log.warning("failed to connect to the local asset store")
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            log.warning("failed to connect to the local user store")
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -186,49 +194,64 @@ extension LocalServer {
             group.leave()
         }
         
-        guard errors.count == 0 else {
-            completionHandler(.failure(errors.first!))
-            return
-        }
-        
-        // Hi Res migrations
-        condition = KBGenericCondition(.beginsWith, value: "hi::")
-
-        for chunk in Array(assetIdentifiers).chunked(into: 10) {
-            var assetCondition = KBGenericCondition(value: false)
-            for assetIdentifier in chunk {
-                assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
+        group.notify(queue: .global()) {
+            guard errors.count == 0 else {
+                completionHandler(.failure(errors.first!))
+                return
             }
-            condition = condition.and(assetCondition)
             
-            group.enter()
-            assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
-                switch result {
-                case .success(let keyValues):
-                    do {
-                        if keyValues.count > 0 {
-                            let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+            /// Hi Res migrations
+            condition = KBGenericCondition(.beginsWith, value: "hi::")
+
+            for chunk in Array(assetIdentifiers).chunked(into: 10) {
+                var assetCondition = KBGenericCondition(value: false)
+                for assetIdentifier in chunk {
+                    assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
+                }
+                condition = condition.and(assetCondition)
+                
+                group.enter()
+                assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
+                    switch result {
+                    case .success(let keyValues):
+                        do {
+                            if keyValues.count > 0 {
+                                let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                            }
+                        } catch {
+                            log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
+                            errors.append(error)
                         }
-                    } catch {
-                        log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
+                    case .failure(let error):
                         errors.append(error)
                     }
-                case .failure(let error):
-                    errors.append(error)
+                    group.leave()
                 }
-                group.leave()
+            }
+            
+            group.notify(queue: .global()) {
+                guard errors.count == 0 else {
+                    completionHandler(.failure(errors.first!))
+                    return
+                }
+                
+                /// For builds older than 4/9/24 rebuild the threads list
+                /// They will be re-created during sync.
+                guard currentBuild == nil || currentBuild! < 20240409 else {
+                    return
+                }
+                
+                userStore.removeValues(
+                    forKeysMatching: KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
+                ) { result in
+                    switch result {
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    case .success:
+                        completionHandler(.success(()))
+                    }
+                }
             }
         }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * assetIdentifiers.count))
-        guard dispatchResult == .success else {
-            completionHandler(.failure(SHBackgroundOperationError.timedOut))
-            return
-        }
-        guard errors.count == 0 else {
-            completionHandler(.failure(errors.first!))
-            return
-        }
-        completionHandler(.success(()))
     }
 }
