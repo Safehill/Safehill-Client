@@ -140,6 +140,7 @@ public struct SHAssetsDownloadManager {
                 } catch SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId {}
                 
                 guard assetGIdList.count > 0 else {
+                    try SHKGQuery.recordExplicitAuthorization(by: self.user.identifier, for: userId)
                     let response = SHAssetDownloadAuthorizationResponse(
                         descriptors: [],
                         users: [:]
