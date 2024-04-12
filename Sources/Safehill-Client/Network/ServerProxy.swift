@@ -1130,26 +1130,20 @@ extension SHServerProxy {
             .compactMap({ $0.creatorPublicIdentifier })
         ))
         
-        var threadIdsToFilter = [String]()
+        var threadIdsToFilterOut = [String]()
         let knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: threadCreatorUserIds)
         for thread in serverThreads {
-            guard threadIdsToFilter.contains(thread.threadId) else {
+            if thread.creatorPublicIdentifier == self.remoteServer.requestor.identifier {
                 continue
-            }
-            
-            for memberId in thread.membersPublicIdentifier {
-                if memberId == self.remoteServer.requestor.identifier {
-                    continue
-                }
-                if (knownUsers[memberId] ?? false) == false {
-                    log.info("filtering thread \(thread.threadId) because user \(memberId) is not a connection")
-                    threadIdsToFilter.append(thread.threadId)
-                    break
-                }
+            } else if thread.creatorPublicIdentifier == nil {
+                continue
+            } else if (knownUsers[thread.creatorPublicIdentifier!] ?? false) == false {
+                log.info("filtering thread \(thread.threadId) because thread creator \(thread.creatorPublicIdentifier!) is not a connection")
+                threadIdsToFilterOut.append(thread.threadId)
             }
         }
         
-        return serverThreads.filter({ threadIdsToFilter.contains($0.threadId) == false })
+        return serverThreads.filter({ threadIdsToFilterOut.contains($0.threadId) == false })
     }
     
     public func listThreads(
