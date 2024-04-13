@@ -252,7 +252,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
                     senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
                     let knownUsers: [UserIdentifier: Bool]
-                    do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+                    do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds, by: self.user.identifier) }
                     catch {
                         self.log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
                         completionHandler(.failure(error))
@@ -456,7 +456,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         ///
         let senderIds = notEnqueuedAsUnauthorized.map({ $0.sharingInfo.sharedByUserIdentifier })
         let knownUsers: [UserIdentifier: Bool]
-        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds, by: self.user.identifier) }
         catch {
             log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
             completionHandler(.failure(error))

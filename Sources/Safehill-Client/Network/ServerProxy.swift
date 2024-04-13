@@ -1140,7 +1140,10 @@ extension SHServerProxy {
         
         var knownUsers = [UserIdentifier: Bool]()
         do {
-            knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: threadCreatorUserIds)
+            knownUsers = try SHKGQuery.areUsersKnown(
+                withIdentifiers: threadCreatorUserIds,
+                by: self.remoteServer.requestor.identifier
+            )
         } catch {
             completionHandler(.failure(error))
             return
