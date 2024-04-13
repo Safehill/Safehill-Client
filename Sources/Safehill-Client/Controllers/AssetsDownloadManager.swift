@@ -104,9 +104,11 @@ public struct SHAssetsDownloadManager {
         }
     }
     
-    /// Authorizing downloads from a user means:
-    /// - Moving the items in the unauthorized queue to the authorized queue for that user
-    /// - Removing items from the auth index (user store) corresponding to the user identifier
+    /// Authorizing downloads from a user means
+    /// (a) Moving the items in the unauthorized queue to the authorized queue for that user,
+    /// (b) Removing items from the auth index (user store) corresponding to the user identifier,
+    /// (c) Adding a record in the KnowledgeGraph to connect the two users
+    ///
     /// - Parameters:
     ///   - userId: the user identifier
     ///   - completionHandler: the callback method
