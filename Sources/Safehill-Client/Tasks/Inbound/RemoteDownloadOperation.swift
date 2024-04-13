@@ -450,8 +450,8 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         }
         
         /// 
-        /// For the ones that are not already marked as unauthorized (all descriptors - unauthorized)
-        /// - check if the user is known (if so, add them to the unauthorized queue)
+        /// For the ones that are not already marked as unauthorized (all descriptors MINUS unauthorized)
+        /// - check if the user is known (if not known, add them to the unauthorized queue)
         /// - return the rest so they can be downloaded
         ///
         let senderIds = notEnqueuedAsUnauthorized.map({ $0.sharingInfo.sharedByUserIdentifier })
