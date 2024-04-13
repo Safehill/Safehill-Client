@@ -32,6 +32,8 @@ public struct SHKGQuery {
         withIdentifiers userIds: [UserIdentifier],
         by thisUserIdentifier: UserIdentifier
     ) throws -> [UserIdentifier: Bool] {
+        let userIds = Array(Set(userIds))
+        
         if userIds.count == 1, let userId = userIds.first, userId == thisUserIdentifier {
             /// Checking whether SELF knows SELF returns true
             return [thisUserIdentifier: true]
@@ -166,6 +168,8 @@ public struct SHKGQuery {
     ) throws {
         var errors = [Error]()
         
+        let receiverUserIds = Array(Set(receiverUserIds))
+        
         do {
             try readWriteGraphQueue.sync(flags: .barrier) {
                 guard let graph = SHDBManager.sharedInstance.graph else {
@@ -209,6 +213,9 @@ public struct SHKGQuery {
         to receiverUserIds: [UserIdentifier],
         in graph: KBKnowledgeStore
     ) throws {
+        
+        let receiverUserIds = Array(Set(receiverUserIds))
+        
         let kgSender = graph.entity(withIdentifier: senderUserId)
         let kgAsset = graph.entity(withIdentifier: assetIdentifier)
         
@@ -306,6 +313,8 @@ public struct SHKGQuery {
     }
     
     internal static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
+        let globalIdentifiers = Array(Set(globalIdentifiers))
+        
         let removeGidsFromCache = {
             (cache: inout [UserIdentifier: Set<GlobalIdentifier>]) in
             let userIds = Array(cache.keys)
@@ -341,6 +350,8 @@ public struct SHKGQuery {
     
     /*
     internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
+        let userIdentifiers = Array(Set(userIdentifiers))
+     
         // TODO: Support writebatch in KnowledgeGraph
         try readWriteGraphQueue.sync(flags: .barrier) {
             
@@ -390,6 +401,9 @@ public struct SHKGQuery {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
+        
+        let userIdentifiers = Array(Set(userIdentifiers))
+        let recipientIdentifiers = recipientIdentifiers == nil ? nil : Array(Set(recipientIdentifiers!))
         
         // TODO: Support this query with variables in the KB framework, instead of merging in memory
         
@@ -503,6 +517,8 @@ public struct SHKGQuery {
             throw KBError.databaseNotReady
         }
         
+        let userIdentifiers = Array(Set(userIdentifiers))
+        
         // TODO: Support this query with variables in the KB framework, instead of merging in memory
         
         let filterAssetsSender: ([GlobalIdentifier: Set<UserIdentifier>]) throws -> [GlobalIdentifier: Set<UserIdentifier>] = {
@@ -610,6 +626,9 @@ public struct SHKGQuery {
         requestingUserId: UserIdentifier,
         filterOutInProgress: Bool = true
     ) throws -> [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]] {
+        
+        let userIdentifiers = Array(Set(userIdentifiers))
+        
         var assetsToUsers = [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]()
         
         // TODO: Support this query with variables in the KB framework, instead of merging in memory
@@ -651,6 +670,9 @@ public struct SHKGQuery {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
+        
+        let globalIdentifiers = Array(Set(globalIdentifiers))
+        
         var sharedWithCondition = KBTripleCondition(value: false)
         var sharedByCondition = KBTripleCondition(value: false)
         
