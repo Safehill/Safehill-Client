@@ -32,6 +32,11 @@ public struct SHKGQuery {
         withIdentifiers userIds: [UserIdentifier],
         by thisUserIdentifier: UserIdentifier
     ) throws -> [UserIdentifier: Bool] {
+        if userIds.count == 1, let userId = userIds.first, userId == thisUserIdentifier {
+            /// Checking whether SELF knows SELF returns true
+            return [thisUserIdentifier: true]
+        }
+        
         var result = [UserIdentifier: Bool]()
         
         /// An asset is shared by any of the users with this user, and recorded in the graph -> KNOWN
@@ -79,9 +84,13 @@ public struct SHKGQuery {
             }
         }
         
-        /// All other cases -> UNKNOWN
+        /// Axiom: this user knows SELF -> TRUE
+        /// In all other cases where a result couldn't be retrieved from the graph -> FALSE
         for userId in userIds {
-            if result[userId] == nil {
+            if userId == thisUserIdentifier {
+                result[userId] = true
+            }
+            else if result[userId] == nil {
                 result[userId] = false
             }
         }
