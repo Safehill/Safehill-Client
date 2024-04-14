@@ -6,6 +6,7 @@ public protocol SHServerProxyProtocol {
     init(user: SHLocalUserProtocol)
     
     func listThreads(
+        filteringUnknownUsers: Bool,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     )
     
@@ -162,8 +163,14 @@ public struct SHServerProxy: SHServerProxyProtocol {
 // MARK: - Migrations
 extension SHServerProxy {
     
-    public func runLocalMigrations(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.localServer.runDataMigrations(completionHandler: completionHandler)
+    public func runLocalMigrations(
+        currentBuild: Int?,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.localServer.runDataMigrations(
+            currentBuild: currentBuild,
+            completionHandler: completionHandler
+        )
     }
     
 }
@@ -1116,13 +1123,94 @@ extension SHServerProxy {
         }
     }
     
+    /// Filter the input threads, removing the threads for which
+    /// either the creator is now known (no assets shared previously, no explicit authorization),
+    /// or "this" user has never sent a message to.
+    ///
+    /// - Parameters:
+    ///   - serverThreads: the unfiltered list
+    ///   - completionHandler: the callback, returning the filtered list
+    internal func filterThreadsCreatedByUnknownUsers(
+        _ serverThreads: [ConversationThreadOutputDTO],
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
+    ) {
+        let threadCreatorUserIds = Array(Set(serverThreads
+            .compactMap({ $0.creatorPublicIdentifier })
+        ))
+        
+        var knownUsers = [UserIdentifier: Bool]()
+        do {
+            knownUsers = try SHKGQuery.areUsersKnown(
+                withIdentifiers: threadCreatorUserIds,
+                by: self.remoteServer.requestor.identifier
+            )
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        var messagesFromThisUserInThread = [String: Int]()
+        
+        let dispatchGroup = DispatchGroup()
+        for thread in serverThreads {
+            dispatchGroup.enter()
+            self.localServer.countMessages(
+                inAnchor: .thread,
+                anchorId: thread.threadId,
+                from: self.localServer.requestor.identifier
+            ) { result in
+                switch result {
+                case .success(let count):
+                    messagesFromThisUserInThread[thread.threadId] = count
+                case .failure:
+                    break
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            var threadIdsToFilterOut = [String]()
+            
+            for thread in serverThreads {
+                if thread.creatorPublicIdentifier == self.remoteServer.requestor.identifier {
+                    continue
+                } else if thread.creatorPublicIdentifier == nil {
+                    continue
+                } else if (messagesFromThisUserInThread[thread.threadId] ?? 0) > 0 {
+                    continue
+                } else if (knownUsers[thread.creatorPublicIdentifier!] ?? false) == false {
+                    log.info("filtering thread \(thread.threadId) because thread creator \(thread.creatorPublicIdentifier!) is not a connection")
+                    threadIdsToFilterOut.append(thread.threadId)
+                }
+            }
+            
+            completionHandler(.success(
+                serverThreads.filter({ threadIdsToFilterOut.contains($0.threadId) == false })
+            ))
+        }
+    }
+    
     public func listThreads(
+        filteringUnknownUsers: Bool = true,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
         self.remoteServer.listThreads { remoteResult in
             switch remoteResult {
-            case .success:
-                completionHandler(remoteResult)
+            case .success(let serverThreads):
+                guard filteringUnknownUsers else {
+                    completionHandler(.success(serverThreads))
+                    return
+                }
+                
+                self.filterThreadsCreatedByUnknownUsers(serverThreads) { result in
+                    switch result {
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    case .success(let filteredThreads):
+                        completionHandler(.success(filteredThreads))
+                    }
+                }
             case .failure(let error):
                 log.warning("failed to fetch threads from server. Returning local version. \(error.localizedDescription)")
                 self.localServer.listThreads(completionHandler: completionHandler)
@@ -1215,15 +1303,7 @@ extension SHServerProxy {
                 self.remoteServer.getThread(withId: threadId) { remoteResult in
                     switch remoteResult {
                     case .success(let remoteThread):
-                        if let remoteThread {
-                            self.localServer.createOrUpdateThread(
-                                serverThread: remoteThread
-                            ) { _ in
-                                completionHandler(.success(remoteThread.encryptionDetails))
-                            }
-                        } else {
-                            completionHandler(.success(nil))
-                        }
+                        completionHandler(.success(remoteThread?.encryptionDetails))
                     case .failure(let error):
                         completionHandler(.failure(error))
                     }

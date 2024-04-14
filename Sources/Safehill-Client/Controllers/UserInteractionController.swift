@@ -8,7 +8,10 @@ public enum InteractionType: String {
     case message = "message", reaction = "reaction"
 }
 
-let E2eCreationSerialQueue = DispatchQueue(label: "com.safehill.encryptAndShare.e2eCreation")
+let E2eCreationSerialQueue = DispatchQueue(
+    label: "com.safehill.encryptAndShare.e2eCreation",
+    qos: .userInteractive
+)
 
 public struct SHUserInteractionController {
     
@@ -30,7 +33,10 @@ public struct SHUserInteractionController {
     public func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
     ) {
-        self.serverProxy.listThreads(completionHandler: completionHandler)
+        self.serverProxy.listThreads(
+            filteringUnknownUsers: true,
+            completionHandler: completionHandler
+        )
     }
     
     public func listLocalThreads(
@@ -64,38 +70,8 @@ public struct SHUserInteractionController {
                     
                     if let conversationThread {
                         log.info("found thread with users \(users.map({ $0.identifier })) from remote")
-                        do {
-                            let encryptionDetails = conversationThread.encryptionDetails
-                            let shareablePayload = SHShareablePayload(
-                                ephemeralPublicKeyData: Data(base64Encoded: encryptionDetails.ephemeralPublicKey)!,
-                                cyphertext: Data(base64Encoded: encryptionDetails.encryptedSecret)!,
-                                signature: Data(base64Encoded: encryptionDetails.secretPublicSignature)!
-                            )
-                            let decryptedSecret: Data
-                            
-                            do {
-                                decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
-                                    usingEncryptedSecret: shareablePayload,
-                                    protocolSalt: authedUser.encryptionProtocolSalt,
-                                    signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
-                                )
-                            } catch SHCypher.DecryptionError.authenticationError {
-                                log.warning("group details were force-updated on the server. Attempting to decrypt the secret using this user's public signature instead of the one recorded by the server")
-                                decryptedSecret = try SHUserContext(user: authedUser.shUser).decryptSecret(
-                                    usingEncryptedSecret: shareablePayload,
-                                    protocolSalt: authedUser.encryptionProtocolSalt,
-                                    signedWith: authedUser.publicSignatureData
-                                )
-                            }
-                            
-                            symmetricKey = SymmetricKey(data: decryptedSecret)
-                        } catch {
-                            log.critical("""
-failed to initialize E2EE details for new users in thread \(conversationThread.threadId). error=\(error.localizedDescription)
-""")
-                            completionHandler(.failure(error))
-                            return
-                        }
+                        completionHandler(.success(conversationThread))
+                        return
                     } else {
                         log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier }))")
                         symmetricKey = createNewSecret()

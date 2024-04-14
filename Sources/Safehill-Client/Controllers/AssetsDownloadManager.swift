@@ -104,14 +104,16 @@ public struct SHAssetsDownloadManager {
         }
     }
     
-    /// Authorizing downloads from a user means:
-    /// - Moving the items in the unauthorized queue to the authorized queue for that user
-    /// - Removing items from the auth index (user store) corresponding to the user identifier
+    /// Authorizing downloads from a user means
+    /// (a) Moving the items in the unauthorized queue to the authorized queue for that user,
+    /// (b) Removing items from the auth index (user store) corresponding to the user identifier,
+    /// (c) Adding a record in the KnowledgeGraph to connect the two users
+    ///
     /// - Parameters:
     ///   - userId: the user identifier
     ///   - completionHandler: the callback method
     public func authorizeDownloads(
-        from userId: String,
+        from userId: UserIdentifier,
         completionHandler: @escaping (Result<SHAssetDownloadAuthorizationResponse, Error>) -> Void
     ) {
         guard self.user is SHAuthenticatedLocalUser else {
@@ -134,8 +136,13 @@ public struct SHAssetsDownloadManager {
             await SHDownloadBlacklist.shared.removeFromBlacklist(userIdentifiers: [userId])
             
             do {
-                let assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
+                var assetGIdList = [GlobalIdentifier]()
+                do {
+                    assetGIdList = try SHAssetsDownloadManager.unauthorizedDownloads(for: userId)
+                } catch SHBackgroundOperationError.missingUnauthorizedDownloadIndexForUserId {}
+                
                 guard assetGIdList.count > 0 else {
+                    try SHKGQuery.recordExplicitAuthorization(by: self.user.identifier, for: userId)
                     let response = SHAssetDownloadAuthorizationResponse(
                         descriptors: [],
                         users: [:]
@@ -152,6 +159,7 @@ public struct SHAssetsDownloadManager {
                 let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(.equal, value: key))
                 
                 try SHKGQuery.ingest(descriptors, receiverUserId: self.user.identifier)
+                try SHKGQuery.recordExplicitAuthorization(by: self.user.identifier, for: userId)
                 
                 self.user.serverProxy.getUsers(inAssetDescriptors: descriptors) {
                     getUsersResult in

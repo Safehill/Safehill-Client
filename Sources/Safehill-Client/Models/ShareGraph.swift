@@ -6,6 +6,7 @@ public enum SHKGPredicate: String {
     case localAssetIdEquivalent = "localAssetIdEquivalent"
     case shares = "shares"
     case sharedWith = "sharedWith"
+    case authorized = "authorized"
 }
 
 var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
@@ -15,15 +16,41 @@ public struct SHKGQuery {
     
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
     
-    public static func areUsersKnown(withIdentifiers userIds: [UserIdentifier]) throws -> [UserIdentifier: Bool] {
+    /// Determines which user is known.
+    ///
+    ///
+    /// The definition of a known user is:
+    /// - At least one asset has been shared previously from this user to the other user
+    /// - At least one asset has been shared previously from the other user to this user
+    /// - An explicit authorization record exists
+    ///
+    /// - Parameters:
+    ///   - userIds: the list of user identifiers to check
+    ///   - by: who is asking?
+    /// - Returns: the "known" value (a boolean) by user identifier
+    public static func areUsersKnown(
+        withIdentifiers userIds: [UserIdentifier],
+        by thisUserIdentifier: UserIdentifier
+    ) throws -> [UserIdentifier: Bool] {
+        let userIds = Array(Set(userIds))
+        
+        if userIds.count == 1, let userId = userIds.first, userId == thisUserIdentifier {
+            /// Checking whether SELF knows SELF returns true
+            return [thisUserIdentifier: true]
+        }
+        
         var result = [UserIdentifier: Bool]()
         
+        /// An asset is shared by any of the users with this user, and recorded in the graph -> KNOWN
         let sharedBy = try SHKGQuery.assetGlobalIdentifiers(
             sharedBy: userIds,
+            with: [thisUserIdentifier],
             filterOutInProgress: false
         )
+        /// An asset is shared by this user with any of the users, and recorded in the graph -> KNOWN
         let sharedWith = try SHKGQuery.assetGlobalIdentifiers(
-            sharedWith: userIds
+            sharedWith: userIds,
+            by: thisUserIdentifier
         )
         
         for (_, uid) in sharedBy {
@@ -36,8 +63,36 @@ public struct SHKGQuery {
             }
         }
         
+        /// An explicit authorization record exists for user -> KNOWN
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            var condition = KBTripleCondition(value: false)
+            for userId in userIds {
+                condition = condition.or(
+                    KBTripleCondition(
+                        subject: thisUserIdentifier,
+                        predicate: SHKGPredicate.authorized.rawValue,
+                        object: userId
+                    )
+                )
+            }
+            for triple in try graph.triples(matching: condition) {
+                if userIds.contains(triple.object) {
+                    result[triple.object] = true
+                }
+            }
+        }
+        
+        /// Axiom: this user knows SELF -> TRUE
+        /// In all other cases where a result couldn't be retrieved from the graph -> FALSE
         for userId in userIds {
-            if result[userId] == nil {
+            if userId == thisUserIdentifier {
+                result[userId] = true
+            }
+            else if result[userId] == nil {
                 result[userId] = false
             }
         }
@@ -47,6 +102,39 @@ public struct SHKGQuery {
 #endif
         
         return result
+    }
+    
+    internal static func recordExplicitAuthorization(
+        by authorizer: UserIdentifier,
+        for authorizee: UserIdentifier
+    ) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            try graph.entity(withIdentifier: authorizer)
+                .link(
+                    to: graph.entity(withIdentifier: authorizee),
+                    withPredicate: SHKGPredicate.authorized.rawValue
+                )
+        }
+    }
+    
+    internal static func removeExplicitAuthorizationRecord(
+        for authorizee: UserIdentifier
+    ) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            try graph.removeTriples(matching: KBTripleCondition(
+                subject: nil,
+                predicate: SHKGPredicate.authorized.rawValue,
+                object: authorizee
+            ))
+        }
     }
     
     internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: UserIdentifier) throws {
@@ -79,6 +167,8 @@ public struct SHKGQuery {
         to receiverUserIds: [UserIdentifier]
     ) throws {
         var errors = [Error]()
+        
+        let receiverUserIds = Array(Set(receiverUserIds))
         
         do {
             try readWriteGraphQueue.sync(flags: .barrier) {
@@ -123,6 +213,9 @@ public struct SHKGQuery {
         to receiverUserIds: [UserIdentifier],
         in graph: KBKnowledgeStore
     ) throws {
+        
+        let receiverUserIds = Array(Set(receiverUserIds))
+        
         let kgSender = graph.entity(withIdentifier: senderUserId)
         let kgAsset = graph.entity(withIdentifier: assetIdentifier)
         
@@ -220,16 +313,18 @@ public struct SHKGQuery {
     }
     
     internal static func removeAssets(with globalIdentifiers: [GlobalIdentifier]) throws {
+        let globalIdentifiers = Array(Set(globalIdentifiers))
+        
         let removeGidsFromCache = {
             (cache: inout [UserIdentifier: Set<GlobalIdentifier>]) in
             let userIds = Array(cache.keys)
             for userId in userIds {
                 if let cachedValue = cache[userId] {
-                    let newAssetsGids = Set(globalIdentifiers).intersection(cachedValue)
+                    let newAssetsGids = cachedValue.subtracting(globalIdentifiers)
                     if newAssetsGids.isEmpty {
                         cache.removeValue(forKey: userId)
                     } else {
-                        cache[userId]!.subtract(globalIdentifiers)
+                        cache[userId] = newAssetsGids
                     }
                 }
             }
@@ -255,6 +350,8 @@ public struct SHKGQuery {
     
     /*
     internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
+        let userIdentifiers = Array(Set(userIdentifiers))
+     
         // TODO: Support writebatch in KnowledgeGraph
         try readWriteGraphQueue.sync(flags: .barrier) {
             
@@ -290,13 +387,59 @@ public struct SHKGQuery {
         }
     }
     
+    /// Retrieve the asset identifiers and their sender, for senders that match the first set of users, and (optionally) recipients that match the second set.
+    /// - Parameters:
+    ///   - userIdentifiers: the set of senders to match when retrieving assets
+    ///   - recipientIdentifiers: if not nil, returns only the asset that are shared with at least one of these users
+    ///   - filterOutInProgress: whether or not to consider the ones in progress
+    /// - Returns: the asset identifiers and their sender
     public static func assetGlobalIdentifiers(
         sharedBy userIdentifiers: [UserIdentifier],
+        with recipientIdentifiers: [UserIdentifier]?,
         filterOutInProgress: Bool = true
     ) throws -> [GlobalIdentifier: UserIdentifier] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
+        
+        let userIdentifiers = Array(Set(userIdentifiers))
+        let recipientIdentifiers = recipientIdentifiers == nil ? nil : Array(Set(recipientIdentifiers!))
+        
+        // TODO: Support this query with variables in the KB framework, instead of merging in memory
+        
+        let filterAssetsRecipients: ([GlobalIdentifier: UserIdentifier]) throws -> [GlobalIdentifier: UserIdentifier] = {
+            dict in
+            
+            guard let recipientIdentifiers, recipientIdentifiers.isEmpty == false else {
+                return dict
+            }
+            
+            let assetIds = dict.keys
+            
+            var recipientsCondition = KBTripleCondition(value: false)
+            for assetId in assetIds {
+                for recipientId in recipientIdentifiers {
+                    recipientsCondition = recipientsCondition.or(
+                        KBTripleCondition(
+                            subject: assetId,
+                            predicate: SHKGPredicate.sharedWith.rawValue,
+                            object: recipientId
+                        )
+                    )
+                }
+            }
+            
+            let triplesMatchingRecipients = try graph.triples(matching: recipientsCondition)
+            var filteredDict = [GlobalIdentifier: UserIdentifier]()
+            for (gid, senderId) in dict {
+                let recipientIdsForThisAsset = triplesMatchingRecipients.filter({ $0.subject == gid }).map({ $0.object })
+                if Set(recipientIdentifiers).intersection(recipientIdsForThisAsset).isEmpty == false {
+                    filteredDict[gid] = senderId
+                }
+            }
+            return filteredDict
+        }
+        
         var assetsToUser = [GlobalIdentifier: UserIdentifier]()
         var sharedByUsersCondition = KBTripleCondition(value: false)
         
@@ -315,7 +458,7 @@ public struct SHKGQuery {
         }
         
         guard usersIdsToSearch.count > 0 else {
-            return assetsToUser
+            return try filterAssetsRecipients(assetsToUser)
         }
         
         for userId in usersIdsToSearch {
@@ -358,15 +501,60 @@ public struct SHKGQuery {
             }
         }
         
-        return assetsToUser
+        return try filterAssetsRecipients(assetsToUser)
     }
     
+    /// Retrieve the asset identifiers and their recipients, for recipients that match the first set of users, and (optionally) recipients that match the second set.
+    /// - Parameters:
+    ///   - userIdentifiers: the set of recipients to match when retrieving assets
+    ///   - by: if not nil, returns only the asset that are shared by one of these users
+    /// - Returns: the asset identifiers and their sender
     public static func assetGlobalIdentifiers(
-        sharedWith userIdentifiers: [UserIdentifier]
+        sharedWith userIdentifiers: [UserIdentifier],
+        by senderIdentifier: UserIdentifier?
     ) throws -> [GlobalIdentifier: Set<UserIdentifier>] {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
+        
+        let userIdentifiers = Array(Set(userIdentifiers))
+        
+        // TODO: Support this query with variables in the KB framework, instead of merging in memory
+        
+        let filterAssetsSender: ([GlobalIdentifier: Set<UserIdentifier>]) throws -> [GlobalIdentifier: Set<UserIdentifier>] = {
+            dict in
+            
+            guard let senderIdentifier else {
+                return dict
+            }
+            
+            let assetIds = dict.keys
+            
+            var senderCondition = KBTripleCondition(value: false)
+            for assetId in assetIds {
+                senderCondition = senderCondition.or(
+                    KBTripleCondition(
+                        subject: senderIdentifier,
+                        predicate: SHKGPredicate.shares.rawValue,
+                        object: assetId
+                    )
+                )
+            }
+            
+            let triplesMatchingSender = try graph.triples(matching: senderCondition)
+            var filteredDict = [GlobalIdentifier: Set<UserIdentifier>]()
+            for (gid, usersSet) in dict {
+                let allSendersForThisAsset = triplesMatchingSender
+                    .filter({ $0.object == gid })
+                    .map({ $0.subject })
+                
+                if allSendersForThisAsset.contains(senderIdentifier) {
+                    filteredDict[gid] = usersSet
+                }
+            }
+            return filteredDict
+        }
+        
         var assetsToUsers = [GlobalIdentifier: Set<UserIdentifier>]()
         var sharedWithUsersCondition = KBTripleCondition(value: false)
         
@@ -389,7 +577,7 @@ public struct SHKGQuery {
         }
         
         guard usersIdsToSearch.count > 0 else {
-            return assetsToUsers
+            return try filterAssetsSender(assetsToUsers)
         }
         
         for userId in usersIdsToSearch {
@@ -422,7 +610,7 @@ public struct SHKGQuery {
             }
         }
         
-        return assetsToUsers
+        return try filterAssetsSender(assetsToUsers)
     }
     
     /// Assets etiher shared by or shared with the provided users are added to the resulting map.
@@ -435,12 +623,25 @@ public struct SHKGQuery {
     /// 
     public static func assetGlobalIdentifiers(
         amongst userIdentifiers: [UserIdentifier],
+        requestingUserId: UserIdentifier,
         filterOutInProgress: Bool = true
     ) throws -> [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]] {
+        
+        let userIdentifiers = Array(Set(userIdentifiers))
+        
         var assetsToUsers = [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]()
         
-        let sharedBy = try self.assetGlobalIdentifiers(sharedBy: userIdentifiers, filterOutInProgress: filterOutInProgress)
-        let sharedWith = try self.assetGlobalIdentifiers(sharedWith: userIdentifiers)
+        // TODO: Support this query with variables in the KB framework, instead of merging in memory
+        
+        let sharedBy = try self.assetGlobalIdentifiers(
+            sharedBy: userIdentifiers,
+            with: [requestingUserId],
+            filterOutInProgress: filterOutInProgress
+        )
+        let sharedWith = try self.assetGlobalIdentifiers(
+            sharedWith: userIdentifiers,
+            by: requestingUserId
+        )
         
         for (gid, uids) in sharedWith {
             uids.forEach({ uid in
@@ -469,6 +670,9 @@ public struct SHKGQuery {
         guard let graph = SHDBManager.sharedInstance.graph else {
             throw KBError.databaseNotReady
         }
+        
+        let globalIdentifiers = Array(Set(globalIdentifiers))
+        
         var sharedWithCondition = KBTripleCondition(value: false)
         var sharedByCondition = KBTripleCondition(value: false)
         

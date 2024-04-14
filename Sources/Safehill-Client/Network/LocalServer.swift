@@ -1422,6 +1422,8 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: serverThread.encryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::senderPublicSignature")
         
         writeBatch.set(value: serverThread.name, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::name")
+        writeBatch.set(value: serverThread.creatorPublicIdentifier, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::creatorPublicIdentifier")
+        writeBatch.set(value: serverThread.createdAt.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::createdAt")
         writeBatch.set(value: serverThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
         
         writeBatch.write { result in
@@ -1481,7 +1483,9 @@ struct LocalServer : SHServerAPI {
             
             let threadId = components[1]
             var name: String? = nil
+            var creatorPublicId: String? = nil
             var membersPublicIdentifiers: [String]? = nil
+            var createdAt: Date? = nil
             var lastUpdatedAt: Date? = nil
             var encryptedSecret: String? = nil
             var ephemeralPublicKey: String? = nil
@@ -1489,6 +1493,8 @@ struct LocalServer : SHServerAPI {
             var senderPublicSignature: String? = nil
             
             switch components[2] {
+            case "creatorPublicIdentifier":
+                creatorPublicId = value as? String
             case "membersPublicIdentifiers":
                 membersPublicIdentifiers = value as? [String]
             case "encryptedSecret":
@@ -1501,6 +1507,10 @@ struct LocalServer : SHServerAPI {
                 senderPublicSignature = value as? String
             case "name":
                 name = value as? String
+            case "createdAt":
+                if let createdAtInterval = value as? Double {
+                    createdAt = Date(timeIntervalSince1970: createdAtInterval)
+                }
             case "lastUpdatedAt":
                 if let lastUpdatedInterval = value as? Double {
                     lastUpdatedAt = Date(timeIntervalSince1970: lastUpdatedInterval)
@@ -1517,7 +1527,9 @@ struct LocalServer : SHServerAPI {
             result[threadId] = ConversationThreadOutputDTO(
                 threadId: threadId,
                 name: name ?? result[threadId]?.name,
+                creatorPublicIdentifier: creatorPublicId ?? result[threadId]?.creatorPublicIdentifier,
                 membersPublicIdentifier: membersPublicIdentifiers ?? result[threadId]?.membersPublicIdentifier ?? [],
+                createdAt: createdAt?.iso8601withFractionalSeconds ?? result[threadId]?.createdAt ?? Date().iso8601withFractionalSeconds,
                 lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds ?? result[threadId]?.lastUpdatedAt,
                 encryptionDetails: RecipientEncryptionDetailsDTO(
                     recipientUserIdentifier: self.requestor.identifier,
@@ -1907,6 +1919,28 @@ struct LocalServer : SHServerAPI {
                     log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
                 }
                 completionHandler(.success(counts))
+            }
+        }
+    }
+    
+    func countMessages(
+        inAnchor anchor: SHInteractionAnchor,
+        anchorId: String,
+        from userId: UserIdentifier,
+        completionHandler: @escaping (Result<Int, Error>) -> ()
+    ) {
+        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let condition = KBGenericCondition(.beginsWith, value: "\(anchor.rawValue)::\(anchorId)::\(userId)")
+        messagesQueue.keys(matching: condition) { messagesResult in
+            switch messagesResult {
+            case .success(let messagesKeys):
+                completionHandler(.success(messagesKeys.count))
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
         }
     }

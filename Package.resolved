@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gennarinoos/KnowledgeBase.git",
       "state" : {
-        "revision" : "f943624b7d378e113c03b30578fb1a2881a68033",
-        "version" : "0.9.27"
+        "branch" : "main",
+        "revision" : "b51634905a1a65391f32bfd29a9d7eae61fd34f8"
       }
     },
     {

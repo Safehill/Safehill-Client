@@ -5,6 +5,7 @@ import Safehill_Crypto
 struct MockThreadDetails {
     let threadId: String
     let name: String?
+    let creatorId: String
     let userIds: [String]
     let encryptionDetails: [RecipientEncryptionDetailsDTO]
 }
@@ -140,7 +141,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
-    func listThreads(completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
+    func listThreads(
+        filteringUnknownUsers: Bool,
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
+    ) {
         do {
             let threads: [ConversationThreadOutputDTO] = try self.state.threads?.map { mockThread in
                 let encryptionDetails = mockThread.encryptionDetails
@@ -150,7 +154,9 @@ struct SHMockServerProxy: SHServerProxyProtocol {
                 return ConversationThreadOutputDTO(
                     threadId: mockThread.threadId,
                     name: mockThread.name,
+                    creatorPublicIdentifier: mockThread.creatorId,
                     membersPublicIdentifier: mockThread.userIds,
+                    createdAt: Date().iso8601withFractionalSeconds,
                     lastUpdatedAt: Date().iso8601withFractionalSeconds,
                     encryptionDetails: selfEncryptionDetails
                 )
@@ -162,7 +168,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     }
     
     func listLocalThreads(completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
-        self.listThreads(completionHandler: completionHandler)
+        self.listThreads(filteringUnknownUsers: false, completionHandler: completionHandler)
     }
     
     func createOrUpdateThread(name: String?, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()) {
@@ -185,6 +191,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             self.state.threads![matchingThreadIdx] = MockThreadDetails(
                 threadId: matchingThread.threadId,
                 name: matchingThread.name,
+                creatorId: matchingThread.creatorId,
                 userIds: matchingThread.userIds,
                 encryptionDetails: encryptionDetails
             )
@@ -192,7 +199,9 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             let serverThread = ConversationThreadOutputDTO(
                 threadId: matchingThread.threadId,
                 name: name,
+                creatorPublicIdentifier: matchingThread.creatorId,
                 membersPublicIdentifier: threadMembersId,
+                createdAt: Date().iso8601withFractionalSeconds,
                 lastUpdatedAt: Date().iso8601withFractionalSeconds,
                 encryptionDetails: selfEncryptionDetails
             )
@@ -236,7 +245,9 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         let serverThread = ConversationThreadOutputDTO(
             threadId: matchingThread.threadId,
             name: matchingThread.name,
+            creatorPublicIdentifier: matchingThread.creatorId,
             membersPublicIdentifier: matchingThread.userIds,
+            createdAt: Date().iso8601withFractionalSeconds,
             lastUpdatedAt: Date().iso8601withFractionalSeconds,
             encryptionDetails: selfEncryptionDetails
         )
@@ -603,6 +614,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             MockThreadDetails(
                 threadId: threadId,
                 name: nil,
+                creatorId: self.testUser.identifier,
                 userIds: [self.testUser.identifier, recipient1.identifier],
                 encryptionDetails: []
             )
@@ -658,13 +670,15 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let userStore = SHDBManager.sharedInstance.userStore!
         let kvs = try userStore.dictionaryRepresentation()
-        XCTAssertEqual(kvs.count, 6)
+        XCTAssertEqual(kvs.count, 8)
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::ephemeralPublicKey"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::secretPublicSignature"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::senderPublicSignature"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::encryptedSecret"])
+        XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::createdAt"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::lastUpdatedAt"])
         XCTAssertNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::name"])
+        XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::creatorPublicIdentifier"])
         XCTAssertNotNil(kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::membersPublicIdentifiers"] as? [String])
         XCTAssertEqual((kvs["\(SHInteractionAnchor.thread.rawValue)::\(threadId)::membersPublicIdentifiers"] as! [String]).count, 2)
         
@@ -1094,6 +1108,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             MockThreadDetails(
                 threadId: threadId,
                 name: nil,
+                creatorId: self.testUser.identifier,
                 userIds: [self.testUser.identifier, recipient1.identifier],
                 encryptionDetails: []
             )

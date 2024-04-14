@@ -252,7 +252,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
                     senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
                     let knownUsers: [UserIdentifier: Bool]
-                    do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+                    do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds, by: self.user.identifier) }
                     catch {
                         self.log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
                         completionHandler(.failure(error))
@@ -450,13 +450,13 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         }
         
         /// 
-        /// For the ones that are not already marked as unauthorized (all descriptors - unauthorized)
-        /// - check if the user is known (if so, add them to the unauthorized queue)
+        /// For the ones that are not already marked as unauthorized (all descriptors MINUS unauthorized)
+        /// - check if the user is known (if not known, add them to the unauthorized queue)
         /// - return the rest so they can be downloaded
         ///
         let senderIds = notEnqueuedAsUnauthorized.map({ $0.sharingInfo.sharedByUserIdentifier })
         let knownUsers: [UserIdentifier: Bool]
-        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds) }
+        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds, by: self.user.identifier) }
         catch {
             log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
             completionHandler(.failure(error))
@@ -1090,6 +1090,11 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
                     self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
 #endif
+                    
+                    guard descriptorsReadyToDownload.isEmpty == false else {
+                        dispatchGroup.leave()
+                        return
+                    }
                     
                     do {
                         try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)

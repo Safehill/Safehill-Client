@@ -65,7 +65,8 @@ public actor SHDownloadBlacklist {
         }
     }
     
-    public func blacklist(userIdentifier: UserIdentifier) {
+    public func blacklist(userIdentifier: UserIdentifier) throws {
+        try SHKGQuery.removeExplicitAuthorizationRecord(for: userIdentifier)
         guard blacklistedUsers.contains(userIdentifier) == false else {
             return
         }
