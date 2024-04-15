@@ -1613,10 +1613,12 @@ extension SHServerProxy {
 
 // MARK: - Subscriptions
 extension SHServerProxy {
-    public func validateTransaction(originalTransactionId: String,
-                                    receipt: String,
-                                    productId: String,
-                                    completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()) {
+    public func validateTransaction(
+        originalTransactionId: String,
+        receipt: String,
+        productId: String,
+        completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
+    ) {
         let group = DispatchGroup()
         var localResult: Result<SHReceiptValidationResponse, Error>? = nil
         var serverResult: Result<SHReceiptValidationResponse, Error>? = nil
@@ -1657,7 +1659,8 @@ extension SHServerProxy {
                 
                 completionHandler(.success(localResponse))
             case .failure(let serverErr):
-                completionHandler(.failure(serverErr))
+                log.critical("receipt server validation failed with error: \(serverErr.localizedDescription)")
+                completionHandler(.success(localResponse))
             }
         }
     }
