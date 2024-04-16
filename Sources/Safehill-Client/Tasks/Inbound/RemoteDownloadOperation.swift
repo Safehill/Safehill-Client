@@ -251,10 +251,14 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     /// filter out the ones whose sender is unknown.
                     /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
                     senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
-                    let knownUsers: [UserIdentifier: Bool]
-                    do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds, by: self.user.identifier) }
+                    var knownUsers = [UserIdentifier: Bool]()
+                    do {
+                        for senderId in senderIds {
+                            knownUsers[senderId] = try SHKGQuery.isUserKnown(withIdentifier: senderId, by: self.user.identifier)
+                        }
+                    }
                     catch {
-                        self.log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
+                        self.log.critical("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
                         completionHandler(.failure(error))
                         return
                     }
@@ -455,8 +459,12 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         /// - return the rest so they can be downloaded
         ///
         let senderIds = notEnqueuedAsUnauthorized.map({ $0.sharingInfo.sharedByUserIdentifier })
-        let knownUsers: [UserIdentifier: Bool]
-        do { knownUsers = try SHKGQuery.areUsersKnown(withIdentifiers: senderIds, by: self.user.identifier) }
+        var knownUsers = [UserIdentifier: Bool]()
+        do {
+            for senderId in senderIds {
+                knownUsers[senderId] = try SHKGQuery.isUserKnown(withIdentifier: senderId, by: self.user.identifier)
+            }
+        }
         catch {
             log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
             completionHandler(.failure(error))

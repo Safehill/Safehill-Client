@@ -25,43 +25,45 @@ public struct SHKGQuery {
     /// - An explicit authorization record exists
     ///
     /// - Parameters:
-    ///   - userIds: the list of user identifiers to check
+    ///   - userId: the user identifiers to check
     ///   - by: who is asking?
-    /// - Returns: the "known" value (a boolean) by user identifier
-    public static func areUsersKnown(
-        withIdentifiers userIds: [UserIdentifier],
+    /// - Returns: the "known" value
+    public static func isUserKnown(
+        withIdentifier userId: UserIdentifier,
         by thisUserIdentifier: UserIdentifier
-    ) throws -> [UserIdentifier: Bool] {
-        let userIds = Array(Set(userIds))
-        
-        if userIds.count == 1, let userId = userIds.first, userId == thisUserIdentifier {
+    ) throws -> Bool {
+        if userId == thisUserIdentifier {
             /// Checking whether SELF knows SELF returns true
-            return [thisUserIdentifier: true]
+            return true
         }
-        
-        var result = [UserIdentifier: Bool]()
         
         /// An asset is shared by any of the users with this user, and recorded in the graph -> KNOWN
         let sharedBy = try SHKGQuery.assetGlobalIdentifiers(
-            sharedBy: userIds,
+            sharedBy: [userId],
             with: [thisUserIdentifier],
             filterOutInProgress: false
         )
         /// An asset is shared by this user with any of the users, and recorded in the graph -> KNOWN
         let sharedWith = try SHKGQuery.assetGlobalIdentifiers(
-            sharedWith: userIds,
+            sharedWith: [userId],
             by: thisUserIdentifier
         )
         
         for (_, uid) in sharedBy {
-            result[uid] = true
+            if uid == userId {
+                return true
+            }
         }
         
         for (_, uids) in sharedWith {
             for uid in uids {
-                result[uid] = true
+                if uid == userId {
+                    return true
+                }
             }
         }
+        
+        var result = false
         
         /// An explicit authorization record exists for user -> KNOWN
         try readWriteGraphQueue.sync(flags: .barrier) {
@@ -69,37 +71,15 @@ public struct SHKGQuery {
                 throw KBError.databaseNotReady
             }
             
-            var condition = KBTripleCondition(value: false)
-            for userId in userIds {
-                condition = condition.or(
-                    KBTripleCondition(
-                        subject: thisUserIdentifier,
-                        predicate: SHKGPredicate.authorized.rawValue,
-                        object: userId
-                    )
-                )
-            }
-            for triple in try graph.triples(matching: condition) {
-                if userIds.contains(triple.object) {
-                    result[triple.object] = true
-                }
+            let condition = KBTripleCondition(
+                subject: thisUserIdentifier,
+                predicate: SHKGPredicate.authorized.rawValue,
+                object: userId
+            )
+            if try graph.triples(matching: condition).isEmpty == false {
+                result = true
             }
         }
-        
-        /// Axiom: this user knows SELF -> TRUE
-        /// In all other cases where a result couldn't be retrieved from the graph -> FALSE
-        for userId in userIds {
-            if userId == thisUserIdentifier {
-                result[userId] = true
-            }
-            else if result[userId] == nil {
-                result[userId] = false
-            }
-        }
-        
-#if DEBUG
-        assert(result.keys.count == Set(userIds).count)
-#endif
         
         return result
     }
@@ -526,16 +506,11 @@ public struct SHKGQuery {
             
             let assetIds = dict.keys
             
-            var senderCondition = KBTripleCondition(value: false)
-            for assetId in assetIds {
-                senderCondition = senderCondition.or(
-                    KBTripleCondition(
-                        subject: senderIdentifier,
-                        predicate: SHKGPredicate.shares.rawValue,
-                        object: assetId
-                    )
-                )
-            }
+            let senderCondition = KBTripleCondition(
+                subject: senderIdentifier,
+                predicate: SHKGPredicate.shares.rawValue,
+                object: nil
+            )
             
             let triplesMatchingSender = try graph.triples(matching: senderCondition)
             var filteredDict = [GlobalIdentifier: Set<UserIdentifier>]()
