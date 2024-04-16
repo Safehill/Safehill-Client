@@ -232,7 +232,7 @@ extension LocalServer {
                 switch response.0 {
                 case 0:
                     completionHandler(.success(response.1))
-                case 21007:
+                case 21007, 21002:
                     self.validate(receipt: receipt, against: SHIAPVerifyReceiptURLSandbox) {
                         result in
                         switch result {
