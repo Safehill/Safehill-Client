@@ -95,18 +95,19 @@ struct ValidateReceiptResponse: Codable {
             return
         }
         do {
-            latestReceiptInfo = try container.decode([LatestReceiptInfo].self, forKey: .latestReceiptInfo)
+            let _latestReceiptInfo = try container.decode([LatestReceiptInfo]?.self, forKey: .latestReceiptInfo)
+            self.latestReceiptInfo = _latestReceiptInfo ?? []
         } catch {
             log.error("unable to parse latestReceiptInfo: \(error)")
-            latestReceiptInfo = []
+            self.latestReceiptInfo = []
         }
         do {
-            pendingRenewalInfo = try container.decode([PendingRenewalInfo].self, forKey: .pendingRenewalInfo)
+            let _pendingRenewalInfo = try container.decode([PendingRenewalInfo]?.self, forKey: .pendingRenewalInfo)
+            self.pendingRenewalInfo = _pendingRenewalInfo ?? []
         } catch {
             log.error("unable to parse pendingRenewalInfo: \(error)")
-            pendingRenewalInfo = []
+            self.pendingRenewalInfo = []
         }
-        print(pendingRenewalInfo)
     }
 }
 
