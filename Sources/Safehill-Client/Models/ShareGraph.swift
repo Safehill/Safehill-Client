@@ -403,7 +403,7 @@ public struct SHKGQuery {
         }
         
         let userIdentifiers = Array(Set(userIdentifiers))
-        let recipientIdentifiers = recipientIdentifiers == nil ? nil : Array(Set(recipientIdentifiers!))
+        let recipientIdentifiers = recipientIdentifiers == nil ? nil : Set(recipientIdentifiers!)
         
         // TODO: Support this query with variables in the KB framework, instead of merging in memory
         
@@ -416,24 +416,20 @@ public struct SHKGQuery {
             
             let assetIds = dict.keys
             
-            var recipientsCondition = KBTripleCondition(value: false)
+            var assetsSharedWithCondition = KBTripleCondition(value: false)
             for assetId in assetIds {
-                for recipientId in recipientIdentifiers {
-                    recipientsCondition = recipientsCondition.or(
-                        KBTripleCondition(
-                            subject: assetId,
-                            predicate: SHKGPredicate.sharedWith.rawValue,
-                            object: recipientId
-                        )
-                    )
-                }
+                KBTripleCondition(
+                    subject: assetId,
+                    predicate: SHKGPredicate.sharedWith.rawValue,
+                    object: nil
+                )
             }
             
-            let triplesMatchingRecipients = try graph.triples(matching: recipientsCondition)
+            let triplesMatchingRecipients = try graph.triples(matching: assetsSharedWithCondition)
             var filteredDict = [GlobalIdentifier: UserIdentifier]()
             for (gid, senderId) in dict {
                 let recipientIdsForThisAsset = triplesMatchingRecipients.filter({ $0.subject == gid }).map({ $0.object })
-                if Set(recipientIdentifiers).intersection(recipientIdsForThisAsset).isEmpty == false {
+                if recipientIdentifiers.intersection(recipientIdsForThisAsset).isEmpty == false {
                     filteredDict[gid] = senderId
                 }
             }
@@ -444,7 +440,7 @@ public struct SHKGQuery {
         var sharedByUsersCondition = KBTripleCondition(value: false)
         
         var usersIdsToSearch = [UserIdentifier]()
-        for userId in Set(userIdentifiers) {
+        for userId in userIdentifiers {
             if let assetIdsSharedBy = UserIdToAssetGidSharedByCache[userId] {
                 assetIdsSharedBy.forEach({
                     if let existing = assetsToUser[$0], userId != existing {
