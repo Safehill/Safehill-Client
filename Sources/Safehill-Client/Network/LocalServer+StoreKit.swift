@@ -32,13 +32,14 @@ public enum SHStoreKitHandlerError: Error, LocalizedError {
 }
 
 public enum SHIAPProduct {
-    case free, monthlyBasic, monthlyPremium, monthlyPro
+    case free, monthlyBasic, monthlyPremium, monthlyPro, monthlyBasicFamily
 }
 
 public let SHIAPProductIds = [
     "safehill.subscription.basic": SHIAPProduct.monthlyBasic,
     "safehill.subscription.premium": SHIAPProduct.monthlyPremium,
-    "safehill.subscription.professional": SHIAPProduct.monthlyPro
+    "safehill.subscription.professional": SHIAPProduct.monthlyPro,
+    "safehill.subscription.family.Apr2024": SHIAPProduct.monthlyBasicFamily,
 ]
 public let SHIAPSharedSecret = "92267f6120324e16b1cf9b52c5ea26e7"
 
@@ -46,7 +47,8 @@ public let SHIAPProductLimits = [
     SHIAPProduct.free: 50,
     SHIAPProduct.monthlyBasic: 1000,
     SHIAPProduct.monthlyPremium: 25000,
-    SHIAPProduct.monthlyPro: 1000000
+    SHIAPProduct.monthlyPro: 1000000,
+    SHIAPProduct.monthlyBasicFamily: 40000,
 ]
 
 
@@ -93,18 +95,19 @@ struct ValidateReceiptResponse: Codable {
             return
         }
         do {
-            latestReceiptInfo = try container.decode([LatestReceiptInfo].self, forKey: .latestReceiptInfo)
+            let _latestReceiptInfo = try container.decode([LatestReceiptInfo]?.self, forKey: .latestReceiptInfo)
+            self.latestReceiptInfo = _latestReceiptInfo ?? []
         } catch {
-            log.error("unable to parse latestReceiptInfo: \(error)")
-            latestReceiptInfo = []
+            log.warning("unable to parse latestReceiptInfo: \(error)")
+            self.latestReceiptInfo = []
         }
         do {
-            pendingRenewalInfo = try container.decode([PendingRenewalInfo].self, forKey: .pendingRenewalInfo)
+            let _pendingRenewalInfo = try container.decode([PendingRenewalInfo]?.self, forKey: .pendingRenewalInfo)
+            self.pendingRenewalInfo = _pendingRenewalInfo ?? []
         } catch {
-            log.error("unable to parse pendingRenewalInfo: \(error)")
-            pendingRenewalInfo = []
+            log.warning("unable to parse pendingRenewalInfo: \(error)")
+            self.pendingRenewalInfo = []
         }
-        print(pendingRenewalInfo)
     }
 }
 
@@ -229,7 +232,7 @@ extension LocalServer {
                 switch response.0 {
                 case 0:
                     completionHandler(.success(response.1))
-                case 21007:
+                case 21007, 21002:
                     self.validate(receipt: receipt, against: SHIAPVerifyReceiptURLSandbox) {
                         result in
                         switch result {
@@ -266,7 +269,7 @@ extension LocalServer {
             storeRequest.httpMethod = "POST"
             storeRequest.httpBody = requestData
             
-            let session = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
+            let session = URLSession.shared
             let task = session.dataTask(with: storeRequest, completionHandler: { (data, response, error) in
                 guard let data = data else {
                     completionHandler(.failure(SHStoreKitHandlerError.receiptValidationError("failed to parse response")))

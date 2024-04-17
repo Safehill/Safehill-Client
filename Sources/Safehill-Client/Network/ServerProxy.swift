@@ -1140,10 +1140,12 @@ extension SHServerProxy {
         
         var knownUsers = [UserIdentifier: Bool]()
         do {
-            knownUsers = try SHKGQuery.areUsersKnown(
-                withIdentifiers: threadCreatorUserIds,
-                by: self.remoteServer.requestor.identifier
-            )
+            for senderId in threadCreatorUserIds {
+                knownUsers[senderId] = try SHKGQuery.isUserKnown(
+                    withIdentifier: senderId,
+                    by: self.remoteServer.requestor.identifier
+                )
+            }
         } catch {
             completionHandler(.failure(error))
             return
@@ -1613,10 +1615,12 @@ extension SHServerProxy {
 
 // MARK: - Subscriptions
 extension SHServerProxy {
-    public func validateTransaction(originalTransactionId: String,
-                                    receipt: String,
-                                    productId: String,
-                                    completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()) {
+    public func validateTransaction(
+        originalTransactionId: String,
+        receipt: String,
+        productId: String,
+        completionHandler: @escaping (Result<SHReceiptValidationResponse, Error>) -> ()
+    ) {
         let group = DispatchGroup()
         var localResult: Result<SHReceiptValidationResponse, Error>? = nil
         var serverResult: Result<SHReceiptValidationResponse, Error>? = nil
@@ -1657,6 +1661,7 @@ extension SHServerProxy {
                 
                 completionHandler(.success(localResponse))
             case .failure(let serverErr):
+                log.critical("receipt server validation failed with error: \(serverErr.localizedDescription)")
                 completionHandler(.failure(serverErr))
             }
         }
