@@ -1662,7 +1662,7 @@ extension SHServerProxy {
                 completionHandler(.success(localResponse))
             case .failure(let serverErr):
                 log.critical("receipt server validation failed with error: \(serverErr.localizedDescription)")
-                completionHandler(.success(localResponse))
+                completionHandler(.failure(serverErr))
             }
         }
     }
