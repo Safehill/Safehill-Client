@@ -48,7 +48,7 @@ public let SHIAPProductLimits = [
     SHIAPProduct.monthlyBasic: 1000,
     SHIAPProduct.monthlyPremium: 25000,
     SHIAPProduct.monthlyPro: 1000000,
-    SHIAPProduct.monthlyBasicFamily: 25000,
+    SHIAPProduct.monthlyBasicFamily: 40000,
 ]
 
 
