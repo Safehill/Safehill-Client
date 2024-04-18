@@ -398,10 +398,12 @@ public struct SHKGQuery {
             
             var assetsSharedWithCondition = KBTripleCondition(value: false)
             for assetId in assetIds {
-                KBTripleCondition(
-                    subject: assetId,
-                    predicate: SHKGPredicate.sharedWith.rawValue,
-                    object: nil
+                assetsSharedWithCondition = assetsSharedWithCondition.or(
+                    KBTripleCondition(
+                        subject: assetId,
+                        predicate: SHKGPredicate.sharedWith.rawValue,
+                        object: nil
+                    )
                 )
             }
             
