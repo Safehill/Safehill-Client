@@ -395,22 +395,27 @@ public struct SHKGQuery {
             }
             
             let assetIds = dict.keys
+            var triplesMatching = [KBTriple]()
             
-            var assetsSharedWithCondition = KBTripleCondition(value: false)
-            for assetId in assetIds {
-                assetsSharedWithCondition = assetsSharedWithCondition.or(
-                    KBTripleCondition(
-                        subject: assetId,
-                        predicate: SHKGPredicate.sharedWith.rawValue,
-                        object: nil
+            for assetIdsChunk in Array(assetIds).chunked(into: 10) {
+                var assetsSharedWithCondition = KBTripleCondition(value: false)
+                for assetId in assetIdsChunk {
+                    assetsSharedWithCondition = assetsSharedWithCondition.or(
+                        KBTripleCondition(
+                            subject: assetId,
+                            predicate: SHKGPredicate.sharedWith.rawValue,
+                            object: nil
+                        )
                     )
-                )
+                }
+                
+                let triplesMatchingThisChunk = try graph.triples(matching: assetsSharedWithCondition)
+                triplesMatching.append(contentsOf: triplesMatchingThisChunk)
             }
             
-            let triplesMatchingRecipients = try graph.triples(matching: assetsSharedWithCondition)
             var filteredDict = [GlobalIdentifier: UserIdentifier]()
             for (gid, senderId) in dict {
-                let recipientIdsForThisAsset = triplesMatchingRecipients.filter({ $0.subject == gid }).map({ $0.object })
+                let recipientIdsForThisAsset = triplesMatching.filter({ $0.subject == gid }).map({ $0.object })
                 if recipientIdentifiers.intersection(recipientIdsForThisAsset).isEmpty == false {
                     filteredDict[gid] = senderId
                 }
