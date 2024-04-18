@@ -22,7 +22,7 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
 public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {
     func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
-    func didReceiveMessagesFromUnauthorized(users: [UserIdentifier])
+    func didReceiveMessagesFromUnauthorized(users: [any SHServerUser])
     
     func reactionsDidChange(inGroup groupId: String)
     func didReceiveMessages(_ messages: [MessageOutputDTO], 

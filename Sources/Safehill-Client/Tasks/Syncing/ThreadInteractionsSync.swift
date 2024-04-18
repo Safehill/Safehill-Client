@@ -100,9 +100,20 @@ extension SHSyncOperation {
                     })
                     var unauthorizedUsers = Set(threadsFromUnknownUsers.compactMap({ $0.creatorPublicIdentifier }))
                     unauthorizedUsers.remove(self.user.identifier)
-                    let threadsDelegates = self.threadsDelegates
-                    self.delegatesQueue.async {
-                        threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: Array(unauthorizedUsers)) })
+                    
+                    SHUsersController(localUser: self.user).getUsersOrCached(with: Array(unauthorizedUsers)) {
+                        result in
+                        switch result {
+                        case .success(let usersDict):
+                            let threadsDelegates = self.threadsDelegates
+                            self.delegatesQueue.async {
+                                threadsDelegates.forEach({
+                                    $0.didReceiveMessagesFromUnauthorized(users: unauthorizedUsers.compactMap({ uid in usersDict[uid] }))
+                                })
+                            }
+                        case .failure(let error):
+                            self.log.error("failed to retrieve unauthorized users \(unauthorizedUsers). \(error.localizedDescription)")
+                        }
                     }
                     
                     ///
@@ -166,6 +177,7 @@ extension SHSyncOperation {
                     }
                     
                     dispatchGroup.notify(queue: .global()) {
+                        let threadsDelegates = self.threadsDelegates
                         self.delegatesQueue.async {
                             threadsDelegates.forEach({ $0.didUpdateThreadsList(threadsFromKnownUsers) })
                         }
