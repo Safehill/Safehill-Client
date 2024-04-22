@@ -128,19 +128,6 @@ extension SHSyncOperation {
                     /// Max date of local threads is the **last known date**
                     ///
                     
-                    var lastKnownThreadUpdateAt: Date? = localThreads
-                        .sorted(by: {
-                            let a = ($0.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
-                            let b = ($1.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
-                            return a.compare(b) == .orderedAscending
-                        })
-                        .last?
-                        .lastUpdatedAt?
-                        .iso8601withFractionalSeconds
-                    if lastKnownThreadUpdateAt == .distantPast {
-                        lastKnownThreadUpdateAt = nil
-                    }
-                    
                     let syncInteractionsInThread = {
                         (thread: ConversationThreadOutputDTO, callback: @escaping () -> Void) in
                         
@@ -153,12 +140,6 @@ extension SHSyncOperation {
                     }
                     
                     for thread in threadsFromKnownUsers {
-                        if let lastKnown = lastKnownThreadUpdateAt,
-                           let lastUpdated = thread.lastUpdatedAt?.iso8601withFractionalSeconds,
-                           lastUpdated.compare(lastKnown) == .orderedAscending {
-                            continue
-                        }
-                        
                         dispatchGroup.enter()
                         
                         let correspondingLocalThread = localThreads
