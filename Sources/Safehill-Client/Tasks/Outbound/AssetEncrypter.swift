@@ -43,7 +43,6 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
     public let limit: Int
     public let user: SHAuthenticatedLocalUser
     public var assetDelegates: [SHOutboundAssetOperationDelegate]
-    public var threadsDelegates: [SHThreadSyncingDelegate]
     
     internal var interactionsController: SHUserInteractionController {
         SHUserInteractionController(user: self.user)
@@ -53,13 +52,11 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
     
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
-                threadsDelegates: [SHThreadSyncingDelegate],
                 limitPerRun limit: Int,
                 imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.limit = limit
         self.assetDelegates = assetsDelegates
-        self.threadsDelegates = threadsDelegates
         self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
@@ -71,7 +68,6 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         SHEncryptionOperation(
             user: self.user,
             assetsDelegates: self.assetDelegates,
-            threadsDelegates: self.threadsDelegates,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )

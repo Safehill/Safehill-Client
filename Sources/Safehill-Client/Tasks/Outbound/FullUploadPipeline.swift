@@ -15,7 +15,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     
     public let user: SHAuthenticatedLocalUser
     public var assetsDelegates: [SHOutboundAssetOperationDelegate]
-    public var threadsDelegates: [SHThreadSyncingDelegate]
     var imageManager: PHCachingImageManager
     var photoIndexer: SHPhotosIndexer?
     
@@ -23,13 +22,11 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
-                threadsDelegates: [SHThreadSyncingDelegate],
                 parallelization: ParallelizationOption = .conservative,
                 imageManager: PHCachingImageManager? = nil,
                 photoIndexer: SHPhotosIndexer? = nil) {
         self.user = user
         self.assetsDelegates = assetsDelegates
-        self.threadsDelegates = threadsDelegates
         self.parallelization = parallelization
         self.imageManager = imageManager ?? PHCachingImageManager()
         self.photoIndexer = photoIndexer
@@ -39,7 +36,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         SHFullUploadPipelineOperation(
             user: self.user,
             assetsDelegates: self.assetsDelegates,
-            threadsDelegates: self.threadsDelegates,
             imageManager: self.imageManager,
             photoIndexer: self.photoIndexer
         )
@@ -78,7 +74,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let encryptOperation = SHEncryptionOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
@@ -93,7 +88,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
@@ -238,7 +232,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let encryptOperation = SHEncryptionOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
@@ -287,7 +280,6 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            threadsDelegates: threadsDelegates,
             limitPerRun: 0,
             imageManager: imageManager
         )
