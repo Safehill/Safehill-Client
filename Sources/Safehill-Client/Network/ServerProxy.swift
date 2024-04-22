@@ -84,6 +84,17 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
+    ///
+    /// Retrieve the interactions from remote server first, because whatever was cached could be lacking messages.
+    /// The ones retrieved according to the query will be cached locally, for offline access.
+    ///
+    /// - Parameters:
+    ///   - groupId: the identifier of the share, aka the `groupId`
+    ///   - type: (optional) filter the type of the interaction: message or reaction only
+    ///   - messageId: (optional) if a sub-thread the message it's anchored to
+    ///   - before: (optional) only messages before a specific date
+    ///   - limit: limit the number of results
+    ///   - completionHandler: the callback method with the encryption details and the result
     func retrieveInteractions(
         inGroup groupId: String,
         ofType type: InteractionType?,
@@ -93,7 +104,36 @@ public protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
+    ///
+    /// Retrieve the interactions from remote server first, because whatever was cached could be lacking messages.
+    /// The ones retrieved according to the query will be cached locally, for offline access.
+    ///
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - type: (optional) filter the type of the interaction: message or reaction only
+    ///   - messageId: (optional) if a sub-thread the message it's anchored to
+    ///   - before: (optional) only messages before a specific date
+    ///   - limit: limit the number of results
+    ///   - completionHandler: the callback method with the encryption details and the result
     func retrieveInteractions(
+        inThread threadId: String,
+        ofType type: InteractionType?,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveLocalInteractions(
+        inGroup groupId: String,
+        ofType type: InteractionType?,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    )
+    
+    func retrieveLocalInteractions(
         inThread threadId: String,
         ofType type: InteractionType?,
         underMessage messageId: String?,
@@ -133,11 +173,6 @@ public protocol SHServerProxyProtocol {
     func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
-    )
-    
-    func retrieveLastMessage(
-        inThread threadId: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
     
     func getThread(
@@ -1511,14 +1546,152 @@ extension SHServerProxy {
         self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
     }
     
-    public func retrieveLastMessage(
-        inThread threadId: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    func cacheInteractions(
+        _ remoteInteractions: InteractionsGroupDTO,
+        inAnchor anchor: SHInteractionAnchor,
+        anchorId: String
     ) {
-        self.localServer.retrieveLastMessage(inThread: threadId, completionHandler: completionHandler)
+        let messagesCompletionBlock = { (result: Result<[MessageOutputDTO], Error>) -> Void in
+            switch result {
+            case .success(let array):
+                log.info("cached \(array.count) messages in \(anchor.rawValue) \(anchorId)")
+            case .failure(let error):
+                log.error("failed to cache messages in \(anchor.rawValue) \(anchorId): \(error.localizedDescription)")
+            }
+        }
+        
+        let reactionsCompletionBlock = { (result: Result<[ReactionOutputDTO], Error>) -> Void in
+            switch result {
+            case .success(let array):
+                log.info("cached \(array.count) reactions in \(anchor.rawValue) \(anchorId)")
+            case .failure(let error):
+                log.error("failed to cache reactions in \(anchor.rawValue) \(anchorId): \(error.localizedDescription)")
+            }
+        }
+        
+        switch anchor {
+        case .thread:
+            if remoteInteractions.messages.isEmpty == false {
+                self.addLocalMessages(
+                    remoteInteractions.messages,
+                    inThread: anchorId,
+                    completionHandler: messagesCompletionBlock
+                )
+            }
+            
+            if remoteInteractions.reactions.isEmpty == false {
+                self.addLocalReactions(
+                    remoteInteractions.reactions,
+                    inThread: anchorId,
+                    completionHandler: reactionsCompletionBlock
+                )
+            }
+        case .group:
+            if remoteInteractions.messages.isEmpty == false {
+                self.addLocalMessages(
+                    remoteInteractions.messages,
+                    inGroup: anchorId,
+                    completionHandler: messagesCompletionBlock
+                )
+            }
+            
+            if remoteInteractions.reactions.isEmpty == false {
+                self.addLocalReactions(
+                    remoteInteractions.reactions,
+                    inGroup: anchorId,
+                    completionHandler: reactionsCompletionBlock
+                )
+            }
+        }
     }
     
     public func retrieveInteractions(
+        inGroup groupId: String,
+        ofType type: InteractionType?,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveRemoteInteractions(
+            inGroup: groupId,
+            ofType: type,
+            underMessage: messageId,
+            before: before,
+            limit: limit
+        ) {
+            result in
+            switch result {
+            case .failure(let serverError):
+                self.retrieveLocalInteractions(
+                    inGroup: groupId,
+                    ofType: type,
+                    underMessage: messageId,
+                    before: before,
+                    limit: limit
+                ) { localResult in
+                    switch localResult {
+                    case .failure:
+                        completionHandler(.failure(serverError))
+                    case .success(let localInteractions):
+                        completionHandler(.success(localInteractions))
+                    }
+                }
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+                self.cacheInteractions(
+                    remoteInteractions, 
+                    inAnchor: .group,
+                    anchorId: groupId
+                )
+            }
+        }
+    }
+    
+    public func retrieveInteractions(
+        inThread threadId: String,
+        ofType type: InteractionType?,
+        underMessage messageId: String?,
+        before: Date?,
+        limit: Int,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.retrieveRemoteInteractions(
+            inThread: threadId,
+            ofType: type,
+            underMessage: messageId,
+            before: before,
+            limit: limit
+        ) {
+            result in
+            switch result {
+            case .failure(let serverError):
+                self.retrieveLocalInteractions(
+                    inThread: threadId,
+                    ofType: type,
+                    underMessage: messageId,
+                    before: before,
+                    limit: limit
+                ) { localResult in
+                    switch localResult {
+                    case .failure:
+                        completionHandler(.failure(serverError))
+                    case .success(let localInteractions):
+                        completionHandler(.success(localInteractions))
+                    }
+                }
+            case .success(let remoteInteractions):
+                completionHandler(.success(remoteInteractions))
+                self.cacheInteractions(
+                    remoteInteractions,
+                    inAnchor: .thread,
+                    anchorId: threadId
+                )
+            }
+        }
+    }
+    
+    public func retrieveLocalInteractions(
         inGroup groupId: String,
         ofType type: InteractionType?,
         underMessage messageId: String?,
@@ -1536,7 +1709,7 @@ extension SHServerProxy {
         )
     }
     
-    public func retrieveInteractions(
+    public func retrieveLocalInteractions(
         inThread threadId: String,
         ofType type: InteractionType?,
         underMessage messageId: String?,

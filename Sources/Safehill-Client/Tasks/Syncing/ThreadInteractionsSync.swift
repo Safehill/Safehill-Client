@@ -1,5 +1,7 @@
 import Foundation
 
+let ThreadLastInteractionSyncLimit = 20
+
 extension SHSyncOperation {
     
     public func runOnceForThreads(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
@@ -92,7 +94,7 @@ extension SHSyncOperation {
                 switch result {
                 case .failure(let error):
                     completionHandler(.failure(error))
-                case .success(var threadsFromKnownUsers):
+                case .success(let threadsFromKnownUsers):
                     
                     let threadIdsFromknownUsers = threadsFromKnownUsers.map({ $0.threadId })
                     let threadsFromUnknownUsers = allThreads.filter({
@@ -208,7 +210,7 @@ extension SHSyncOperation {
             ofType: nil,
             underMessage: nil,
             before: nil,
-            limit: 20
+            limit: ThreadLastInteractionSyncLimit
         ) { result in
             switch result {
             case .failure(let err):
@@ -228,12 +230,12 @@ extension SHSyncOperation {
         var localReactions = [ReactionOutputDTO]()
         
         dispatchGroup.enter()
-        serverProxy.retrieveInteractions(
+        serverProxy.retrieveLocalInteractions(
             inThread: threadId,
             ofType: nil,
             underMessage: nil,
             before: nil,
-            limit: 20
+            limit: ThreadLastInteractionSyncLimit
         ) { localResult in
             switch localResult {
             case .failure(let err):

@@ -119,18 +119,27 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         )
     }
     
+    func retrieveLocalInteractions(inGroup groupId: String, ofType type: InteractionType?, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<Safehill_Client.InteractionsGroupDTO, Error>) -> ()) {
+        self.retrieveInteractions(inGroup: groupId, ofType: type, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
+    }
+    
+    func retrieveLocalInteractions(inThread threadId: String, ofType type: InteractionType?, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<Safehill_Client.InteractionsGroupDTO, Error>) -> ()) {
+        self.retrieveInteractions(inThread: threadId, ofType: type, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
+    }
+    
+    func retrieveRemoteInteractions(inGroup groupId: String, ofType type: InteractionType?, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<Safehill_Client.InteractionsGroupDTO, Error>) -> ()) {
+        self.retrieveInteractions(inGroup: groupId, ofType: type, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
+    }
+    
+    func retrieveRemoteInteractions(inThread threadId: String, ofType type: InteractionType?, underMessage messageId: String?, before: Date?, limit: Int, completionHandler: @escaping (Result<Safehill_Client.InteractionsGroupDTO, Error>) -> ()) {
+        self.retrieveInteractions(inThread: threadId, ofType: type, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
+    }
+    
     func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
         self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
-    }
-    
-    func retrieveLastMessage(
-        inThread threadId: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.localServer.retrieveLastMessage(inThread: threadId, completionHandler: completionHandler)
     }
     
     func retrieveUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
@@ -280,42 +289,6 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     
     func addLocalReactions(_ reactions: [ReactionInput], inThread threadId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
         self.localServer.addReactions(reactions, inThread: threadId, completionHandler: completionHandler)
-    }
-    
-    func retrieveRemoteInteractions(
-        inGroup groupId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.localServer.retrieveInteractions(
-            inGroup: groupId,
-            ofType: type,
-            underMessage: messageId,
-            before: before,
-            limit: limit,
-            completionHandler: completionHandler
-        )
-    }
-    
-    func retrieveRemoteInteractions(
-        inThread threadId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        self.localServer.retrieveInteractions(
-            inThread: threadId,
-            ofType: type,
-            underMessage: messageId,
-            before: before,
-            limit: limit,
-            completionHandler: completionHandler
-        )
     }
 }
 

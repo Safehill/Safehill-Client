@@ -128,7 +128,7 @@ extension SHSyncOperation {
         var localReactions = [ReactionOutputDTO]()
         
         dispatchGroup.enter()
-        serverProxy.retrieveInteractions(
+        serverProxy.retrieveLocalInteractions(
             inGroup: groupId,
             ofType: nil,
             underMessage: nil,
