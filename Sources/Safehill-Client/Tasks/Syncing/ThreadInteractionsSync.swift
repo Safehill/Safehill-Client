@@ -24,7 +24,7 @@ extension SHSyncOperation {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         let dispatchGroup = DispatchGroup()
-        var error: Error? = nil
+        var remoteError: Error? = nil, localError: Error? = nil
         var allThreads = [ConversationThreadOutputDTO]()
         var localThreads = [ConversationThreadOutputDTO]()
         
@@ -37,7 +37,7 @@ extension SHSyncOperation {
             case .success(let threadList):
                 allThreads = threadList
             case .failure(let err):
-                error = err
+                remoteError = err
             }
             dispatchGroup.leave()
         }
@@ -48,17 +48,30 @@ extension SHSyncOperation {
             case .success(let threadList):
                 localThreads = threadList
             case .failure(let err):
-                error = err
+                localError = err
             }
             dispatchGroup.leave()
         }
         
         dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard error == nil else {
-                self.log.error("[sync] error getting all threads. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
+            guard remoteError == nil else {
+                self.log.error("[sync] error getting all threads from server. \(remoteError!.localizedDescription)")
+                
+                let threadsDelegates = self.threadsDelegates
+                self.delegatesQueue.async {
+                    threadsDelegates.forEach({ $0.didUpdateThreadsList(localThreads) })
+                }
+                
+                completionHandler(.failure(remoteError!))
                 return
             }
+            
+            guard localError == nil else {
+                self.log.error("[sync] error getting local threads. \(localError!.localizedDescription)")
+                completionHandler(.failure(localError!))
+                return
+            }
+            
             
             ///
             /// Remove extra threads locally
