@@ -88,9 +88,14 @@ extension SHSyncOperation {
             }
             
             ///
-            /// Request authorization for unknown users that messaged this user
+            /// Request authorization for unknown users that messaged this user.
+            /// Don't filter out threads where messages were sent by this user,
+            /// in case these threads weren't created yet on this device
             ///
-            self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads) { result in
+            self.serverProxy.filterThreadsCreatedByUnknownUsers(
+                allThreads,
+                filterIfThisUserHasSentMessages: false
+            ) { result in
                 switch result {
                 case .failure(let error):
                     completionHandler(.failure(error))
