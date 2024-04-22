@@ -1,5 +1,7 @@
 import Foundation
 
+let GroupLastInteractionSyncLimit = 50
+
 extension SHSyncOperation {
     
     /// Determine the full set of unique group ids from the descriptor and call `syncGroupInteractions(groupIds:qos:)`
@@ -94,6 +96,8 @@ extension SHSyncOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
+        log.debug("[sync] syncing interactions in group \(groupId)")
+        
         let dispatchGroup = DispatchGroup()
         var errors = [Error]()
         
@@ -108,7 +112,7 @@ extension SHSyncOperation {
             ofType: nil,
             underMessage: nil,
             before: nil,
-            limit: 50
+            limit: GroupLastInteractionSyncLimit
         ) { result in
             switch result {
             case .failure(let err):
@@ -133,7 +137,7 @@ extension SHSyncOperation {
             ofType: nil,
             underMessage: nil,
             before: nil,
-            limit: 50
+            limit: GroupLastInteractionSyncLimit
         ) { localResult in
             switch localResult {
             case .failure(let err):

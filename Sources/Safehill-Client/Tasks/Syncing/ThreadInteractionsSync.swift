@@ -200,6 +200,8 @@ extension SHSyncOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        log.debug("[sync] syncing interactions in thread \(serverThread.threadId)")
+        
         let threadId = serverThread.threadId
         
         let dispatchGroup = DispatchGroup()
