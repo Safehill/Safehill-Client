@@ -497,8 +497,6 @@ public struct SHKGQuery {
                 return dict
             }
             
-            let assetIds = dict.keys
-            
             let senderCondition = KBTripleCondition(
                 subject: senderIdentifier,
                 predicate: SHKGPredicate.shares.rawValue,

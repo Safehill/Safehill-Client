@@ -161,12 +161,6 @@ extension LocalServer {
             return
         }
         
-        guard let userStore = SHDBManager.sharedInstance.userStore else {
-            log.warning("failed to connect to the local user store")
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
         var assetIdentifiers = Set<String>()
         
         // Low Res migrations
