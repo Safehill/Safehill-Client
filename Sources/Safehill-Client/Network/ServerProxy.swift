@@ -1164,9 +1164,11 @@ extension SHServerProxy {
     ///
     /// - Parameters:
     ///   - serverThreads: the unfiltered list
+    ///   - filterIfThisUserHasSentMessages: controls filtering based on whether the requestor has sent messages in this thread
     ///   - completionHandler: the callback, returning the filtered list
     internal func filterThreadsCreatedByUnknownUsers(
         _ serverThreads: [ConversationThreadOutputDTO],
+        filterIfThisUserHasSentMessages: Bool = true,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
     ) {
         let threadCreatorUserIds = Array(Set(serverThreads
@@ -1214,7 +1216,7 @@ extension SHServerProxy {
                     continue
                 } else if thread.creatorPublicIdentifier == nil {
                     continue
-                } else if (messagesFromThisUserInThread[thread.threadId] ?? 0) > 0 {
+                } else if filterIfThisUserHasSentMessages == false || (messagesFromThisUserInThread[thread.threadId] ?? 0) > 0 {
                     continue
                 } else if (knownUsers[thread.creatorPublicIdentifier!] ?? false) == false {
                     log.info("filtering thread \(thread.threadId) because thread creator \(thread.creatorPublicIdentifier!) is not a connection")
