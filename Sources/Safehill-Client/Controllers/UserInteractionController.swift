@@ -264,7 +264,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inThread threadId: String,
         ofType type: InteractionType? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
+        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> Void
     ) {
         self.serverProxy.retrieveLocalInteractions(
             inThread: threadId,
@@ -275,22 +275,18 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         ) { result in
             switch result {
             case .success(let interactionsGroup):
-                let encryptionDetails = EncryptionDetailsClass(
-                    ephemeralPublicKey: interactionsGroup.ephemeralPublicKey,
-                    encryptedSecret: interactionsGroup.encryptedSecret,
-                    secretPublicSignature: interactionsGroup.secretPublicSignature,
-                    senderPublicSignature: interactionsGroup.senderPublicSignature
-                )
-                
-                self.decryptMessages(
-                    interactionsGroup.messages,
-                    usingEncryptionDetails: encryptionDetails
-                ) { result in
-                    switch result {
-                    case .success(let messages):
-                        completionHandler(.success(messages))
+                self.decryptMessages(in: interactionsGroup, for: .thread, anchorId: threadId) {
+                    processResult in
+                    switch processResult {
+                    case .success(let processedResult):
+                        let threadInteractions = SHConversationThreadInteractions(
+                            threadId: threadId, 
+                            messages: processedResult.messages,
+                            reactions: processedResult.reactions
+                        )
+                        completionHandler(.success(threadInteractions))
                     case .failure(let error):
-                        log.error("failed to decrypt last message in thread \(threadId, privacy: .public)")
+                        log.error("failed to process interactions in thread \(threadId, privacy: .public)")
                         completionHandler(.failure(error))
                     }
                 }
@@ -386,8 +382,12 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         
         dispatchGroup.enter()
         let usersController = SHUsersController(localUser: self.user)
-        let userIds: [UserIdentifier] = interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
-        usersController.getUsers(withIdentifiers: userIds) {
+        let userIds = Set<UserIdentifier>(
+            interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
+            + interactionsGroup.messages.map({ $0.senderUserIdentifier! })
+        )
+        
+        usersController.getUsers(withIdentifiers: Array(userIds)) {
             result in
             switch result {
             case .failure(let err):
