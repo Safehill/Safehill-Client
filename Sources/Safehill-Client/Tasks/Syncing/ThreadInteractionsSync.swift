@@ -145,9 +145,11 @@ extension SHSyncOperation {
                         let correspondingLocalThread = localThreads
                             .first(where: { $0.threadId == thread.threadId })
                         
-                        if let correspondingLocalThread, correspondingLocalThread.lastUpdatedAt == thread.lastUpdatedAt {
-                            syncInteractionsInThread(thread) {
-                                dispatchGroup.leave()
+                        if let correspondingLocalThread {
+                            if correspondingLocalThread.lastUpdatedAt != thread.lastUpdatedAt {
+                                syncInteractionsInThread(thread) {
+                                    dispatchGroup.leave()
+                                }
                             }
                         } else {
                             self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
