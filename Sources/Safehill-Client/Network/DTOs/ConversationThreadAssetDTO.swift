@@ -1,9 +1,9 @@
 import Foundation
 
 public struct ConversationThreadAssetDTO: Codable {
-    let globalIdentifier: String
-    let addedByUserIdentifier: String
-    let addedAt: String
-    let groupId: String
+    public let globalIdentifier: String
+    public let addedByUserIdentifier: String
+    public let addedAt: String
+    public let groupId: String
 }
 
