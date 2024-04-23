@@ -28,11 +28,13 @@ public struct SHUploadPipeline {
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
+    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread, meaning that it should be linked to it
     public static func enqueueUpload(
         localIdentifier: String,
         groupId: String,
         sender: SHServerUser,
-        recipients: [SHServerUser]
+        recipients: [SHServerUser],
+        shouldLinkToThread: Bool
     ) throws {
         do {
             let queueItem = SHLocalFetchRequestQueueItem(
@@ -41,7 +43,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients,
                 shouldUpload: true,
-                shouldLinkToThread: false
+                shouldLinkToThread: shouldLinkToThread
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
         } catch {
