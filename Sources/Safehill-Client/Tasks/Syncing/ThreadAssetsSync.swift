@@ -86,7 +86,10 @@ extension SHSyncOperation {
                 let writeBatch = userStore.writeBatch()
                 for assetToUpdate in assetsToUpdate {
                     writeBatch.set(
-                        value: assetToUpdate.addedByUserIdentifier,
+                        value: [
+                            "addedByUserIdentifier": assetToUpdate.addedByUserIdentifier,
+                            "groupId": assetToUpdate.groupId
+                        ],
                         for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::\(assetToUpdate.globalIdentifier)"
                     )
                 }

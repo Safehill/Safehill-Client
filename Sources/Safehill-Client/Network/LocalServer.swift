@@ -1749,7 +1749,8 @@ struct LocalServer : SHServerAPI {
                                     return ConversationThreadAssetDTO(
                                         globalIdentifier: gid,
                                         addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
-                                        addedAt: date.iso8601withFractionalSeconds
+                                        addedAt: date.iso8601withFractionalSeconds,
+                                        groupId: groupId
                                     )
                                 }
                                 completionHandler(.success(result))
