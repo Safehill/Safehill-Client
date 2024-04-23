@@ -1010,6 +1010,18 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+    ) {
+        self.post(
+            "threads/retrieve/\(threadId)/assets",
+            parameters: nil,
+            requiresAuthentication: true,
+            completionHandler: completionHandler
+        )
+    }
+    
     func deleteThread(
         withId threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()

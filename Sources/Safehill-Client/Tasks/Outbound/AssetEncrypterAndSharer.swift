@@ -384,16 +384,16 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
 #endif
                 
-                self.share(
-                    globalIdentifier: globalIdentifier,
-                    via: shareRequest
-                ) { result in
-                    if case .failure(let error) = result {
-                        handleError(error)
-                        return
-                    }
-                    
-                    let handleSuccess = { (globalIdentifier: GlobalIdentifier) in
+                let doShare = {
+                    self.share(
+                        globalIdentifier: globalIdentifier,
+                        via: shareRequest
+                    ) { result in
+                        if case .failure(let error) = result {
+                            handleError(error)
+                            return
+                        }
+                        
                         do {
                             try self.markAsSuccessful(
                                 item: item,
@@ -404,33 +404,34 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                             self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
                             handleError(error)
                         }
+                        
                         completionHandler(.success(()))
                     }
-                    
-                    if shareRequest.isBackground == false {
-                        self.initializeGroupAndThread(shareRequest: shareRequest) { result in
-                            switch result {
-                            case .failure(let error):
-                                self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
-                                // Mark as failed on any other error
+                }
+                
+                if shareRequest.isBackground == false {
+                    self.initializeGroupAndThread(shareRequest: shareRequest) { result in
+                        switch result {
+                        case .failure(let error):
+                            self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
+                            // Mark as failed on any other error
+                            handleError(error)
+                        case .success:
+                            do {
+                                // Ingest into the graph
+                                try SHKGQuery.ingestShare(
+                                    of: globalIdentifier,
+                                    from: self.user.identifier,
+                                    to: shareRequest.sharedWith.map({ $0.identifier })
+                                )
+                                doShare()
+                            } catch {
                                 handleError(error)
-                            case .success:
-                                do {
-                                    // Ingest into the graph
-                                    try SHKGQuery.ingestShare(
-                                        of: globalIdentifier,
-                                        from: self.user.identifier,
-                                        to: shareRequest.sharedWith.map({ $0.identifier })
-                                    )
-                                    handleSuccess(globalIdentifier)
-                                } catch {
-                                    handleError(error)
-                                }
                             }
                         }
-                    } else {
-                        handleSuccess(globalIdentifier)
                     }
+                } else {
+                    doShare()
                 }
             }
         }

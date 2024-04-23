@@ -138,17 +138,24 @@ extension SHSyncOperation {
                     
                     ///
                     /// Add remote threads locally and sync their interactions.
-                    /// Max date of local threads is the **last known date**
                     ///
                     
-                    let syncInteractionsInThread = {
+                    let syncAssetsAndInteractionsInThread = {
                         (thread: ConversationThreadOutputDTO, callback: @escaping () -> Void) in
                         
                         self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
                             if case .failure(let err) = result {
                                 self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                             }
-                            callback()
+                            
+                            
+                            self.syncThreadAssets(serverThread: thread, qos: qos) { result in
+                                if case .failure(let err) = result {
+                                    self.log.error("error syncing assets in thread \(thread.threadId). \(err.localizedDescription)")
+                                }
+                                
+                                callback()
+                            }
                         }
                     }
                     
@@ -160,7 +167,7 @@ extension SHSyncOperation {
                         
                         if let correspondingLocalThread {
                             if correspondingLocalThread.lastUpdatedAt != thread.lastUpdatedAt {
-                                syncInteractionsInThread(thread) {
+                                syncAssetsAndInteractionsInThread(thread) {
                                     dispatchGroup.leave()
                                 }
                             }
@@ -168,7 +175,7 @@ extension SHSyncOperation {
                             self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
                                 switch createResult {
                                 case .success:
-                                    syncInteractionsInThread(thread) {
+                                    syncAssetsAndInteractionsInThread(thread) {
                                         dispatchGroup.leave()
                                     }
                                 case .failure(let err):
@@ -227,7 +234,6 @@ extension SHSyncOperation {
         ///
         /// Retrieve the LOCAL interactions
         ///
-        
         var shouldCreateE2EEDetailsLocally = false
         var localMessages = [MessageOutputDTO]()
         var localReactions = [ReactionOutputDTO]()
@@ -261,7 +267,7 @@ extension SHSyncOperation {
                 completionHandler(.failure(error!))
                 return
             }
-            guard let remoteInteractions = remoteInteractions else {
+            guard let remoteInteractions else {
                 self.log.error("error retrieving remote interactions for thread \(threadId)")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("error retrieving interactions for thread \(threadId)")))
                 return

@@ -1277,6 +1277,30 @@ extension SHServerProxy {
         self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
     }
     
+    /// Get them from local server, and rely on the thread asset sync operation to retrieve fresh information.
+    /// If none is found or an error occurs, retrieve them from the remote server
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - completionHandler: the callback method
+    public func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+    ) {
+        self.localServer.getAssets(inThread: threadId) { remoteResult in
+            switch remoteResult {
+            case .success(let threadAssets):
+                if threadAssets.count > 0 {
+                    completionHandler(.success(threadAssets))
+                } else {
+                    self.remoteServer.getAssets(inThread: threadId, completionHandler: completionHandler)
+                }
+            case .failure(let failure):
+                log.error("failed to get assets in thread \(threadId) from remote server, trying local. \(failure.localizedDescription)")
+                self.remoteServer.getAssets(inThread: threadId, completionHandler: completionHandler)
+            }
+        }
+    }
+    
     public func deleteThread(
         withId threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()

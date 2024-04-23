@@ -229,6 +229,15 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     
+    /// Retrieve the assets in a thread
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - completionHandler: the callback method
+    func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+    )
+    
     // MARK: Groups
     
     /// Creates a group and provides the encryption details for users in the group for E2EE.
