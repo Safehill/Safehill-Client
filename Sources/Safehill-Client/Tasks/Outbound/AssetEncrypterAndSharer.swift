@@ -18,7 +18,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: self.assetDelegates,
-            threadsDelegates: self.threadsDelegates,
             limitPerRun: self.limit,
             imageManager: self.imageManager
         )
@@ -270,11 +269,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         ) {
             setupThreadResult in
             switch setupThreadResult {
-            case .success(let serverThread):
-                let threadsDelegates = self.threadsDelegates
-                self.delegatesQueue.async {
-                    threadsDelegates.forEach({ $0.didUpdateThreadsList([serverThread])} )
-                }
+            case .success:
+                break
             case .failure(let error):
                 errorInitializingThread = error
             }

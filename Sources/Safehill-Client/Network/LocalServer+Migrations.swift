@@ -161,12 +161,6 @@ extension LocalServer {
             return
         }
         
-        guard let userStore = SHDBManager.sharedInstance.userStore else {
-            log.warning("failed to connect to the local user store")
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
         var assetIdentifiers = Set<String>()
         
         // Low Res migrations
@@ -238,22 +232,7 @@ extension LocalServer {
                     return
                 }
                 
-                /// For builds older than 4/9/24 rebuild the threads list
-                /// They will be re-created during sync.
-                guard currentBuild == nil || currentBuild! < 20240409 else {
-                    return
-                }
-                
-                userStore.removeValues(
-                    forKeysMatching: KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
-                ) { result in
-                    switch result {
-                    case .failure(let error):
-                        completionHandler(.failure(error))
-                    case .success:
-                        completionHandler(.success(()))
-                    }
-                }
+                completionHandler(.success(()))
             }
         }
     }

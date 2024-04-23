@@ -43,6 +43,8 @@ extension SHSyncOperation {
         if reactionsToUpdate.count > 0 {
             dispatchGroup.enter()
             
+            log.debug("[sync] syncing reactions in \(anchor.rawValue) \(anchorId). toUpdate=\(reactionsToUpdate.count)")
+            
             let callback = { (addReactionsResult: Result<[ReactionOutputDTO], Error>) in
                 if case .failure(let failure) = addReactionsResult {
                     self.log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
@@ -68,6 +70,7 @@ extension SHSyncOperation {
                 )
             }
         }
+        
         if reactionsToRemove.count > 0 {
             let callback = { (removeReactionsResult: Result<Void, Error>) in
                 if case .failure(let failure) = removeReactionsResult {

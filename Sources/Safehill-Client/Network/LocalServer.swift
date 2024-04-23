@@ -2242,65 +2242,6 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func retrieveLastMessage(
-        inThread threadId: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    ) {
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        self.retrieveUserEncryptionDetails(anchorType: .thread, anchorId: threadId) {
-            encryptionDetailsResult in
-            switch encryptionDetailsResult {
-            case .failure(let err):
-                completionHandler(.failure(err))
-            case .success(let e2eeResult):
-                guard let encryptionDetails = e2eeResult else {
-                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(threadId)))
-                    return
-                }
-                
-                let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::")
-                
-                messagesQueue.keyValuesAndTimestamps(
-                    forKeysMatching: condition,
-                    timestampMatching: nil,
-                    paginate: KBPaginationOptions(limit: 1, offset: 0),
-                    sort: .descending
-                ) { messagesResult in
-                    switch messagesResult {
-                    case .success(let messageKvts):
-                        var messages = [MessageOutputDTO]()
-                        
-                        if let messageKvt = messageKvts.first {
-                            do {
-                                let message = try LocalServer.toMessageOutput(messageKvt)
-                                messages.append(message)
-                            } catch {
-                                completionHandler(.failure(error))
-                                return
-                            }
-                        }
-                        
-                        let result = InteractionsGroupDTO(
-                            messages: messages,
-                            reactions: [],
-                            ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
-                            encryptedSecret: encryptionDetails.encryptedSecret,
-                            secretPublicSignature: encryptionDetails.secretPublicSignature,
-                            senderPublicSignature: encryptionDetails.senderPublicSignature
-                        )
-                        completionHandler(.success(result))
-                    case .failure(let err):
-                        completionHandler(.failure(err))
-                    }
-                }
-            }
-        }
-    }
-    
     func addMessages(
         _ messages: [MessageInput],
         inGroup groupId: String,

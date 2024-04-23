@@ -1,5 +1,7 @@
 import Foundation
 
+let ThreadLastInteractionSyncLimit = 20
+
 extension SHSyncOperation {
     
     public func runOnceForThreads(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
@@ -22,7 +24,7 @@ extension SHSyncOperation {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         let dispatchGroup = DispatchGroup()
-        var error: Error? = nil
+        var remoteError: Error? = nil, localError: Error? = nil
         var allThreads = [ConversationThreadOutputDTO]()
         var localThreads = [ConversationThreadOutputDTO]()
         
@@ -35,7 +37,7 @@ extension SHSyncOperation {
             case .success(let threadList):
                 allThreads = threadList
             case .failure(let err):
-                error = err
+                remoteError = err
             }
             dispatchGroup.leave()
         }
@@ -46,17 +48,30 @@ extension SHSyncOperation {
             case .success(let threadList):
                 localThreads = threadList
             case .failure(let err):
-                error = err
+                localError = err
             }
             dispatchGroup.leave()
         }
         
         dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard error == nil else {
-                self.log.error("[sync] error getting all threads. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
+            guard remoteError == nil else {
+                self.log.error("[sync] error getting all threads from server. \(remoteError!.localizedDescription)")
+                
+                let threadsDelegates = self.threadsDelegates
+                self.delegatesQueue.async {
+                    threadsDelegates.forEach({ $0.didUpdateThreadsList(localThreads) })
+                }
+                
+                completionHandler(.failure(remoteError!))
                 return
             }
+            
+            guard localError == nil else {
+                self.log.error("[sync] error getting local threads. \(localError!.localizedDescription)")
+                completionHandler(.failure(localError!))
+                return
+            }
+            
             
             ///
             /// Remove extra threads locally
@@ -86,13 +101,18 @@ extension SHSyncOperation {
             }
             
             ///
-            /// Request authorization for unknown users that messaged this user
+            /// Request authorization for unknown users that messaged this user.
+            /// Don't filter out threads where messages were sent by this user,
+            /// in case these threads weren't created yet on this device
             ///
-            self.serverProxy.filterThreadsCreatedByUnknownUsers(allThreads) { result in
+            self.serverProxy.filterThreadsCreatedByUnknownUsers(
+                allThreads,
+                filterIfThisUserHasSentMessages: false
+            ) { result in
                 switch result {
                 case .failure(let error):
                     completionHandler(.failure(error))
-                case .success(var threadsFromKnownUsers):
+                case .success(let threadsFromKnownUsers):
                     
                     let threadIdsFromknownUsers = threadsFromKnownUsers.map({ $0.threadId })
                     let threadsFromUnknownUsers = allThreads.filter({
@@ -100,28 +120,26 @@ extension SHSyncOperation {
                     })
                     var unauthorizedUsers = Set(threadsFromUnknownUsers.compactMap({ $0.creatorPublicIdentifier }))
                     unauthorizedUsers.remove(self.user.identifier)
-                    let threadsDelegates = self.threadsDelegates
-                    self.delegatesQueue.async {
-                        threadsDelegates.forEach({ $0.didReceiveMessagesFromUnauthorized(users: Array(unauthorizedUsers)) })
+                    
+                    SHUsersController(localUser: self.user).getUsersOrCached(with: Array(unauthorizedUsers)) {
+                        result in
+                        switch result {
+                        case .success(let usersDict):
+                            let threadsDelegates = self.threadsDelegates
+                            self.delegatesQueue.async {
+                                threadsDelegates.forEach({
+                                    $0.didReceiveMessagesFromUnauthorized(users: unauthorizedUsers.compactMap({ uid in usersDict[uid] }))
+                                })
+                            }
+                        case .failure(let error):
+                            self.log.error("failed to retrieve unauthorized users \(unauthorizedUsers). \(error.localizedDescription)")
+                        }
                     }
                     
                     ///
                     /// Add remote threads locally and sync their interactions.
                     /// Max date of local threads is the **last known date**
                     ///
-                    
-                    var lastKnownThreadUpdateAt: Date? = localThreads
-                        .sorted(by: {
-                            let a = ($0.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
-                            let b = ($1.lastUpdatedAt?.iso8601withFractionalSeconds ?? .distantPast)
-                            return a.compare(b) == .orderedAscending
-                        })
-                        .last?
-                        .lastUpdatedAt?
-                        .iso8601withFractionalSeconds
-                    if lastKnownThreadUpdateAt == .distantPast {
-                        lastKnownThreadUpdateAt = nil
-                    }
                     
                     let syncInteractionsInThread = {
                         (thread: ConversationThreadOutputDTO, callback: @escaping () -> Void) in
@@ -135,20 +153,16 @@ extension SHSyncOperation {
                     }
                     
                     for thread in threadsFromKnownUsers {
-                        if let lastKnown = lastKnownThreadUpdateAt,
-                           let lastUpdated = thread.lastUpdatedAt?.iso8601withFractionalSeconds,
-                           lastUpdated.compare(lastKnown) == .orderedAscending {
-                            continue
-                        }
-                        
                         dispatchGroup.enter()
                         
                         let correspondingLocalThread = localThreads
                             .first(where: { $0.threadId == thread.threadId })
                         
-                        if let correspondingLocalThread, correspondingLocalThread.lastUpdatedAt == thread.lastUpdatedAt {
-                            syncInteractionsInThread(thread) {
-                                dispatchGroup.leave()
+                        if let correspondingLocalThread {
+                            if correspondingLocalThread.lastUpdatedAt != thread.lastUpdatedAt {
+                                syncInteractionsInThread(thread) {
+                                    dispatchGroup.leave()
+                                }
                             }
                         } else {
                             self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
@@ -166,6 +180,7 @@ extension SHSyncOperation {
                     }
                     
                     dispatchGroup.notify(queue: .global()) {
+                        let threadsDelegates = self.threadsDelegates
                         self.delegatesQueue.async {
                             threadsDelegates.forEach({ $0.didUpdateThreadsList(threadsFromKnownUsers) })
                         }
@@ -181,6 +196,8 @@ extension SHSyncOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
+        log.debug("[sync] syncing interactions in thread \(serverThread.threadId)")
+        
         let threadId = serverThread.threadId
         
         let dispatchGroup = DispatchGroup()
@@ -196,7 +213,7 @@ extension SHSyncOperation {
             ofType: nil,
             underMessage: nil,
             before: nil,
-            limit: 20
+            limit: ThreadLastInteractionSyncLimit
         ) { result in
             switch result {
             case .failure(let err):
@@ -216,12 +233,12 @@ extension SHSyncOperation {
         var localReactions = [ReactionOutputDTO]()
         
         dispatchGroup.enter()
-        serverProxy.retrieveInteractions(
+        serverProxy.retrieveLocalInteractions(
             inThread: threadId,
             ofType: nil,
             underMessage: nil,
             before: nil,
-            limit: 20
+            limit: ThreadLastInteractionSyncLimit
         ) { localResult in
             switch localResult {
             case .failure(let err):

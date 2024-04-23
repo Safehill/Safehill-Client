@@ -4,7 +4,7 @@ import os
 /// 
 /// Responsible for syncing:
 /// - full list of threads with server
-/// - LAST 20 interactions in each
+/// - LAST `ThreadLastInteractionSyncLimit` interactions in each
 ///
 public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
     
