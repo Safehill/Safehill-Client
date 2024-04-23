@@ -268,7 +268,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             dispatchGroup.leave()
         }
         
-        if skipThreadCreation {
+        if skipThreadCreation == false {
             self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
             dispatchGroup.enter()
             self.interactionsController.setupThread(
