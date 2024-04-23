@@ -41,7 +41,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients,
                 shouldUpload: true,
-                shouldCreateThread: false
+                shouldLinkToThread: false
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
         } catch {
@@ -77,7 +77,7 @@ public struct SHUploadPipeline {
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - forceUpload: whether or not it's a force-retry (and should re-upload)
-    ///   - shouldCreateThread: whether or not it should attempt to create a new thread with the recipients if it doesn't exist
+    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread, meaning that it should be linked to it
     public static func enqueueShare(
         localIdentifier: String,
         globalIdentifier: String?,
@@ -85,7 +85,7 @@ public struct SHUploadPipeline {
         sender: SHAuthenticatedLocalUser,
         recipients: [SHServerUser],
         forceUpload: Bool,
-        shouldCreateThread: Bool
+        shouldLinkToThread: Bool
     ) throws {
         ///
         /// First, check if the asset already exists in the local store.
@@ -114,7 +114,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients,
                 shouldUpload: forceUpload,
-                shouldCreateThread: shouldCreateThread
+                shouldLinkToThread: shouldLinkToThread
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
             

@@ -1126,6 +1126,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
+               shouldLinkToThread: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))

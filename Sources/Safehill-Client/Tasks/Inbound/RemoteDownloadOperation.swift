@@ -716,7 +716,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                             groupId: groupId,
                             eventOriginator: myUser,
                             sharedWith: [],
-                            shouldCreateThread: false,
+                            shouldLinkToThread: false,
                             isBackground: false
                         )
                         groupIdToUploadItem[groupId] = (item, groupCreationDate)
@@ -739,7 +739,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                                 groupId: groupId,
                                 eventOriginator: myUser,
                                 sharedWith: [user],
-                                shouldCreateThread: false,
+                                shouldLinkToThread: false,
                                 isBackground: false
                             )
                             groupIdToShareItem[groupId] = (item, groupCreationDate)
@@ -756,7 +756,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                                 groupId: groupId,
                                 eventOriginator: myUser,
                                 sharedWith: users,
-                                shouldCreateThread: false,
+                                shouldLinkToThread: false,
                                 isBackground: false
                             )
                             groupIdToShareItem[groupId] = (item, groupCreationDate)

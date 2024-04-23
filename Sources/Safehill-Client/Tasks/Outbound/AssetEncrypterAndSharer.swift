@@ -121,7 +121,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldCreateThread = request.shouldCreateThread
+        let shouldLinkToThread = request.shouldLinkToThread
         
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
@@ -138,7 +138,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldCreateThread: shouldCreateThread,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: request.isBackground
         )
         
@@ -226,7 +226,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     return
                 }
                 
-                self.serverProxy.share(shareableEncryptedAsset) { shareResult in
+                self.serverProxy.share(
+                    shareableEncryptedAsset,
+                    shouldLinkToThread: request.shouldLinkToThread
+                ) { shareResult in
                     if case .failure(let err) = shareResult {
                         completionHandler(.failure(err))
                         return
@@ -419,7 +422,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 if shareRequest.isBackground == false {
                     self.initializeGroupAndThread(
                         shareRequest: shareRequest,
-                        skipThreadCreation: shareRequest.shouldCreateThread == false
+                        skipThreadCreation: shareRequest.shouldLinkToThread == false
                     ) { result in
                         switch result {
                         case .failure(let error):

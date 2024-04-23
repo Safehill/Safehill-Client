@@ -116,8 +116,10 @@ public protocol SHServerAPI {
     /// Shares one or more assets with a set of users
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
+    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread so a link between the thread and the asset should be made
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
+               shouldLinkToThread: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Adds a link between a share group and a set of phone numbers on the server.
