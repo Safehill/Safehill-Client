@@ -40,7 +40,8 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
-                shouldUpload: true
+                shouldUpload: true,
+                shouldCreateThread: false
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
         } catch {
@@ -71,17 +72,20 @@ public struct SHUploadPipeline {
     /// In case of a force-retry, the asset upload will be re-attempted too.
     /// - Parameters:
     ///   - localIdentifier: the Apple Photos local identifier
+    ///   - globalIdentifier: the global identifier, if available
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - forceUpload: whether or not it's a force-retry (and should re-upload)
+    ///   - shouldCreateThread: whether or not it should attempt to create a new thread with the recipients if it doesn't exist
     public static func enqueueShare(
         localIdentifier: String,
         globalIdentifier: String?,
         groupId: String,
         sender: SHAuthenticatedLocalUser,
         recipients: [SHServerUser],
-        forceUpload: Bool
+        forceUpload: Bool,
+        shouldCreateThread: Bool
     ) throws {
         ///
         /// First, check if the asset already exists in the local store.
@@ -109,7 +113,8 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
-                shouldUpload: forceUpload
+                shouldUpload: forceUpload,
+                shouldCreateThread: shouldCreateThread
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
             

@@ -124,6 +124,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
+        let shouldCreateThread = request.shouldCreateThread
         let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
@@ -144,6 +145,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: [],
+            shouldCreateThread: shouldCreateThread,
             isBackground: isBackground
         )
         
@@ -192,6 +194,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
                     eventOriginator: eventOriginator,
                     sharedWith: sharedWith,
                     shouldUpload: false,
+                    shouldCreateThread: shouldCreateThread,
                     isBackground: isBackground
                 )
                 try fetchRequest.enqueue(in: fetchQueue)
@@ -219,6 +222,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
                         eventOriginator: request.eventOriginator,
                         sharedWith: request.sharedWith,
                         shouldUpload: true,
+                        shouldCreateThread: false,
                         isBackground: true
                     )
                     try hiResFetchQueueItem.enqueue(in: fetchQueue)

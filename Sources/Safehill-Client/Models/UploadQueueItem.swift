@@ -15,6 +15,7 @@ private let PublicKeyKey = "publicKey"
 private let PublicSignatureKey = "publicSignature"
 private let AssetDescriptorKey = "assetDescriptor"
 private let AssetShouldUploadKey = "shouldUpload"
+private let ThreadShouldBeCreated = "shouldCreateThread"
 
 
 /// A class (not a swift struct, such as SHRemoteUser) for SHServer objects
@@ -390,15 +391,19 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
     
     public let shouldUpload: Bool
     
+    public let shouldCreateThread: Bool
+    
     public init(localIdentifier: String,
                 globalIdentifier: String? = nil,
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
+                shouldCreateThread: Bool,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
+        self.shouldCreateThread = shouldCreateThread
         super.init(localIdentifier: localIdentifier,
                    groupId: groupId,
                    eventOriginator: eventOriginator,
@@ -413,9 +418,11 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
+                shouldCreateThread: Bool,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
+        self.shouldCreateThread = shouldCreateThread
         super.init(localIdentifier: localIdentifier,
                    versions: versions,
                    groupId: groupId,
@@ -428,12 +435,14 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
         super.encode(with: coder)
         coder.encode(self.globalIdentifier, forKey: GlobalAssetIdKey)
         coder.encode(NSNumber(booleanLiteral: self.shouldUpload), forKey: AssetShouldUploadKey)
+        coder.encode(NSNumber(booleanLiteral: self.shouldCreateThread), forKey: ThreadShouldBeCreated)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
             let shouldUpload = decoder.decodeObject(of: NSNumber.self, forKey: AssetShouldUploadKey)
+            let shouldCreateThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeCreated)
             
             guard let su = shouldUpload else {
                 log.error("unexpected value for shouldUpload when decoding SHLocalFetchRequestQueueItem object")
@@ -447,6 +456,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
                       shouldUpload: su.boolValue,
+                      shouldCreateThread: shouldCreateThread?.boolValue ?? false,
                       isBackground: superSelf.isBackground)
             return
         }
@@ -463,13 +473,17 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     
     public let asset: SHApplePhotoAsset
     
+    public let shouldCreateThread: Bool
+    
     public init(asset: SHApplePhotoAsset,
                 versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],
+                shouldCreateThread: Bool,
                 isBackground: Bool = false) {
         self.asset = asset
+        self.shouldCreateThread = shouldCreateThread
         super.init(localIdentifier: asset.phAsset.localIdentifier,
                    versions: versions,
                    groupId: groupId,
@@ -481,11 +495,13 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     public override func encode(with coder: NSCoder) {
         super.encode(with: coder)
         coder.encode(self.asset, forKey: AssetKey)
+        coder.encode(NSNumber(booleanLiteral: self.shouldCreateThread), forKey: ThreadShouldBeCreated)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             let asset = decoder.decodeObject(of: SHApplePhotoAsset.self, forKey: AssetKey)
+            let shouldCreateThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeCreated)
             
             guard let asset = asset else {
                 log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
@@ -497,6 +513,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
+                      shouldCreateThread: shouldCreateThread?.boolValue ?? false,
                       isBackground: superSelf.isBackground)
             return
         }
@@ -511,14 +528,18 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
     
     public let globalAssetId: String
     
+    public let shouldCreateThread: Bool
+    
     public init(localAssetId: String,
                 globalAssetId: String,
                 versions: [SHAssetQuality],
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],
+                shouldCreateThread: Bool,
                 isBackground: Bool = false) {
         self.globalAssetId = globalAssetId
+        self.shouldCreateThread = shouldCreateThread
         super.init(localIdentifier: localAssetId,
                    versions: versions,
                    groupId: groupId,
@@ -530,11 +551,13 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
     public override func encode(with coder: NSCoder) {
         super.encode(with: coder)
         coder.encode(self.globalAssetId, forKey: GlobalAssetIdKey)
+        coder.encode(NSNumber(booleanLiteral: self.shouldCreateThread), forKey: ThreadShouldBeCreated)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
         if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
             let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
+            let shouldCreateThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeCreated)
             
             guard let globalAssetId = globalAssetId as? String else {
                 log.error("unexpected value for globalAssetId when decoding SHConcreteShareableGroupableQueueItem object")
@@ -548,6 +571,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
                 groupId: superSelf.groupId,
                 eventOriginator: superSelf.eventOriginator,
                 sharedWith: superSelf.sharedWith,
+                shouldCreateThread: shouldCreateThread?.boolValue ?? false,
                 isBackground: superSelf.isBackground
             )
             return

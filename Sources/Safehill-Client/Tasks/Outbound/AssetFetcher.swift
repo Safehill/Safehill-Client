@@ -156,6 +156,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let shouldUpload = request.shouldUpload
+        let shouldCreateThread = request.shouldCreateThread
         let isBackground = request.isBackground
         
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
@@ -177,6 +178,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
+                    shouldCreateThread: shouldCreateThread,
                     isBackground: isBackground
                 )
                 try encryptionRequest.enqueue(in: encryptionQueue)
@@ -207,6 +209,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
+                    shouldCreateThread: shouldCreateThread,
                     isBackground: isBackground
                 )
                 try encryptionForSharingRequest.enqueue(in: shareQueue)

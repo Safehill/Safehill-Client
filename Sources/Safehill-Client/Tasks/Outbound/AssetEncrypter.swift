@@ -275,6 +275,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let isBackground = request.isBackground
+        let shouldCreateThread = request.shouldCreateThread
         
         do {
             ///
@@ -296,6 +297,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldCreateThread: shouldCreateThread,
             isBackground: isBackground
         )
         

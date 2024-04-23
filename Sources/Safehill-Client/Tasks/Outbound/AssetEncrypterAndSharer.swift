@@ -121,6 +121,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let shouldCreateThread = request.shouldCreateThread
         
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
@@ -137,6 +138,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldCreateThread: shouldCreateThread,
             isBackground: request.isBackground
         )
         
@@ -239,6 +241,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     private func initializeGroupAndThread(
         shareRequest: SHEncryptionForSharingRequestQueueItem,
+        skipThreadCreation: Bool,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var errorInitializingGroup: Error? = nil
@@ -262,19 +265,23 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             dispatchGroup.leave()
         }
         
-        self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
-        dispatchGroup.enter()
-        self.interactionsController.setupThread(
-            with: usersAndSelf
-        ) {
-            setupThreadResult in
-            switch setupThreadResult {
-            case .success:
-                break
-            case .failure(let error):
-                errorInitializingThread = error
+        if skipThreadCreation {
+            self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
+            dispatchGroup.enter()
+            self.interactionsController.setupThread(
+                with: usersAndSelf
+            ) {
+                setupThreadResult in
+                switch setupThreadResult {
+                case .success:
+                    break
+                case .failure(let error):
+                    errorInitializingThread = error
+                }
+                dispatchGroup.leave()
             }
-            dispatchGroup.leave()
+        } else {
+            self.log.info("skipping thread creation as instructed by request \(shareRequest.identifier)")
         }
         
         dispatchGroup.notify(queue: .global()) {
@@ -410,7 +417,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
                 
                 if shareRequest.isBackground == false {
-                    self.initializeGroupAndThread(shareRequest: shareRequest) { result in
+                    self.initializeGroupAndThread(
+                        shareRequest: shareRequest,
+                        skipThreadCreation: shareRequest.shouldCreateThread == false
+                    ) { result in
                         switch result {
                         case .failure(let error):
                             self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
