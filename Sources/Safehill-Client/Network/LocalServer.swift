@@ -1464,6 +1464,8 @@ struct LocalServer : SHServerAPI {
             condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
         }
         
+        condition.and(KBGenericCondition(.contains, value: "::assets::", negated: true))
+        
         let kvPairs: KBKVPairs
         do {
             kvPairs = try userStore
