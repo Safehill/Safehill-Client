@@ -148,7 +148,6 @@ extension SHSyncOperation {
                                 self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                             }
                             
-                            
                             self.syncThreadAssets(serverThread: thread, qos: qos) { result in
                                 if case .failure(let err) = result {
                                     self.log.error("error syncing assets in thread \(thread.threadId). \(err.localizedDescription)")
@@ -170,6 +169,8 @@ extension SHSyncOperation {
                                 syncAssetsAndInteractionsInThread(thread) {
                                     dispatchGroup.leave()
                                 }
+                            } else {
+                                dispatchGroup.leave()
                             }
                         } else {
                             self.serverProxy.localServer.createOrUpdateThread(serverThread: thread) { createResult in
