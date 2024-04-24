@@ -165,11 +165,7 @@ extension SHSyncOperation {
                             .first(where: { $0.threadId == thread.threadId })
                         
                         if let correspondingLocalThread {
-                            if correspondingLocalThread.lastUpdatedAt != thread.lastUpdatedAt {
-                                syncAssetsAndInteractionsInThread(thread) {
-                                    dispatchGroup.leave()
-                                }
-                            } else {
+                            syncAssetsAndInteractionsInThread(thread) {
                                 dispatchGroup.leave()
                             }
                         } else {
