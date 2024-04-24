@@ -228,7 +228,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 
                 self.serverProxy.share(
                     shareableEncryptedAsset,
-                    shouldLinkToThread: request.shouldLinkToThread
+                    shouldLinkToThread: request.shouldLinkToThread,
+                    suppressNotification: request.isBackground
                 ) { shareResult in
                     if case .failure(let err) = shareResult {
                         completionHandler(.failure(err))

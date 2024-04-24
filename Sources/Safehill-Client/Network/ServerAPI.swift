@@ -117,9 +117,11 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
     ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread so a link between the thread and the asset should be made
+    ///   - suppressNotification: do not send a notification to the user. For instance, when the high resolution is shared in the background
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
                shouldLinkToThread: Bool,
+               suppressNotification: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Adds a link between a share group and a set of phone numbers on the server.

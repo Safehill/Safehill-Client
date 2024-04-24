@@ -673,6 +673,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func share(asset: SHShareableEncryptedAsset,
                shouldLinkToThread: Bool,
+               suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
         if asset.sharedVersions.count == 0 {
@@ -696,7 +697,8 @@ struct SHServerHTTPAPI : SHServerAPI {
             "globalAssetIdentifier": asset.globalIdentifier,
             "versionSharingDetails": versions,
             "groupId": asset.groupId,
-            "shouldLinkToThread": shouldLinkToThread
+            "shouldLinkToThread": shouldLinkToThread,
+            "suppressNotification": suppressNotification
         ]
         
         self.post("assets/share", parameters: shareDict) { (result: Result<NoReply, Error>) in

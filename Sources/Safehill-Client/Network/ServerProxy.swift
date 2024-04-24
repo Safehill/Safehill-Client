@@ -1060,7 +1060,7 @@ extension SHServerProxy {
     
     func shareAssetLocally(_ asset: SHShareableEncryptedAsset,
                            completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.share(asset: asset, shouldLinkToThread: false) {
+        self.localServer.share(asset: asset) {
             result in
             switch result {
             case .success(_):
@@ -1079,10 +1079,12 @@ extension SHServerProxy {
     
     func share(_ asset: SHShareableEncryptedAsset,
                shouldLinkToThread: Bool,
+               suppressNotification: Bool = false,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.share(
             asset: asset,
             shouldLinkToThread: shouldLinkToThread,
+            suppressNotification: suppressNotification,
             completionHandler: completionHandler
         )
     }
