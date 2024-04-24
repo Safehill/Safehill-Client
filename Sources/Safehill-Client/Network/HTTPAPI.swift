@@ -672,6 +672,8 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
+               shouldLinkToThread: Bool,
+               suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
         if asset.sharedVersions.count == 0 {
@@ -694,7 +696,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         let shareDict: [String: Any?] = [
             "globalAssetIdentifier": asset.globalIdentifier,
             "versionSharingDetails": versions,
-            "groupId": asset.groupId
+            "groupId": asset.groupId,
+            "shouldLinkToThread": shouldLinkToThread,
+            "suppressNotification": suppressNotification
         ]
         
         self.post("assets/share", parameters: shareDict) { (result: Result<NoReply, Error>) in
@@ -1008,6 +1012,18 @@ struct SHServerHTTPAPI : SHServerAPI {
                 completionHandler(.failure(failure))
             }
         }
+    }
+    
+    func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+    ) {
+        self.post(
+            "threads/retrieve/\(threadId)/assets",
+            parameters: nil,
+            requiresAuthentication: true,
+            completionHandler: completionHandler
+        )
     }
     
     func deleteThread(

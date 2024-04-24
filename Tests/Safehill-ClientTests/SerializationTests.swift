@@ -132,7 +132,8 @@ final class Safehill_SerializationTests: XCTestCase {
                 groupId: "groupId",
                 eventOriginator: sender,
                 sharedWith: [],
-                shouldUpload: true
+                shouldUpload: true,
+                shouldLinkToThread: false
             ),
             SHLocalFetchRequestQueueItem(
                 localIdentifier: "localIdentifier",
@@ -141,6 +142,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 eventOriginator: sender,
                 sharedWith: [sender],
                 shouldUpload: false,
+                shouldLinkToThread: true,
                 isBackground: true
             ),
         ]
@@ -164,6 +166,7 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssert(queueItem.sharedWith.count == deserialized.sharedWith.count)
             XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
             XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
+            XCTAssertEqual(queueItem.shouldLinkToThread, deserialized.shouldLinkToThread)
             XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)
         }
     }

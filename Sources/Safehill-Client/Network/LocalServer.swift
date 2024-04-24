@@ -1126,6 +1126,8 @@ struct LocalServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
+               shouldLinkToThread: Bool = false,
+               suppressNotification: Bool = true,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
@@ -1463,6 +1465,8 @@ struct LocalServer : SHServerAPI {
             condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
         }
         
+        condition = condition.and(KBGenericCondition(.contains, value: "::assets::", negated: true))
+        
         let kvPairs: KBKVPairs
         do {
             kvPairs = try userStore
@@ -1657,6 +1661,116 @@ struct LocalServer : SHServerAPI {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    private func getGroupId(for userIdentifiers: [UserIdentifier], in descriptor: any SHAssetDescriptor) -> String? {
+        var groupId: String? = nil
+        for userIdentifier in userIdentifiers {
+            if let groupForUser = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userIdentifier] {
+                if groupId == nil {
+                    groupId = groupForUser
+                } else if groupId != groupForUser {
+                    ///
+                    /// This asset should not be displayed in this thread
+                    /// cause it was shared with the thread's users via a different group id.
+                    ///
+                    return nil
+                }
+            }
+        }
+        return groupId
+    }
+    
+    func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        /// 
+        /// Get the thread from the identifier
+        ///
+        self.getThread(withId: threadId) { threadResult in
+            switch threadResult {
+            case .success(let serverThread):
+                if let serverThread {
+                    do {
+                        ///
+                        /// Get the assets associated to this thread,
+                        /// previously synced by the `SHThreadInteractionSyncOperation`
+                        ///
+                        let assetsGids = try userStore
+                            .keys(
+                                matching: KBGenericCondition(
+                                    .beginsWith,
+                                    value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets"
+                                )
+                            )
+                            .compactMap {
+                                let components = $0.components(separatedBy: "::")
+                                if components.count == 4, let assetGid = components.last {
+                                    return assetGid
+                                }
+                                return nil
+                            }
+                        
+                        ///
+                        /// Get the assets descriptors for these assets,
+                        /// so that we can retrieve sharing information such as the share date and the sender.
+                        /// 
+                        /// Although we do store the sender information in the userStore KVS as a value for the thread-asset keys
+                        /// we ignore it here and trust the descriptor instead.
+                        ///
+                        self.getAssetDescriptors(forAssetGlobalIdentifiers: assetsGids) { descriptorsResult in
+                            switch descriptorsResult {
+                            case .success(let descriptors):
+                                let descriptorsDict = descriptors.reduce([GlobalIdentifier: any SHAssetDescriptor]()) {
+                                    partialResult, descriptor in
+                                    var result = partialResult
+                                    result[descriptor.globalIdentifier] = descriptor
+                                    return result
+                                }
+                                
+                                let result = assetsGids.compactMap {
+                                    (gid: GlobalIdentifier) -> ConversationThreadAssetDTO? in
+                                    
+                                    guard let descriptor = descriptorsDict[gid] else {
+                                        return nil
+                                    }
+                                        
+                                    guard let groupId = self.getGroupId(for: serverThread.membersPublicIdentifier, in: descriptor) else {
+                                        return nil
+                                    }
+                                    
+                                    guard let date = descriptor.sharingInfo.groupInfoById[groupId]?.createdAt else {
+                                        return nil
+                                    }
+                                    
+                                    return ConversationThreadAssetDTO(
+                                        globalIdentifier: gid,
+                                        addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
+                                        addedAt: date.iso8601withFractionalSeconds,
+                                        groupId: groupId
+                                    )
+                                }
+                                completionHandler(.success(result))
+                            case .failure(let failure):
+                                completionHandler(.failure(failure))
+                            }
+                        }
+                    } catch {
+                        completionHandler(.failure(error))
+                    }
+                } else {
+                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     private func retrieveUserEncryptionDetails(

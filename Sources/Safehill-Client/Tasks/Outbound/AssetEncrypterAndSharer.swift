@@ -121,6 +121,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let shouldLinkToThread = request.shouldLinkToThread
         
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
@@ -137,6 +138,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: request.isBackground
         )
         
@@ -224,7 +226,11 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     return
                 }
                 
-                self.serverProxy.share(shareableEncryptedAsset) { shareResult in
+                self.serverProxy.share(
+                    shareableEncryptedAsset,
+                    shouldLinkToThread: request.shouldLinkToThread,
+                    suppressNotification: request.isBackground
+                ) { shareResult in
                     if case .failure(let err) = shareResult {
                         completionHandler(.failure(err))
                         return
@@ -239,6 +245,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     private func initializeGroupAndThread(
         shareRequest: SHEncryptionForSharingRequestQueueItem,
+        skipThreadCreation: Bool,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var errorInitializingGroup: Error? = nil
@@ -262,19 +269,23 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             dispatchGroup.leave()
         }
         
-        self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
-        dispatchGroup.enter()
-        self.interactionsController.setupThread(
-            with: usersAndSelf
-        ) {
-            setupThreadResult in
-            switch setupThreadResult {
-            case .success:
-                break
-            case .failure(let error):
-                errorInitializingThread = error
+        if skipThreadCreation == false {
+            self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
+            dispatchGroup.enter()
+            self.interactionsController.setupThread(
+                with: usersAndSelf
+            ) {
+                setupThreadResult in
+                switch setupThreadResult {
+                case .success:
+                    break
+                case .failure(let error):
+                    errorInitializingThread = error
+                }
+                dispatchGroup.leave()
             }
-            dispatchGroup.leave()
+        } else {
+            self.log.info("skipping thread creation as instructed by request \(shareRequest.identifier)")
         }
         
         dispatchGroup.notify(queue: .global()) {
@@ -384,16 +395,16 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
 #endif
                 
-                self.share(
-                    globalIdentifier: globalIdentifier,
-                    via: shareRequest
-                ) { result in
-                    if case .failure(let error) = result {
-                        handleError(error)
-                        return
-                    }
-                    
-                    let handleSuccess = { (globalIdentifier: GlobalIdentifier) in
+                let doShare = {
+                    self.share(
+                        globalIdentifier: globalIdentifier,
+                        via: shareRequest
+                    ) { result in
+                        if case .failure(let error) = result {
+                            handleError(error)
+                            return
+                        }
+                        
                         do {
                             try self.markAsSuccessful(
                                 item: item,
@@ -404,33 +415,37 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                             self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops")
                             handleError(error)
                         }
+                        
                         completionHandler(.success(()))
                     }
-                    
-                    if shareRequest.isBackground == false {
-                        self.initializeGroupAndThread(shareRequest: shareRequest) { result in
-                            switch result {
-                            case .failure(let error):
-                                self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
-                                // Mark as failed on any other error
+                }
+                
+                if shareRequest.isBackground == false {
+                    self.initializeGroupAndThread(
+                        shareRequest: shareRequest,
+                        skipThreadCreation: shareRequest.shouldLinkToThread == false
+                    ) { result in
+                        switch result {
+                        case .failure(let error):
+                            self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
+                            // Mark as failed on any other error
+                            handleError(error)
+                        case .success:
+                            do {
+                                // Ingest into the graph
+                                try SHKGQuery.ingestShare(
+                                    of: globalIdentifier,
+                                    from: self.user.identifier,
+                                    to: shareRequest.sharedWith.map({ $0.identifier })
+                                )
+                                doShare()
+                            } catch {
                                 handleError(error)
-                            case .success:
-                                do {
-                                    // Ingest into the graph
-                                    try SHKGQuery.ingestShare(
-                                        of: globalIdentifier,
-                                        from: self.user.identifier,
-                                        to: shareRequest.sharedWith.map({ $0.identifier })
-                                    )
-                                    handleSuccess(globalIdentifier)
-                                } catch {
-                                    handleError(error)
-                                }
                             }
                         }
-                    } else {
-                        handleSuccess(globalIdentifier)
                     }
+                } else {
+                    doShare()
                 }
             }
         }
