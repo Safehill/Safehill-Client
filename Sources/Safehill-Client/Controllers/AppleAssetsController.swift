@@ -2,7 +2,7 @@ import Foundation
 import Photos
 import KnowledgeBase
 
-public let kSHPhotosPreferencesUserDefaults = "com.gf.safehill.PhotosAssetCache"
+public let kSHPhotosPreferencesUserDefaults = "com.gf.safehill.PhotosPreferences"
 public let kSHPhotosAssetCacheStoreName = "com.gf.safehill.PhotosAssetCache"
 let kSHPhotosAuthorizationStatusKey = "com.gf.safehill.indexer.photos.authorizationStatus"
 
