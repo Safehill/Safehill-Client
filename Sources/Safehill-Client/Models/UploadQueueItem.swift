@@ -204,7 +204,11 @@ public extension SHShareableGroupableQueueItem {
     }
 }
 
-public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupableQueueItem {
+public protocol SHOutboundShareableGroupableQueueItem: SHShareableGroupableQueueItem {
+    var shouldLinkToThread: Bool { get }
+}
+
+public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutboundShareableGroupableQueueItem {
     
     public var identifier: String {
         return SHUploadPipeline.queueItemIdentifier(
@@ -224,6 +228,8 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
     public let groupId: String
     public let eventOriginator: SHServerUser
     public let sharedWith: [SHServerUser] // Empty if it's just a backup request
+    
+    public let shouldLinkToThread: Bool
     
     ///
     /// The recommended versions based on the type of request.
@@ -252,13 +258,15 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
+                shouldLinkToThread: Bool,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
-        self.versions = SHAbstractShareableGroupableQueueItem.recommendedVersions(forSharingWith: users)
+        self.versions = SHAbstractOutboundShareableGroupableQueueItem.recommendedVersions(forSharingWith: users)
         self.groupId = groupId
         self.eventOriginator = eventOriginator
         self.sharedWith = users
         self.isBackground = isBackground
+        self.shouldLinkToThread = shouldLinkToThread
     }
     
     public init(localIdentifier: String,
@@ -266,6 +274,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
+                shouldLinkToThread: Bool,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = versions
@@ -273,6 +282,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
         self.eventOriginator = eventOriginator
         self.sharedWith = users
         self.isBackground = isBackground
+        self.shouldLinkToThread = shouldLinkToThread
     }
     
     public func encode(with coder: NSCoder) {
@@ -290,6 +300,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
             SHRemoteUserClass(identifier: $0.identifier, name: $0.name, publicKeyData: $0.publicKeyData, publicSignatureData: $0.publicSignatureData)
         }
         coder.encode(remoteReceivers, forKey: SharedWithKey)
+        coder.encode(NSNumber(booleanLiteral: self.shouldLinkToThread), forKey: ThreadShouldBeLinked)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
@@ -299,6 +310,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
         let sender = decoder.decodeObject(of: SHRemoteUserClass.self, forKey: EventOriginatorKey)
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: IsBackgroundKey)
+        let shouldLinkToThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeLinked)
         
         guard let assetId = assetId as? String else {
             log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
@@ -361,6 +373,7 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
                   groupId: groupId,
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
+                  shouldLinkToThread: shouldLinkToThread?.boolValue ?? false,
                   isBackground: isBg.boolValue)
     }
     
@@ -383,15 +396,13 @@ public class SHAbstractShareableGroupableQueueItem: NSObject, SHShareableGroupab
     }
 }
 
-public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQueueItem, NSSecureCoding {
     
     public static var supportsSecureCoding: Bool = true
     
     public let globalIdentifier: String?
     
     public let shouldUpload: Bool
-    
-    public let shouldLinkToThread: Bool
     
     public init(localIdentifier: String,
                 globalIdentifier: String? = nil,
@@ -403,11 +414,11 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
-        self.shouldLinkToThread = shouldLinkToThread
         super.init(localIdentifier: localIdentifier,
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
+                   shouldLinkToThread: shouldLinkToThread,
                    isBackground: isBackground)
     }
     
@@ -422,12 +433,12 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
-        self.shouldLinkToThread = shouldLinkToThread
         super.init(localIdentifier: localIdentifier,
                    versions: versions,
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
+                   shouldLinkToThread: shouldLinkToThread,
                    isBackground: isBackground)
     }
     
@@ -435,14 +446,12 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
         super.encode(with: coder)
         coder.encode(self.globalIdentifier, forKey: GlobalAssetIdKey)
         coder.encode(NSNumber(booleanLiteral: self.shouldUpload), forKey: AssetShouldUploadKey)
-        coder.encode(NSNumber(booleanLiteral: self.shouldLinkToThread), forKey: ThreadShouldBeLinked)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
-        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+        if let superSelf = SHAbstractOutboundShareableGroupableQueueItem(coder: decoder) {
             let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
             let shouldUpload = decoder.decodeObject(of: NSNumber.self, forKey: AssetShouldUploadKey)
-            let shouldLinkToThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeLinked)
             
             guard let su = shouldUpload else {
                 log.error("unexpected value for shouldUpload when decoding SHLocalFetchRequestQueueItem object")
@@ -456,7 +465,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
                       shouldUpload: su.boolValue,
-                      shouldLinkToThread: shouldLinkToThread?.boolValue ?? false,
+                      shouldLinkToThread: superSelf.shouldLinkToThread,
                       isBackground: superSelf.isBackground)
             return
         }
@@ -467,13 +476,11 @@ public class SHLocalFetchRequestQueueItem: SHAbstractShareableGroupableQueueItem
 
 /// On-disk representation of an upload queue item.
 /// References a group id, which is the unique identifier of the request.
-public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+public class SHConcreteEncryptionRequestQueueItem: SHAbstractOutboundShareableGroupableQueueItem, NSSecureCoding {
     
     public static var supportsSecureCoding: Bool = true
     
     public let asset: SHApplePhotoAsset
-    
-    public let shouldLinkToThread: Bool
     
     public init(asset: SHApplePhotoAsset,
                 versions: [SHAssetQuality],
@@ -483,25 +490,23 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
                 shouldLinkToThread: Bool,
                 isBackground: Bool = false) {
         self.asset = asset
-        self.shouldLinkToThread = shouldLinkToThread
         super.init(localIdentifier: asset.phAsset.localIdentifier,
                    versions: versions,
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
+                   shouldLinkToThread: shouldLinkToThread,
                    isBackground: isBackground)
     }
     
     public override func encode(with coder: NSCoder) {
         super.encode(with: coder)
         coder.encode(self.asset, forKey: AssetKey)
-        coder.encode(NSNumber(booleanLiteral: self.shouldLinkToThread), forKey: ThreadShouldBeLinked)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
-        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+        if let superSelf = SHAbstractOutboundShareableGroupableQueueItem(coder: decoder) {
             let asset = decoder.decodeObject(of: SHApplePhotoAsset.self, forKey: AssetKey)
-            let shouldLinkToThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeLinked)
             
             guard let asset = asset else {
                 log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
@@ -513,7 +518,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
-                      shouldLinkToThread: shouldLinkToThread?.boolValue ?? false,
+                      shouldLinkToThread: superSelf.shouldLinkToThread,
                       isBackground: superSelf.isBackground)
             return
         }
@@ -522,13 +527,11 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractShareableGroupableQ
     }
 }
 
-public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+public class SHConcreteShareableGroupableQueueItem: SHAbstractOutboundShareableGroupableQueueItem, NSSecureCoding {
     
     public static var supportsSecureCoding: Bool = true
     
     public let globalAssetId: String
-    
-    public let shouldLinkToThread: Bool
     
     public init(localAssetId: String,
                 globalAssetId: String,
@@ -539,25 +542,23 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
                 shouldLinkToThread: Bool,
                 isBackground: Bool = false) {
         self.globalAssetId = globalAssetId
-        self.shouldLinkToThread = shouldLinkToThread
         super.init(localIdentifier: localAssetId,
                    versions: versions,
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
+                   shouldLinkToThread: shouldLinkToThread,
                    isBackground: isBackground)
     }
     
     public override func encode(with coder: NSCoder) {
         super.encode(with: coder)
         coder.encode(self.globalAssetId, forKey: GlobalAssetIdKey)
-        coder.encode(NSNumber(booleanLiteral: self.shouldLinkToThread), forKey: ThreadShouldBeLinked)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
-        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+        if let superSelf = SHAbstractOutboundShareableGroupableQueueItem(coder: decoder) {
             let globalAssetId = decoder.decodeObject(of: NSString.self, forKey: GlobalAssetIdKey)
-            let shouldLinkToThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeLinked)
             
             guard let globalAssetId = globalAssetId as? String else {
                 log.error("unexpected value for globalAssetId when decoding SHConcreteShareableGroupableQueueItem object")
@@ -571,7 +572,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
                 groupId: superSelf.groupId,
                 eventOriginator: superSelf.eventOriginator,
                 sharedWith: superSelf.sharedWith,
-                shouldLinkToThread: shouldLinkToThread?.boolValue ?? false,
+                shouldLinkToThread: superSelf.shouldLinkToThread,
                 isBackground: superSelf.isBackground
             )
             return
@@ -581,16 +582,17 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractShareableGroupable
     }
 }
 
-public class SHFailedQueueItem: SHAbstractShareableGroupableQueueItem, NSSecureCoding {
+public class SHFailedQueueItem: SHAbstractOutboundShareableGroupableQueueItem, NSSecureCoding {
     public static var supportsSecureCoding: Bool = true
     
     public required convenience init?(coder decoder: NSCoder) {
-        if let superSelf = SHAbstractShareableGroupableQueueItem(coder: decoder) {
+        if let superSelf = SHAbstractOutboundShareableGroupableQueueItem(coder: decoder) {
             self.init(localIdentifier: superSelf.localIdentifier,
                       versions: superSelf.versions,
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
+                      shouldLinkToThread: superSelf.shouldLinkToThread,
                       isBackground: superSelf.isBackground)
             return
         }

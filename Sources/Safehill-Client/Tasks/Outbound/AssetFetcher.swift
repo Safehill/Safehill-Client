@@ -97,6 +97,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let shouldLinkToThread = request.shouldLinkToThread
         
         // Dequeue from FETCH queue
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
@@ -120,6 +121,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: request.isBackground
         )
         

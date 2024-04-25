@@ -18,6 +18,7 @@ protocol SHUploadStepBackgroundOperation {
         groupId: String,
         eventOriginator: SHServerUser,
         sharedWith: [SHServerUser],
+        shouldLinkToThread: Bool,
         isBackground: Bool
     )
 }
@@ -53,6 +54,7 @@ extension SHUploadStepBackgroundOperation {
         groupId: String,
         eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser],
+        shouldLinkToThread: Bool,
         isBackground: Bool
     ) {
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
@@ -61,6 +63,7 @@ extension SHUploadStepBackgroundOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: isBackground
         )
         
@@ -92,6 +95,7 @@ extension SHUploadStepBackgroundOperation {
                 groupId: groupId,
                 eventOriginator: eventOriginator,
                 sharedWith: users,
+                shouldLinkToThread: shouldLinkToThread,
                 isBackground: isBackground
             )
             
