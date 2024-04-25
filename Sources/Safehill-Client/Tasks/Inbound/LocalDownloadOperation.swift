@@ -40,8 +40,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         assetsSyncDelegates: [SHAssetSyncingDelegate],
         threadsSyncDelegates: [SHThreadSyncingDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
-        limitPerRun limit: Int? = nil,
-        photoIndexer: SHPhotosIndexer? = nil
+        photoIndexer: SHPhotosIndexer,
+        limitPerRun limit: Int? = nil
     ) {
         fatalError("Not supported")
     }
@@ -50,7 +50,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         user: SHLocalUserProtocol,
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
-        isRestoring: Bool
+        isRestoring: Bool,
+        photoIndexer: SHPhotosIndexer
     ) {
         self.isRestoring = isRestoring
         super.init(
@@ -58,7 +59,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             downloaderDelegates: delegates,
             assetsSyncDelegates: [],
             threadsSyncDelegates: [],
-            restorationDelegate: restorationDelegate
+            restorationDelegate: restorationDelegate,
+            photoIndexer: photoIndexer
         )
     }
     
@@ -67,7 +69,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             user: self.user,
             delegates: self.downloaderDelegates,
             restorationDelegate: self.restorationDelegate,
-            isRestoring: self.isRestoring
+            isRestoring: self.isRestoring,
+            photoIndexer: self.photoIndexer
         )
     }
     
@@ -79,7 +82,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             user: self.user,
             delegates: self.downloaderDelegates,
             restorationDelegate: self.restorationDelegate,
-            isRestoring: isRestoring
+            isRestoring: isRestoring,
+            photoIndexer: self.photoIndexer
         )
     }
     

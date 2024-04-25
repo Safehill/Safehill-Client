@@ -16,15 +16,15 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
     public let user: SHAuthenticatedLocalUser
     public var assetsDelegates: [SHOutboundAssetOperationDelegate]
     var imageManager: PHCachingImageManager
-    var photoIndexer: SHPhotosIndexer?
+    var photoIndexer: SHPhotosIndexer
     
     let parallelization: ParallelizationOption
     
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
                 parallelization: ParallelizationOption = .conservative,
-                imageManager: PHCachingImageManager? = nil,
-                photoIndexer: SHPhotosIndexer? = nil) {
+                photoIndexer: SHPhotosIndexer,
+                imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.assetsDelegates = assetsDelegates
         self.parallelization = parallelization
@@ -36,8 +36,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         SHFullUploadPipelineOperation(
             user: self.user,
             assetsDelegates: self.assetsDelegates,
-            imageManager: self.imageManager,
-            photoIndexer: self.photoIndexer
+            photoIndexer: self.photoIndexer,
+            imageManager: self.imageManager
         )
     }
     
@@ -67,8 +67,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let fetchOperation = SHLocalFetchOperation(
             delegates: assetsDelegates,
             limitPerRun: 0,
-            imageManager: imageManager,
-            photoIndexer: photoIndexer
+            photoIndexer: self.photoIndexer,
+            imageManager: imageManager
         )
         
         let encryptOperation = SHEncryptionOperation(
@@ -208,8 +208,8 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         let fetchOperation = SHLocalFetchOperation(
             delegates: assetsDelegates,
             limitPerRun: limit ?? 0,
-            imageManager: imageManager,
-            photoIndexer: photoIndexer
+            photoIndexer: photoIndexer,
+            imageManager: imageManager
         )
         log.debug("Running FETCH step")
         fetchOperation.runOnce(completionHandler: completionHandler)

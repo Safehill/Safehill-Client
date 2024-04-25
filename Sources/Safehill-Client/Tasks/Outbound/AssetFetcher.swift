@@ -21,20 +21,20 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
     
     public init(delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int,
-                imageManager: PHCachingImageManager? = nil,
-                photoIndexer: SHPhotosIndexer? = nil) {
+                photoIndexer: SHPhotosIndexer,
+                imageManager: PHCachingImageManager? = nil) {
         self.limit = limit
         self.delegates = delegates
         self.imageManager = imageManager ?? PHCachingImageManager()
-        self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
+        self.photoIndexer = photoIndexer
     }
     
     public func clone() -> SHBackgroundOperationProtocol {
         SHLocalFetchOperation(
             delegates: self.delegates,
             limitPerRun: self.limit,
-            imageManager: self.imageManager,
-            photoIndexer: self.photoIndexer
+            photoIndexer: self.photoIndexer,
+            imageManager: self.imageManager
         )
     }
     
