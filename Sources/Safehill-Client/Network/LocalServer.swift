@@ -1655,12 +1655,25 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    @available(*, deprecated, message: "Local database doesn't store thread members information, only keys and name for local threads")
     func getThread(
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+        self.listThreads { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let threads):
+                let userIdsToMatch = Set(users.map({ $0.identifier }))
+                for thread in threads {
+                    if Set(thread.membersPublicIdentifier) == userIdsToMatch {
+                        completionHandler(.success(thread))
+                        return
+                    }
+                }
+                completionHandler(.success(nil))
+            }
+        }
     }
     
     private func getGroupId(for userIdentifiers: [UserIdentifier], in descriptor: any SHAssetDescriptor) -> String? {

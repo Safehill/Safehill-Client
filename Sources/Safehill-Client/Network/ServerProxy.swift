@@ -1274,14 +1274,36 @@ extension SHServerProxy {
         withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.remoteServer.getThread(withId: threadId, completionHandler: completionHandler)
+        self.localServer.getThread(withId: threadId) { localResult in
+            switch localResult {
+            case .failure:
+                self.remoteServer.getThread(withId: threadId, completionHandler: completionHandler)
+            case .success(let maybeThread):
+                if let maybeThread {
+                    completionHandler(.success(maybeThread))
+                } else {
+                    self.remoteServer.getThread(withId: threadId, completionHandler: completionHandler)
+                }
+            }
+        }
     }
     
     public func getThread(
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+        self.localServer.getThread(withUsers: users) { localResult in
+            switch localResult {
+            case .failure:
+                self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+            case .success(let maybeThread):
+                if let maybeThread {
+                    completionHandler(.success(maybeThread))
+                } else {
+                    self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+                }
+            }
+        }
     }
     
     /// Get them from local server, and rely on the thread asset sync operation to retrieve fresh information.
