@@ -48,15 +48,15 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 assetsSyncDelegates: [SHAssetSyncingDelegate],
                 threadsSyncDelegates: [SHThreadSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
-                limitPerRun limit: Int? = nil,
-                photoIndexer: SHPhotosIndexer? = nil) {
+                photoIndexer: SHPhotosIndexer,
+                limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
         self.downloaderDelegates = downloaderDelegates
         self.assetsSyncDelegates = assetsSyncDelegates
         self.threadsSyncDelegates = threadsSyncDelegates
         self.restorationDelegate = restorationDelegate
-        self.photoIndexer = photoIndexer ?? SHPhotosIndexer()
+        self.photoIndexer = photoIndexer
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
@@ -68,8 +68,8 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             assetsSyncDelegates: self.assetsSyncDelegates,
             threadsSyncDelegates: self.threadsSyncDelegates,
             restorationDelegate: self.restorationDelegate,
-            limitPerRun: self.limit,
-            photoIndexer: self.photoIndexer
+            photoIndexer: self.photoIndexer,
+            limitPerRun: self.limit
         )
     }
     
