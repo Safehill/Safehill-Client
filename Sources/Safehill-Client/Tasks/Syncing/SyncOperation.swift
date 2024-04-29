@@ -293,7 +293,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 }
             }
         case .thread:
-            self.serverProxy.getThread(withId: anchorId) { getThreadResult in
+            self.serverProxy.remoteServer.getThread(withId: anchorId) { getThreadResult in
                 switch getThreadResult {
                 case .failure(let error):
                     self.log.error("failed to get thread with id \(anchorId) from server")

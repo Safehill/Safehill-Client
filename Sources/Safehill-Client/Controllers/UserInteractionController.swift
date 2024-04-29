@@ -20,7 +20,12 @@ public struct SHUserInteractionController {
     
     private static let encryptionDetailsCache = RecipientEncryptionDetailsCache()
     
-    public init(user: SHLocalUserProtocol,
+    public init(user: SHLocalUserProtocol) {
+        self.user = user
+        self.serverProxy = user.serverProxy
+    }
+    
+    internal init(user: SHLocalUserProtocol,
                 serverProxy: SHServerProxyProtocol? = nil) {
         self.user = user
         self.serverProxy = serverProxy ?? user.serverProxy
@@ -344,6 +349,30 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 completionHandler(.failure(err))
             }
         }
+    }
+    
+    public func retrieveLocalInteraction(
+        inThread threadId: String,
+        withId interactionIdentifier: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.serverProxy.retrieveLocalInteraction(
+            inThread: threadId,
+            withId: interactionIdentifier,
+            completionHandler: completionHandler
+        )
+    }
+    
+    public func retrieveLocalInteraction(
+        inGroup groupId: String,
+        withId interactionIdentifier: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.serverProxy.retrieveLocalInteraction(
+            inGroup: groupId,
+            withId: interactionIdentifier,
+            completionHandler: completionHandler
+        )
     }
     
     private func decryptMessages(
