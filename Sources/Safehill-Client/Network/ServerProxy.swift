@@ -563,17 +563,10 @@ extension SHServerProxy {
     public func getCurrentUsage(
         completionHandler: @escaping (Result<Int, Error>) -> ()
     ) {
-        // TODO: Server support for getting usage (MB used?, or just an integer)
-        // Definitely do not download the whole descriptors just for calulating quota
-        self.remoteServer.getAssetDescriptors(since: .distantPast) { result in
+        self.remoteServer.countUploaded() { result in
             switch result {
-            case .success(let descs):
-                completionHandler(.success(
-                    descs.filter({
-                        $0.sharingInfo.sharedByUserIdentifier == self.remoteServer.requestor.identifier
-                    })
-                    .count
-                ))
+            case .success(let count):
+                completionHandler(.success(count))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
@@ -582,12 +575,14 @@ extension SHServerProxy {
     
     func getLocalAssetDescriptors(
         for globalIdentifiers: [GlobalIdentifier]? = nil,
+        after: Date? = nil,
         filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         self.localServer.getAssetDescriptors(
-            forAssetGlobalIdentifiers: globalIdentifiers,
-            filteringGroupIds: filteringGroups
+            forAssetGlobalIdentifiers: globalIdentifiers ?? [],
+            filteringGroupIds: filteringGroups,
+            after: after
         ) { result in
             switch result {
             case .failure(let err):
@@ -613,6 +608,7 @@ extension SHServerProxy {
     func getRemoteAssetDescriptors(
         for globalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroups: [String]? = nil,
+        after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         let handleServerResult = { (serverResult: Result<[any SHAssetDescriptor], Error>) in
@@ -637,12 +633,13 @@ extension SHServerProxy {
         if let globalIdentifiers {
             self.remoteServer.getAssetDescriptors(
                 forAssetGlobalIdentifiers: globalIdentifiers,
-                filteringGroupIds: filteringGroups
+                filteringGroupIds: filteringGroups,
+                after: after
             ) {
                 handleServerResult($0)
             }
         } else {
-            self.remoteServer.getAssetDescriptors(since: Date.distantPast) {
+            self.remoteServer.getAssetDescriptors(after: after) {
                 handleServerResult($0)
             }
         }
@@ -656,6 +653,7 @@ extension SHServerProxy {
         log.trace("[CACHING] Attempting to cache \(quality.rawValue) for assets \(descriptorsKeyedByGlobalIdentifier)")
         
         let globalIdentifiers = Array(descriptorsKeyedByGlobalIdentifier.keys)
+        
         ///
         /// Get the asset from the remote server (CDN)
         ///
@@ -706,7 +704,8 @@ extension SHServerProxy {
         ///
         self.remoteServer.getAssetDescriptors(
             forAssetGlobalIdentifiers: globalIdentifiers,
-            filteringGroupIds: nil
+            filteringGroupIds: nil,
+            after: nil
         ) { result in
             switch result {
             case .success(let descriptors):
@@ -942,7 +941,8 @@ extension SHServerProxy {
             group.enter()
             self.remoteServer.getAssetDescriptors(
                 forAssetGlobalIdentifiers: assetIdentifiersToFetch,
-                filteringGroupIds: nil
+                filteringGroupIds: nil,
+                after: nil
             ) {
                 result in
                 switch result {

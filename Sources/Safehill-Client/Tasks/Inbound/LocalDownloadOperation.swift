@@ -32,6 +32,7 @@ import os
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
     let isRestoring: Bool
+    var alreadyProcessed: [GlobalIdentifier]
     
     @available(*, unavailable)
     public override init(
@@ -41,6 +42,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         threadsSyncDelegates: [SHThreadSyncingDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         photoIndexer: SHPhotosIndexer,
+        lastFetchDate: Date? = nil,
         limitPerRun limit: Int? = nil
     ) {
         fatalError("Not supported")
@@ -51,9 +53,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         isRestoring: Bool,
+        alreadyProcessed: [GlobalIdentifier],
         photoIndexer: SHPhotosIndexer
     ) {
         self.isRestoring = isRestoring
+        self.alreadyProcessed = []
         super.init(
             user: user,
             downloaderDelegates: delegates,
@@ -70,6 +74,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             delegates: self.downloaderDelegates,
             restorationDelegate: self.restorationDelegate,
             isRestoring: self.isRestoring,
+            alreadyProcessed: self.alreadyProcessed,
             photoIndexer: self.photoIndexer
         )
     }
@@ -83,6 +88,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             delegates: self.downloaderDelegates,
             restorationDelegate: self.restorationDelegate,
             isRestoring: isRestoring,
+            alreadyProcessed: self.alreadyProcessed,
             photoIndexer: self.photoIndexer
         )
     }
@@ -93,10 +99,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     internal func fetchDescriptorsFromLocalServer(
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        serverProxy.getLocalAssetDescriptors { result in
+        serverProxy.getLocalAssetDescriptors(after: nil) { result in
             switch result {
             case .success(let descs):
-                completionHandler(.success(descs))
+                completionHandler(.success(descs.filter({
+                    self.alreadyProcessed.contains($0.globalIdentifier) == false
+                })))
+                self.alreadyProcessed = descs.map({ $0.globalIdentifier })
             case .failure(let err):
                 completionHandler(.failure(err))
             }

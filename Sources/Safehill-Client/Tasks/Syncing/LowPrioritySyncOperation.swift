@@ -14,12 +14,16 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
     
     let assetsSyncDelegates: [SHAssetSyncingDelegate]
     
+    var lastFetchDate: Date?
+    
     public init(
         user: SHAuthenticatedLocalUser,
-        assetsSyncDelegates: [SHAssetSyncingDelegate]
+        assetsSyncDelegates: [SHAssetSyncingDelegate],
+        lastFetchDate: Date? = nil
     ) {
         self.user = user
         self.assetsSyncDelegates = assetsSyncDelegates
+        self.lastFetchDate = lastFetchDate
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
@@ -27,7 +31,8 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
     public func clone() -> SHBackgroundOperationProtocol {
         SHLowPrioritySyncOperation(
             user: self.user,
-            assetsSyncDelegates: self.assetsSyncDelegates
+            assetsSyncDelegates: self.assetsSyncDelegates,
+            lastFetchDate: self.lastFetchDate
         )
     }
     
@@ -58,7 +63,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         /// Get all asset descriptors associated with this user from the server.
         ///
         dispatchGroup.enter()
-        self.serverProxy.getRemoteAssetDescriptors() { remoteResult in
+        self.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
             switch remoteResult {
             case .success(let descriptors):
                 remoteDescriptors = descriptors

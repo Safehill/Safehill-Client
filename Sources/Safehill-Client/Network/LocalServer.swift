@@ -435,36 +435,34 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
+    func countUploaded(
+        completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func getAssetDescriptors(
+        after: Date?,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
+        self.getAssetDescriptors(
+            forAssetGlobalIdentifiers: [],
+            after: after,
+            completionHandler: completionHandler
+        )
+    }
+    
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
-        filteringGroupIds: [String]?,
-        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
-        self.getAssetDescriptors(
-            forAssetGlobalIdentifiers: forAssetGlobalIdentifiers,
-            filteringGroupIds: nil,
-            since: nil,
-            completionHandler: completionHandler
-        )
-    }
-    
-    func getAssetDescriptors(
-        since: Date,
-        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
-    ) {
-        self.getAssetDescriptors(
-            forAssetGlobalIdentifiers: nil,
-            since: since,
-            completionHandler: completionHandler
-        )
-    }
-    
-    func getAssetDescriptors(
-        forAssetGlobalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroupIds: [String]? = nil,
-        since: Date? = nil,
+        after: Date? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        // TODO: Filter with the since Date
+        guard after == nil else {
+            completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+            return
+        }
+        
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -478,9 +476,9 @@ struct LocalServer : SHServerAPI {
             condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
         }
         
-        if let filterGids = forAssetGlobalIdentifiers {
+        if forAssetGlobalIdentifiers.count > 0 {
             var gidCondition = KBGenericCondition(value: false)
-            for gid in filterGids {
+            for gid in forAssetGlobalIdentifiers {
                 gidCondition = gidCondition.or(KBGenericCondition(.endsWith, value: "::\(gid)"))
             }
             condition = condition.and(gidCondition)

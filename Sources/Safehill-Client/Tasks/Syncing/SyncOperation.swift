@@ -231,27 +231,21 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        
         ///
         /// Get the descriptors from the local server
         ///
-        self.serverProxy.getLocalAssetDescriptors { localResult in
+        self.serverProxy.getLocalAssetDescriptors(after: nil) { localResult in
             switch localResult {
-            case .success(let descriptors):
-                let localDescriptors = descriptors
-                
+            case .success(let localDescriptors):
                 ///
-                /// Get the descriptors from the server
+                /// Get the corresponding descriptors from the server
                 ///
-                self.serverProxy.getRemoteAssetDescriptors { remoteResult in
+                self.serverProxy.getRemoteAssetDescriptors(
+                    for: localDescriptors.map { $0.globalIdentifier },
+                    after: nil
+                ) { remoteResult in
                     switch remoteResult {
-                    case .success(let descriptors):
-                        let remoteDescriptors = descriptors.filter { remoteDesc in
-                            localDescriptors.contains(where: {
-                                $0.globalIdentifier == remoteDesc.globalIdentifier
-                            })
-                        }
-                        
+                    case .success(let remoteDescriptors):
                         ///
                         /// Start the sync process
                         ///
@@ -316,5 +310,17 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 }
             }
         }
+    }
+}
+
+public class SHHighPrioritySyncProcessor : SHBackgroundOperationProcessor<SHLowPrioritySyncOperation> {
+    
+    public static var shared = SHHighPrioritySyncProcessor(
+        delayedStartInSeconds: 0,
+        dispatchIntervalInSeconds: 20
+    )
+    private override init(delayedStartInSeconds: Int,
+                          dispatchIntervalInSeconds: Int? = nil) {
+        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

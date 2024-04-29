@@ -527,16 +527,35 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
     }
+    
+    func countUploaded(
+        completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
+    ) {
+        self.get("assets/countUploaded", parameters: nil) { (result: Result<Int, Error>) in
+            switch result {
+            case .success(let count):
+                completionHandler(.success(count))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
         filteringGroupIds: [String]?,
+        after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        let parameters = [
+        var parameters = [
             "globalIdentifiers": forAssetGlobalIdentifiers,
             "groupIds": filteringGroupIds ?? []
-        ]
+        ] as [String: Any]
+        
+        if let after {
+            parameters["after"] = after.iso8601withFractionalSeconds
+        }
+        
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
@@ -547,12 +566,15 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func getAssetDescriptors(since: Date,
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
-        let parameters = [
-//            "since": date?.iso8601withFractionalSeconds
-            :
-        ] as [String: Any]
+    func getAssetDescriptors(
+        after: Date?,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
+        var parameters = [String: Any]()
+        if let after {
+            parameters["after"] = after.iso8601withFractionalSeconds
+        }
+        
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):

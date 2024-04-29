@@ -3,7 +3,9 @@ import KnowledgeBase
 import os
 import Photos
 
-protocol SHDownloadOperation {}
+protocol SHDownloadOperation {
+    var lastFetchDate: Date? { get }
+}
 
 
 ///
@@ -43,12 +45,15 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     
     let photoIndexer: SHPhotosIndexer
     
+    var lastFetchDate: Date?
+    
     public init(user: SHLocalUserProtocol,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
                 assetsSyncDelegates: [SHAssetSyncingDelegate],
                 threadsSyncDelegates: [SHThreadSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
                 photoIndexer: SHPhotosIndexer,
+                lastFetchDate: Date? = nil,
                 limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
@@ -57,6 +62,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         self.threadsSyncDelegates = threadsSyncDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer
+        self.lastFetchDate = lastFetchDate
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
@@ -69,6 +75,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
             threadsSyncDelegates: self.threadsSyncDelegates,
             restorationDelegate: self.restorationDelegate,
             photoIndexer: self.photoIndexer,
+            lastFetchDate: self.lastFetchDate,
             limitPerRun: self.limit
         )
     }
@@ -76,84 +83,46 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     internal func fetchDescriptors(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroups: [String]? = nil,
-        completionHandler: @escaping (
-            Result<(
-                allRemote: [any SHAssetDescriptor],
-                allLocal: [any SHAssetDescriptor],
-                remoteOnly: [any SHAssetDescriptor],
-                localAndRemote: [any SHAssetDescriptor]
-            ), Error>
-        ) -> Void
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        
-        let dispatchGroup = DispatchGroup()
-        
-        var localDescriptors = [any SHAssetDescriptor]()
-        var remoteDescriptors = [any SHAssetDescriptor]()
-        var localError: Error? = nil
-        var remoteError: Error? = nil
-        
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
-        dispatchGroup.enter()
         self.serverProxy.getRemoteAssetDescriptors(
             for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!,
-            filteringGroups: filteringGroups
+            filteringGroups: filteringGroups,
+            after: self.lastFetchDate
         ) { remoteResult in
             switch remoteResult {
-            case .success(let descriptors):
-                remoteDescriptors = descriptors
+            case .success(let remoteDescriptors):
+                self.lastFetchDate = Date()
+                
+                ///
+                /// Get all the corresponding local descriptors.
+                /// The extra ones (to be DELETED) will be removed by the sync operation
+                /// The ones that changed (to be UPDATED) will be changed by the sync operation
+                ///
+                self.serverProxy.getLocalAssetDescriptors(
+                    for: remoteDescriptors.map { $0.globalIdentifier }
+                ) { localResult in
+                    switch localResult {
+                    case .success(let localDescriptors):
+                        completionHandler(.success(remoteDescriptors.filter({
+                            remoteDesc in
+                            localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier }) == false
+                        })))
+                        
+                    case .failure(let err):
+                        self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
+                        completionHandler(.failure(err))
+                    }
+                }
+                
             case .failure(let err):
                 self.log.error("[\(type(of: self))] failed to fetch descriptors from REMOTE server when syncing: \(err.localizedDescription)")
-                remoteError = err
+                completionHandler(.failure(err))
             }
-            dispatchGroup.leave()
-        }
-        
-        ///
-        /// Get all the local descriptors.
-        /// These need to be filtered out. Syncing will take care of updating descriptors that are present locally
-        ///
-        dispatchGroup.enter()
-        self.serverProxy.getLocalAssetDescriptors(
-            for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!,
-            filteringGroups: filteringGroups
-        ) { localResult in
-            switch localResult {
-            case .success(let descriptors):
-                localDescriptors = descriptors
-            case .failure(let err):
-                self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
-                localError = err
-            }
-            dispatchGroup.leave()
-        }
-        
-        dispatchGroup.notify(queue: .global()) {
-            guard remoteError == nil else {
-                completionHandler(.failure(remoteError!))
-                return
-            }
-            guard localError == nil else {
-                completionHandler(.failure(localError!))
-                return
-            }
-            
-            var remoteDescriptorsCopy = Array(remoteDescriptors)
-            let p = remoteDescriptorsCopy.partition { remoteDesc in
-                localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier })
-            }
-            let remoteOnlyDescriptors = remoteDescriptorsCopy[..<p]
-            let remoteAndLocalDescriptors = remoteDescriptorsCopy[p...]
-            
-            completionHandler(.success((
-                allRemote: remoteDescriptors,
-                allLocal: localDescriptors,
-                remoteOnly: Array(remoteOnlyDescriptors),
-                localAndRemote: Array(remoteAndLocalDescriptors)
-            )))
         }
     }
     
@@ -1033,137 +1002,74 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     private func process(
-        _ descriptors: (
-            allRemote: [any SHAssetDescriptor],
-            allLocal: [any SHAssetDescriptor],
-            remoteOnly: [any SHAssetDescriptor],
-            localAndRemote: [any SHAssetDescriptor]
-        ),
+        _ remoteOnly: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        var filteredDescriptorsByAssetGid = [GlobalIdentifier: any SHAssetDescriptor]()
-        
-        let start = CFAbsoluteTimeGetCurrent()
-        var processingError: Error? = nil
-        
         ///
-        /// **CREATES**
+        /// This processing takes care of the **CREATES**, namely the new assets on the server not present locally
         /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded after filtering
         ///
         
-        self.log.debug("[\(type(of: self))] original descriptors: \(descriptors.remoteOnly.count)")
+        self.log.debug("[\(type(of: self))] original descriptors: \(remoteOnly.count)")
         
-        let dispatchGroup = DispatchGroup()
-        
-        dispatchGroup.enter()
-        self.processDescriptors(descriptors.remoteOnly, qos: qos) { descResult in
+        self.processDescriptors(remoteOnly, qos: qos) { descResult in
+            
             switch descResult {
+                
             case .failure(let err):
                 self.log.error("[\(type(of: self))] failed to download descriptors: \(err.localizedDescription)")
-                processingError = err
-            case .success(let val):
-                filteredDescriptorsByAssetGid = val.fromRetrievableUsers
-            }
-            dispatchGroup.leave()
-            
-            let end = CFAbsoluteTimeGetCurrent()
-            self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.remoteOnly.count) descriptors")
-        }
-        
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard processingError == nil else {
-                completionHandler(.failure(processingError!))
-                return
-            }
-            
-            dispatchGroup.enter()
-            
-#if DEBUG
-            let delta = Set(descriptors.remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
-            self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
-#endif
-            
-            var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
-            
-            self.processAssetsInDescriptors(
-                descriptorsByGlobalIdentifier: filteredDescriptorsByAssetGid,
-                qos: qos
-            ) { descAssetResult in
-                switch descAssetResult {
-                case .failure(let err):
-                    self.log.error("[\(type(of: self))] failed to process assets in descriptors: \(err.localizedDescription)")
-                    processingError = err
-                    dispatchGroup.leave()
-                case .success(let descriptorsReadyToDownload):
-#if DEBUG
-                    let delta1 = Set(filteredDescriptorsByAssetGid.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
-                    let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
-                    self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
-#endif
-                    
-                    guard descriptorsReadyToDownload.isEmpty == false else {
-                        dispatchGroup.leave()
-                        return
-                    }
-                    
-                    do {
-                        try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)
-                    } catch {
-                        processingError = error
-                        dispatchGroup.leave()
-                        return
-                    }
-                    
-                    self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
-                        switch downloadResult {
-                        case .success(let list):
-                            successfullyDownloadedAssets = list
-                        case .failure(let error):
-                            processingError = error
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-            }
-            
-            ///
-            /// **UPDATES and DELETES**
-            /// Given the whole remote descriptors set, sync local and remote state
-            ///
-            let syncOperation = SHSyncOperation(
-                user: self.user as! SHAuthenticatedLocalUser,
-                assetsDelegates: self.assetsSyncDelegates,
-                threadsDelegates: self.threadsSyncDelegates
-            )
-            dispatchGroup.enter()
-            syncOperation.sync(
-                remoteAndLocalDescriptors: descriptors.localAndRemote,
-                localDescriptors: descriptors.allLocal,
-                qos: qos
-            ) { syncResult in
-                dispatchGroup.leave()
-            }
-
-            ///
-            /// Given the whole remote descriptors set (to retrieve threads and groups),
-            /// sync the comments and reactions in posts
-            ///
-            dispatchGroup.enter()
-            syncOperation.syncGroupInteractions(
-                remoteDescriptors: descriptors.allRemote,
-                qos: qos
-            ) { syncInteractionsResult in
-                dispatchGroup.leave()
-            }
-            
-            dispatchGroup.notify(queue: .global(qos: qos)) {
-                guard processingError == nil else {
-                    completionHandler(.failure(processingError!))
-                    return
-                }
+                completionHandler(.failure(err))
                 
-                completionHandler(.success(successfullyDownloadedAssets))
+            case .success(let val):
+                let filteredDescriptorsByAssetGid = val.fromRetrievableUsers
+                
+#if DEBUG
+                let delta = Set(remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
+                self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
+#endif
+                
+                self.processAssetsInDescriptors(
+                    descriptorsByGlobalIdentifier: filteredDescriptorsByAssetGid,
+                    qos: qos
+                ) { descAssetResult in
+                    switch descAssetResult {
+                        
+                    case .failure(let err):
+                        self.log.error("[\(type(of: self))] failed to process assets in descriptors: \(err.localizedDescription)")
+                        completionHandler(.failure(err))
+                        
+                    case .success(let descriptorsReadyToDownload):
+#if DEBUG
+                        let delta1 = Set(filteredDescriptorsByAssetGid.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
+                        let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
+                        self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
+#endif
+                        
+                        guard descriptorsReadyToDownload.isEmpty == false else {
+                            completionHandler(.success([]))
+                            return
+                        }
+                        
+                        do {
+                            try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)
+                        } catch {
+                            completionHandler(.failure(error))
+                            return
+                        }
+                        
+                        self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
+                            switch downloadResult {
+                            
+                            case .success(let list):
+                                completionHandler(.success(list))
+                            
+                            case .failure(let error):
+                                completionHandler(.failure(error))
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1194,15 +1100,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 for: assetGlobalIdentifiers,
                 filteringGroups: groupIds
             ) {
-                (result: Result<(
-                    allRemote: [any SHAssetDescriptor],
-                    allLocal: [any SHAssetDescriptor],
-                    remoteOnly: [any SHAssetDescriptor],
-                    localAndRemote: [any SHAssetDescriptor]
-                ), Error>) in
+                (result: Result<([any SHAssetDescriptor]), Error>) in
                 switch result {
-                case .success(let descriptors):
-                    self.process(descriptors, qos: qos) { result in
+                case .success(let onlyRemoteDescriptors):
+                    self.process(onlyRemoteDescriptors, qos: qos) { result in
                         handleResult(result)
                     }
                 case .failure(let error):

@@ -68,7 +68,7 @@ extension LocalServer {
         dryRun: Bool = true,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.requestor.serverProxy.getRemoteAssetDescriptors { remoteResult in
+        self.requestor.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
             switch remoteResult {
             case .success(let remoteDescriptors):
                 var uniqueAssetGids = Set<GlobalIdentifier>()

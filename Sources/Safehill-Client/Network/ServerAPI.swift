@@ -69,23 +69,32 @@ public protocol SHServerAPI {
     
     // MARK: Assets Management
     
+    /// Count how many assets were created by this user
+    /// - Parameters:
+    ///   - completionHandler: the callback method
+    func countUploaded(
+        completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
+    )
+    
     /// Get descriptors for specific asset global identifiers
     /// - Parameters:
     ///   - forAssetGlobalIdentifiers: the asset gids
+    ///   - after: retrieve only the ones uploaded or shared after this date
     ///   - filteringGroupIds: only returns assets that are shared via the group ids, and restricts the group information returned to these group ids
     ///   - completionHandler: the callback method
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
         filteringGroupIds: [String]?,
+        after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     )
     
     /// Retrieve asset descriptor created or updated since the reference date
     /// - Parameters:
-    ///   - since: the reference date
+    ///   - after: retrieve only the ones uploaded or shared after this date
     ///   - completionHandler: the callback method
     func getAssetDescriptors(
-        since: Date,
+        after: Date?,
         completionHandler: @escaping (Swift.Result<[any SHAssetDescriptor], Error>) -> ()
     )
     
