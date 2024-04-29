@@ -214,6 +214,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let shouldLinkToThread = request.shouldLinkToThread
         
         ///
         /// Dequeue from Encryption queue
@@ -236,6 +237,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: request.isBackground
         )
         

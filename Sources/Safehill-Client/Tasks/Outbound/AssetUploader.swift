@@ -68,6 +68,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let shouldLinkToThread = request.shouldLinkToThread
         
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
@@ -88,6 +89,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: request.isBackground
         )
         

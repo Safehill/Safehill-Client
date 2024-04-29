@@ -51,7 +51,8 @@ public struct SHUploadPipeline {
                 localIdentifier: localIdentifier,
                 groupId: groupId,
                 eventOriginator: sender,
-                sharedWith: recipients
+                sharedWith: recipients,
+                shouldLinkToThread: shouldLinkToThread
             )
             try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedUpload))
             
@@ -60,7 +61,8 @@ public struct SHUploadPipeline {
                     localIdentifier: localIdentifier,
                     groupId: groupId,
                     eventOriginator: sender,
-                    sharedWith: recipients
+                    sharedWith: recipients,
+                    shouldLinkToThread: shouldLinkToThread
                 )
                 try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
             }
@@ -126,7 +128,8 @@ public struct SHUploadPipeline {
                 versions: versions,
                 groupId: groupId,
                 eventOriginator: sender,
-                sharedWith: recipients
+                sharedWith: recipients,
+                shouldLinkToThread: shouldLinkToThread
             )
             try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
             

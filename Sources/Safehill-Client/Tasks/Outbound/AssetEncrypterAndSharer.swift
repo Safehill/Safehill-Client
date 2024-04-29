@@ -66,6 +66,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let shouldLinkToThread = request.shouldLinkToThread
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
@@ -82,6 +83,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            shouldLinkToThread: shouldLinkToThread,
             isBackground: request.isBackground
         )
 

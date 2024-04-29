@@ -135,6 +135,22 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.retrieveInteractions(inThread: threadId, ofType: type, underMessage: messageId, before: before, limit: limit, completionHandler: completionHandler)
     }
     
+    func retrieveLocalInteraction(
+        inThread threadId: String,
+        withId interactionIdentifier: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveInteraction(anchorType: .thread, anchorId: threadId, withId: interactionIdentifier, completionHandler: completionHandler)
+    }
+    
+    func retrieveLocalInteraction(
+        inGroup groupId: String,
+        withId interactionIdentifier: String,
+        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+    ) {
+        self.localServer.retrieveInteraction(anchorType: .group, anchorId: groupId, withId: interactionIdentifier, completionHandler: completionHandler)
+    }
+    
     func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
