@@ -53,7 +53,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         isRestoring: Bool,
-        alreadyProcessed: [GlobalIdentifier],
+        alreadyProcessed: [GlobalIdentifier] = [],
         photoIndexer: SHPhotosIndexer
     ) {
         self.isRestoring = isRestoring
