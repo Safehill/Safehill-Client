@@ -313,7 +313,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
     }
 }
 
-public class SHHighPrioritySyncProcessor : SHBackgroundOperationProcessor<SHLowPrioritySyncOperation> {
+public class SHHighPrioritySyncProcessor : SHBackgroundOperationProcessor<SHSyncOperation> {
     
     public static var shared = SHHighPrioritySyncProcessor(
         delayedStartInSeconds: 0,
