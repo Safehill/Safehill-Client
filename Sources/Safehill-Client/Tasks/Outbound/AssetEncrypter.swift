@@ -31,7 +31,10 @@ extension SHApplePhotoAsset {
     }
 }
 
-internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHEncryptionOperation: Operation, SHBackgroundQueueProcessorOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
+    
+    typealias OperationResult = Result<Void, Error>
+    
     
     var operationType: BackgroundOperationQueue.OperationType { .encryption }
     var processingState: ProcessingState { .encrypting }
@@ -64,7 +67,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         self.user.serverProxy
     }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHEncryptionOperation(
             user: self.user,
             assetsDelegates: self.assetDelegates,
@@ -495,22 +498,9 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         }
     }
     
-    public override func run(
+    public func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runOnce(completionHandler: completionHandler)
-    }
-}
-
-internal class SHAssetsEncrypterQueueProcessor : SHBackgroundOperationProcessor<SHEncryptionOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetsEncrypterQueueProcessor(
-        delayedStartInSeconds: 3,
-        dispatchIntervalInSeconds: 2
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

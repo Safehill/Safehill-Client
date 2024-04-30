@@ -3,7 +3,7 @@ import KnowledgeBase
 import Photos
 import os
 
-open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtocol {
     
     public enum ParallelizationOption {
         case aggressive, conservative
@@ -32,7 +32,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         self.photoIndexer = photoIndexer
     }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHFullUploadPipelineOperation(
             user: self.user,
             assetsDelegates: self.assetsDelegates,
@@ -133,7 +133,7 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         }
     }
     
-    public override func run(
+    public func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runFetchCycle { result in
@@ -285,18 +285,5 @@ open class SHFullUploadPipelineOperation: SHAbstractBackgroundOperation, SHBackg
         )
         log.debug("Running SHARE step")
         shareOperation.runOnce(completionHandler: completionHandler)
-    }
-}
-
-public class SHFullUploadPipelineProcessor : SHBackgroundOperationProcessor<SHFullUploadPipelineOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHFullUploadPipelineProcessor(
-        delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 7
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

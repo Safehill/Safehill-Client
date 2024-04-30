@@ -32,7 +32,8 @@ import os
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
     let isRestoring: Bool
-    var alreadyProcessed: Set<GlobalIdentifier>
+    
+    private static var alreadyProcessed = Set<GlobalIdentifier>()
     
     @available(*, unavailable)
     public override init(
@@ -53,11 +54,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         isRestoring: Bool,
-        alreadyProcessed: Set<GlobalIdentifier> = Set(),
         photoIndexer: SHPhotosIndexer
     ) {
         self.isRestoring = isRestoring
-        self.alreadyProcessed = alreadyProcessed
         super.init(
             user: user,
             downloaderDelegates: delegates,
@@ -68,13 +67,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         )
     }
     
-    public override func clone() -> SHBackgroundOperationProtocol {
+    public override func clone() -> any SHBackgroundOperationProtocol {
         SHLocalDownloadOperation(
             user: self.user,
             delegates: self.downloaderDelegates,
             restorationDelegate: self.restorationDelegate,
             isRestoring: self.isRestoring,
-            alreadyProcessed: self.alreadyProcessed,
             photoIndexer: self.photoIndexer
         )
     }
@@ -82,13 +80,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// Clone as above, but override the `isRestoring` flag
     /// - Parameter isRestoring: the overriden value
     /// - Returns: the cloned object
-    public func clone(isRestoring: Bool) -> SHBackgroundOperationProtocol {
+    public func clone(isRestoring: Bool) -> any SHBackgroundOperationProtocol {
         SHLocalDownloadOperation(
             user: self.user,
             delegates: self.downloaderDelegates,
             restorationDelegate: self.restorationDelegate,
             isRestoring: isRestoring,
-            alreadyProcessed: self.alreadyProcessed,
             photoIndexer: self.photoIndexer
         )
     }
@@ -103,10 +100,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             switch result {
             case .success(let descs):
                 let unprocessed = descs.filter({
-                    self.alreadyProcessed.contains($0.globalIdentifier) == false
+                    Self.alreadyProcessed.contains($0.globalIdentifier) == false
                 })
                 for gid in descs.map({ $0.globalIdentifier }) {
-                    self.alreadyProcessed.insert(gid)
+                    Self.alreadyProcessed.insert(gid)
                 }
                 completionHandler(.success(unprocessed))
             case .failure(let err):
@@ -479,20 +476,5 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 }
             }
         }
-    }
-}
-
-
-// MARK: - Local Download Operation Processor
-
-public class SHLocalDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHLocalDownloadOperation> {
-    
-    public static var shared = SHLocalDownloadPipelineProcessor(
-        delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 5
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

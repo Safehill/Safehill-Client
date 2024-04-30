@@ -4,7 +4,7 @@ import os
 
 // MARK: - Low Priority Sync Operation
 
-public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+public class SHLowPrioritySyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-LP-SYNC")
     
@@ -28,7 +28,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHLowPrioritySyncOperation(
             user: self.user,
             assetsSyncDelegates: self.assetsSyncDelegates,
@@ -242,20 +242,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         }
     }
     
-    public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.runOnce(qos: .background, completionHandler: completionHandler)
-    }
-}
-
-
-public class SHLowPrioritySyncProcessor : SHBackgroundOperationProcessor<SHLowPrioritySyncOperation> {
-    
-    public static var shared = SHLowPrioritySyncProcessor(
-        delayedStartInSeconds: 20,
-        dispatchIntervalInSeconds: 120
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

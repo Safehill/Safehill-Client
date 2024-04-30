@@ -6,7 +6,7 @@ import os
 /// - full list of threads with server
 /// - LAST `ThreadLastInteractionSyncLimit` interactions in each
 ///
-public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-INTERACTIONS-SYNC")
     
@@ -27,7 +27,7 @@ public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, 
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHThreadsInteractionsSyncOperation(
             user: self.user,
             assetsSyncDelegates: self.assetsSyncDelegates,
@@ -53,21 +53,7 @@ public class SHThreadsInteractionsSyncOperation: SHAbstractBackgroundOperation, 
         syncOperation.syncLastThreadInteractions(qos: qos, completionHandler: completionHandler)
     }
     
-    public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.runOnce(qos: .default, completionHandler: completionHandler)
-    }
-}
-
-// MARK: - Threads Interactions Sync Operation Processor
-
-public class SHThreadsInteractionsSyncProcessor : SHBackgroundOperationProcessor<SHThreadsInteractionsSyncOperation> {
-    
-    public static var shared = SHThreadsInteractionsSyncProcessor(
-        delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 2
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

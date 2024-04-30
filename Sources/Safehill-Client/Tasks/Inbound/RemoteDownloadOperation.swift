@@ -29,7 +29,7 @@ protocol SHDownloadOperation {
 ///   \->   6
 /// ```
 ///
-public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol, SHDownloadOperation {
+public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -67,7 +67,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHRemoteDownloadOperation(
             user: self.user,
             downloaderDelegates: self.downloaderDelegates,
@@ -915,8 +915,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         for descriptor in descriptors {
             guard !self.isCancelled else {
                 log.info("[\(type(of: self))] download task cancelled. Finishing")
-                state = .finished
-                break
+                return
             }
             
             guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
@@ -1120,7 +1119,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         self.runOnce(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
     }
     
-    public override func run(
+    public func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runOnce(qos: .default) { result in
@@ -1130,19 +1129,5 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 completionHandler(.success(()))
             }
         }
-    }
-}
-
-// MARK: - Download Operation Processor
-
-public class SHRemoteDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHRemoteDownloadOperation> {
-    
-    public static var shared = SHRemoteDownloadPipelineProcessor(
-        delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 5
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

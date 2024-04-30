@@ -14,7 +14,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.encryptAndShare.delegates")
     
-    public override func clone() -> SHBackgroundOperationProtocol {
+    public override func clone() -> any SHBackgroundOperationProtocol {
         SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: self.assetDelegates,
@@ -451,18 +451,5 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
             }
         }
-    }
-}
-
-internal class SHAssetEncryptAndShareQueueProcessor : SHBackgroundOperationProcessor<SHEncryptAndShareOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetEncryptAndShareQueueProcessor(
-        delayedStartInSeconds: 5,
-        dispatchIntervalInSeconds: 2
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

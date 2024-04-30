@@ -3,7 +3,7 @@ import os
 import KnowledgeBase
 
 
-internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHUploadOperation: Operation, SHBackgroundQueueProcessorOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
     
     let operationType = BackgroundOperationQueue.OperationType.upload
     let processingState = ProcessingState.uploading
@@ -30,7 +30,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         self.delegates = delegates
     }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHUploadOperation(user: self.user,
                           localAssetStoreController: self.localAssetStoreController,
                           delegates: self.delegates,
@@ -355,23 +355,9 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         }
     }
     
-    public override func run(
+    public func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runOnce(completionHandler: completionHandler)
-    }
-}
-
-internal class SHAssetsUploaderQueueProcessor : SHBackgroundOperationProcessor<SHUploadOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetsUploaderQueueProcessor(
-        delayedStartInSeconds: 4,
-        dispatchIntervalInSeconds: 2
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds,
-                   dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

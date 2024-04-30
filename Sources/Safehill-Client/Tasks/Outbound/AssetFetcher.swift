@@ -4,7 +4,7 @@ import KnowledgeBase
 import Photos
 import os
 
-internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHLocalFetchOperation: Operation, SHBackgroundQueueProcessorOperationProtocol, SHOutboundBackgroundOperation {
     
     let operationType = BackgroundOperationQueue.OperationType.fetch
     let processingState = ProcessingState.fetching
@@ -29,7 +29,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
         self.photoIndexer = photoIndexer
     }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHLocalFetchOperation(
             delegates: self.delegates,
             limitPerRun: self.limit,
@@ -340,22 +340,9 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
         }
     }
     
-    public override func run(
+    public func run(
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.runOnce(completionHandler: completionHandler)
-    }
-}
-
-internal class SHAssetsFetcherQueueProcessor : SHBackgroundOperationProcessor<SHLocalFetchOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetsFetcherQueueProcessor(
-        delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 3
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

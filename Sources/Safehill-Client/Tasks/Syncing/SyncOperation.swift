@@ -5,7 +5,7 @@ import os
 
 // MARK: - Sync Operation
 
-public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-SYNC")
     
@@ -28,7 +28,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         self.threadsDelegates = threadsDelegates
     }
     
-    public func clone() -> SHBackgroundOperationProtocol {
+    public func clone() -> any SHBackgroundOperationProtocol {
         SHSyncOperation(
             user: self.user,
             assetsDelegates: self.assetsDelegates,
@@ -265,7 +265,7 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
         }
     }
     
-    public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.runOnce(qos: .background, completionHandler: completionHandler)
     }
     
@@ -310,17 +310,5 @@ public class SHSyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperati
                 }
             }
         }
-    }
-}
-
-public class SHHighPrioritySyncProcessor : SHBackgroundOperationProcessor<SHSyncOperation> {
-    
-    public static var shared = SHHighPrioritySyncProcessor(
-        delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 20
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }
