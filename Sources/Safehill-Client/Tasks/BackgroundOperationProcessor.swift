@@ -1,26 +1,33 @@
 import Foundation
 
-public class SHBackgroundOperationProcessor {
+public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     
     private var runningOperations = [String: Bool]()
     private var timers = [String: DispatchSourceTimer]()
-    private let operationQueue = DispatchQueue(
-        label: "com.gf.safehill.SHBackgroundOperationProcessor",
-        attributes: .concurrent
-    )
     
-    public init() {}
+    let operation: T
+    private let operationQueue: DispatchQueue
+    
+    var operationKey: String {
+        String(describing: T.self)
+    }
+    
+    public init(operation: T) {
+        self.operation = operation
+        self.operationQueue = DispatchQueue(
+            label: "com.gf.safehill.SHBackgroundOperationProcessor.\(String(describing: T.self))",
+            attributes: .concurrent
+        )
+    }
     
     /// Run a single operation
     /// - Parameters:
-    ///   - operation: the operation
     ///   - completion: the callback
-    public func runOperation<T: SHBackgroundOperationProtocol>(
-        _ operation: T,
+    public func runOperation(
         qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
-        let operationKey = String(describing: T.self)
+        let operationKey = self.operationKey
         log.debug("\(operationKey): run at qos=\(qos.toTaskPriority().rawValue)")
         
         operationQueue.async { [weak self] in
@@ -47,24 +54,22 @@ public class SHBackgroundOperationProcessor {
     
     /// Run an operation repeatedly with a given interval (and a delay)
     /// - Parameters:
-    ///   - operation: the operation
     ///   - initialDelay: the initial delay
     ///   - repeatInterval: the interval between each run
     ///   - completion: the calback
-    public func runRepeatedOperation<T: SHBackgroundOperationProtocol>(
-        _ operation: T,
+    public func runRepeatedOperation(
         initialDelay: TimeInterval,
         repeatInterval: TimeInterval,
         qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
-        let operationKey = String(describing: T.self)
+        let operationKey = self.operationKey
         log.debug("\(operationKey): scheduled repeated run at qos=\(qos.toTaskPriority().rawValue) with delay=\(initialDelay) interval=\(repeatInterval)")
         
         let timer = DispatchSource.makeTimerSource(queue: operationQueue)
         timer.schedule(deadline: .now() + initialDelay, repeating: repeatInterval)
         timer.setEventHandler { [weak self] in
-            self?.runOperation(operation, qos: qos, completion: completion)
+            self?.runOperation(qos: qos, completion: completion)
         }
         timer.resume()
         
@@ -75,11 +80,8 @@ public class SHBackgroundOperationProcessor {
     
     /// Stop an operation that was previously run on repeat
     /// - Parameter operationType: the operation type
-    public func stopRepeatedOperation<T: SHBackgroundOperationProtocol>(
-        _ operationType: T.Type
-    ) {
-        let operationKey = String(describing: T.self)
-        
+    public func stopRepeatedOperation() {
+        let operationKey = self.operationKey
         operationQueue.async {
             if let timer = self.timers[operationKey] {
                 timer.cancel()
