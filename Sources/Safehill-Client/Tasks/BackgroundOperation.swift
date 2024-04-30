@@ -24,7 +24,7 @@ public protocol SHBackgroundQueueBackedOperationProtocol : SHBackgroundOperation
 
 open class SHBackgroundOperationProcessor {
     
-    static let shared = SHBackgroundOperationProcessor()
+    public static let shared = SHBackgroundOperationProcessor()
     
     private var runningOperations = [String: Bool]()
     private var timers = [String: DispatchSourceTimer]()
