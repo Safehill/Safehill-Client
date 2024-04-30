@@ -115,67 +115,59 @@ open class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     public func `repeat`(_ operation: T) {
         guard self.started == false else { return }
         
-        self.stateQueue.sync {
+        self.stateQueue.sync(flags: .barrier) {
             self.started = true
         }
-        self.timerQueue.sync { [weak self] in
-            self?.process(operation, after: self!.delayedStartInSeconds)
-        }
+        
+        self.process(operation, after: self.delayedStartInSeconds)
     }
     
-    private func process(_ operation: T, after seconds: Int) {
+    private func process(_ operation: T, after delay: Int) {
         Dispatch.dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
         
         guard self.started else { return }
         
-        // As long as there is no operation in the queue that is running, add an operation by cloning the last one run.
-        // That operation will pick up any item in the queue, if any exists.
-        // If the queue is empty, then the upload operation will finish immediately
+        /// 
+        /// As long as there is no operation in the queue that is running, add an operation by cloning the last one run.
+        /// That operation will pick up any item in the queue, if any exists.
+        /// If the queue is empty, then the upload operation will finish immediately
+        ///
         
-        if operationQueue.operationCount == 0 {
-            self.timerQueue.sync {
-                DispatchQueue.main.async {
-                    var lastExecutingOperation: T = operation
-                    
-                    // timers need to be scheduled on the main queue
-                    self.timer = Timer.scheduledTimer(withTimeInterval: Double(seconds), repeats: false, block: { [weak self] _ in
-                        self?.timerQueue.async {
-                            if !lastExecutingOperation.isExecuting,
-                               let sself = self,
-                               sself.started,
-                               sself.operationQueue.operationCount == 0
-                            {
-                                lastExecutingOperation = lastExecutingOperation.clone() as! T
-                                sself.operationQueue.addOperation(lastExecutingOperation)
-                            }
-                        }
-                    })
-                }
-            }
-        }
-        
-        // If a repeat interval is set, recursively call this method to continuously add the operation to the queue
-        
-        if let dispatchIntervalInSeconds = self.dispatchIntervalInSeconds {
-            self.timerQueue.sync {
-                let dispatchInterval = max(dispatchIntervalInSeconds, seconds)
+        self.timerQueue.sync {
+            ///
+            /// Timers need to be scheduled on the main queue
+            ///
+            DispatchQueue.main.async {
+                var lastExecutingOperation: T = operation
                 
-                DispatchQueue.main.async {
-                    self.timer = Timer.scheduledTimer(withTimeInterval: Double(dispatchInterval), repeats: false, block: { [weak self] _ in
-                        self?.timerQueue.async {
-                            self?.process(operation, after: 0)
-                        }
-                    })
+                let interval: TimeInterval
+                let repeating: Bool
+                if let repeatInterval = self.dispatchIntervalInSeconds {
+                    interval = Double(max(repeatInterval, delay))
+                    repeating = true
+                } else {
+                    interval = Double(delay)
+                    repeating = false
+                }
+                
+                self.timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: repeating) {
+                    [weak self] _ in
+                    
+                    if !lastExecutingOperation.isExecuting,
+                       let sself = self,
+                       sself.started,
+                       sself.operationQueue.operationCount == 0
+                    {
+                        lastExecutingOperation = lastExecutingOperation.clone() as! T
+                        sself.operationQueue.addOperation(lastExecutingOperation)
+                    }
                 }
             }
-        } else {
-            log.info("No dispatchIntervalInSeconds set. The operation will not repeat")
         }
-        
     }
     
     public func stopRepeat() {
-        self.stateQueue.sync {
+        self.stateQueue.sync(flags: .barrier) {
             self.started = false
             self.operationQueue.cancelAllOperations()
         }
