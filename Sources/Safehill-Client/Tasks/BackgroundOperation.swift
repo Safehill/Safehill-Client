@@ -46,7 +46,7 @@ open class SHBackgroundOperationProcessor {
     ) {
         let operationKey = String(describing: T.self)
         
-        operationQueue.async(flags: .barrier) { [weak self] in
+        operationQueue.async { [weak self] in
             guard let self = self else { return }
             
             ///
@@ -62,7 +62,7 @@ open class SHBackgroundOperationProcessor {
         operation.run(qos: qos) { [weak self] result in
             completion(result)
             
-            self?.operationQueue.async(flags: .barrier) {
+            self?.operationQueue.async {
                 self?.runningOperations[operationKey] = false
             }
         }
@@ -89,7 +89,7 @@ open class SHBackgroundOperationProcessor {
         }
         timer.resume()
         
-        operationQueue.async(flags: .barrier) {
+        operationQueue.async {
             self.timers[operationKey] = timer
         }
     }
@@ -101,7 +101,7 @@ open class SHBackgroundOperationProcessor {
     ) {
         let operationKey = String(describing: T.self)
         
-        operationQueue.async(flags: .barrier) {
+        operationQueue.async {
             if let timer = self.timers[operationKey] {
                 timer.cancel()
                 self.timers[operationKey] = nil
