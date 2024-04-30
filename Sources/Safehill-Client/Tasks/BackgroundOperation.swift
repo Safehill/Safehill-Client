@@ -135,15 +135,18 @@ open class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         if operationQueue.operationCount == 0 {
             self.timerQueue.sync {
                 DispatchQueue.main.async {
+                    var lastExecutingOperation: T = operation
+                    
                     // timers need to be scheduled on the main queue
                     self.timer = Timer.scheduledTimer(withTimeInterval: Double(seconds), repeats: false, block: { [weak self] _ in
                         self?.timerQueue.async {
-                            if !operation.isExecuting,
+                            if !lastExecutingOperation.isExecuting,
                                let sself = self,
                                sself.started,
                                sself.operationQueue.operationCount == 0
                             {
-                                sself.operationQueue.addOperation(operation.clone() as! T)
+                                lastExecutingOperation = lastExecutingOperation.clone() as! T
+                                sself.operationQueue.addOperation(lastExecutingOperation)
                             }
                         }
                     })
