@@ -76,8 +76,8 @@ open class SHBackgroundOperationProcessor {
     ///   - completion: the calback
     public func runRepeatedOperation<T: SHBackgroundOperationProtocol>(
         _ operation: T, initialDelay: TimeInterval,
-        qos: DispatchQoS.QoSClass,
         repeatInterval: TimeInterval,
+        qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
         let operationKey = String(describing: T.self)
