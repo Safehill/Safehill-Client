@@ -11,20 +11,24 @@ protocol SHOutboundBackgroundOperation {
     
     func run(
         forQueueItemIdentifiers queueItemIdentifiers: [String],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )
         
     func runOnce(
         for item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )
     
     func runOnce(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )
     
     func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )
 }
@@ -33,6 +37,7 @@ extension SHOutboundBackgroundOperation {
     
     func runOnce(
         for item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         guard Safehill_Client.processingState(for: item.identifier) != self.processingState else {
@@ -64,7 +69,7 @@ extension SHOutboundBackgroundOperation {
                 
                 self.log.info("\(self.operationType.identifier) item \(queuedItem.identifier) created at \(queuedItem.createdAt)")
                 
-                self.process(queuedItem) { result in
+                self.process(queuedItem, qos: qos) { result in
                     switch result {
                     case .success:
                         self.log.info("[√] \(self.operationType.identifier) task completed for item \(queuedItem.identifier)")
@@ -83,6 +88,7 @@ extension SHOutboundBackgroundOperation {
     
     func run(
         forQueueItemIdentifiers queueItemIdentifiers: [String],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let queue: KBQueueStore
@@ -110,7 +116,7 @@ extension SHOutboundBackgroundOperation {
             group.leave()
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: .global(qos: qos)) {
             guard error == nil else {
                 self.log.critical("failed to retrieve items from \(self.operationType.identifier) queue. \(error!.localizedDescription)")
                 completionHandler(.failure(error!))
@@ -121,7 +127,7 @@ extension SHOutboundBackgroundOperation {
             
             for item in queueItems {
                 group.enter()
-                self.runOnce(for: item) { _ in
+                self.runOnce(for: item, qos: qos) { _ in
                     semaphore.signal()
                 }
                 
@@ -133,6 +139,7 @@ extension SHOutboundBackgroundOperation {
     }
     
     func runOnce(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let queue: KBQueueStore
@@ -168,7 +175,7 @@ extension SHOutboundBackgroundOperation {
             return
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: .global(qos: qos)) {
             guard error == nil else {
                 self.log.critical("failed to retrieve items from FETCH queue. \(error!.localizedDescription)")
                 completionHandler(.failure(error!))
@@ -181,7 +188,7 @@ extension SHOutboundBackgroundOperation {
             
             for item in queueItems {
                 count += 1
-                self.runOnce(for: item) { _ in
+                self.runOnce(for: item, qos: qos) { _ in
                     semaphore.signal()
                 }
                 
@@ -192,5 +199,12 @@ extension SHOutboundBackgroundOperation {
             
             self.log.info("started \(count) \(self.operationType.identifier) operations")
         }
+    }
+    
+    public func run(
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.runOnce(qos: qos, completionHandler: completionHandler)
     }
 }

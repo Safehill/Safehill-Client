@@ -265,8 +265,8 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
         }
     }
     
-    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: .background, completionHandler: completionHandler)
+    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.runOnce(qos: qos, completionHandler: completionHandler)
     }
     
     public func runOnce(

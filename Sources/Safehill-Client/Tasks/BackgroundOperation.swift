@@ -12,14 +12,18 @@ public protocol SHBackgroundOperationProtocol : Operation {
     /// - Returns: a new object initialized exactly as Self was
     func clone() -> any SHBackgroundOperationProtocol
     
-    func run(completionHandler: @escaping (OperationResult) -> Void)
+    func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (OperationResult) -> Void)
 }
 
 public protocol SHBackgroundQueueBackedOperationProtocol : SHBackgroundOperationProtocol {
     
     func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem
     
-    func process(_: KBQueueItem, completionHandler: @escaping (Result<Void, Error>) -> Void)
+    func process(
+        _: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    )
 }
 
 open class SHBackgroundOperationProcessor {
@@ -41,6 +45,7 @@ open class SHBackgroundOperationProcessor {
     ///   - completion: the callback
     public func runOperation<T: SHBackgroundOperationProtocol>(
         _ operation: T,
+        qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
         let operationKey = String(describing: T.self)
@@ -58,7 +63,7 @@ open class SHBackgroundOperationProcessor {
             self.runningOperations[operationKey] = true
         }
         
-        operation.run { [weak self] result in
+        operation.run(qos: qos) { [weak self] result in
             completion(result)
             
             self?.operationQueue.async(flags: .barrier) {
@@ -75,6 +80,7 @@ open class SHBackgroundOperationProcessor {
     ///   - completion: the calback
     public func runRepeatedOperation<T: SHBackgroundOperationProtocol>(
         _ operation: T, initialDelay: TimeInterval,
+        qos: DispatchQoS.QoSClass,
         repeatInterval: TimeInterval,
         completion: @escaping (T.OperationResult) -> Void
     ) {
@@ -83,9 +89,13 @@ open class SHBackgroundOperationProcessor {
         let timer = DispatchSource.makeTimerSource(queue: operationQueue)
         timer.schedule(deadline: .now() + initialDelay, repeating: repeatInterval)
         timer.setEventHandler { [weak self] in
-            self?.runOperation(operation, completion: completion)
+            self?.runOperation(operation, qos: qos, completion: completion)
         }
         timer.resume()
+        
+        operationQueue.async(flags: .barrier) {
+            self.timers[operationKey] = timer
+        }
     }
     
     /// Stop an operation that was previously run on repeat

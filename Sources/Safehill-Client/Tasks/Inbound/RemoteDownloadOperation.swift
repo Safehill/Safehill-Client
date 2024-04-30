@@ -1120,9 +1120,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     }
     
     public func run(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        self.runOnce(qos: .default) { result in
+        self.runOnce(qos: qos) { result in
             if case .failure(let failure) = result {
                 completionHandler(.failure(failure))
             } else {

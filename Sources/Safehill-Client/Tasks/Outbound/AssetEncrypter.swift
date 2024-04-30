@@ -333,6 +333,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
     
     internal func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let encryptionRequest: SHEncryptionRequestQueueItem
@@ -442,7 +443,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global()) {
+        dispatchGroup.notify(queue: .global(qos: qos)) {
             guard secretRetrievalError == nil else {
                 handleError(secretRetrievalError!)
                 return
@@ -496,11 +497,5 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 }
             }
         }
-    }
-    
-    public func run(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.runOnce(completionHandler: completionHandler)
     }
 }

@@ -248,6 +248,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     private func initializeGroupAndThread(
         shareRequest: SHEncryptionForSharingRequestQueueItem,
         skipThreadCreation: Bool,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var errorInitializingGroup: Error? = nil
@@ -290,7 +291,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             self.log.info("skipping thread creation as instructed by request \(shareRequest.identifier)")
         }
         
-        dispatchGroup.notify(queue: .global()) {
+        dispatchGroup.notify(queue: .global(qos: qos)) {
             guard errorInitializingGroup == nil,
                   errorInitializingThread == nil else {
                 self.log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
@@ -305,6 +306,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     internal override func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
@@ -425,7 +427,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 if shareRequest.isBackground == false {
                     self.initializeGroupAndThread(
                         shareRequest: shareRequest,
-                        skipThreadCreation: shareRequest.shouldLinkToThread == false
+                        skipThreadCreation: shareRequest.shouldLinkToThread == false,
+                        qos: qos
                     ) { result in
                         switch result {
                         case .failure(let error):

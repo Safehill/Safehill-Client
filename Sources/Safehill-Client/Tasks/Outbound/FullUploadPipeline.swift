@@ -45,6 +45,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         forAssetLocalIdentifiers localIdentifiers: [String],
         groupId: String,
         sharedWith: [SHServerUser],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let queueItemIdentifiers = localIdentifiers.flatMap({
@@ -95,28 +96,28 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let log = self.log
         
         log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
-        fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+        fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers, qos: qos) { result in
             guard case .success = result else {
                 completionHandler(result)
                 return
             }
             
             log.debug("Running on-demand ENCRYPT for items \(queueItemIdentifiers)")
-            encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+            encryptOperation.run(forQueueItemIdentifiers: queueItemIdentifiers, qos: qos) { result in
                 guard case .success = result else {
                     completionHandler(result)
                     return
                 }
                 
                 log.debug("Running on-demand UPLOAD for items \(queueItemIdentifiers)")
-                uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+                uploadOperation.run(forQueueItemIdentifiers: queueItemIdentifiers, qos: qos) { result in
                     guard case .success = result else {
                         completionHandler(result)
                         return
                     }
                     
                     log.debug("Running on-demand FETCH for items \(queueItemIdentifiers)")
-                    fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers) { result in
+                    fetchOperation.run(forQueueItemIdentifiers: queueItemIdentifiers, qos: qos) { result in
                         guard case .success = result else {
                             completionHandler(result)
                             return
@@ -125,6 +126,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
                         log.debug("Running on-demand SHARE for items \(queueItemIdentifiers)")
                         shareOperation.run(
                             forQueueItemIdentifiers: queueItemIdentifiers,
+                            qos: qos,
                             completionHandler: completionHandler
                         )
                     }
@@ -134,9 +136,10 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     }
     
     public func run(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        self.runFetchCycle { result in
+        self.runFetchCycle(qos: qos) { result in
             switch result {
             case .failure(let error):
                 self.log.critical("error running FETCH step: \(error.localizedDescription)")
@@ -147,7 +150,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
                     completionHandler(.success(()))
                     return
                 }
-                self.runEncryptionCycle { result in
+                self.runEncryptionCycle(qos: qos) { result in
                     switch result {
                     case .failure(let error):
                         self.log.critical("error running ENCRYPT step: \(error.localizedDescription)")
@@ -158,7 +161,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
                             completionHandler(.success(()))
                             return
                         }
-                        self.runUploadCycle { result in
+                        self.runUploadCycle(qos: qos) { result in
                             switch result {
                             case .failure(let error):
                                 self.log.critical("error running UPLOAD step: \(error.localizedDescription)")
@@ -169,7 +172,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
                                     completionHandler(.success(()))
                                     return
                                 }
-                                self.runFetchCycle { result in
+                                self.runFetchCycle(qos: qos) { result in
                                     switch result {
                                     case .failure(let error):
                                         self.log.critical("error running step FETCH': \(error.localizedDescription)")
@@ -180,7 +183,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
                                             completionHandler(.success(()))
                                             return
                                         }
-                                        self.runShareCycle(completionHandler: completionHandler)
+                                        self.runShareCycle(qos: qos, completionHandler: completionHandler)
                                     }
                                 }
                             }
@@ -192,6 +195,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     }
     
     private func runFetchCycle(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
@@ -212,10 +216,11 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             imageManager: imageManager
         )
         log.debug("Running FETCH step")
-        fetchOperation.runOnce(completionHandler: completionHandler)
+        fetchOperation.runOnce(qos: qos, completionHandler: completionHandler)
     }
     
     private func runEncryptionCycle(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
@@ -236,10 +241,11 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             imageManager: imageManager
         )
         log.debug("Running ENCRYPT step")
-        encryptOperation.runOnce(completionHandler: completionHandler)
+        encryptOperation.runOnce(qos: qos, completionHandler: completionHandler)
     }
     
     private func runUploadCycle(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
@@ -260,10 +266,11 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             limitPerRun: 0
         )
         log.debug("Running UPLOAD step")
-        uploadOperation.runOnce(completionHandler: completionHandler)
+        uploadOperation.runOnce(qos: qos, completionHandler: completionHandler)
     }
     
     private func runShareCycle(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var limit: Int? = nil // no limit (parallelization == .aggressive)
@@ -284,6 +291,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             imageManager: imageManager
         )
         log.debug("Running SHARE step")
-        shareOperation.runOnce(completionHandler: completionHandler)
+        shareOperation.runOnce(qos: qos, completionHandler: completionHandler)
     }
 }

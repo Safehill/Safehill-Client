@@ -235,6 +235,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
     
     internal func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let fetchRequest: SHLocalFetchRequestQueueItem
@@ -338,11 +339,5 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 handleError(failure)
             }
         }
-    }
-    
-    public func run(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.runOnce(completionHandler: completionHandler)
     }
 }

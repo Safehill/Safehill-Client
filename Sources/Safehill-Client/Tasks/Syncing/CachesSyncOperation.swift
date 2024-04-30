@@ -2,9 +2,8 @@ import Foundation
 import KnowledgeBase
 import os
 
-// MARK: - Low Priority Sync Operation
 
-public class SHLowPrioritySyncOperation: Operation, SHBackgroundOperationProtocol {
+public class CachesSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-LP-SYNC")
     
@@ -29,7 +28,7 @@ public class SHLowPrioritySyncOperation: Operation, SHBackgroundOperationProtoco
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     public func clone() -> any SHBackgroundOperationProtocol {
-        SHLowPrioritySyncOperation(
+        CachesSyncOperation(
             user: self.user,
             assetsSyncDelegates: self.assetsSyncDelegates,
             lastFetchDate: self.lastFetchDate
@@ -242,7 +241,7 @@ public class SHLowPrioritySyncOperation: Operation, SHBackgroundOperationProtoco
         }
     }
     
-    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: .background, completionHandler: completionHandler)
+    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.runOnce(qos: qos, completionHandler: completionHandler)
     }
 }

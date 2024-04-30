@@ -240,6 +240,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
     
     func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let uploadRequest: SHUploadRequestQueueItem
@@ -353,11 +354,5 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 }
             }
         }
-    }
-    
-    public func run(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.runOnce(completionHandler: completionHandler)
     }
 }

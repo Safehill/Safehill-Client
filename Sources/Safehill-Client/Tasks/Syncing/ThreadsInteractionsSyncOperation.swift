@@ -53,7 +53,8 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
         syncOperation.syncLastThreadInteractions(qos: qos, completionHandler: completionHandler)
     }
     
-    public func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: .default, completionHandler: completionHandler)
+    public func run(qos: DispatchQoS.QoSClass,
+                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.runOnce(qos: qos, completionHandler: completionHandler)
     }
 }
