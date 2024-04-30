@@ -57,7 +57,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         photoIndexer: SHPhotosIndexer
     ) {
         self.isRestoring = isRestoring
-        self.alreadyProcessed = []
+        self.alreadyProcessed = alreadyProcessed
         super.init(
             user: user,
             downloaderDelegates: delegates,
