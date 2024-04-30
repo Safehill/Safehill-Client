@@ -32,7 +32,7 @@ import os
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
     let isRestoring: Bool
-    var alreadyProcessed: [GlobalIdentifier]
+    var alreadyProcessed: Set<GlobalIdentifier>
     
     @available(*, unavailable)
     public override init(
@@ -53,7 +53,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         isRestoring: Bool,
-        alreadyProcessed: [GlobalIdentifier] = [],
+        alreadyProcessed: Set<GlobalIdentifier> = Set(),
         photoIndexer: SHPhotosIndexer
     ) {
         self.isRestoring = isRestoring
@@ -102,10 +102,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         serverProxy.getLocalAssetDescriptors(after: nil) { result in
             switch result {
             case .success(let descs):
-                completionHandler(.success(descs.filter({
+                let unprocessed = descs.filter({
                     self.alreadyProcessed.contains($0.globalIdentifier) == false
-                })))
-                self.alreadyProcessed = descs.map({ $0.globalIdentifier })
+                })
+                for gid in descs.map({ $0.globalIdentifier }) {
+                    self.alreadyProcessed.insert(gid)
+                }
+                completionHandler(.success(unprocessed))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
