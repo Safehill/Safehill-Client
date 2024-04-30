@@ -32,15 +32,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         self.photoIndexer = photoIndexer
     }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHFullUploadPipelineOperation(
-            user: self.user,
-            assetsDelegates: self.assetsDelegates,
-            photoIndexer: self.photoIndexer,
-            imageManager: self.imageManager
-        )
-    }
-    
     public func run(
         forAssetLocalIdentifiers localIdentifiers: [String],
         groupId: String,

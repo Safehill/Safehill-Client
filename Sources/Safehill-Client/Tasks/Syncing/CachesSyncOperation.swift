@@ -27,14 +27,6 @@ public class CachesSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        CachesSyncOperation(
-            user: self.user,
-            assetsSyncDelegates: self.assetsSyncDelegates,
-            lastFetchDate: self.lastFetchDate
-        )
-    }
-    
     private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
         var userIdsDescriptorsSet = Set<UserIdentifier>()
         for descriptor in descriptors {

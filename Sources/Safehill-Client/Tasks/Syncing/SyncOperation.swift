@@ -28,14 +28,6 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
         self.threadsDelegates = threadsDelegates
     }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHSyncOperation(
-            user: self.user,
-            assetsDelegates: self.assetsDelegates,
-            threadsDelegates: self.threadsDelegates
-        )
-    }
-    
     private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
         var userIdsDescriptorsSet = Set<UserIdentifier>()
         for descriptor in descriptors {

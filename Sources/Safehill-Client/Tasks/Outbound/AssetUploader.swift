@@ -30,13 +30,6 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         self.delegates = delegates
     }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHUploadOperation(user: self.user,
-                          localAssetStoreController: self.localAssetStoreController,
-                          delegates: self.delegates,
-                          limitPerRun: self.limit)
-    }
-    
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw SHBackgroundOperationError.unexpectedData(item.content)

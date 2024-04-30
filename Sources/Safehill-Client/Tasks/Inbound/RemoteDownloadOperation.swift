@@ -67,19 +67,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHRemoteDownloadOperation(
-            user: self.user,
-            downloaderDelegates: self.downloaderDelegates,
-            assetsSyncDelegates: self.assetsSyncDelegates,
-            threadsSyncDelegates: self.threadsSyncDelegates,
-            restorationDelegate: self.restorationDelegate,
-            photoIndexer: self.photoIndexer,
-            lastFetchDate: self.lastFetchDate,
-            limitPerRun: self.limit
-        )
-    }
-    
     internal func fetchDescriptors(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroups: [String]? = nil,

@@ -29,15 +29,6 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         self.photoIndexer = photoIndexer
     }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHLocalFetchOperation(
-            delegates: self.delegates,
-            limitPerRun: self.limit,
-            photoIndexer: self.photoIndexer,
-            imageManager: self.imageManager
-        )
-    }
-    
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)

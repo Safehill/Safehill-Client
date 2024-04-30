@@ -14,15 +14,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.encryptAndShare.delegates")
     
-    public override func clone() -> any SHBackgroundOperationProtocol {
-        SHEncryptAndShareOperation(
-            user: self.user,
-            assetsDelegates: self.assetDelegates,
-            limitPerRun: self.limit,
-            imageManager: self.imageManager
-        )
-    }
-    
     public override func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)

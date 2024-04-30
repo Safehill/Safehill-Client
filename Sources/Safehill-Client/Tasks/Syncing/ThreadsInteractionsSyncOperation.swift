@@ -27,14 +27,6 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHThreadsInteractionsSyncOperation(
-            user: self.user,
-            assetsSyncDelegates: self.assetsSyncDelegates,
-            threadsSyncDelegates: self.threadsSyncDelegates
-        )
-    }
-    
     public func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void

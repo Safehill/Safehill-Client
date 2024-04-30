@@ -67,15 +67,6 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         self.user.serverProxy
     }
     
-    public func clone() -> any SHBackgroundOperationProtocol {
-        SHEncryptionOperation(
-            user: self.user,
-            assetsDelegates: self.assetDelegates,
-            limitPerRun: self.limit,
-            imageManager: self.imageManager
-        )
-    }
-    
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw SHBackgroundOperationError.unexpectedData(item.content)
