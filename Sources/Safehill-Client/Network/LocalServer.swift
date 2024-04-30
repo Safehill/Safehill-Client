@@ -476,14 +476,6 @@ struct LocalServer : SHServerAPI {
             condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
         }
         
-        if forAssetGlobalIdentifiers.count > 0 {
-            var gidCondition = KBGenericCondition(value: false)
-            for gid in forAssetGlobalIdentifiers {
-                gidCondition = gidCondition.or(KBGenericCondition(.endsWith, value: "::\(gid)"))
-            }
-            condition = condition.and(gidCondition)
-        }
-        
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Result) in
             switch result {
             case .success(let keyValues):
@@ -499,6 +491,10 @@ struct LocalServer : SHServerAPI {
                     }
                     
                     let doProcessState = { (globalIdentifier: String, quality: SHAssetQuality) in
+                        if forAssetGlobalIdentifiers.count > 0, forAssetGlobalIdentifiers.contains(globalIdentifier) == false {
+                            return
+                        }
+                        
                         let state: SHAssetDescriptorUploadState
                         
                         if let uploadStateStr = value["uploadState"] as? String,
@@ -526,6 +522,10 @@ struct LocalServer : SHServerAPI {
                         globalIdentifier = "" + k[range.upperBound...]
                         doProcessState(globalIdentifier, .hiResolution)
                     } else {
+                        continue
+                    }
+                    
+                    if forAssetGlobalIdentifiers.count > 0, forAssetGlobalIdentifiers.contains(globalIdentifier) == false {
                         continue
                     }
                     
