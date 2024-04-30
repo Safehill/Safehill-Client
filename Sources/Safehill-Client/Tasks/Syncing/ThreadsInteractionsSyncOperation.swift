@@ -27,11 +27,8 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func runOnce(
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        
+    public func run(qos: DispatchQoS.QoSClass,
+                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
         guard self.user is SHAuthenticatedLocalUser else {
             completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
@@ -43,10 +40,5 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
             threadsDelegates: self.threadsSyncDelegates
         )
         syncOperation.syncLastThreadInteractions(qos: qos, completionHandler: completionHandler)
-    }
-    
-    public func run(qos: DispatchQoS.QoSClass,
-                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: qos, completionHandler: completionHandler)
     }
 }

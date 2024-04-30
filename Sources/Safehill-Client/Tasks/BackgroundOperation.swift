@@ -45,6 +45,7 @@ open class SHBackgroundOperationProcessor {
         completion: @escaping (T.OperationResult) -> Void
     ) {
         let operationKey = String(describing: T.self)
+        log.debug("\(operationKey): run at qos=\(qos.toTaskPriority().rawValue)")
         
         operationQueue.async { [weak self] in
             guard let self = self else { return }
@@ -75,12 +76,14 @@ open class SHBackgroundOperationProcessor {
     ///   - repeatInterval: the interval between each run
     ///   - completion: the calback
     public func runRepeatedOperation<T: SHBackgroundOperationProtocol>(
-        _ operation: T, initialDelay: TimeInterval,
+        _ operation: T, 
+        initialDelay: TimeInterval,
         repeatInterval: TimeInterval,
         qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
         let operationKey = String(describing: T.self)
+        log.debug("\(operationKey): scheduled repeated run at qos=\(qos.toTaskPriority().rawValue) with delay=\(initialDelay) interval=\(repeatInterval)")
         
         let timer = DispatchSource.makeTimerSource(queue: operationQueue)
         timer.schedule(deadline: .now() + initialDelay, repeating: repeatInterval)

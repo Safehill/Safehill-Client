@@ -9,25 +9,14 @@ protocol SHOutboundBackgroundOperation {
     var log: Logger { get }
     var limit: Int { get }
     
-    func run(
-        forQueueItemIdentifiers queueItemIdentifiers: [String],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    )
-        
-    func runOnce(
-        for item: KBQueueItem,
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    )
-    
-    func runOnce(
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    )
-    
     func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    )
+    
+    func run(
+        forQueueItemIdentifiers queueItemIdentifiers: [String],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )
@@ -35,7 +24,7 @@ protocol SHOutboundBackgroundOperation {
 
 extension SHOutboundBackgroundOperation {
     
-    func runOnce(
+    private func runOnce(
         for item: KBQueueItem,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
@@ -138,7 +127,7 @@ extension SHOutboundBackgroundOperation {
         }
     }
     
-    func runOnce(
+    private func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {

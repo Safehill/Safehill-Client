@@ -207,7 +207,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             imageManager: imageManager
         )
         log.debug("Running FETCH step")
-        fetchOperation.runOnce(qos: qos, completionHandler: completionHandler)
+        fetchOperation.run(qos: qos, completionHandler: completionHandler)
     }
     
     private func runEncryptionCycle(
@@ -232,7 +232,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             imageManager: imageManager
         )
         log.debug("Running ENCRYPT step")
-        encryptOperation.runOnce(qos: qos, completionHandler: completionHandler)
+        encryptOperation.run(qos: qos, completionHandler: completionHandler)
     }
     
     private func runUploadCycle(
@@ -257,7 +257,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             limitPerRun: 0
         )
         log.debug("Running UPLOAD step")
-        uploadOperation.runOnce(qos: qos, completionHandler: completionHandler)
+        uploadOperation.run(qos: qos, completionHandler: completionHandler)
     }
     
     private func runShareCycle(
@@ -282,6 +282,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
             imageManager: imageManager
         )
         log.debug("Running SHARE step")
-        shareOperation.runOnce(qos: qos, completionHandler: completionHandler)
+        shareOperation.run(qos: qos, completionHandler: completionHandler)
     }
 }

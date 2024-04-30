@@ -219,10 +219,7 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
         }
     }
     
-    private func runOnce(
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
+    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
         ///
         /// Get the descriptors from the local server
         ///
@@ -257,11 +254,7 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
         }
     }
     
-    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: qos, completionHandler: completionHandler)
-    }
-    
-    public func runOnce(
+    public func run(
         for anchor: SHInteractionAnchor,
         anchorId: String,
         qos: DispatchQoS.QoSClass,

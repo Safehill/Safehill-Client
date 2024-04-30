@@ -208,10 +208,7 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
         }
     }
     
-    public func runOnce(
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
+    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
         DispatchQueue.global(qos: qos).async {
             self.fetchDescriptors(qos: qos) {
                 (result: Result<(
@@ -231,9 +228,5 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
                 }
             }
         }
-    }
-    
-    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: qos, completionHandler: completionHandler)
     }
 }

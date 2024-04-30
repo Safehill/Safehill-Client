@@ -1060,7 +1060,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
     }
     
-    public func runOnce(
+    private func runOnce(
         for assetGlobalIdentifiers: [GlobalIdentifier]?,
         filteringGroups groupIds: [String]?,
         qos: DispatchQoS.QoSClass,
@@ -1099,7 +1099,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
     }
     
-    public func runOnce(
+    internal func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {

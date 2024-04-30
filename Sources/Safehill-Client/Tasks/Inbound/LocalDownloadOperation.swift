@@ -366,7 +366,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    public override func runOnce(
+    internal override func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {

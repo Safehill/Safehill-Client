@@ -4,7 +4,7 @@ let ThreadLastInteractionSyncLimit = 20
 
 extension SHSyncOperation {
     
-    public func runOnceForThreads(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
+    public func syncThreads(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
         self.syncLastThreadInteractions(qos: qos) { result in
             if case .failure(let err) = result {
                 self.log.error("failed to sync interactions: \(err.localizedDescription)")
