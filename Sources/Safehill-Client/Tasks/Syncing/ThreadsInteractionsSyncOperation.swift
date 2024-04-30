@@ -43,4 +43,4 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
     }
 }
 
-let ThreadsSyncProcessor = SHBackgroundOperationProcessor<SHThreadsInteractionsSyncOperation>()
+public let ThreadsSyncProcessor = SHBackgroundOperationProcessor<SHThreadsInteractionsSyncOperation>()

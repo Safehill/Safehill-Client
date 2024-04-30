@@ -456,4 +456,4 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     }
 }
 
-let LocalDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHLocalDownloadOperation>()
+public let LocalDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHLocalDownloadOperation>()

@@ -90,5 +90,3 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         }
     }
 }
-
-

@@ -286,4 +286,4 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     }
 }
 
-let FullUploadPipelineProcessor = SHBackgroundOperationProcessor<SHFullUploadPipelineOperation>()
+public let FullUploadPipelineProcessor = SHBackgroundOperationProcessor<SHFullUploadPipelineOperation>()

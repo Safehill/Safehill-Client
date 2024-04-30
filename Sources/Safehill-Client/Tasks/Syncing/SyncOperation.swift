@@ -298,4 +298,4 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
     }
 }
 
-let SyncProcessor = SHBackgroundOperationProcessor<SHSyncOperation>()
+public let SyncProcessor = SHBackgroundOperationProcessor<SHSyncOperation>()
