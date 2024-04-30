@@ -3,7 +3,7 @@ import KnowledgeBase
 import os
 
 
-public class CachesSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-LP-SYNC")
     
