@@ -15,7 +15,7 @@ public protocol SHBackgroundOperationProtocol : Operation {
     func run(completionHandler: @escaping (OperationResult) -> Void)
 }
 
-public protocol SHBackgroundQueueProcessorOperationProtocol : SHBackgroundOperationProtocol {
+public protocol SHBackgroundQueueBackedOperationProtocol : SHBackgroundOperationProtocol {
     
     func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem
     

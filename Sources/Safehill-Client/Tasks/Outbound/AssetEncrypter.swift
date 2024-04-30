@@ -31,7 +31,7 @@ extension SHApplePhotoAsset {
     }
 }
 
-internal class SHEncryptionOperation: Operation, SHBackgroundQueueProcessorOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
+internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
     
     typealias OperationResult = Result<Void, Error>
     

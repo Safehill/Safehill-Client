@@ -4,7 +4,7 @@ import KnowledgeBase
 import Photos
 import os
 
-internal class SHLocalFetchOperation: Operation, SHBackgroundQueueProcessorOperationProtocol, SHOutboundBackgroundOperation {
+internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation {
     
     let operationType = BackgroundOperationQueue.OperationType.fetch
     let processingState = ProcessingState.fetching

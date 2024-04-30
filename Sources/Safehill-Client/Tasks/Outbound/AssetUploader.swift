@@ -3,7 +3,7 @@ import os
 import KnowledgeBase
 
 
-internal class SHUploadOperation: Operation, SHBackgroundQueueProcessorOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
+internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
     
     let operationType = BackgroundOperationQueue.OperationType.upload
     let processingState = ProcessingState.uploading
