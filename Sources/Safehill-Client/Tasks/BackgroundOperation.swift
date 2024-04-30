@@ -39,7 +39,7 @@ open class SHBackgroundOperationProcessor {
     /// - Parameters:
     ///   - operation: the operation
     ///   - completion: the callback
-    func runOperation<T: SHBackgroundOperationProtocol>(
+    public func runOperation<T: SHBackgroundOperationProtocol>(
         _ operation: T,
         completion: @escaping (T.OperationResult) -> Void
     ) {
@@ -73,7 +73,7 @@ open class SHBackgroundOperationProcessor {
     ///   - initialDelay: the initial delay
     ///   - repeatInterval: the interval between each run
     ///   - completion: the calback
-    func runRepeatedOperation<T: SHBackgroundOperationProtocol>(
+    public func runRepeatedOperation<T: SHBackgroundOperationProtocol>(
         _ operation: T, initialDelay: TimeInterval,
         repeatInterval: TimeInterval,
         completion: @escaping (T.OperationResult) -> Void
@@ -90,7 +90,7 @@ open class SHBackgroundOperationProcessor {
     
     /// Stop an operation that was previously run on repeat
     /// - Parameter operationType: the operation type
-    func stopRepeatedOperation<T: SHBackgroundOperationProtocol>(
+    public func stopRepeatedOperation<T: SHBackgroundOperationProtocol>(
         _ operationType: T.Type
     ) {
         let operationKey = String(describing: T.self)
