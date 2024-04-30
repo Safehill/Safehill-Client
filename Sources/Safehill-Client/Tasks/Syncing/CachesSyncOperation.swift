@@ -230,3 +230,5 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
         }
     }
 }
+
+let CachesSyncProcessor = SHBackgroundOperationProcessor<SHCachesSyncOperation>()

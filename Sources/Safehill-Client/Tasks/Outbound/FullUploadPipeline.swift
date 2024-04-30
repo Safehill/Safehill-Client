@@ -285,3 +285,5 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         shareOperation.run(qos: qos, completionHandler: completionHandler)
     }
 }
+
+let FullUploadPipelineProcessor = SHBackgroundOperationProcessor<SHFullUploadPipelineOperation>()

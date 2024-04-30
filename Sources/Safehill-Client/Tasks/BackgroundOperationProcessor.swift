@@ -5,15 +5,13 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     private var runningOperations = [String: Bool]()
     private var timers = [String: DispatchSourceTimer]()
     
-    let operation: T
     private let operationQueue: DispatchQueue
     
     var operationKey: String {
         String(describing: T.self)
     }
     
-    public init(operation: T) {
-        self.operation = operation
+    internal init() {
         self.operationQueue = DispatchQueue(
             label: "com.gf.safehill.SHBackgroundOperationProcessor.\(String(describing: T.self))",
             attributes: .concurrent
@@ -24,6 +22,7 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     /// - Parameters:
     ///   - completion: the callback
     public func runOperation(
+        _ operation: T,
         qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
@@ -58,6 +57,7 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     ///   - repeatInterval: the interval between each run
     ///   - completion: the calback
     public func runRepeatedOperation(
+        _ operation: T,
         initialDelay: TimeInterval,
         repeatInterval: TimeInterval,
         qos: DispatchQoS.QoSClass,
@@ -69,7 +69,7 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         let timer = DispatchSource.makeTimerSource(queue: operationQueue)
         timer.schedule(deadline: .now() + initialDelay, repeating: repeatInterval)
         timer.setEventHandler { [weak self] in
-            self?.runOperation(qos: qos, completion: completion)
+            self?.runOperation(operation, qos: qos, completion: completion)
         }
         timer.resume()
         

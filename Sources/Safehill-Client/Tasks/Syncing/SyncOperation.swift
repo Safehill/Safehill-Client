@@ -297,3 +297,5 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
         }
     }
 }
+
+let SyncProcessor = SHBackgroundOperationProcessor<SHSyncOperation>()

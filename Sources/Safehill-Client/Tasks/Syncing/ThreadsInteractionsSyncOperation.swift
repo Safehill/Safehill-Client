@@ -42,3 +42,5 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
         syncOperation.syncLastThreadInteractions(qos: qos, completionHandler: completionHandler)
     }
 }
+
+let ThreadsSyncProcessor = SHBackgroundOperationProcessor<SHThreadsInteractionsSyncOperation>()
