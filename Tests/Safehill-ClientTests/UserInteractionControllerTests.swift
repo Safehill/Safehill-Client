@@ -279,6 +279,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         completionHandler(.success(serverThread))
     }
     
+    func getAssets(inThread threadId: String, completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()) {
+        completionHandler(.success([]))
+    }
+    
     func removeReaction(_ reaction: ReactionInput, inGroup groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.removeReactions([reaction], inGroup: groupId, completionHandler: completionHandler)
     }

@@ -36,6 +36,11 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+    )
+    
     func addReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,
@@ -1107,7 +1112,7 @@ extension SHServerProxy {
         self.remoteServer.add(phoneNumbers: phoneNumbers, to: groupId, completionHandler: completionHandler)
     }
     
-    public func setupGroupEncryptionDetails(
+    func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
@@ -1149,7 +1154,7 @@ extension SHServerProxy {
         }
     }
     
-    public func createOrUpdateThread(
+    internal func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
@@ -1249,7 +1254,7 @@ extension SHServerProxy {
         }
     }
     
-    public func listThreads(
+    internal func listThreads(
         filteringUnknownUsers: Bool = true,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
@@ -1276,13 +1281,13 @@ extension SHServerProxy {
         }
     }
     
-    public func listLocalThreads(
+    internal func listLocalThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
         self.localServer.listThreads(completionHandler: completionHandler)
     }
     
-    public func getThread(
+    internal func getThread(
         withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
@@ -1300,7 +1305,7 @@ extension SHServerProxy {
         }
     }
     
-    public func getThread(
+    internal func getThread(
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
@@ -1323,7 +1328,7 @@ extension SHServerProxy {
     /// - Parameters:
     ///   - threadId: the thread identifier
     ///   - completionHandler: the callback method
-    public func getAssets(
+    internal func getAssets(
         inThread threadId: String,
         completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
     ) {
@@ -1342,7 +1347,7 @@ extension SHServerProxy {
         }
     }
     
-    func deleteThread(
+    internal func deleteThread(
         withId threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -1361,7 +1366,7 @@ extension SHServerProxy {
         }
     }
     
-    func retrieveUserEncryptionDetails(
+    internal func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
@@ -1393,7 +1398,7 @@ extension SHServerProxy {
         }
     }
     
-    func retrieveUserEncryptionDetails(
+    internal func retrieveUserEncryptionDetails(
         forThread threadId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
@@ -1416,7 +1421,7 @@ extension SHServerProxy {
         }
     }
     
-    func addLocalReactions(
+    internal func addLocalReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
@@ -1428,7 +1433,7 @@ extension SHServerProxy {
         )
     }
     
-    func addLocalReactions(
+    internal func addLocalReactions(
         _ reactions: [ReactionInput],
         inThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
@@ -1440,7 +1445,7 @@ extension SHServerProxy {
         )
     }
     
-    func addReactions(
+    internal func addReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
@@ -1467,7 +1472,7 @@ extension SHServerProxy {
         }
     }
     
-    func addReactions(
+    internal func addReactions(
         _ reactions: [ReactionInput],
         inThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
@@ -1494,7 +1499,7 @@ extension SHServerProxy {
         }
     }
     
-    func removeReaction(
+    internal func removeReaction(
         _ reaction: ReactionInput,
         inGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
@@ -1514,7 +1519,7 @@ extension SHServerProxy {
         }
     }
     
-    func removeReaction(
+    internal func removeReaction(
         _ reaction: ReactionInput,
         inThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
@@ -1534,7 +1539,7 @@ extension SHServerProxy {
         }
     }
     
-    func addLocalMessages(
+    internal func addLocalMessages(
         _ messages: [MessageInput],
         inGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
@@ -1546,7 +1551,7 @@ extension SHServerProxy {
         )
     }
     
-    func addLocalMessages(
+    internal func addLocalMessages(
         _ messages: [MessageInput],
         inThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
@@ -1558,7 +1563,7 @@ extension SHServerProxy {
         )
     }
     
-    func addMessage(
+    internal func addMessage(
         _ message: MessageInputDTO,
         inGroup groupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
@@ -1582,7 +1587,7 @@ extension SHServerProxy {
         }
     }
     
-    func addMessage(
+    internal func addMessage(
         _ message: MessageInputDTO,
         inThread threadId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
@@ -1606,7 +1611,7 @@ extension SHServerProxy {
         }
     }
     
-    func countLocalInteractions(
+    internal func countLocalInteractions(
         inGroup groupId: String,
         completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
     ) {
