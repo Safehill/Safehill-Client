@@ -15,7 +15,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     
     public let user: SHAuthenticatedLocalUser
     public var assetsDelegates: [SHOutboundAssetOperationDelegate]
-    var imageManager: PHCachingImageManager
     var photoIndexer: SHPhotosIndexer
     
     let parallelization: ParallelizationOption
@@ -23,12 +22,10 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
                 parallelization: ParallelizationOption = .conservative,
-                photoIndexer: SHPhotosIndexer,
-                imageManager: PHCachingImageManager? = nil) {
+                photoIndexer: SHPhotosIndexer) {
         self.user = user
         self.assetsDelegates = assetsDelegates
         self.parallelization = parallelization
-        self.imageManager = imageManager ?? PHCachingImageManager()
         self.photoIndexer = photoIndexer
     }
     
@@ -59,15 +56,13 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let fetchOperation = SHLocalFetchOperation(
             delegates: assetsDelegates,
             limitPerRun: 0,
-            photoIndexer: self.photoIndexer,
-            imageManager: imageManager
+            photoIndexer: self.photoIndexer
         )
         
         let encryptOperation = SHEncryptionOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            limitPerRun: 0,
-            imageManager: imageManager
+            limitPerRun: 0
         )
         
         let uploadOperation = SHUploadOperation(
@@ -80,8 +75,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            limitPerRun: 0,
-            imageManager: imageManager
+            limitPerRun: 0
         )
         
         let log = self.log
@@ -203,8 +197,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let fetchOperation = SHLocalFetchOperation(
             delegates: assetsDelegates,
             limitPerRun: limit ?? 0,
-            photoIndexer: photoIndexer,
-            imageManager: imageManager
+            photoIndexer: photoIndexer
         )
         log.debug("Running FETCH step")
         fetchOperation.run(qos: qos, completionHandler: completionHandler)
@@ -228,8 +221,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let encryptOperation = SHEncryptionOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            limitPerRun: 0,
-            imageManager: imageManager
+            limitPerRun: 0
         )
         log.debug("Running ENCRYPT step")
         encryptOperation.run(qos: qos, completionHandler: completionHandler)
@@ -278,8 +270,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            limitPerRun: 0,
-            imageManager: imageManager
+            limitPerRun: 0
         )
         log.debug("Running SHARE step")
         shareOperation.run(qos: qos, completionHandler: completionHandler)

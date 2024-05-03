@@ -16,16 +16,13 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
     
     public let limit: Int
     public var delegates: [SHOutboundAssetOperationDelegate]
-    var imageManager: PHCachingImageManager
     let photoIndexer: SHPhotosIndexer
     
     public init(delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int,
-                photoIndexer: SHPhotosIndexer,
-                imageManager: PHCachingImageManager? = nil) {
+                photoIndexer: SHPhotosIndexer) {
         self.limit = limit
         self.delegates = delegates
-        self.imageManager = imageManager ?? PHCachingImageManager()
         self.photoIndexer = photoIndexer
     }
     
@@ -72,7 +69,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 
                 let photoAsset = SHApplePhotoAsset(
                     for: phAsset,
-                    usingCachingImageManager: self.imageManager
+                    usingCachingImageManager: self.photoIndexer.imageManager
                 )
                 completionHandler(.success(photoAsset))
             }
