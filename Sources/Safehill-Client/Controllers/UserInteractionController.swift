@@ -361,25 +361,59 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveLocalInteraction(
         inThread threadId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inThread: threadId,
-            withId: interactionIdentifier,
-            completionHandler: completionHandler
-        )
+            withId: interactionIdentifier
+        ) { firstResult in
+            switch firstResult {
+            case .success(let localInteractionsGroup):
+                self.decryptMessages(
+                    in: localInteractionsGroup,
+                    for: .thread,
+                    anchorId: threadId
+                ) { secondResult in
+                    switch secondResult {
+                    case .success(let res):
+                        completionHandler(.success(res as! SHConversationThreadInteractions))
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     public func retrieveLocalInteraction(
         inGroup groupId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inGroup: groupId,
-            withId: interactionIdentifier,
-            completionHandler: completionHandler
-        )
+            withId: interactionIdentifier
+        ) { firstResult in
+            switch firstResult {
+            case .success(let localInteractionsGroup):
+                self.decryptMessages(
+                    in: localInteractionsGroup,
+                    for: .group,
+                    anchorId: groupId
+                ) { secondResult in
+                    switch secondResult {
+                    case .success(let res):
+                        completionHandler(.success(res as! SHAssetsGroupInteractions))
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     private func decryptMessages(
