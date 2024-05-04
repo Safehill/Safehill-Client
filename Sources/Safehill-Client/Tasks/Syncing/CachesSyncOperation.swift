@@ -13,16 +13,12 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     let assetsSyncDelegates: [SHAssetSyncingDelegate]
     
-    var lastFetchDate: Date?
-    
     public init(
         user: SHAuthenticatedLocalUser,
-        assetsSyncDelegates: [SHAssetSyncingDelegate],
-        lastFetchDate: Date? = nil
+        assetsSyncDelegates: [SHAssetSyncingDelegate]
     ) {
         self.user = user
         self.assetsSyncDelegates = assetsSyncDelegates
-        self.lastFetchDate = lastFetchDate
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
@@ -69,7 +65,7 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
         /// Get all the local descriptors.
         ///
         dispatchGroup.enter()
-        self.serverProxy.getLocalAssetDescriptors { localResult in
+        self.serverProxy.getLocalAssetDescriptors(after: nil) { localResult in
             switch localResult {
             case .success(let descriptors):
                 localDescriptors = descriptors

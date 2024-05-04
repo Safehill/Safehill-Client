@@ -208,7 +208,6 @@ public struct SHServerProxy: SHServerProxyProtocol {
         self.localServer = LocalServer(requestor: user)
         self.remoteServer = SHServerHTTPAPI(requestor: user)
     }
-    
 }
 
 

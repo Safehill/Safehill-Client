@@ -43,7 +43,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         threadsSyncDelegates: [SHThreadSyncingDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         photoIndexer: SHPhotosIndexer,
-        lastFetchDate: Date? = nil,
         limitPerRun limit: Int? = nil
     ) {
         fatalError("Not supported")

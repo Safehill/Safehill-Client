@@ -3,9 +3,10 @@ import KnowledgeBase
 import os
 import Photos
 
-protocol SHDownloadOperation {
-    var lastFetchDate: Date? { get }
-}
+public let kSHAssetDownloadDefaults = "com.gf.safehill.ServerState"
+let kSHLastFetchDateAnchor = "com.gf.safehill.lastFetchDate"
+
+protocol SHDownloadOperation {}
 
 
 ///
@@ -31,6 +32,24 @@ protocol SHDownloadOperation {
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
     
+    private static var RemoteDownloadUserDefaults = UserDefaults(suiteName: kSHAssetDownloadDefaults)!
+    
+    internal static var lastFetchDate: Date? {
+        get {
+            let savedLastFetchDate = RemoteDownloadUserDefaults.value(forKey: kSHLastFetchDateAnchor)
+            if let savedLastFetchDate = savedLastFetchDate as? Date {
+                return savedLastFetchDate
+            }
+            return nil
+        }
+        set {
+            RemoteDownloadUserDefaults.set(
+                newValue,
+                forKey: kSHLastFetchDateAnchor
+            )
+        }
+    }
+    
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.download.delegates")
@@ -45,15 +64,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     let photoIndexer: SHPhotosIndexer
     
-    var lastFetchDate: Date?
-    
     public init(user: SHLocalUserProtocol,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
                 assetsSyncDelegates: [SHAssetSyncingDelegate],
                 threadsSyncDelegates: [SHThreadSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
                 photoIndexer: SHPhotosIndexer,
-                lastFetchDate: Date? = nil,
                 limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
@@ -62,7 +78,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         self.threadsSyncDelegates = threadsSyncDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer
-        self.lastFetchDate = lastFetchDate
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
@@ -79,11 +94,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         self.serverProxy.getRemoteAssetDescriptors(
             for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!,
             filteringGroups: filteringGroups,
-            after: self.lastFetchDate
+            after: Self.lastFetchDate
         ) { remoteResult in
             switch remoteResult {
             case .success(let remoteDescriptors):
-                self.lastFetchDate = Date()
+                Self.lastFetchDate = Date()
                 
                 ///
                 /// Get all the corresponding local descriptors.
