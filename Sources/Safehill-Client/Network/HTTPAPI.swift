@@ -575,9 +575,12 @@ struct SHServerHTTPAPI : SHServerAPI {
             parameters["after"] = after.iso8601withFractionalSeconds
         }
         
+        log.debug("Retrieving all asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
+        
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
+                log.debug("retrieved \(descriptors.count) asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
                 completionHandler(.success(descriptors))
             case .failure(let error):
                 completionHandler(.failure(error))
