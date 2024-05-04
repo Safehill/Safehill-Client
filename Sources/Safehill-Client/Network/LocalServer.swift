@@ -2242,6 +2242,7 @@ struct LocalServer : SHServerAPI {
                 dispatchGroup.leave()
             }
             
+            dispatchGroup.enter()
             retrieveReactions { result in
                 switch result {
                 case .success(let r):
