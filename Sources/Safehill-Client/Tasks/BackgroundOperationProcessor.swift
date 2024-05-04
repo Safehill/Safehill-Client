@@ -64,7 +64,7 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         completion: @escaping (T.OperationResult) -> Void
     ) {
         let operationKey = self.operationKey
-        log.debug("\(operationKey): scheduled repeated run at qos=\(qos.toTaskPriority().rawValue) with delay=\(initialDelay) interval=\(repeatInterval)")
+        log.debug("\(operationKey, privacy: .public): scheduled repeated run at qos=\(qos.toTaskPriority().rawValue) with delay=\(initialDelay) interval=\(repeatInterval)")
         
         let timer = DispatchSource.makeTimerSource(queue: operationQueue)
         timer.schedule(deadline: .now() + initialDelay, repeating: repeatInterval)
