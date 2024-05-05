@@ -164,8 +164,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
         Task(priority: qos.toTaskPriority()) {
-            let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
-            var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+            let globalIdentifiers = Array(Set(descriptors.map({ $0.globalIdentifier })))
+            var senderIds = Array(Set(descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })))
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
                 assetGlobalIdentifiers: globalIdentifiers
             )
