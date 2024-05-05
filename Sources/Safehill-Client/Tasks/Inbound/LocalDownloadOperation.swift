@@ -17,7 +17,6 @@ import os
 ///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
 /// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted asset to the delegates
 ///
-/// The `isRestoring` flag determines whether step 4 is run.
 /// Usually in the lifecycle of the application, the decryption happens only once.
 /// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
 /// Hence, it's advised to run it with that flag set to true once (at start) and then run it continously with that flag set to false.
@@ -26,12 +25,10 @@ import os
 ///
 /// The pipeline sequence is:
 /// ```
-/// 1 -->   2 -->    3 -->    4 (optional)
+/// 1 -->   2 -->    3 -->    4
 /// ```
 ///
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
-    
-    let isRestoring: Bool
     
     private static var alreadyProcessed = Set<GlobalIdentifier>()
     
@@ -52,10 +49,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         user: SHLocalUserProtocol,
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
-        isRestoring: Bool,
         photoIndexer: SHPhotosIndexer
     ) {
-        self.isRestoring = isRestoring
         super.init(
             user: user,
             downloaderDelegates: delegates,
@@ -78,9 +73,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 let unprocessed = descs.filter({
                     Self.alreadyProcessed.contains($0.globalIdentifier) == false
                 })
-                for gid in descs.map({ $0.globalIdentifier }) {
-                    Self.alreadyProcessed.insert(gid)
-                }
                 completionHandler(.success(unprocessed))
             case .failure(let err):
                 completionHandler(.failure(err))
@@ -311,18 +303,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        /// 
-        /// Only call the restoration delegate for items to restore from the history queues
-        /// when restoring. Otherwise the delegate will be called at every cycle
-        /// with items that have already been restored
-        ///
-        guard isRestoring else {
-            self.log.debug("[\(type(of: self))] skipping restoration and local decryption step")
-            
-            completionHandler(.success([]))
-            return
-        }
-        
         // TODO: This method does not re-create missing items from the history queues. If an item is missing it will not be restored
         
         ///
@@ -442,6 +422,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     }
                                     
                                     completionHandler(thirdResult)
+                                    
+                                    if case .success(let tuples) = thirdResult, tuples.count > 0 {
+                                        for gid in tuples.map({ $0.1.globalIdentifier }) {
+                                            Self.alreadyProcessed.insert(gid)
+                                        }
+                                    }
                                 }
                                 
                             case .failure(let error):
