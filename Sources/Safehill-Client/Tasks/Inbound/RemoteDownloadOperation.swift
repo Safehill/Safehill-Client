@@ -221,7 +221,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
                     /// filter out the ones whose sender is unknown.
                     /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-                    senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
+                    senderIds = Array(Set(filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })))
                     var knownUsers = [UserIdentifier: Bool]()
                     do {
                         for senderId in senderIds {
