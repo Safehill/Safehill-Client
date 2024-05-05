@@ -34,21 +34,23 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     private static var RemoteDownloadUserDefaults = UserDefaults(suiteName: kSHAssetDownloadDefaults)!
     
-    internal static var lastFetchDate: Date? {
-        get {
-            let savedLastFetchDate = RemoteDownloadUserDefaults.value(forKey: kSHLastFetchDateAnchor)
-            if let savedLastFetchDate = savedLastFetchDate as? Date {
-                return savedLastFetchDate
-            }
-            return nil
-        }
-        set {
-            RemoteDownloadUserDefaults.set(
-                newValue,
-                forKey: kSHLastFetchDateAnchor
-            )
-        }
-    }
+//    internal static var lastFetchDate: Date? {
+//        get {
+//            let savedLastFetchDate = RemoteDownloadUserDefaults.value(forKey: kSHLastFetchDateAnchor)
+//            if let savedLastFetchDate = savedLastFetchDate as? Date {
+//                return savedLastFetchDate
+//            }
+//            return nil
+//        }
+//        set {
+//            RemoteDownloadUserDefaults.set(
+//                newValue,
+//                forKey: kSHLastFetchDateAnchor
+//            )
+//        }
+//    }
+    
+    internal static var lastFetchDate: Date? = nil
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -98,8 +100,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ) { remoteResult in
             switch remoteResult {
             case .success(let remoteDescriptors):
-                Self.lastFetchDate = Date()
-                
                 ///
                 /// Get all the corresponding local descriptors.
                 /// The extra ones (to be DELETED) will be removed by the sync operation
@@ -1081,6 +1081,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        let fetchStartedAt = Date()
+        
         let handleResult = { (result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) in
             let downloaderDelegates = self.downloaderDelegates
             self.delegatesQueue.async {
@@ -1089,6 +1091,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 })
             }
             completionHandler(result)
+            
+            if case .success(let tuples) = result, tuples.count > 0 {
+                Self.lastFetchDate = fetchStartedAt
+            }
         }
         
         guard self.user is SHAuthenticatedLocalUser else {
