@@ -626,17 +626,13 @@ struct SHServerHTTPAPI : SHServerAPI {
                     }
                 }
                 
-                let allAssetsVersionsCount = assets.reduce(0, { partialResult, asset in partialResult + asset.versions.count })
-                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds * allAssetsVersionsCount))
-                guard dispatchResult == .success else {
-                    return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+                group.notify(queue: .global()) {
+                    let errorsDict = errors.toDict()
+                    guard errorsDict.count == 0 else {
+                        return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
+                    }
+                    completionHandler(.success(manifest.dictionary))
                 }
-                
-                let errorsDict = errors.toDict()
-                guard errorsDict.count == 0 else {
-                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
-                }
-                completionHandler(.success(manifest.dictionary))
                 
             case .failure(let error):
                 completionHandler(.failure(error))

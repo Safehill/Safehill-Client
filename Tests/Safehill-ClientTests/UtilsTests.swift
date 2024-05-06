@@ -38,9 +38,10 @@ class ArrayChunkingTests: XCTestCase {
     
     func testScalabilityWithLinearDecrease() {
         let largeArray = Array(1...100_000)
-        let startTime = Date()
+        let start = CFAbsoluteTimeGetCurrent()
         let _ = largeArray.chunkedWithLinearDecrease()
-        let duration = Date().timeIntervalSince(startTime)
+        let end = CFAbsoluteTimeGetCurrent()
+        let duration = CFAbsoluteTime(end - start)
         XCTAssertLessThan(duration, 0.5, "Chunking a large array should be efficient")
     }
 
