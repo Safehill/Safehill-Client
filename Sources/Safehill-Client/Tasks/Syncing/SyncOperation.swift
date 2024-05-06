@@ -229,10 +229,7 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
                 ///
                 /// Get the corresponding descriptors from the server
                 ///
-                self.serverProxy.getRemoteAssetDescriptors(
-                    for: localDescriptors.map { $0.globalIdentifier },
-                    after: nil
-                ) { remoteResult in
+                self.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
                     switch remoteResult {
                     case .success(let remoteDescriptors):
                         ///

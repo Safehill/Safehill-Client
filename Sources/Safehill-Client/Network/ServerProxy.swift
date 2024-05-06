@@ -372,7 +372,9 @@ extension SHServerProxy {
             case .failure(let err):
                 var shouldFetchFromLocal = false /// Only try to fetch users from the local DB …
                 switch err {
-                case is URLError, is SHHTTPError.TransportError: /// when a connection to the server could not be established
+                case is URLError: /// when a connection to the server could not be established
+                    shouldFetchFromLocal = true
+                case is SHHTTPError.TransportError:
                     shouldFetchFromLocal = true
                 case SHLocalUserError.notAuthenticated: /// when the user is not yet authenticated
                     shouldFetchFromLocal = true
