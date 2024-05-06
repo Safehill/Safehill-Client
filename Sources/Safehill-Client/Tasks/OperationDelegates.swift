@@ -107,28 +107,17 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
 }
 
 public protocol SHAssetActivityRestorationDelegate {
+    
     /// Notify the delegate that the restoration started.
     func didStartRestoration()
     
-    /// Let the delegate know that a queue item representing a successful UPLOAD needs to be retrieved or re-created in the queue.
-    /// The item - in fact - might not exist in the queue if:
-    /// - the user logged out and the queues were cleaned
-    /// - the user is on another device
-    ///
-    /// - Parameter forLocalIdentifiers: all the possible queue item identifiers to restore
-    /// - Parameter groupId: the group identifier common across all these queue items
-    func restoreUploadQueueItems(forLocalIdentifiers: [String],
-                                 in groupId: String)
+    /// Provide the descriptors for items uploaded by this user, but not shared
+    /// - Parameter from: the descriptors
+    func restoreUploadQueueItems(from: [String: (SHUploadHistoryItem, Date)])
     
-    /// Let the delegate know that a queue item representing a successful SHARE needs to be retrieved or re-created in the queue.
-    /// The item - in fact - might not exist in the queue if:
-    /// - the user logged out and the queues were cleaned
-    /// - the user is on another device
-    /// 
-    /// - Parameter forLocalIdentifiers: all the possible queue item identifiers to restore
-    /// - Parameter groupId: the group identifier common across all these queue items
-    func restoreShareQueueItems(forLocalIdentifiers: [String],
-                                in groupId: String)
+    /// Provide the descriptors shared by this user with other users
+    /// - Parameter from: the descriptors
+    func restoreShareQueueItems(from: [String: (SHShareHistoryItem, Date)])
     
     /// Notify the delegate that the restoration was completed.
     /// This can be used as a signal to update all the threads, so the list of user identifiers

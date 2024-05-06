@@ -92,16 +92,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// about all groups that need to be restored.
     /// Uploads and shares will be reported separately, according to the contract in the delegate.
     /// Because these assets exist in the local server, the assumption is that they will also be present in the
-    /// upload and history queues, so they don't need to be re-created, as it happens in the sister method
+    /// upload and history queues, so they don't need to be re-created.
+    /// The recreation only happens in the sister method:
     /// `SHRemoteDownloadOperation::restoreQueueItems(descriptorsByGlobalIdentifier:qos:completionHandler:)`
     ///
     /// - Parameters:
     ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
+    ///   - globalIdentifiersSharedBySelf: the asset global identifiers shared by self
     ///   - completionHandler: the callback method
     ///
     func restoreQueueItems(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
+        filteringKeys globalIdentifiersSharedBySelf: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         guard original.count > 0 else {
@@ -109,9 +111,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
+        guard globalIdentifiersSharedBySelf.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
         let descriptors = original.values.filter({
-            filteringKeys.contains($0.globalIdentifier)
-            && $0.sharingInfo.sharedByUserIdentifier == self.user.identifier
+            globalIdentifiersSharedBySelf.contains($0.globalIdentifier)
             && $0.localIdentifier != nil
         })
         
@@ -125,68 +131,47 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             restorationDelegate.didStartRestoration()
         }
         
-        var uploadLocalAssetIdByGroupId = [String: Set<LocalIdentifier>]()
-        var shareLocalAssetIdsByGroupId = [String: Set<LocalIdentifier>]()
-        var userIdsInvolvedInRestoration = Set<UserIdentifier>()
-        
+        var allUserIdsInDescriptors = Set<UserIdentifier>()
         for descriptor in descriptors {
-            
-            guard let localIdentifier = descriptor.localIdentifier else {
-                continue
+            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                allUserIdsInDescriptors.insert(recipientId)
             }
-            
-            if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
-               let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
-               recipientUserId == user.identifier {
-                ///
-                /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
-                /// Restore the upload from the queue
-                ///
-                let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
+        }
+        
+        self.getUsers(withIdentifiers: Array(allUserIdsInDescriptors)) { getUsersResult in
+            switch getUsersResult {
                 
-                if uploadLocalAssetIdByGroupId[groupId] == nil {
-                    uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
-                } else {
-                    uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
+            case .failure(let error):
+                completionHandler(.failure(error))
+            
+            case .success(let usersDict):
+                
+                let restorationDelegate = self.restorationDelegate
+                self.delegatesQueue.async {
+                    restorationDelegate.didStartRestoration()
                 }
                 
-                userIdsInvolvedInRestoration.insert(recipientUserId)
-            } else {
-                for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    if uploadLocalAssetIdByGroupId[groupId] == nil {
-                        uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
-                    } else {
-                        uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
-                    }
-                    if shareLocalAssetIdsByGroupId[groupId] == nil {
-                        shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
-                    } else {
-                        shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
-                    }
+                let (
+                    groupIdToUploadItem,
+                    groupIdToShareItem,
+                    userIdsInvolvedInRestoration
+                ) = self.createHistoryItems(
+                    from: descriptors,
+                    usersDict: usersDict
+                )
+                
+                self.delegatesQueue.async {
+                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItem)
+                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItem)
                     
-                    userIdsInvolvedInRestoration.insert(recipientUserId)
+                    restorationDelegate.didCompleteRestoration(
+                        userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
+                    )
                 }
+                
+                completionHandler(.success(()))
             }
         }
-        
-        self.log.debug("[\(type(of: self))] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-        self.log.debug("[\(type(of: self))] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
-        
-        self.delegatesQueue.async {
-            for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
-                restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
-            }
-            
-            for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
-                restorationDelegate.restoreShareQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
-            }
-            
-            restorationDelegate.didCompleteRestoration(
-                userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
-            )
-        }
-        
-        completionHandler(.success(()))
     }
     
     
