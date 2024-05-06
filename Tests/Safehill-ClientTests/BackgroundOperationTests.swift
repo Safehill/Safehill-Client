@@ -5,9 +5,9 @@ import os
 struct DummyRestorationDelegate: SHAssetActivityRestorationDelegate {
     func didStartRestoration() {}
     
-    func restoreUploadQueueItems(forLocalIdentifiers: [String], in groupId: String) {}
+    func restoreUploadQueueItems(from: [String : [(SHUploadHistoryItem, Date)]]) {}
     
-    func restoreShareQueueItems(forLocalIdentifiers: [String], in groupId: String) {}
+    func restoreShareQueueItems(from: [String : [(SHShareHistoryItem, Date)]]) {}
     
     func didCompleteRestoration(userIdsInvolvedInRestoration: [String]) {}
 }

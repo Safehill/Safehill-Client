@@ -3,9 +3,38 @@ import KnowledgeBase
 
 public extension Array {
     func chunked(into size: Int) -> [[Element]] {
+        guard !isEmpty && size > 0 else {
+            return []
+        }
+        
         return stride(from: 0, to: count, by: size).map {
             Array(self[$0 ..< Swift.min($0 + size, count)])
         }
+    }
+    
+    func chunkedWithLinearDecrease() -> [[Element]] {
+        guard !isEmpty else {
+            return []
+        }
+        
+        let totalElements = count
+        var chunks: [[Element]] = []
+        var ratio = 0.5
+        var currentChunkSize = Swift.max(1, Int(Double(totalElements) * ratio))
+        
+        var currentIndex = 0
+        while currentIndex < totalElements {
+            let endIndex = Swift.min(currentIndex + currentChunkSize, totalElements)
+            let chunk = Array(self[currentIndex..<endIndex])
+            chunks.append(chunk)
+            
+            currentIndex += currentChunkSize
+            let remainingElements = totalElements - currentIndex
+            ratio *= 1.5
+            currentChunkSize = Swift.max(1, Int(Double(remainingElements) * ratio))
+        }
+        
+        return chunks
     }
 }
 
