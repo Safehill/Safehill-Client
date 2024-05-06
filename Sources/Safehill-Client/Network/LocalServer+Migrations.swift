@@ -228,31 +228,31 @@ extension LocalServer {
             
             /// Hi Res migrations
             condition = KBGenericCondition(.beginsWith, value: "hi::")
-
-            for chunk in Array(assetIdentifiers).chunked(into: 10) {
-                var assetCondition = KBGenericCondition(value: false)
-                for assetIdentifier in chunk {
-                    assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
-                }
-                condition = condition.and(assetCondition)
-                
-                group.enter()
-                assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
-                    switch result {
-                    case .success(let keyValues):
-                        do {
-                            if keyValues.count > 0 {
-                                let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+            
+            group.enter()
+            assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
+                switch result {
+                case .success(let keyValues):
+                    let relevantKeyValues = keyValues.filter {
+                        for assetIdentifier in assetIdentifiers {
+                            if $0.key.hasSuffix("::\(assetIdentifier)") {
+                                return true
                             }
-                        } catch {
-                            log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
-                            errors.append(error)
                         }
-                    case .failure(let error):
+                        return false
+                    }
+                    do {
+                        if relevantKeyValues.count > 0 {
+                            let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                        }
+                    } catch {
+                        log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
                         errors.append(error)
                     }
-                    group.leave()
+                case .failure(let error):
+                    errors.append(error)
                 }
+                group.leave()
             }
             
             group.notify(queue: .global()) {
