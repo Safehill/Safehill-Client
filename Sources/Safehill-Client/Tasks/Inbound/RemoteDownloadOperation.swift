@@ -3,15 +3,14 @@ import KnowledgeBase
 import os
 import Photos
 
-public let kSHAssetDownloadDefaults = "com.gf.safehill.ServerState"
-let kSHLastFetchDateAnchor = "com.gf.safehill.lastFetchDate"
-
 protocol SHDownloadOperation {}
 
 
 ///
 /// This pipeline operation is responsible for keeping assets in the remote server and local server in sync.
 /// It **ignores all assets in the local server**, except for when determining the set it needs to operate on.
+/// The restoration delegates are notified about successful uploads and shares from this user. If these items are not present in the history queues, they are created and persisted there.
+///
 ///
 /// The steps are:
 /// 1. `fetchDescriptors(for:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
@@ -20,35 +19,13 @@ protocol SHDownloadOperation {}
 ///     - for the assets shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
 ///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
 /// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt the ones from "known" authorized users and append to the unauthorized queue for the "uknown" users
-/// 5. `sync(remoteDescriptors:localDescriptors:qos:completionHandler:)` : similarly to how step 2.1 takes care of creating assets that do not exist on local server, this step takes care of assets that are both in local and remote server as well as the ones only in local. Local server is updated according to remote server information.
-/// 6. `syncGroupInteractions(remoteDescriptors:qos:completionHandler:)` : From the remote descriptors determine all group identifiers and sync the interactions (reactions and comments) for these groups by updating the local interactions store
 ///
 /// The pipeline sequence is:
 /// ```
 /// 1 -->   2 -->    3 -->    4
-///   \->   5
-///   \->   6
 /// ```
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
-    
-    private static var RemoteDownloadUserDefaults = UserDefaults(suiteName: kSHAssetDownloadDefaults)!
-    
-//    internal static var lastFetchDate: Date? {
-//        get {
-//            let savedLastFetchDate = RemoteDownloadUserDefaults.value(forKey: kSHLastFetchDateAnchor)
-//            if let savedLastFetchDate = savedLastFetchDate as? Date {
-//                return savedLastFetchDate
-//            }
-//            return nil
-//        }
-//        set {
-//            RemoteDownloadUserDefaults.set(
-//                newValue,
-//                forKey: kSHLastFetchDateAnchor
-//            )
-//        }
-//    }
     
     internal static var lastFetchDate: Date? = nil
     
@@ -271,14 +248,17 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     }
     
     ///
-    /// Get the apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier
-    /// If they exist, then do not decrypt them but just serve the local asset.
-    /// If they don't, return them in the callback method so they can be decrypted.
+    /// Notifies the delegates about matches between the assets on the server and the local library.
+    ///
+    ///
+    /// It retrieves apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier.
+    /// - If they exist, then do not decrypt them but just serve the local asset.
+    /// - If they don't, return them in the callback method so they can be decrypted.
     ///
     /// - Parameters:
     ///   - descriptorsByGlobalIdentifier: all the descriptors by local identifier
     ///   - completionHandler: the callback method
-    internal func mergeDescriptorsWithApplePhotosAssets(
+    internal func filterOutMatchesInPhotoLibrary(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Result<[GlobalIdentifier], Error>) -> Void
@@ -506,7 +486,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// These don't need to be downloaded.
         /// The delegate needs to be notified that they should be marked as "uploaded on the server"
         ///
-        self.mergeDescriptorsWithApplePhotosAssets(
+        self.filterOutMatchesInPhotoLibrary(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
             filteringKeys: sharedBySelfGlobalIdentifiers
         ) { result in

@@ -5,23 +5,23 @@ import os
 
 
 ///
-/// This pipeline operation deals with assets in the LocalServer and the Apple Photos Library.
-/// **IT DOES NOT** deal with remote server or remote descriptors. See `SHRemoteDwonloadOperation` for remote descriptor processing.
-/// It is responsible for identifying the mapping between the assets in the two sets, and then decrypt the assets in the local store for the ones that don't have a mapping to the local photo library.
+/// This pipeline operation deals with assets present the LocalServer.
+/// **It does not** deal with remote server or remote descriptors. See `SHRemoteDownloadOperation` for remote descriptor processing.
+/// The local pipeline is responsible for identifying the mapping between the assets in the photos library and the assets in the local server. The ones that don't have a mapping to the local photo library,  are decrypted from the local server and served via the `SHAssetDownloaderDelegate`.
+/// The restoration delegates are notified about successful uploads and shares from this user. It assumes the history queues on disk are in sync with the local server, so it doesn't try to create history items like the `SHRemoteDownloadOperation`.
+///
 ///
 /// The steps are:
 /// 1. `fetchDescriptorsFromServer()` : the descriptors are fetched from the local server
-/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
+/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This pipeline **does not** deal with use authorization, because assets in the local server are expected to have been previously authorized.
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
 ///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
-///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
+///     - the assets shared by from _other_ users are returned so they can be decrypted
 /// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted asset to the delegates
 ///
 /// Usually in the lifecycle of the application, the decryption happens only once.
 /// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
-/// Hence, it's advised to run it with that flag set to true once (at start) and then run it continously with that flag set to false.
-/// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor,
-/// running `SHRemoteDownloadOperation`s.
+/// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
 ///
 /// The pipeline sequence is:
 /// ```
@@ -31,6 +31,12 @@ import os
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
     private static var alreadyProcessed = Set<GlobalIdentifier>()
+    
+    static func markAsAlreadyProcessed(_ gids: [GlobalIdentifier]) {
+        for gid in gids {
+            Self.alreadyProcessed.insert(gid)
+        }
+    }
     
     @available(*, unavailable)
     public override init(
@@ -302,7 +308,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         self.restoreQueueItems(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
             filteringKeys: sharedBySelfGlobalIdentifiers
-        ) { _ in
+        ) { restoreResult in
+            
+            if case .failure(let err) = restoreResult {
+                self.log.critical("failure while restoring queue items \(sharedBySelfGlobalIdentifiers): \(err.localizedDescription)")
+            } else {
+                Self.markAsAlreadyProcessed(sharedBySelfGlobalIdentifiers)
+            }
             
             ///
             /// FOR THE ONES SHARED BY OTHER USERS
@@ -409,9 +421,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     completionHandler(thirdResult)
                                     
                                     if case .success(let tuples) = thirdResult, tuples.count > 0 {
-                                        for gid in tuples.map({ $0.1.globalIdentifier }) {
-                                            Self.alreadyProcessed.insert(gid)
-                                        }
+                                        Self.markAsAlreadyProcessed(tuples.map({ $0.1.globalIdentifier }))
                                     }
                                 }
                                 
