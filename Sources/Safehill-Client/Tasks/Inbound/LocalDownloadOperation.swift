@@ -152,8 +152,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 }
                 
                 let (
-                    groupIdToUploadItem,
-                    groupIdToShareItem,
+                    groupIdToUploadItems,
+                    groupIdToShareItems,
                     userIdsInvolvedInRestoration
                 ) = self.createHistoryItems(
                     from: descriptors,
@@ -161,8 +161,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 )
                 
                 self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItem)
-                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItem)
+                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
+                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
                     
                     restorationDelegate.didCompleteRestoration(
                         userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)

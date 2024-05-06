@@ -113,11 +113,11 @@ public protocol SHAssetActivityRestorationDelegate {
     
     /// Provide the descriptors for items uploaded by this user, but not shared
     /// - Parameter from: the descriptors
-    func restoreUploadQueueItems(from: [String: (SHUploadHistoryItem, Date)])
+    func restoreUploadQueueItems(from: [String: [(SHUploadHistoryItem, Date)]])
     
     /// Provide the descriptors shared by this user with other users
     /// - Parameter from: the descriptors
-    func restoreShareQueueItems(from: [String: (SHShareHistoryItem, Date)])
+    func restoreShareQueueItems(from: [String: [(SHShareHistoryItem, Date)]])
     
     /// Notify the delegate that the restoration was completed.
     /// This can be used as a signal to update all the threads, so the list of user identifiers

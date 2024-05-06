@@ -638,34 +638,39 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 }
                 
                 let (
-                    groupIdToUploadItem,
-                    groupIdToShareItem,
+                    groupIdToUploadItems,
+                    groupIdToShareItems,
                     userIdsInvolvedInRestoration
                 ) = self.createHistoryItems(
                     from: Array(descriptorsByGlobalIdentifier.values),
                     usersDict: usersDict
                 )
                     
-                for (uploadItem, timestamp) in groupIdToUploadItem.values {
-                    if (try? uploadItem.insert(
-                        in: BackgroundOperationQueue.of(type: .successfulUpload),
-                        at: timestamp
-                    )) == nil {
-                        self.log.warning("[\(type(of: self))] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
+                for groupIdToUploadItem in groupIdToUploadItems.values {
+                    for (uploadItem, timestamp) in groupIdToUploadItem {
+                        if (try? uploadItem.insert(
+                            in: BackgroundOperationQueue.of(type: .successfulUpload),
+                            at: timestamp
+                        )) == nil {
+                            self.log.warning("[\(type(of: self))] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
+                        }
                     }
                 }
-                for (shareItem, timestamp) in groupIdToShareItem.values {
-                    if (try? shareItem.insert(
-                        in: BackgroundOperationQueue.of(type: .successfulShare),
-                        at: timestamp
-                    )) == nil {
-                        self.log.warning("[\(type(of: self))] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
+                
+                for groupIdToShareItem in groupIdToShareItems.values {
+                    for (shareItem, timestamp) in groupIdToShareItem {
+                        if (try? shareItem.insert(
+                            in: BackgroundOperationQueue.of(type: .successfulShare),
+                            at: timestamp
+                        )) == nil {
+                            self.log.warning("[\(type(of: self))] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
+                        }
                     }
                 }
 
                 self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItem)
-                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItem)
+                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
+                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
                     
                     restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration))
                 }
@@ -675,25 +680,38 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
     }
     
+    /// For each descriptor (there's one per asset), create in-memory representation of:
+    /// - `SHUploadHistoryItem`s, aka the upload event (by this user)
+    /// - `SHShareHistoryItem`s, aka all share events for the asset (performed by this user)
+    ///
+    /// Such representation is keyed by groupId.
+    /// In other words, for each group there is as many history items as many assets were shared in the group.
+    ///
+    /// - Parameters:
+    ///   - descriptors: the descriptors to process
+    ///   - usersDict: the users mentioned in the descriptors, keyed by identifier
+    ///
     internal func createHistoryItems(
         from descriptors: [any SHAssetDescriptor],
         usersDict: [UserIdentifier: any SHServerUser]
     ) -> (
-        [String: (SHUploadHistoryItem, Date)],
-        [String: (SHShareHistoryItem, Date)],
+        [String: [(SHUploadHistoryItem, Date)]],
+        [String: [(SHShareHistoryItem, Date)]],
         Set<UserIdentifier>
     ) {
         let myUser = self.user
         
         var userIdsInvolvedInRestoration = Set<UserIdentifier>()
-        var groupIdToUploadItem = [String: (SHUploadHistoryItem, Date)]()
-        var groupIdToShareItem = [String: (SHShareHistoryItem, Date)]()
+        var groupIdToUploadItems = [String: [(SHUploadHistoryItem, Date)]]()
+        var groupIdToShareItems = [String: [(SHShareHistoryItem, Date)]]()
         
         for descriptor in descriptors {
             
             guard let localIdentifier = descriptor.localIdentifier else {
                 continue
             }
+            
+            var otherUserIdsSharedWith = [String: [(with: any SHServerUser, at: Date)]]()
             
             for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 
@@ -714,50 +732,59 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         isBackground: false
                     )
                     
-                    groupIdToUploadItem[groupId] = (item, groupCreationDate)
+                    if groupIdToUploadItems[groupId] == nil {
+                        groupIdToUploadItems[groupId] = [(item, groupCreationDate)]
+                    } else {
+                        groupIdToUploadItems[groupId]!.append((item, groupCreationDate))
+                    }
+                    
                 } else {
-                    guard let user = usersDict[recipientUserId] else {
+                    guard let recipient = usersDict[recipientUserId] else {
                         self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server")
                         continue
                     }
-                    
-                    if groupIdToShareItem[groupId] == nil {
-                        let item = SHShareHistoryItem(
-                            localAssetId: localIdentifier,
-                            globalAssetId: descriptor.globalIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            groupId: groupId,
-                            eventOriginator: myUser,
-                            sharedWith: [user],
-                            shouldLinkToThread: false, // TODO: We should fetch this information from server, instead of assuming it's false
-                            isBackground: false
-                        )
-                        groupIdToShareItem[groupId] = (item, groupCreationDate)
-                        
-                        userIdsInvolvedInRestoration.insert(user.identifier)
+                    if otherUserIdsSharedWith[groupId] == nil {
+                        otherUserIdsSharedWith[groupId] = [(with: recipient, at: groupCreationDate)]
                     } else {
-                        var users = [any SHServerUser]()
-                        users.append(contentsOf: groupIdToShareItem[groupId]!.0.sharedWith)
-                        users.append(user)
-                        let item = SHShareHistoryItem(
-                            localAssetId: localIdentifier,
-                            globalAssetId: descriptor.globalIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            groupId: groupId,
-                            eventOriginator: myUser,
-                            sharedWith: users,
-                            shouldLinkToThread: false,
-                            isBackground: false
+                        otherUserIdsSharedWith[groupId]?.append(
+                            missingContentsFrom: [(with: recipient, at: groupCreationDate)],
+                            compareUsing: { $0.with.identifier == $1.with.identifier }
                         )
-                        groupIdToShareItem[groupId] = (item, groupCreationDate)
                     }
+                }
+            }
+            
+            for (groupId, shareInfo) in otherUserIdsSharedWith {
+                let item = SHShareHistoryItem(
+                    localAssetId: localIdentifier,
+                    globalAssetId: descriptor.globalIdentifier,
+                    versions: [.lowResolution, .hiResolution],
+                    groupId: groupId,
+                    eventOriginator: myUser,
+                    sharedWith: shareInfo.map({ $0.with }),
+                    shouldLinkToThread: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                    isBackground: false
+                )
+                
+                let maxDate: Date = shareInfo.reduce(Date.distantPast) { 
+                    (currentMax, tuple) in
+                    if currentMax.compare(tuple.at) == .orderedAscending {
+                        return tuple.at
+                    }
+                    return currentMax
+                }
+                
+                if groupIdToShareItems[groupId] == nil {
+                    groupIdToShareItems[groupId] = [(item, maxDate)]
+                } else {
+                    groupIdToShareItems[groupId]!.append((item, maxDate))
                 }
             }
         }
         
         return (
-            groupIdToUploadItem,
-            groupIdToShareItem,
+            groupIdToUploadItems,
+            groupIdToShareItems,
             userIdsInvolvedInRestoration
         )
     }
