@@ -132,11 +132,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
-        let restorationDelegate = self.restorationDelegate
-        self.delegatesQueue.async {
-            restorationDelegate.didStartRestoration()
-        }
-        
         var allUserIdsInDescriptors = Set<UserIdentifier>()
         for descriptor in descriptors {
             for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
@@ -152,27 +147,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             
             case .success(let usersDict):
                 
-                let restorationDelegate = self.restorationDelegate
-                self.delegatesQueue.async {
-                    restorationDelegate.didStartRestoration()
-                }
-                
                 let (
                     groupIdToUploadItems,
-                    groupIdToShareItems,
-                    userIdsInvolvedInRestoration
+                    groupIdToShareItems
                 ) = self.createHistoryItems(
                     from: descriptors,
                     usersDict: usersDict
                 )
                 
+                let restorationDelegate = self.restorationDelegate
                 self.delegatesQueue.async {
                     restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
                     restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
-                    
-                    restorationDelegate.didCompleteRestoration(
-                        userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
-                    )
                 }
                 
                 completionHandler(.success(()))

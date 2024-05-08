@@ -612,15 +612,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 
             case .success(let usersDict):
                 
-                let restorationDelegate = self.restorationDelegate
-                self.delegatesQueue.async {
-                    restorationDelegate.didStartRestoration()
-                }
-                
                 let (
                     groupIdToUploadItems,
-                    groupIdToShareItems,
-                    userIdsInvolvedInRestoration
+                    groupIdToShareItems
                 ) = self.createHistoryItems(
                     from: Array(descriptorsByGlobalIdentifier.values),
                     usersDict: usersDict
@@ -648,11 +642,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     }
                 }
 
+                let restorationDelegate = self.restorationDelegate
                 self.delegatesQueue.async {
                     restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
                     restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
-                    
-                    restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration))
                 }
                 
                 completionHandler(.success(()))
@@ -676,12 +669,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         usersDict: [UserIdentifier: any SHServerUser]
     ) -> (
         [String: [(SHUploadHistoryItem, Date)]],
-        [String: [(SHShareHistoryItem, Date)]],
-        Set<UserIdentifier>
+        [String: [(SHShareHistoryItem, Date)]]
     ) {
         let myUser = self.user
         
-        var userIdsInvolvedInRestoration = Set<UserIdentifier>()
         var groupIdToUploadItems = [String: [(SHUploadHistoryItem, Date)]]()
         var groupIdToShareItems = [String: [(SHShareHistoryItem, Date)]]()
         
@@ -696,8 +687,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 
                 let groupCreationDate = descriptor.sharingInfo.groupInfoById[groupId]!.createdAt!
-                
-                userIdsInvolvedInRestoration.insert(user.identifier)
                 
                 if recipientUserId == myUser.identifier {
                     
@@ -764,8 +753,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         return (
             groupIdToUploadItems,
-            groupIdToShareItems,
-            userIdsInvolvedInRestoration
+            groupIdToShareItems
         )
     }
     

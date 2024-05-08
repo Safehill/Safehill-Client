@@ -108,9 +108,6 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
 
 public protocol SHAssetActivityRestorationDelegate {
     
-    /// Notify the delegate that the restoration started.
-    func didStartRestoration()
-    
     /// Provide the descriptors for items uploaded by this user, but not shared
     /// - Parameter from: the descriptors
     func restoreUploadQueueItems(from: [String: [(SHUploadHistoryItem, Date)]])
@@ -118,13 +115,6 @@ public protocol SHAssetActivityRestorationDelegate {
     /// Provide the descriptors shared by this user with other users
     /// - Parameter from: the descriptors
     func restoreShareQueueItems(from: [String: [(SHShareHistoryItem, Date)]])
-    
-    /// Notify the delegate that the restoration was completed.
-    /// This can be used as a signal to update all the threads, so the list of user identifiers
-    /// involved in the restoration of the upload/share requests is provided.
-    /// 
-    /// - Parameter userIdsInvolvedInRestoration: All the user identifiers involved in the restoration of the assets
-    func didCompleteRestoration(userIdsInvolvedInRestoration: [String])
 }
 
 public protocol SHOutboundAssetOperationDelegate {}
