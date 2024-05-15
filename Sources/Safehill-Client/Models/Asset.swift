@@ -96,8 +96,8 @@ public enum SHAssetDescriptorUploadState: String {
 
 
 public protocol SHRemoteAssetIdentifiable: Hashable {
-    var globalIdentifier: String { get }
-    var localIdentifier: String? { get }
+    var globalIdentifier: GlobalIdentifier { get }
+    var localIdentifier: LocalIdentifier? { get }
 }
 
 public extension SHRemoteAssetIdentifiable {
@@ -187,7 +187,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
 
 /// The interface representing an asset after being decrypted
 public protocol SHDecryptedAsset: SHRemoteAssetIdentifiable {
-    var localIdentifier: String? { get set }
+    var localIdentifier: LocalIdentifier? { get set }
     var decryptedVersions: [SHAssetQuality: Data] { get set }
     var creationDate: Date? { get }
 }

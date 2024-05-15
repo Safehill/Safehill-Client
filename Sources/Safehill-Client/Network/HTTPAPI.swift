@@ -514,8 +514,9 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        let deviceId = SHHash.stringDigest(for: deviceName.data(using: .utf8))
         let parameters = [
-            "deviceId": deviceName,
+            "deviceId": deviceId,
             "token": token
         ]
         self.post("users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
