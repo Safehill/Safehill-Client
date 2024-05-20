@@ -202,23 +202,18 @@ public class SHInteractionsSyncOperation: Operation {
     /// Main run.
     /// 1. Pull the latest threads from remote, and sync the latest interactions via REST
     /// 2. Start the WEBSOCKET connection for updates
-    ///
-    /// - Parameters:
-    ///   - qos: the level of quality of the service
-    public func start(qos: DispatchQoS.QoSClass) async throws {
-        do {
-            try await self.syncThreadsAndLastInteractions(qos: qos)
-        } catch {
-            self.log.critical("failure syncing thread interactions: \(error.localizedDescription)")
-            throw error
-        }
-
-        Task(priority: qos.toTaskPriority()) {
+    public override func start() {
+        super.start()
+        
+        Task {
+            do {
+                try await self.syncThreadsAndLastInteractions(qos: .default)
+            } catch {
+                self.log.critical("failure syncing thread interactions: \(error.localizedDescription)")
+                throw error
+            }
+            
             try await self.startWebSocketAndReconnectOnFailure()
         }
-    }
-    
-    public func stop() async {
-        await self.stopWebSocket()
     }
 }
