@@ -748,6 +748,44 @@ extension SHUserInteractionController {
     
     public func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
+        in anchor: SHInteractionAnchor,
+        anchorId: String,
+        completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
+    ) {
+        let encryptionDetails: RecipientEncryptionDetailsDTO
+        do {
+            let maybeEncryptionDetails = try self.fetchSelfEncryptionDetails(forAnchor: anchor, anchorId: anchorId)
+            guard let maybeEncryptionDetails else {
+                switch anchor {
+                case .thread:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(anchorId)))
+                case .group:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(anchorId)))
+                }
+                return
+            }
+            encryptionDetails = maybeEncryptionDetails
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let encryptionDetailsClass = EncryptionDetailsClass(
+            ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
+            encryptedSecret: encryptionDetails.encryptedSecret,
+            secretPublicSignature: encryptionDetails.secretPublicSignature,
+            senderPublicSignature: encryptionDetails.senderPublicSignature
+        )
+        
+        decryptMessages(
+            encryptedMessages,
+            usingEncryptionDetails: encryptionDetailsClass,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func decryptMessages(
+        _ encryptedMessages: [MessageOutputDTO],
         usingEncryptionDetails encryptionDetails: EncryptionDetailsClass,
         completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
     ) {
