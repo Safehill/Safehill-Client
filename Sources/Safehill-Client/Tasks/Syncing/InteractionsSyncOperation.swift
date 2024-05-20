@@ -156,8 +156,8 @@ public class SHInteractionsSyncOperation: Operation {
         }
     }
     
-    public func run(
-        for anchor: SHInteractionAnchor,
+    public func sync(
+        anchor: SHInteractionAnchor,
         anchorId: String,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
