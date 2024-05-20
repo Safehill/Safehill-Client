@@ -736,10 +736,11 @@ extension SHUserInteractionController {
     
     public func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
-        usingEncryptionDetails encryptionDetails: EncryptionDetailsClass
+        in anchor: SHInteractionAnchor,
+        anchorId: String
     ) async throws -> [SHDecryptedMessage] {
         try await withUnsafeThrowingContinuation { continuation in
-            self.decryptMessages(encryptedMessages, usingEncryptionDetails: encryptionDetails) {
+            self.decryptMessages(encryptedMessages, in: anchor, anchorId: anchorId) {
                 result in
                 continuation.resume(with: result)
             }
