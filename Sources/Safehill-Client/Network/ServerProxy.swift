@@ -11,6 +11,7 @@ internal protocol SHServerProxyProtocol {
     )
     
     func listLocalThreads(
+        withIdentifiers: [String]?,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     )
     
@@ -1283,9 +1284,13 @@ extension SHServerProxy {
     }
     
     internal func listLocalThreads(
+        withIdentifiers threadIds: [String]? = nil,
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
-        self.localServer.listThreads(completionHandler: completionHandler)
+        self.localServer.listThreads(
+            withIdentifiers: threadIds,
+            completionHandler: completionHandler
+        )
     }
     
     internal func getThread(

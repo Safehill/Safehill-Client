@@ -192,7 +192,9 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func listLocalThreads(completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
+    func listLocalThreads(
+        withIdentifiers threadIds: [String]?,
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
         self.listThreads(filteringUnknownUsers: false, completionHandler: completionHandler)
     }
     

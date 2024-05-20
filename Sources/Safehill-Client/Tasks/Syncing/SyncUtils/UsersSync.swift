@@ -1,7 +1,7 @@
 import Foundation
 import KnowledgeBase
 
-extension SHSyncOperation {
+extension SHAssetsSyncOperation {
     
     /// ** !!!!!!!!!! **
     /// ** !!!!!!!!!! **

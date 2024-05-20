@@ -1,6 +1,6 @@
 import Foundation
 
-extension SHSyncOperation {
+extension SHInteractionsSyncOperation {
     
     func syncReactions(
         anchor: SHInteractionAnchor,
@@ -101,13 +101,13 @@ extension SHSyncOperation {
         }
         
         if anyChanged {
-            let threadsDelegates = self.threadsDelegates
+            let interactionsSyncDelegates = self.interactionsSyncDelegates
             self.delegatesQueue.async {
                 switch anchor {
                 case .thread:
-                    threadsDelegates.forEach({ $0.reactionsDidChange(inThread: anchorId) })
+                    interactionsSyncDelegates.forEach({ $0.reactionsDidChange(inThread: anchorId) })
                 case .group:
-                    threadsDelegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
+                    interactionsSyncDelegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
                 }
             }
         }

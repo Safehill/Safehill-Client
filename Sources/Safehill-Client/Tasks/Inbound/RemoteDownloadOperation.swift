@@ -37,24 +37,18 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     let user: SHLocalUserProtocol
     
     let downloaderDelegates: [SHAssetDownloaderDelegate]
-    let assetsSyncDelegates: [SHAssetSyncingDelegate]
-    let threadsSyncDelegates: [SHThreadSyncingDelegate]
     let restorationDelegate: SHAssetActivityRestorationDelegate
     
     let photoIndexer: SHPhotosIndexer
     
     public init(user: SHLocalUserProtocol,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
-                assetsSyncDelegates: [SHAssetSyncingDelegate],
-                threadsSyncDelegates: [SHThreadSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
                 photoIndexer: SHPhotosIndexer,
                 limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
         self.downloaderDelegates = downloaderDelegates
-        self.assetsSyncDelegates = assetsSyncDelegates
-        self.threadsSyncDelegates = threadsSyncDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer
     }

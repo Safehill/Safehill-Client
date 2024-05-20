@@ -5,27 +5,24 @@ import os
 
 // MARK: - Sync Operation
 
-public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
     
-    public let log = Logger(subsystem: "com.safehill", category: "BG-SYNC")
+    public let log = Logger(subsystem: "com.safehill", category: "BG-ASSETS-SYNC")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.sync.delegates")
     
     let user: SHAuthenticatedLocalUser
     
     let assetsDelegates: [SHAssetSyncingDelegate]
-    let threadsDelegates: [SHThreadSyncingDelegate]
     
     var serverProxy: SHServerProxy { user.serverProxy }
     
     public init(
         user: SHAuthenticatedLocalUser,
-        assetsDelegates: [SHAssetSyncingDelegate],
-        threadsDelegates: [SHThreadSyncingDelegate]
+        assetsDelegates: [SHAssetSyncingDelegate]
     ) {
         self.user = user
         self.assetsDelegates = assetsDelegates
-        self.threadsDelegates = threadsDelegates
     }
     
     private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
@@ -250,49 +247,6 @@ public class SHSyncOperation: Operation, SHBackgroundOperationProtocol {
             }
         }
     }
-    
-    public func run(
-        for anchor: SHInteractionAnchor,
-        anchorId: String,
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        switch anchor {
-        case .group:
-            self.syncGroupInteractions(groupId: anchorId, qos: qos) { result in
-                switch result {
-                case .failure(let err):
-                    self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
-                    completionHandler(.failure(err))
-                case .success:
-                    completionHandler(.success(()))
-                }
-            }
-        case .thread:
-            self.serverProxy.remoteServer.getThread(withId: anchorId) { getThreadResult in
-                switch getThreadResult {
-                case .failure(let error):
-                    self.log.error("failed to get thread with id \(anchorId) from server")
-                    completionHandler(.failure(error))
-                case .success(let serverThread):
-                    guard let serverThread else {
-                        self.log.warning("no such thread with id \(anchorId) from server")
-                        completionHandler(.success(()))
-                        return
-                    }
-                    self.syncThreadInteractions(serverThread: serverThread, qos: qos) { syncResult in
-                        switch syncResult {
-                        case .failure(let err):
-                            self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
-                            completionHandler(.failure(err))
-                        case .success:
-                            completionHandler(.success(()))
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
-public let SyncProcessor = SHBackgroundOperationProcessor<SHSyncOperation>()
+public let AssetsSyncProcessor = SHBackgroundOperationProcessor<SHAssetsSyncOperation>()

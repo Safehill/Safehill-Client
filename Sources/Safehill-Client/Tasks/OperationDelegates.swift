@@ -19,7 +19,7 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     )
 }
 
-public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {
+public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
     func didAddThread(_: ConversationThreadOutputDTO)

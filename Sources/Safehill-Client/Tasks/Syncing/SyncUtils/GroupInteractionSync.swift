@@ -2,7 +2,7 @@ import Foundation
 
 let GroupLastInteractionSyncLimit = 50
 
-extension SHSyncOperation {
+extension SHInteractionsSyncOperation {
     
     /// Determine the full set of unique group ids from the descriptor and call `syncGroupInteractions(groupIds:qos:)`
     /// to sync the interactions in these groups

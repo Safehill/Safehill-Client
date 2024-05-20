@@ -6,7 +6,7 @@ import os
 /// - full list of threads with server
 /// - LAST `ThreadLastInteractionSyncLimit` interactions in each
 ///
-public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHInteractionsSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public typealias OperationResult = Result<Void, Error>
     
@@ -19,17 +19,14 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
     
     let socket: WebSocketAPI
     
-    let assetsSyncDelegates: [SHAssetSyncingDelegate]
-    let threadsSyncDelegates: [SHThreadSyncingDelegate]
+    let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     
     public init(user: SHAuthenticatedLocalUser,
                 deviceId: String,
-                assetsSyncDelegates: [SHAssetSyncingDelegate],
-                threadsSyncDelegates: [SHThreadSyncingDelegate]) throws {
+                interactionsSyncDelegates: [SHInteractionsSyncingDelegate]) throws {
         self.user = user
         self.deviceId = deviceId
-        self.assetsSyncDelegates = assetsSyncDelegates
-        self.threadsSyncDelegates = threadsSyncDelegates
+        self.interactionsSyncDelegates = interactionsSyncDelegates
         self.socket = WebSocketAPI()
     }
     
@@ -67,35 +64,14 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
         await self.socket.disconnect()
     }
     
-    public func run(qos: DispatchQoS.QoSClass,
-                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        let syncOperation = SHSyncOperation(
-            user: self.user,
-            assetsDelegates: self.assetsSyncDelegates,
-            threadsDelegates: self.threadsSyncDelegates
-        )
-        syncOperation.syncLastThreadInteractions(qos: qos) {
-            result in
-            
-            if case .failure(let failure) = result {
-                self.log.critical("failure syncing thread interactions: \(failure.localizedDescription)")
-                completionHandler(.failure(failure))
-            }
-            completionHandler(.success(()))
-            
-            Task(priority: qos.toTaskPriority()) {
-                try await self.startWebSocketAndReconnectOnFailure()
-            }
-        }
-    }
-    
     private func processMessage(_ message: WebSocketMessage) {
         guard let contentData = message.content.data(using: .utf8) else {
             log.critical("[ws] unable to parse message content")
             return
         }
         
-        let threadsSyncDelegates = self.threadsSyncDelegates
+        let interactionsSyncDelegates = self.interactionsSyncDelegates
+        
         self.delegatesQueue.async {
             
             switch message.type {
@@ -103,7 +79,7 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
                 
                 guard let textMessage = try? JSONDecoder().decode(WebSocketMessage.TextMessage.self, from: contentData),
                       let interactionId = textMessage.interactionId else {
-                    self.log.critical("server sent a \(message.type.rawValue) message via WebSockets without an ID. This is not supposed to happen. \(message.content)")
+                    self.log.critical("server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
                     return
                 }
                 
@@ -116,7 +92,7 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
                     createdAt: textMessage.sentAt
                 )
                 
-                threadsSyncDelegates.forEach({
+                interactionsSyncDelegates.forEach({
                     switch SHInteractionAnchor(rawValue: textMessage.anchorType) {
                     case .group:
                         $0.didReceiveMessages([messageOutput], inGroup: textMessage.anchorId)
@@ -146,7 +122,7 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
                     addedAt: reaction.updatedAt
                 )
                 
-                threadsSyncDelegates.forEach({
+                interactionsSyncDelegates.forEach({
                     switch SHInteractionAnchor(rawValue: reaction.anchorType) {
                     case .group:
                         if message.type == .reactionAdd {
@@ -172,9 +148,77 @@ public class SHThreadsInteractionsSyncOperation: Operation, SHBackgroundOperatio
                     return
                 }
                 
-                threadsSyncDelegates.forEach({
-                    $0.didAddThread(threadOutputDTO)
-                })
+                self.syncThreadsFromAuthorizedUsers(
+                    remoteThreads: [threadOutputDTO],
+                    qos: .utility
+                ) { _ in }
+            }
+        }
+    }
+    
+    public func run(
+        for anchor: SHInteractionAnchor,
+        anchorId: String,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        switch anchor {
+        case .group:
+            self.syncGroupInteractions(groupId: anchorId, qos: qos) { result in
+                switch result {
+                case .failure(let err):
+                    self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
+                    completionHandler(.failure(err))
+                case .success:
+                    completionHandler(.success(()))
+                }
+            }
+        case .thread:
+            self.serverProxy.remoteServer.getThread(withId: anchorId) { getThreadResult in
+                switch getThreadResult {
+                case .failure(let error):
+                    self.log.error("failed to get thread with id \(anchorId) from server")
+                    completionHandler(.failure(error))
+                case .success(let serverThread):
+                    guard let serverThread else {
+                        self.log.warning("no such thread with id \(anchorId) from server")
+                        completionHandler(.success(()))
+                        return
+                    }
+                    self.syncThreadInteractions(serverThread: serverThread, qos: qos) { syncResult in
+                        switch syncResult {
+                        case .failure(let err):
+                            self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
+                            completionHandler(.failure(err))
+                        case .success:
+                            completionHandler(.success(()))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Main run.
+    /// 1. Pull the latest threads from remote, and sync the latest interactions via REST
+    /// 2. Start the WEBSOCKET connection for updates
+    ///
+    /// - Parameters:
+    ///   - qos: the level of quality of the service
+    ///   - completionHandler: the callback
+    public func run(qos: DispatchQoS.QoSClass,
+                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        self.syncLastThreadInteractions(qos: qos) {
+            result in
+            
+            if case .failure(let failure) = result {
+                self.log.critical("failure syncing thread interactions: \(failure.localizedDescription)")
+                completionHandler(.failure(failure))
+            }
+            completionHandler(.success(()))
+            
+            Task(priority: qos.toTaskPriority()) {
+                try await self.startWebSocketAndReconnectOnFailure()
             }
         }
     }

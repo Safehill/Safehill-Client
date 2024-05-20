@@ -47,7 +47,7 @@ public struct SHUserInteractionController {
     public func listLocalThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
     ) {
-        self.serverProxy.listLocalThreads(completionHandler: completionHandler)
+        self.serverProxy.listLocalThreads(withIdentifiers: nil, completionHandler: completionHandler)
     }
     
     public func setupThread(
@@ -265,8 +265,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     /// Retrieve the last message in the thread.
     /// Because the last `ThreadLastInteractionSyncLimit` interactions
-    /// are synced via the `SHSyncOperation`,
-    /// we can safely collect the last message from local
+    /// are synced via the `SHInteractionsSyncOperation`, we can safely collect the last message from local
     ///
     /// - Parameters:
     ///   - threadId: the thread identifier

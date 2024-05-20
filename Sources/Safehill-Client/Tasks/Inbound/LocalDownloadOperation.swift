@@ -42,8 +42,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     public override init(
         user: SHLocalUserProtocol,
         downloaderDelegates: [SHAssetDownloaderDelegate],
-        assetsSyncDelegates: [SHAssetSyncingDelegate],
-        threadsSyncDelegates: [SHThreadSyncingDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         photoIndexer: SHPhotosIndexer,
         limitPerRun limit: Int? = nil
@@ -60,8 +58,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         super.init(
             user: user,
             downloaderDelegates: delegates,
-            assetsSyncDelegates: [],
-            threadsSyncDelegates: [],
             restorationDelegate: restorationDelegate,
             photoIndexer: photoIndexer
         )

@@ -1711,7 +1711,7 @@ struct LocalServer : SHServerAPI {
                     do {
                         ///
                         /// Get the assets associated to this thread,
-                        /// previously synced by the `SHThreadInteractionSyncOperation`
+                        /// previously synced by the `SHInteractionSyncOperation`
                         ///
                         let assetsGids = try userStore
                             .keys(
