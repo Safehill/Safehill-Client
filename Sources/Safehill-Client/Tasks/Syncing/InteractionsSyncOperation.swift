@@ -78,6 +78,12 @@ public class SHInteractionsSyncOperation: Operation {
         self.delegatesQueue.async {
             
             switch message.type {
+            case .connectionAck:
+                guard let encoded = try? JSONDecoder().decode(WebSocketMessage.ConnectionAck.self, from: contentData) else {
+                    return
+                }
+                self.log.debug("CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
+                
             case .message:
                 
                 guard let textMessage = try? JSONDecoder().decode(WebSocketMessage.TextMessage.self, from: contentData),

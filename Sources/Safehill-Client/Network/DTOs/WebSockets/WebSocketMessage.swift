@@ -3,6 +3,7 @@ import Foundation
 public struct WebSocketMessage: Codable {
     
     enum MessageType: String, Codable {
+        case connectionAck = "connection-ack"
         case message = "message"
         case reactionAdd = "reaction-add"
         case reactionRemove = "reaction-remove"
@@ -11,6 +12,11 @@ public struct WebSocketMessage: Codable {
     
     let type: MessageType
     let content: String
+    
+    struct ConnectionAck: Codable {
+        let userPublicIdentifier: String
+        let deviceId: String
+    }
     
     struct TextMessage: Codable {
         let interactionId: String?
