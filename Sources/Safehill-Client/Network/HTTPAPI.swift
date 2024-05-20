@@ -513,8 +513,7 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let deviceId = SHHash.stringDigest(for: deviceName.data(using: .utf8)!)
+    func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "deviceId": deviceId,
             "token": token
