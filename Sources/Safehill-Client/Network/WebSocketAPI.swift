@@ -141,6 +141,7 @@ extension WebSocketAPI {
         do {
             return try JSONDecoder().decode(WebSocketMessage.self, from: jsonData)
         } catch {
+            log.error("[ws] unable to parse WebSocketMessage \(encodedMessage): \(error.localizedDescription)")
             throw WebSocketConnectionError.decodingError
         }
     }
