@@ -44,16 +44,14 @@ extension SHSyncOperation {
                         threadsDelegates.forEach({
                             $0.didReceiveMessages(
                                 messages,
-                                inGroup: anchorId,
-                                encryptionDetails: encryptionDetails
+                                inGroup: anchorId
                             )
                         })
                     case .thread:
                         threadsDelegates.forEach({
                             $0.didReceiveMessages(
                                 messages,
-                                inThread: anchorId,
-                                encryptionDetails: encryptionDetails
+                                inThread: anchorId
                             )
                         })
                     }

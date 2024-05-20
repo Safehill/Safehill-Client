@@ -22,17 +22,26 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
 public protocol SHThreadSyncingDelegate: SHInboundAssetOperationDelegate {
     func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
+    func didAddThread(_: ConversationThreadOutputDTO)
+    
     func didReceiveMessagesFromUnauthorized(users: [any SHServerUser])
     
-    func reactionsDidChange(inGroup groupId: String)
-    func didReceiveMessages(_ messages: [MessageOutputDTO], 
-                            inGroup groupId: String,
-                            encryptionDetails: EncryptionDetailsClass)
+    func didReceiveMessages(_ messages: [MessageOutputDTO],
+                           inGroup groupId: String)
+    func didReceiveMessages(_: [MessageOutputDTO],
+                           inThread threadId: String)
     
     func reactionsDidChange(inThread threadId: String)
-    func didReceiveMessages(_ messages: [MessageOutputDTO], 
-                            inThread threadId: String,
-                            encryptionDetails: EncryptionDetailsClass)
+    func reactionsDidChange(inGroup groupId: String)
+    
+    func didAddReaction(_: ReactionOutputDTO,
+                        inGroup groupId: String)
+    func didAddReaction(_: ReactionOutputDTO,
+                        inThread threadId: String)
+    func didRemoveReaction(_: ReactionOutputDTO,
+                           inGroup groupId: String)
+    func didRemoveReaction(_: ReactionOutputDTO,
+                           inThread threadId: String)
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {

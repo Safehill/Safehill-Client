@@ -15,9 +15,7 @@ extension SHSyncOperation {
     }
     
     ///
-    /// Best attempt to sync the interactions from the server to the local server proxy by calling SHUserInteractionController::retrieveInteractions
-    ///
-    /// - Parameter descriptorsByGlobalIdentifier: the descriptors retrieved from server, from which to collect all unique groups
+    /// Update the list of threads locally by fetching the latest from remote
     ///
     func syncLastThreadInteractions(
         qos: DispatchQoS.QoSClass,

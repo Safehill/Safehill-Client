@@ -35,7 +35,6 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
     
     typealias OperationResult = Result<Void, Error>
     
-    
     var operationType: BackgroundOperationQueue.OperationType { .encryption }
     var processingState: ProcessingState { .encrypting }
     
