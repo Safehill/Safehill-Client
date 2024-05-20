@@ -4,149 +4,134 @@ let ThreadLastInteractionSyncLimit = 20
 
 extension SHInteractionsSyncOperation {
     
-    public func syncThreads(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.syncLastThreadInteractions(qos: qos) { result in
-            if case .failure(let err) = result {
-                self.log.error("failed to sync interactions: \(err.localizedDescription)")
-                completionHandler(.failure(err))
-            }
-            completionHandler(.success(()))
-        }
-    }
-    
-    ///
-    /// Update the list of threads locally by fetching the latest from remote
-    ///
-    func syncLastThreadInteractions(
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        let dispatchGroup = DispatchGroup()
-        var remoteError: Error? = nil, localError: Error? = nil
-        var allThreads = [ConversationThreadOutputDTO]()
-        var localThreads = [ConversationThreadOutputDTO]()
+    internal func syncThreadsAndLastInteractions(qos: DispatchQoS.QoSClass) async throws {
         
-        ///
-        /// Pull all threads from REMOTE
-        ///
-        dispatchGroup.enter()
-        self.serverProxy.listThreads(filteringUnknownUsers: false) { result in
-            switch result {
-            case .success(let threadList):
-                allThreads = threadList
-            case .failure(let err):
-                remoteError = err
-            }
-            dispatchGroup.leave()
-        }
-        
-        ///
-        /// Pull all threads from LOCAL
-        ///
-        dispatchGroup.enter()
-        self.serverProxy.listLocalThreads { result in
-            switch result {
-            case .success(let threadList):
-                localThreads = threadList
-            case .failure(let err):
-                localError = err
-            }
-            dispatchGroup.leave()
-        }
-        
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard remoteError == nil else {
-                self.log.error("[sync] error getting all threads from server. \(remoteError!.localizedDescription)")
-                
-                let interactionsSyncDelegates = self.interactionsSyncDelegates
-                self.delegatesQueue.async {
-                    interactionsSyncDelegates.forEach({ $0.didUpdateThreadsList(localThreads) })
-                }
-                
-                completionHandler(.failure(remoteError!))
-                return
-            }
+        return try await withUnsafeThrowingContinuation { continuation in
             
-            guard localError == nil else {
-                self.log.error("[sync] error getting local threads. \(localError!.localizedDescription)")
-                completionHandler(.failure(localError!))
-                return
-            }
-            
+            let dispatchGroup = DispatchGroup()
+            var remoteError: Error? = nil, localError: Error? = nil
+            var allThreads = [ConversationThreadOutputDTO]()
+            var localThreads = [ConversationThreadOutputDTO]()
             
             ///
-            /// Remove extra threads locally, and notify the delegates
+            /// Pull all threads from REMOTE
             ///
-            var threadIdsToRemoveLocally = [String]()
-            for localThread in localThreads {
-                if allThreads.contains(where: { $0.threadId == localThread.threadId }) == false {
-                    threadIdsToRemoveLocally.append(localThread.threadId)
+            dispatchGroup.enter()
+            self.serverProxy.listThreads(filteringUnknownUsers: false) { result in
+                switch result {
+                case .success(let threadList):
+                    allThreads = threadList
+                case .failure(let err):
+                    remoteError = err
                 }
+                dispatchGroup.leave()
             }
             
-            if threadIdsToRemoveLocally.isEmpty == false {
-                var removedCount = 0
-                let removalDispatchGroup = DispatchGroup()
-                for threadIdToRemoveLocally in threadIdsToRemoveLocally {
-                    removalDispatchGroup.enter()
-                    self.serverProxy.localServer.deleteThread(withId: threadIdToRemoveLocally) { result in
-                        if case .success = result {
-                            removedCount += 1
-                        }
-                        removalDispatchGroup.leave()
-                    }
+            ///
+            /// Pull all threads from LOCAL
+            ///
+            dispatchGroup.enter()
+            self.serverProxy.listLocalThreads { result in
+                switch result {
+                case .success(let threadList):
+                    localThreads = threadList
+                case .failure(let err):
+                    localError = err
                 }
-                removalDispatchGroup.notify(queue: .global(qos: qos)) {
-                    self.log.info("threads to remove: \(threadIdsToRemoveLocally.count), removed: \(removedCount)")
-                    
-                    let remainingThreads = localThreads.filter({ threadIdsToRemoveLocally.contains($0.threadId) == false })
+                dispatchGroup.leave()
+            }
+            
+            dispatchGroup.notify(queue: .global(qos: qos)) {
+                guard remoteError == nil else {
+                    self.log.error("[sync] error getting all threads from server. \(remoteError!.localizedDescription)")
                     
                     let interactionsSyncDelegates = self.interactionsSyncDelegates
+                    let localThreadsImmutable = localThreads
                     self.delegatesQueue.async {
-                        interactionsSyncDelegates.forEach({ $0.didUpdateThreadsList(remainingThreads) })
+                        interactionsSyncDelegates.forEach({ $0.didUpdateThreadsList(localThreadsImmutable) })
+                    }
+                    
+                    continuation.resume(throwing: remoteError!)
+                    return
+                }
+                
+                guard localError == nil else {
+                    self.log.error("[sync] error getting local threads. \(localError!.localizedDescription)")
+                    
+                    continuation.resume(throwing: localError!)
+                    return
+                }
+                
+                ///
+                /// Remove extra threads locally, and notify the delegates
+                ///
+                var threadIdsToRemoveLocally = [String]()
+                for localThread in localThreads {
+                    if allThreads.contains(where: { $0.threadId == localThread.threadId }) == false {
+                        threadIdsToRemoveLocally.append(localThread.threadId)
                     }
                 }
-            }
-            
-            ///
-            /// Create threads locally as needed, and notify the delegates
-            ///
-            self.syncThreadsFromAuthorizedUsers(
-                remoteThreads: allThreads,
-                localThreads: localThreads,
-                qos: qos
-            ) { result in
-                switch result {
                 
-                case .failure(let error):
-                    completionHandler(.failure(error))
+                if threadIdsToRemoveLocally.isEmpty == false {
+                    var removedCount = 0
+                    let removalDispatchGroup = DispatchGroup()
+                    for threadIdToRemoveLocally in threadIdsToRemoveLocally {
+                        removalDispatchGroup.enter()
+                        self.serverProxy.localServer.deleteThread(withId: threadIdToRemoveLocally) { result in
+                            if case .success = result {
+                                removedCount += 1
+                            }
+                            removalDispatchGroup.leave()
+                        }
+                    }
+                    removalDispatchGroup.notify(queue: .global(qos: qos)) {
+                        self.log.info("threads to remove: \(threadIdsToRemoveLocally.count), removed: \(removedCount)")
+                        
+                        let remainingThreads = localThreads.filter({ threadIdsToRemoveLocally.contains($0.threadId) == false })
+                        
+                        let interactionsSyncDelegates = self.interactionsSyncDelegates
+                        self.delegatesQueue.async {
+                            interactionsSyncDelegates.forEach({ $0.didUpdateThreadsList(remainingThreads) })
+                        }
+                    }
+                }
                 
-                case .success(let threadsFromKnownUsers):
-                    Task {
-                        let dispatchGroup = DispatchGroup()
+                ///
+                /// Create threads locally as needed, and notify the delegates
+                ///
+                self.syncThreadsFromAuthorizedUsers(
+                    remoteThreads: allThreads,
+                    localThreads: localThreads,
+                    qos: qos
+                ) { result in
+                    switch result {
+                        
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                        
+                    case .success(let threadsFromKnownUsers):
+                        continuation.resume(returning: ())
                         
                         ///
                         /// Sync last interactions for the threads from authorized users
                         ///
-                        threadsFromKnownUsers.forEach({ thread in
-                            dispatchGroup.enter()
-                            self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
-                                if case .failure(let err) = result {
-                                    self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
-                                }
-                                
-                                self.syncThreadAssets(serverThread: thread, qos: qos) { result in
+                        Task(priority: .background) {
+                            threadsFromKnownUsers.forEach({ thread in
+                                dispatchGroup.enter()
+                                self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
                                     if case .failure(let err) = result {
-                                        self.log.error("error syncing assets in thread \(thread.threadId). \(err.localizedDescription)")
+                                        self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
                                     }
                                     
-                                    dispatchGroup.leave()
+                                    self.syncThreadAssets(serverThread: thread, qos: qos) { result in
+                                        if case .failure(let err) = result {
+                                            self.log.error("error syncing assets in thread \(thread.threadId). \(err.localizedDescription)")
+                                        }
+                                        
+                                        dispatchGroup.leave()
+                                    }
                                 }
-                            }
-                        })
-                        
-                        dispatchGroup.notify(queue: .global(qos: qos)) {
-                            completionHandler(.success(()))
+                            })
                         }
                     }
                 }
@@ -428,7 +413,7 @@ extension SHInteractionsSyncOperation {
                 switch getThreadsResult {
                     
                 case .failure(let failure):
-                    self.log.error("failed to get local threads when syncing. Assuming these threads don't exist")
+                    self.log.error("failed to get local threads when syncing. Assuming these threads don't exist. \(failure.localizedDescription)")
                     
                 case .success(let localThreads):
                     let localThreadIds = localThreads.map({ $0.threadId })

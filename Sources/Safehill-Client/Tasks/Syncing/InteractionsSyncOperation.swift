@@ -6,7 +6,7 @@ import os
 /// - full list of threads with server
 /// - LAST `ThreadLastInteractionSyncLimit` interactions in each
 ///
-public class SHInteractionsSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHInteractionsSyncOperation: Operation {
     
     public typealias OperationResult = Result<Void, Error>
     
@@ -60,7 +60,7 @@ public class SHInteractionsSyncOperation: Operation, SHBackgroundOperationProtoc
         }
     }
     
-    private func stopWebSocket() async {
+    public func stopWebSocket() async {
         await self.socket.disconnect()
     }
     
@@ -205,21 +205,20 @@ public class SHInteractionsSyncOperation: Operation, SHBackgroundOperationProtoc
     ///
     /// - Parameters:
     ///   - qos: the level of quality of the service
-    ///   - completionHandler: the callback
-    public func run(qos: DispatchQoS.QoSClass,
-                    completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.syncLastThreadInteractions(qos: qos) {
-            result in
-            
-            if case .failure(let failure) = result {
-                self.log.critical("failure syncing thread interactions: \(failure.localizedDescription)")
-                completionHandler(.failure(failure))
-            }
-            completionHandler(.success(()))
-            
-            Task(priority: qos.toTaskPriority()) {
-                try await self.startWebSocketAndReconnectOnFailure()
-            }
+    public func start(qos: DispatchQoS.QoSClass) async throws {
+        do {
+            try await self.syncThreadsAndLastInteractions(qos: qos)
+        } catch {
+            self.log.critical("failure syncing thread interactions: \(error.localizedDescription)")
+            throw error
         }
+
+        Task(priority: qos.toTaskPriority()) {
+            try await self.startWebSocketAndReconnectOnFailure()
+        }
+    }
+    
+    public func stop() async {
+        await self.stopWebSocket()
     }
 }
