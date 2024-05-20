@@ -40,7 +40,7 @@ public actor WebSocketAPI {
             throw WebSocketConnectionError.invalidURL
         }
         
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url.appendingPathComponent("messages"))
         request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         
         self.webSocketTask = URLSession.shared.webSocketTask(with: request)
