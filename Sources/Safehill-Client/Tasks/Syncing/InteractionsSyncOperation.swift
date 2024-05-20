@@ -56,8 +56,13 @@ public class SHInteractionsSyncOperation: Operation {
         do {
             try await self.startWebSocket()
         } catch let error {
-            if error is WebSocketConnectionError {
-                try await self.startWebSocketAndReconnectOnFailure()
+            if let error = error as? WebSocketConnectionError {
+                switch error {
+                case .disconnected, .closed, .connectionError, .transportError:
+                    try await self.startWebSocketAndReconnectOnFailure()
+                default:
+                    break
+                }
             }
             log.error("failed to connect to websocket: \(error.localizedDescription)")
         }
