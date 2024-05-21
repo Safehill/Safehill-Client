@@ -34,6 +34,10 @@ public actor WebSocketAPI {
     }
     
     public func connect(as authedUser: SHAuthenticatedLocalUser, from deviceId: String) throws {
+        guard webSocketTask == nil else {
+            return
+        }
+        
         let param = URLQueryItem(name: "deviceId", value: deviceId)
         urlComponents.queryItems = [param]
         guard let url = urlComponents.url else {

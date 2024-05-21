@@ -21,6 +21,9 @@ public class SHInteractionsSyncOperation: Operation {
     
     let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     
+    private var retryDelay: UInt64 = 1
+    private let maxRetryDelay: UInt64 = 8
+    
     public init(user: SHAuthenticatedLocalUser,
                 deviceId: String,
                 interactionsSyncDelegates: [SHInteractionsSyncingDelegate]) throws {
@@ -59,6 +62,12 @@ public class SHInteractionsSyncOperation: Operation {
             if let error = error as? WebSocketConnectionError {
                 switch error {
                 case .disconnected, .closed, .connectionError, .transportError:
+                    /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
+                    await self.stopWebSocket()
+                    
+                    /// Exponential retry with backoff
+                    try await Task.sleep(nanoseconds: self.retryDelay * 1_000_000_000)
+                    self.retryDelay = max(self.maxRetryDelay, self.retryDelay * 2)
                     try await self.startWebSocketAndReconnectOnFailure()
                 default:
                     break
