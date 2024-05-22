@@ -2,204 +2,6 @@ import Foundation
 import Yams
 import Contacts
 
-internal protocol SHServerProxyProtocol {
-    init(user: SHLocalUserProtocol)
-    
-    func listThreads(
-        filteringUnknownUsers: Bool,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    )
-    
-    func listLocalThreads(
-        withIdentifiers: [String]?,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    )
-    
-    func createOrUpdateThread(
-        name: String?,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
-        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
-    )
-    
-    func deleteThread(
-        withId threadId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    )
-    
-    func setupGroupEncryptionDetails(
-        groupId: String,
-        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    )
-    
-    func deleteGroup(
-        groupId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    )
-    
-    func getAssets(
-        inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
-    )
-    
-    func addReactions(
-        _ reactions: [ReactionInput],
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
-    )
-    
-    func removeReaction(
-        _: ReactionInput,
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    )
-    
-    func addMessage(
-        _ message: MessageInputDTO,
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
-    )
-    
-    func addMessage(
-        _ message: MessageInputDTO,
-        inThread threadId: String,
-        completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
-    )
-    
-    func addLocalMessages(
-        _ messages: [MessageInput],
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
-    )
-    
-    func addLocalMessages(
-        _ messages: [MessageInput],
-        inThread threadId: String,
-        completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
-    )
-    
-    func addLocalReactions(
-        _ reactions: [ReactionInput],
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
-    )
-    
-    func addLocalReactions(
-        _ reactions: [ReactionInput],
-        inThread threadId: String,
-        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
-    )
-    
-    ///
-    /// Retrieve the interactions from remote server first, because whatever was cached could be lacking messages.
-    /// The ones retrieved according to the query will be cached locally, for offline access.
-    ///
-    /// - Parameters:
-    ///   - groupId: the identifier of the share, aka the `groupId`
-    ///   - type: (optional) filter the type of the interaction: message or reaction only
-    ///   - messageId: (optional) if a sub-thread the message it's anchored to
-    ///   - before: (optional) only messages before a specific date
-    ///   - limit: limit the number of results
-    ///   - completionHandler: the callback method with the encryption details and the result
-    func retrieveInteractions(
-        inGroup groupId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    ///
-    /// Retrieve the interactions from remote server first, because whatever was cached could be lacking messages.
-    /// The ones retrieved according to the query will be cached locally, for offline access.
-    ///
-    /// - Parameters:
-    ///   - threadId: the thread identifier
-    ///   - type: (optional) filter the type of the interaction: message or reaction only
-    ///   - messageId: (optional) if a sub-thread the message it's anchored to
-    ///   - before: (optional) only messages before a specific date
-    ///   - limit: limit the number of results
-    ///   - completionHandler: the callback method with the encryption details and the result
-    func retrieveInteractions(
-        inThread threadId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    func retrieveLocalInteractions(
-        inGroup groupId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    func retrieveLocalInteractions(
-        inThread threadId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    func retrieveRemoteInteractions(
-        inGroup groupId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    func retrieveRemoteInteractions(
-        inThread threadId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    func retrieveLocalInteraction(
-        inThread threadId: String,
-        withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-        
-    func retrieveLocalInteraction(
-        inGroup groupId: String,
-        withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
-    )
-    
-    func retrieveUserEncryptionDetails(
-        forGroup groupId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
-    )
-    
-    func retrieveUserEncryptionDetails(
-        forThread threadId: String,
-        completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
-    )
-    
-    func countLocalInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
-    )
-    
-    func getThread(
-        withUsers users: [any SHServerUser],
-        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
-    )
-}
-
-
 public struct SHServerProxy: SHServerProxyProtocol {
     
     let localServer: LocalServer
@@ -212,8 +14,9 @@ public struct SHServerProxy: SHServerProxyProtocol {
 }
 
 
-// MARK: - Migrations
 extension SHServerProxy {
+    
+    // MARK: - Migrations
     
     public func runLocalMigrations(
         currentBuild: Int?,
@@ -228,8 +31,9 @@ extension SHServerProxy {
 }
 
 
-// MARK: - Users & Devices
 extension SHServerProxy {
+    
+    // MARK: - Users & Devices
     
     public func createUser(name: String,
                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
@@ -563,9 +367,11 @@ extension SHServerProxy {
         self.remoteServer.registerDevice(deviceId, token: token, completionHandler: completionHandler)
     }
 }
-    
-// MARK: - Assets
+ 
+
 extension SHServerProxy {
+    
+    // MARK: - Assets
     
     public func getCurrentUsage(
         completionHandler: @escaping (Result<Int, Error>) -> ()
@@ -1107,6 +913,12 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+}
+
+
+extension SHServerProxy {
+    
+    // - MARK: Groups, Threads and Interactions
     
     public func add(phoneNumbers: [SHPhoneNumber],
                     to groupId: String,
@@ -1278,7 +1090,7 @@ extension SHServerProxy {
                 }
             case .failure(let error):
                 log.warning("failed to fetch threads from server. Returning local version. \(error.localizedDescription)")
-                self.localServer.listThreads(completionHandler: completionHandler)
+                self.listLocalThreads(completionHandler: completionHandler)
             }
         }
     }
@@ -1305,7 +1117,21 @@ extension SHServerProxy {
                 if let maybeThread {
                     completionHandler(.success(maybeThread))
                 } else {
-                    self.remoteServer.getThread(withId: threadId, completionHandler: completionHandler)
+                    self.remoteServer.getThread(
+                        withId: threadId
+                    ) { remoteResult in
+                        if case .success(let thread) = remoteResult,
+                           let thread
+                        {
+                            self.createKnownUserThreadsLocallyIfMissing(
+                                [thread],
+                                localThreads: nil,
+                                qos: .background
+                            ) {}
+                        }
+                        
+                        completionHandler(remoteResult)
+                    }
                 }
             }
         }
@@ -1617,14 +1443,119 @@ extension SHServerProxy {
         }
     }
     
-    internal func countLocalInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    internal func topLevelInteractionsSummary(
+        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
     ) {
-        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+        self.remoteServer.topLevelInteractionsSummary {
+            result in
+            switch result {
+                
+            case .failure(let error):
+                log.warning("failed to get interactions summary from server. Fetching local summary. \(error.localizedDescription)")
+                self.localServer.topLevelInteractionsSummary(completionHandler: completionHandler)
+                
+            case .success(let interactionsSummary):
+                let serverThreads = interactionsSummary.summaryByThreadId.values.map { $0.thread }
+                
+                ///
+                /// Create the threads if they don't exist
+                /// and if they are from users that are authorized
+                ///
+                self.createKnownUserThreadsLocallyIfMissing(
+                    serverThreads,
+                    localThreads: nil,
+                    qos: .default
+                ) {
+                    let dispatchGroup = DispatchGroup()
+                    
+                    for (threadId, threadSummary) in interactionsSummary.summaryByThreadId {
+                        let lastEncryptedMessage = threadSummary.lastEncryptedMessage
+                        
+                        ///
+                        /// Add the last message pulled from the summary to the thread
+                        ///
+                        dispatchGroup.enter()
+                        self.addLocalMessages(
+                            [lastEncryptedMessage],
+                            inThread: threadId
+                        ) { _ in
+                            dispatchGroup.leave()
+                        }
+                    }
+                    
+                    ///
+                    /// Add all the interactions referenced in the summary
+                    ///
+                    for (groupId, groupSummary) in interactionsSummary.summaryByGroupId {
+                        dispatchGroup.enter()
+                        self.addLocalReactions(
+                            groupSummary.reactions,
+                            inGroup: groupId
+                        ) { _ in
+                            dispatchGroup.leave()
+                        }
+                    }
+                    
+                    completionHandler(.success(interactionsSummary))
+                }
+            }
+        }
     }
     
-    func cacheInteractions(
+    internal func topLevelLocalInteractionsSummary(
+        for groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()
+    ) {
+        self.localServer.topLevelInteractionsSummary(inGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    internal func createKnownUserThreadsLocallyIfMissing(
+        _ threadsToCreate: [ConversationThreadOutputDTO],
+        localThreads: [ConversationThreadOutputDTO]?,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping () -> Void
+    ) {
+        var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
+        
+        if let localThreads {
+            let localThreadIds = localThreads.map({ $0.threadId })
+            notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
+        } else {
+            self.listLocalThreads(
+                withIdentifiers: threadsToCreate.map({ $0.threadId })
+            ) { getThreadsResult in
+                
+                switch getThreadsResult {
+                    
+                case .failure(let failure):
+                    log.error("failed to get local threads when syncing. Assuming no threads on local. \(failure.localizedDescription)")
+                    
+                case .success(let localThreads):
+                    let localThreadIds = localThreads.map({ $0.threadId })
+                    notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
+                }
+            }
+        }
+        
+        let dispatchGroup = DispatchGroup()
+        for threadToCreateLocally in notYetOnLocal {
+            dispatchGroup.enter()
+            self.localServer.createOrUpdateThread(
+                serverThread: threadToCreateLocally
+            ) { createResult in
+                if case .failure(let error) = createResult {
+                    log.error("failed to create thread locally. \(error.localizedDescription)")
+                }
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .global(qos: qos)) {
+            completionHandler()
+        }
+    }
+    
+    func addLocalInteractions(
         _ remoteInteractions: InteractionsGroupDTO,
         inAnchor anchor: SHInteractionAnchor,
         anchorId: String
@@ -1717,7 +1648,7 @@ extension SHServerProxy {
                 }
             case .success(let remoteInteractions):
                 completionHandler(.success(remoteInteractions))
-                self.cacheInteractions(
+                self.addLocalInteractions(
                     remoteInteractions, 
                     inAnchor: .group,
                     anchorId: groupId
@@ -1760,7 +1691,7 @@ extension SHServerProxy {
                 }
             case .success(let remoteInteractions):
                 completionHandler(.success(remoteInteractions))
-                self.cacheInteractions(
+                self.addLocalInteractions(
                     remoteInteractions,
                     inAnchor: .thread,
                     anchorId: threadId
@@ -1890,8 +1821,10 @@ extension SHServerProxy {
 }
 
 
-// MARK: - Subscriptions
 extension SHServerProxy {
+    
+    // MARK: - Subscriptions
+    
     public func validateTransaction(
         originalTransactionId: String,
         receipt: String,

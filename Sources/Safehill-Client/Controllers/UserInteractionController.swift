@@ -2,8 +2,6 @@ import Foundation
 import Safehill_Crypto
 import CryptoKit
 
-public typealias InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]], messages: Int)
-
 public enum InteractionType: String {
     case message = "message", reaction = "reaction"
 }
@@ -33,21 +31,6 @@ public struct SHUserInteractionController {
     
     func createNewSecret() -> SymmetricKey {
         SymmetricKey(size: .bits256)
-    }
-    
-    public func listThreads(
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
-    ) {
-        self.serverProxy.listThreads(
-            filteringUnknownUsers: true,
-            completionHandler: completionHandler
-        )
-    }
-    
-    public func listLocalThreads(
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
-    ) {
-        self.serverProxy.listLocalThreads(withIdentifiers: nil, completionHandler: completionHandler)
     }
     
     public func setupThread(
@@ -246,14 +229,10 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.serverProxy.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
-    public func countInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    public func fetchInteractionsSummary(
+        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
     ) {
-        self.serverProxy.countLocalInteractions(
-            inGroup: groupId,
-            completionHandler: completionHandler
-        )
+        self.serverProxy.topLevelInteractionsSummary(completionHandler: completionHandler)
     }
     
     public func getAssets(
@@ -851,132 +830,5 @@ extension SHUserInteractionController {
                  completionHandler(.success(decryptedMessages))
              }
          }
-    }
-}
-
-
-extension SHUserInteractionController {
-    
-    func startCachingInteractions(
-        _ anchor: SHInteractionAnchor,
-        anchorId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        localInteractionsGroup: InteractionsGroupDTO,
-        completionHandler: @escaping (Result<([MessageOutputDTO], [ReactionOutputDTO]), Error>) -> Void
-    ) {
-        let process = { (remoteInteractionsGroup: InteractionsGroupDTO) in
-            
-            let localReactionIds = localInteractionsGroup.reactions.map({ $0.interactionId })
-            let localMessageIds = localInteractionsGroup.messages.map({ $0.interactionId })
-            let missingReactions = remoteInteractionsGroup.reactions.filter({
-                localReactionIds.contains($0.interactionId) == false
-            })
-            let missingMessages = remoteInteractionsGroup.messages.filter({
-                localMessageIds.contains($0.interactionId) == false
-            })
-            
-            log.debug("""
-[SHUserInteractionController] Started from \(localInteractionsGroup.messages.count) messages and \(localInteractionsGroup.reactions.count) reactions. Retrieved \(remoteInteractionsGroup.messages.count) messages and \(remoteInteractionsGroup.reactions.count) reactions from remote server. \(missingMessages.count) messages and \(missingReactions.count) are not in local
-""")
-            
-            let dispatchGroup = DispatchGroup()
-            
-            switch anchor {
-            case .thread:
-                if missingReactions.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalReactions(
-                        missingReactions,
-                        inThread: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-                
-                if missingMessages.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalMessages(
-                        missingMessages,
-                        inThread: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-            case .group:
-                if missingReactions.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalReactions(
-                        missingReactions,
-                        inGroup: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-                
-                if missingMessages.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalMessages(
-                        missingMessages,
-                        inGroup: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-            }
-            
-            dispatchGroup.notify(queue: .global()) {
-                completionHandler(.success((missingMessages, missingReactions)))
-            }
-        }
-        
-        switch anchor {
-        case .group:
-            self.serverProxy.retrieveRemoteInteractions(
-                inGroup: anchorId,
-                ofType: type,
-                underMessage: messageId,
-                before: before,
-                limit: 100
-            ) { result in
-                
-                switch result {
-                case .success(let remoteInteractionsGroup):
-                    process(remoteInteractionsGroup)
-                case .failure(let err):
-                    completionHandler(.failure(err))
-                }
-            }
-        case .thread:
-            self.serverProxy.retrieveRemoteInteractions(
-                inThread: anchorId,
-                ofType: type,
-                underMessage: messageId,
-                before: before,
-                limit: 100
-            ) { result in
-                
-                switch result {
-                case .success(let remoteInteractionsGroup):
-                    process(remoteInteractionsGroup)
-                case .failure(let err):
-                    completionHandler(.failure(err))
-                }
-            }
-        }
     }
 }

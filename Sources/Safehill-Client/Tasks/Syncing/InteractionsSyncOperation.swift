@@ -42,7 +42,7 @@ public class SHInteractionsSyncOperation: Operation {
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     private func startWebSocket() async throws {
-        try await socket.connect(as: self.user, from: self.deviceId)
+        try await socket.connect(to: "ws/messages", as: self.user, from: self.deviceId)
         
         for try await message in await socket.receive() {
             
@@ -73,7 +73,7 @@ public class SHInteractionsSyncOperation: Operation {
                     break
                 }
             }
-            log.error("failed to connect to websocket: \(error.localizedDescription)")
+            log.error("[ws] failed to connect to websocket: \(error.localizedDescription)")
         }
     }
     
@@ -96,13 +96,13 @@ public class SHInteractionsSyncOperation: Operation {
                 guard let encoded = try? JSONDecoder().decode(WebSocketMessage.ConnectionAck.self, from: contentData) else {
                     return
                 }
-                self.log.debug("CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
+                self.log.debug("[ws] CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
                 
             case .message:
                 
                 guard let textMessage = try? JSONDecoder().decode(WebSocketMessage.TextMessage.self, from: contentData),
                       let interactionId = textMessage.interactionId else {
-                    self.log.critical("server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
                     return
                 }
                 
@@ -122,7 +122,7 @@ public class SHInteractionsSyncOperation: Operation {
                     case .thread:
                         $0.didReceiveMessages([messageOutput], inThread: textMessage.anchorId)
                     case .none:
-                        self.log.critical("invalid anchor type from server: \(textMessage.anchorType)")
+                        self.log.critical("[ws] invalid anchor type from server: \(textMessage.anchorType)")
                     }
                 })
                 
@@ -132,7 +132,7 @@ public class SHInteractionsSyncOperation: Operation {
                       let interactionId = reaction.interactionId,
                       let reactionType = ReactionType(rawValue: reaction.reactionType)
                 else {
-                    self.log.critical("server sent a \(message.type.rawValue) message via WebSockets that can't be parsed or without an ID, or invalid reaction type. This is not supposed to happen. \(message.content)")
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed or without an ID, or invalid reaction type. This is not supposed to happen. \(message.content)")
                     return
                 }
                 
@@ -160,20 +160,20 @@ public class SHInteractionsSyncOperation: Operation {
                             $0.didRemoveReaction(reactionOutput, inThread: reaction.anchorId)
                         }
                     case .none:
-                        self.log.critical("invalid anchor type from server: \(reaction.anchorType)")
+                        self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
                     }
                 })
                 
             case .threadAdd:
                 
                 guard let threadOutputDTO = try? JSONDecoder().decode(ConversationThreadOutputDTO.self, from: contentData) else {
-                    self.log.critical("server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
                 
                 self.syncThreadsFromAuthorizedUsers(
                     remoteThreads: [threadOutputDTO],
-                    qos: .utility
+                    qos: .default
                 ) { _ in }
             }
         }
@@ -190,7 +190,7 @@ public class SHInteractionsSyncOperation: Operation {
             self.syncGroupInteractions(groupId: anchorId, qos: qos) { result in
                 switch result {
                 case .failure(let err):
-                    self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
+                    self.log.error("[sync] failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
                     completionHandler(.failure(err))
                 case .success:
                     completionHandler(.success(()))
@@ -200,18 +200,18 @@ public class SHInteractionsSyncOperation: Operation {
             self.serverProxy.remoteServer.getThread(withId: anchorId) { getThreadResult in
                 switch getThreadResult {
                 case .failure(let error):
-                    self.log.error("failed to get thread with id \(anchorId) from server")
+                    self.log.error("[sync] failed to get thread with id \(anchorId) from server")
                     completionHandler(.failure(error))
                 case .success(let serverThread):
                     guard let serverThread else {
-                        self.log.warning("no such thread with id \(anchorId) from server")
+                        self.log.warning("[sync] no such thread with id \(anchorId) from server")
                         completionHandler(.success(()))
                         return
                     }
-                    self.syncThreadInteractions(serverThread: serverThread, qos: qos) { syncResult in
+                    self.syncThreadInteractions(in: serverThread, qos: qos) { syncResult in
                         switch syncResult {
                         case .failure(let err):
-                            self.log.error("failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
+                            self.log.error("[sync] failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
                             completionHandler(.failure(err))
                         case .success:
                             completionHandler(.success(()))
@@ -223,20 +223,19 @@ public class SHInteractionsSyncOperation: Operation {
     }
     
     /// Main run.
-    /// 1. Pull the latest threads from remote, and sync the latest interactions via REST
+    /// 1. Pull the summary for threads and groups
     /// 2. Start the WEBSOCKET connection for updates
+    /// 3. In the background sync the last interactions for all threads
     public override func start() {
         super.start()
         
         Task {
-            do {
-                try await self.syncThreadsAndLastInteractions(qos: .default)
-            } catch {
-                self.log.critical("failure syncing thread interactions: \(error.localizedDescription)")
-                throw error
-            }
-            
+            let threadsFromKnownUsers = try await self.syncThreads
             try await self.startWebSocketAndReconnectOnFailure()
+//            try await self.syncThreadInteractions(
+//                in: threadsFromKnownUsers,
+//                qos: .background
+//            )
         }
     }
 }

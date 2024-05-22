@@ -1061,6 +1061,12 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
+    func topLevelInteractionsSummary(
+        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
+    ) {
+        self.post("interactions/summary", parameters: nil, completionHandler: completionHandler)
+    }
+    
     func addReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,

@@ -33,7 +33,11 @@ public actor WebSocketAPI {
         webSocketTask?.cancel(with: .goingAway, reason: nil)
     }
     
-    public func connect(as authedUser: SHAuthenticatedLocalUser, from deviceId: String) throws {
+    public func connect(
+        to endpoint: String,
+        as authedUser: SHAuthenticatedLocalUser,
+        from deviceId: String
+    ) throws {
         guard webSocketTask == nil else {
             return
         }
@@ -44,7 +48,7 @@ public actor WebSocketAPI {
             throw WebSocketConnectionError.invalidURL
         }
         
-        var request = URLRequest(url: url.appendingPathComponent("ws/messages"))
+        var request = URLRequest(url: url.appendingPathComponent(endpoint))
         request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         
         self.webSocketTask = URLSession.shared.webSocketTask(with: request)

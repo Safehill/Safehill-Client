@@ -1859,6 +1859,284 @@ struct LocalServer : SHServerAPI {
         self.delete(anchor: .thread, anchorId: threadId, completionHandler: completionHandler)
     }
     
+    func topLevelInteractionsSummary(completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()) {
+        self.topLevelThreadInteractionsSummary { threadsResult in
+            switch threadsResult {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let threadsSummary):
+                self.topLevelGroupInteractionsSummary { groupsResult in
+                    switch groupsResult {
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    case .success(let groupsSummary):
+                        
+                        completionHandler(.success(InteractionsSummaryDTO(
+                            summaryByThreadId: threadsSummary,
+                            summaryByGroupId: groupsSummary
+                        )))
+                    }
+                }
+            }
+        }
+    }
+    
+    func topLevelThreadInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsThreadSummaryDTO], Error>) -> ()) {
+        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        ///
+        /// List all threads
+        ///
+        self.listThreads { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let threads):
+                
+                var threadsById = [String: ConversationThreadOutputDTO]()
+                var lastMessageByThreadId = [String: MessageOutputDTO]()
+                var numMessagesByThreadId = [String: Int]()
+                
+                let dispatchGroup = DispatchGroup()
+                
+                ///
+                /// For each thread run 2 queries:
+                /// 1. One to retrieve the last message (encrypted)
+                /// 2. One to retrieve the number of messages in the thread
+                ///
+                for thread in threads {
+                    let threadId = thread.threadId
+                    threadsById[threadId] = thread
+                    
+                    dispatchGroup.enter()
+                    
+                    let threadCondition = KBGenericCondition(
+                        .beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)"
+                    )
+                    messagesQueue.keyValuesAndTimestamps(
+                        forKeysMatching: threadCondition,
+                        timestampMatching: nil,
+                        paginate: KBPaginationOptions(limit: 1, offset: 0),
+                        sort: .descending
+                    ) { messagesResult in
+                        
+                        guard case .success(let messagesKvts) = messagesResult,
+                              let lastCreatedMessageKvts = messagesKvts.first
+                        else {
+                            log.error("failed to fetch messages for condition \(threadCondition)")
+                            dispatchGroup.leave()
+                            return
+                        }
+                        
+                        let keyComponents = lastCreatedMessageKvts.key.components(separatedBy: "::")
+                        guard keyComponents.count == 6 else {
+                            log.warning("invalid reaction key in local DB: \(lastCreatedMessageKvts.key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                            dispatchGroup.leave()
+                            return
+                        }
+                        guard let messageOutput = try? LocalServer.toMessageOutput(lastCreatedMessageKvts) else {
+                            dispatchGroup.leave()
+                            return
+                        }
+                        
+                        lastMessageByThreadId[threadId] = messageOutput
+                        
+                        dispatchGroup.leave()
+                    }
+                    
+                    dispatchGroup.enter()
+                    messagesQueue.keys(
+                        matching: threadCondition
+                    ) { messagesResult in
+                        
+                        guard case .success(let keys) = messagesResult else {
+                            log.error("failed to fetch messages for condition nil")
+                            dispatchGroup.leave()
+                            return
+                        }
+                        
+                        for key in keys {
+                            let keyComponents = key.components(separatedBy: "::")
+                            guard keyComponents.count == 6 else {
+                                log.warning("invalid message key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                                continue
+                            }
+                            let threadId = keyComponents[1]
+                            numMessagesByThreadId[threadId] = (numMessagesByThreadId[threadId] ?? 0) + 1
+                        }
+                        
+                        dispatchGroup.leave()
+                    }
+                }
+                
+                dispatchGroup.notify(queue: .global()) {
+                    var threadSummaryById = [String: InteractionsThreadSummaryDTO]()
+                    
+                    for (threadId, thread) in threadsById {
+                        guard let lastMessage = lastMessageByThreadId[threadId] else {
+                            continue
+                        }
+                        let threadSummary = InteractionsThreadSummaryDTO(
+                            thread: thread,
+                            lastEncryptedMessage: lastMessage,
+                            numMessages: numMessagesByThreadId[threadId] ?? 0,
+                            numAssets: 0 // TODO: Figure out assets
+                        )
+                        threadSummaryById[threadId] = threadSummary
+                    }
+                    completionHandler(.success(threadSummaryById))
+                }
+            }
+        }
+    }
+    
+    func topLevelGroupInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()) {
+        guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        var allGroupIds = Set<String>()
+        
+        var numCommentsByGroupId = [String: Int]()
+        var reactionsByGroupId = [String: [ReactionOutputDTO]]()
+        
+        let allGroupsCondition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::")
+        
+        let dispatchGroup = DispatchGroup()
+        
+        ///
+        /// Retrieve all reactions across all groupIds, and store them by groupId in
+        /// `reactionsByGroupId`
+        ///
+        dispatchGroup.enter()
+        reactionStore.keyValuesAndTimestamps(
+            forKeysMatching: allGroupsCondition,
+            timestampMatching: nil
+        ) { reactionsResult in
+            
+            switch reactionsResult {
+            case .success(let reactionKvts):
+                reactionKvts.forEach({
+                    let keyComponents = $0.key.components(separatedBy: "::")
+                    guard keyComponents.count == 6 else {
+                        log.warning("invalid reaction key in local DB: \($0.key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                        return
+                    }
+                    guard let reactionOutput = LocalServer.toReactionOutput($0) else {
+                        return
+                    }
+                    
+                    let groupId = keyComponents[1]
+                    reactionsByGroupId[groupId] = (reactionsByGroupId[groupId] ?? [])
+                    reactionsByGroupId[groupId]?.append(reactionOutput)
+                    
+                    allGroupIds.insert(groupId)
+                })
+            case .failure(let error):
+                log.critical("failed to retrieve group reactions: \(error.localizedDescription)")
+            }
+            
+            dispatchGroup.leave()
+        }
+        
+        ///
+        /// Retrieve all messages (comments) in all groups to update `numCommentsByGroupId`
+        ///
+        dispatchGroup.enter()
+        messagesQueue.keys(matching: allGroupsCondition) { messagesResult in
+            
+            guard case .success(let keys) = messagesResult else {
+                log.error("failed to fetch messages for condition nil")
+                dispatchGroup.leave()
+                return
+            }
+            
+            for key in keys {
+                let keyComponents = key.components(separatedBy: "::")
+                guard keyComponents.count == 6 else {
+                    log.warning("invalid message key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                    continue
+                }
+                let anchorId = keyComponents[1]
+                numCommentsByGroupId[anchorId] = (numCommentsByGroupId[anchorId] ?? 0) + 1
+                allGroupIds.insert(anchorId)
+            }
+            
+            dispatchGroup.leave()
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            var groupSummaryById = [String: InteractionsGroupSummaryDTO]()
+            
+            for groupId in allGroupIds {
+                let groupSummary = InteractionsGroupSummaryDTO(
+                    numComments: numCommentsByGroupId[groupId] ?? 0,
+                    reactions: reactionsByGroupId[groupId] ?? []
+                )
+                
+                groupSummaryById[groupId] = groupSummary
+            }
+            
+            completionHandler(.success(groupSummaryById))
+        }
+    }
+    
+    func topLevelInteractionsSummary(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()
+    ) {
+        guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        var reactions = [ReactionOutputDTO]()
+        var numMessages = 0
+        
+        let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::")
+        reactionStore.keyValuesAndTimestamps(
+            forKeysMatching: condition,
+            timestampMatching: nil
+        ) { reactionsResult in
+            switch reactionsResult {
+            case .success(let reactionKvts):
+                reactionKvts.forEach({
+                    if let output = LocalServer.toReactionOutput($0) {
+                        reactions.append(output)
+                    }
+                })
+            case .failure(let error):
+                log.critical("failed to retrieve reactions for group \(groupId): \(error.localizedDescription)")
+            }
+            
+            messagesQueue.keys(matching: condition) { messagesResult in
+                switch messagesResult {
+                case .success(let messagesKeys):
+                    numMessages = messagesKeys.count
+                case .failure(let error):
+                    log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
+                }
+                
+                let response = InteractionsGroupSummaryDTO(numComments: numMessages, reactions: reactions)
+                completionHandler(.success(response))
+            }
+        }
+    }
+    
     func addReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,
@@ -1990,60 +2268,6 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.success(()))
             case .failure(let err):
                 completionHandler(.failure(err))
-            }
-        }
-    }
-    
-    func countInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
-    ) {
-        guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        var counts: InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]](), messages: 0)
-        
-        let condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::")
-        reactionStore.dictionaryRepresentation(forKeysMatching: condition) { reactionsResult in
-            switch reactionsResult {
-            case .success(let reactionsKeysAndValues):
-                var reactionsCountDict = [ReactionType: [UserIdentifier]]()
-                for (k, v) in reactionsKeysAndValues {
-                    guard let rawValue = v as? Int, let reactionType = ReactionType(rawValue: rawValue) else {
-                        log.warning("unknown reaction type in local DB for group \(groupId): \(String(describing: v))")
-                        continue
-                    }
-                    let components = k.components(separatedBy: "::")
-                    guard components.count == 6 else {
-                        log.warning("invalid reaction key in local DB for group \(groupId): \(String(describing: k)). Expected `assets-groups::<groupId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
-                        continue
-                    }
-                    let senderIdentifier = components[2]
-                    if reactionsCountDict[reactionType] != nil {
-                        reactionsCountDict[reactionType]!.append(senderIdentifier)
-                    } else {
-                        reactionsCountDict[reactionType] = [senderIdentifier]
-                    }
-                }
-                counts.reactions = reactionsCountDict
-            case .failure(let error):
-                log.critical("failed to retrieve reactions for group \(groupId): \(error.localizedDescription)")
-            }
-            messagesQueue.keys(matching: condition) { messagesResult in
-                switch messagesResult {
-                case .success(let messagesKeys):
-                    counts.messages = messagesKeys.count
-                case .failure(let error):
-                    log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
-                }
-                completionHandler(.success(counts))
             }
         }
     }

@@ -4,7 +4,14 @@ let ThreadLastInteractionSyncLimit = 20
 
 extension SHInteractionsSyncOperation {
     
-    internal func syncThreadsAndLastInteractions(qos: DispatchQoS.QoSClass) async throws {
+    /// Sync the threads betwen remote and local server
+    /// and returns the list of threads that have been synced, filtering out the ones where users are unauthorized.
+    ///
+    /// - Parameter qos: the quality of service
+    /// - Returns: the list of threads from known users
+    internal func syncThreads(
+        qos: DispatchQoS.QoSClass
+    ) async throws -> [ConversationThreadOutputDTO] {
         
         return try await withUnsafeThrowingContinuation { continuation in
             
@@ -110,43 +117,47 @@ extension SHInteractionsSyncOperation {
                         continuation.resume(throwing: error)
                         
                     case .success(let threadsFromKnownUsers):
-                        continuation.resume(returning: ())
-                        
-                        ///
-                        /// Sync last interactions for the threads from authorized users
-                        ///
-                        Task(priority: .background) {
-                            threadsFromKnownUsers.forEach({ thread in
-                                dispatchGroup.enter()
-                                self.syncThreadInteractions(serverThread: thread, qos: qos) { result in
-                                    if case .failure(let err) = result {
-                                        self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
-                                    }
-                                    
-                                    self.syncThreadAssets(serverThread: thread, qos: qos) { result in
-                                        if case .failure(let err) = result {
-                                            self.log.error("error syncing assets in thread \(thread.threadId). \(err.localizedDescription)")
-                                        }
-                                        
-                                        dispatchGroup.leave()
-                                    }
-                                }
-                            })
-                        }
+                        continuation.resume(returning: threadsFromKnownUsers)
                     }
                 }
             }
         }
     }
     
+    ///
+    /// Sync last interactions for the threads from authorized users
+    ///
+    /// - Parameters:
+    ///   - serverThreads: the threads to sync interactions for
+    ///   - qos: the quality of service
+    func _syncThreadInteractions(
+        in threadsFromKnownUsers: [ConversationThreadOutputDTO],
+        qos: DispatchQoS.QoSClass
+    ) {
+        Task(priority: .background) {
+            threadsFromKnownUsers.forEach({ thread in
+                self.syncThreadInteractions(in: thread, qos: qos) { result in
+                    if case .failure(let err) = result {
+                        self.log.error("error syncing interactions in thread \(thread.threadId). \(err.localizedDescription)")
+                    }
+                }
+                self.syncThreadAssets(serverThread: thread, qos: qos) { result in
+                    if case .failure(let err) = result {
+                        self.log.error("error syncing assets in thread \(thread.threadId). \(err.localizedDescription)")
+                    }
+                }
+            })
+        }
+    }
+    
     func syncThreadInteractions(
-        serverThread: ConversationThreadOutputDTO,
+        in thread: ConversationThreadOutputDTO,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        log.debug("[sync] syncing interactions in thread \(serverThread.threadId)")
+        log.debug("[sync] syncing interactions in thread \(thread.threadId)")
         
-        let threadId = serverThread.threadId
+        let threadId = thread.threadId
         
         let dispatchGroup = DispatchGroup()
         var error: Error? = nil
@@ -221,7 +232,7 @@ extension SHInteractionsSyncOperation {
             if shouldCreateE2EEDetailsLocally {
                 dispatchGroup.enter()
                 self.serverProxy.localServer.createOrUpdateThread(
-                    serverThread: serverThread
+                    serverThread: thread
                 ) { threadCreateResult in
                     switch threadCreateResult {
                     case .success(_):
@@ -347,7 +358,7 @@ extension SHInteractionsSyncOperation {
                 /// Create the local thread from the provided thread if it doesn't exist
                 ///
                 
-                self.createThreadsLocally(
+                self.serverProxy.createKnownUserThreadsLocallyIfMissing(
                     threadsFromKnownUsers,
                     localThreads: localThreads,
                     qos: qos
@@ -391,52 +402,6 @@ extension SHInteractionsSyncOperation {
                     }
                 }
             }
-        }
-    }
-    
-    private func createThreadsLocally(
-        _ threadsToCreate: [ConversationThreadOutputDTO],
-        localThreads: [ConversationThreadOutputDTO]?,
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping () -> Void
-    ) {
-        var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
-        
-        if let localThreads {
-            let localThreadIds = localThreads.map({ $0.threadId })
-            notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
-        } else {
-            self.serverProxy.listLocalThreads(
-                withIdentifiers: threadsToCreate.map({ $0.threadId })
-            ) { getThreadsResult in
-                
-                switch getThreadsResult {
-                    
-                case .failure(let failure):
-                    self.log.error("failed to get local threads when syncing. Assuming these threads don't exist. \(failure.localizedDescription)")
-                    
-                case .success(let localThreads):
-                    let localThreadIds = localThreads.map({ $0.threadId })
-                    notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
-                }
-            }
-        }
-        
-        let dispatchGroup = DispatchGroup()
-        for threadToCreateLocally in notYetOnLocal {
-            dispatchGroup.enter()
-            self.serverProxy.localServer.createOrUpdateThread(
-                serverThread: threadToCreateLocally
-            ) { createResult in
-                if case .failure(let error) = createResult {
-                    self.log.error("failed to create thread locally. \(error.localizedDescription)")
-                }
-                dispatchGroup.leave()
-            }
-        }
-        
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            completionHandler()
         }
     }
 }

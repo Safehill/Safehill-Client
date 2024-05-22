@@ -151,11 +151,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.retrieveInteraction(anchorType: .group, anchorId: groupId, withId: interactionIdentifier, completionHandler: completionHandler)
     }
     
-    func countLocalInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    func topLevelInteractionsSummary(
+        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
     ) {
-        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+        self.localServer.topLevelInteractionsSummary(completionHandler: completionHandler)
     }
     
     func retrieveUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
