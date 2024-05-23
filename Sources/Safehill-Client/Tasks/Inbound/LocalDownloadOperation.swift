@@ -86,7 +86,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         withIdentifiers userIdentifiers: [UserIdentifier],
         completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
     ) {
-        SHUsersController(localUser: self.user).getUsersOrCached(with: userIdentifiers, completionHandler: completionHandler)
+        Task {
+            do {
+                let usersDict = try await SHUsersController(localUser: self.user).getUsersOrCached(with: userIdentifiers)
+                completionHandler(.success(usersDict))
+            } catch {
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     ///

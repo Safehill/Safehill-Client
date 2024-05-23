@@ -79,12 +79,10 @@ public class SHUsersController {
     /// - Parameter userIdentifiers: the user identifiers to fetch
     /// - Returns: the best effort to retrieve the requested identifiers from cache
     public func getCachedUsers(
-        withIdentifiers userIdentifiers: [UserIdentifier],
-        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
-    ) {
+        withIdentifiers userIdentifiers: [UserIdentifier]
+    ) async throws -> [UserIdentifier: any SHServerUser] {
         guard userIdentifiers.count > 0 else {
-            completionHandler(.success([:]))
-            return
+            return [:]
         }
         
         var users = [UserIdentifier: any SHServerUser]()
@@ -99,21 +97,22 @@ public class SHUsersController {
         }
         
         guard missingUserIds.isEmpty == false else {
-            completionHandler(.success(users))
-            return
+            return users
         }
         
-        serverProxy.getLocalUsers(withIdentifiers: missingUserIds) {
-            result in
-            switch result {
-            case .success(let serverUsers):
-                for serverUser in serverUsers {
-                    users[serverUser.identifier] = serverUser
+        return try await withUnsafeThrowingContinuation { continuation in
+            serverProxy.getLocalUsers(withIdentifiers: missingUserIds) {
+                result in
+                switch result {
+                case .success(let serverUsers):
+                    for serverUser in serverUsers {
+                        users[serverUser.identifier] = serverUser
+                    }
+                    continuation.resume(returning: users)
+                case .failure(let err):
+                    log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
+                    continuation.resume(throwing: err)
                 }
-                completionHandler(.success(users))
-            case .failure(let err):
-                log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
-                completionHandler(.failure(err))
             }
         }
     }
@@ -126,36 +125,23 @@ public class SHUsersController {
     ///   - identifiers: the user identifiers
     ///   - completionHandler: the map identifier to user
     public func getUsersOrCached(
-        with identifiers: [UserIdentifier],
-        completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
-    ) {
-        self.getUsers(withIdentifiers: identifiers) {
-            result in
-            switch result {
-            case .failure(let error):
-                switch error {
-                case SHLocalUserError.notAuthenticated:
-                    break
-                default:
-                    log.warning("[\(type(of: self))] failed fetch users from server, falling back to **best effort** user cache: \(error.localizedDescription)")
-                }
-                
-                self.getCachedUsers(withIdentifiers: identifiers) {
-                    cachedResult in
-                    switch cachedResult {
-                    case .failure(let error):
-                        log.error("[\(type(of: self))] failed to update thread lists because users couldn't be fetched: \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                    case .success(var usersByIdentifier):
-                        if usersByIdentifier[self.localUser.identifier] == nil {
-                            usersByIdentifier[self.localUser.identifier] = self.localUser
-                        }
-                        completionHandler(.success(usersByIdentifier))
-                    }
-                }
-            case .success(let usersByIdentifier):
-                completionHandler(.success(usersByIdentifier))
+        with identifiers: [UserIdentifier]
+    ) async throws -> [UserIdentifier: any SHServerUser] {
+        do {
+            return try await self.getUsers(withIdentifiers: identifiers)
+        } catch {
+            switch error {
+            case SHLocalUserError.notAuthenticated:
+                break
+            default:
+                log.warning("[\(type(of: self))] failed fetch users from server, falling back to **best effort** user cache: \(error.localizedDescription)")
             }
+            
+            var cached = try await self.getCachedUsers(withIdentifiers: identifiers)
+            if cached[self.localUser.identifier] == nil {
+                cached[self.localUser.identifier] = self.localUser
+            }
+            return cached
         }
     }
     

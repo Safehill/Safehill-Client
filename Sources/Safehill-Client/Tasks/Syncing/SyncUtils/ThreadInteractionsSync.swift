@@ -171,54 +171,50 @@ extension SHInteractionsSyncOperation {
                 var unauthorizedUsers = Set(threadsFromUnknownUsers.compactMap({ $0.creatorPublicIdentifier }))
                 unauthorizedUsers.remove(self.user.identifier)
                 
+                let unauthorizedUsersImmutable = unauthorizedUsers
+                
                 ///
-                /// Create the local thread from the provided thread if it doesn't exist
+                /// Create the local thread if it doesn't exist
                 ///
                 
                 Task {
-                    await self.serverProxy.createThreadsLocallyIfMissing(
+                    let createdThreads = await self.serverProxy.createThreadsLocallyIfMissing(
                         threadsFromKnownUsers,
                         localThreads: localThreads
                     )
                     
-                    completionHandler(.success(threadsFromKnownUsers))
+                    completionHandler(.success(createdThreads))
                     
                     ///
                     /// Handle the ones from AUTHORIZED creators
                     ///
-                    ///
+                    
                     let interactionsSyncDelegates = self.interactionsSyncDelegates
                     self.delegatesQueue.async {
                         interactionsSyncDelegates.forEach({ delegate in
-                            threadsFromKnownUsers.forEach({ threadFromKnownUser in
-                                delegate.didAddThread(threadFromKnownUser)
+                            createdThreads.forEach({ createdThread in
+                                delegate.didAddThread(createdThread)
                             })
                         })
                     }
-                }
-                
-                if unauthorizedUsers.isEmpty == false {
                     
-                    ///
-                    /// Handle the ones from UNAUTHORIZED creators
-                    ///
-                    
-                    let unauthorizedUsersImmutable = unauthorizedUsers
-                    SHUsersController(localUser: self.user).getUsersOrCached(
-                        with: Array(unauthorizedUsers)
-                    ) { result in
-                        switch result {
+                    if unauthorizedUsersImmutable.isEmpty == false {
                         
-                        case .success(let usersDict):
-                            let interactionsSyncDelegates = self.interactionsSyncDelegates
+                        ///
+                        /// Handle the ones from UNAUTHORIZED creators
+                        ///
+                        
+                        do {
+                            let usersDict = try await SHUsersController(localUser: self.user).getUsersOrCached(
+                                with: Array(unauthorizedUsersImmutable)
+                            )
                             self.delegatesQueue.async {
                                 interactionsSyncDelegates.forEach({
                                     $0.didReceiveMessagesFromUnauthorized(users: unauthorizedUsersImmutable.compactMap({ uid in usersDict[uid] }))
                                 })
                             }
-
-                        case .failure(let error):
-                            self.log.error("failed to retrieve unauthorized users \(unauthorizedUsers). \(error.localizedDescription)")
+                        } catch {
+                            self.log.error("failed to retrieve unauthorized users \(unauthorizedUsersImmutable). \(error.localizedDescription)")
                         }
                     }
                 }
