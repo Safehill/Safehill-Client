@@ -10,11 +10,9 @@ public struct InteractionsGroupSummaryDTO: Codable {
         case reactions
     }
     
-    public init(
-        numComments: Int,
-        firstEncryptedMessage: MessageOutputDTO?,
-        reactions: [ReactionOutputDTO]
-    ) {
+    init(numComments: Int,
+         firstEncryptedMessage: MessageOutputDTO?,
+         reactions: [ReactionOutputDTO]) {
         self.numComments = numComments
         self.firstEncryptedMessage = firstEncryptedMessage
         self.reactions = reactions
