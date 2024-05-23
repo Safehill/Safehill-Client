@@ -625,14 +625,22 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inGroup groupId: String,
         inReplyToAssetGlobalIdentifier: String? = nil,
         inReplyToInteractionId: String? = nil,
-        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ReactionOutputDTO, Error>) -> ()
     ) {
         let reactionInput = ReactionInputDTO(
             inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: inReplyToInteractionId,
             reactionType: reactionType
         )
-        self.serverProxy.addReactions([reactionInput], inGroup: groupId, completionHandler: completionHandler)
+        self.serverProxy.addReactions([reactionInput], inGroup: groupId) {
+            result in
+            switch result {
+            case .success(let reactionOutputs):
+                completionHandler(.success(reactionOutputs.first!))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     public func removeReaction(
