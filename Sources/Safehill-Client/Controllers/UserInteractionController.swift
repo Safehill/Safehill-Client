@@ -233,11 +233,11 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         return try await self.serverProxy.topLevelThreadsInteractionsSummary()
     }
     
-    private func fetchGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
+    public func fetchGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
         return try await self.serverProxy.topLevelGroupsInteractionsSummary()
     }
     
-    private func reloadLocalInteractionsSummary(
+    public func reloadLocalInteractionsSummary(
         for groupId: String
     ) async throws -> InteractionsGroupSummaryDTO {
         return try await self.serverProxy.topLevelLocalInteractionsSummary(for: groupId)
