@@ -237,6 +237,12 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         return try await self.serverProxy.topLevelGroupsInteractionsSummary()
     }
     
+    private func reloadLocalInteractionsSummary(
+        for groupId: String
+    ) async throws -> InteractionsGroupSummaryDTO {
+        return try await self.serverProxy.topLevelLocalInteractionsSummary(for: groupId)
+    }
+    
     public func getAssets(
         inThread threadId: String,
         completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()

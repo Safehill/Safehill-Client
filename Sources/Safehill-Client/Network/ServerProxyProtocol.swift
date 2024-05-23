@@ -192,6 +192,8 @@ internal protocol SHServerProxyProtocol {
     
     func topLevelGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO]
     
+    func topLevelLocalInteractionsSummary(for groupId: String) async throws -> InteractionsGroupSummaryDTO
+    
     func getThread(
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()

@@ -193,6 +193,20 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
+    func topLevelLocalInteractionsSummary(for groupId: String) async throws -> InteractionsGroupSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelInteractionsSummary(inGroup: groupId) {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
     func retrieveUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
         self.localServer.retrieveUserEncryptionDetails(forGroup: groupId, completionHandler: completionHandler)
     }
