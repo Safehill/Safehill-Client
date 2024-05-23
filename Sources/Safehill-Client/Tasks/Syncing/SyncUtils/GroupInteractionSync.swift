@@ -10,7 +10,7 @@ extension SHInteractionsSyncOperation {
     ///   - remoteDescriptors: the descriptors
     ///   - qos: the thread priority
     ///   - completionHandler: the callback
-    public func syncGroupInteractions(
+    func syncGroupInteractions(
         remoteDescriptors: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void

@@ -284,4 +284,165 @@ extension SHInteractionsSyncOperation {
             }
         }
     }
+    
+    /// Sync the last `ThreadLastInteractionSyncLimit` interactions in a specific thread
+    /// - Parameters:
+    ///   - thread: the thread
+    ///   - qos: the quality of service
+    ///   - completionHandler: the callback
+    func syncThreadInteractions(
+        in thread: ConversationThreadOutputDTO,
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        log.debug("[sync] syncing interactions in thread \(thread.threadId)")
+        
+        let threadId = thread.threadId
+        
+        let dispatchGroup = DispatchGroup()
+        var error: Error? = nil
+        
+        ///
+        /// Retrieve the REMOTE interactions
+        ///
+        var remoteInteractions: InteractionsGroupDTO? = nil
+        dispatchGroup.enter()
+        self.serverProxy.retrieveRemoteInteractions(
+            inThread: threadId,
+            ofType: nil,
+            underMessage: nil,
+            before: nil,
+            limit: ThreadLastInteractionSyncLimit
+        ) { result in
+            switch result {
+            case .failure(let err):
+                error = err
+            case .success(let interactions):
+                remoteInteractions = interactions
+            }
+            dispatchGroup.leave()
+        }
+        
+        ///
+        /// Retrieve the LOCAL interactions
+        ///
+        var shouldCreateE2EEDetailsLocally = false
+        var localMessages = [MessageOutputDTO]()
+        var localReactions = [ReactionOutputDTO]()
+        
+        dispatchGroup.enter()
+        serverProxy.retrieveLocalInteractions(
+            inThread: threadId,
+            ofType: nil,
+            underMessage: nil,
+            before: nil,
+            limit: ThreadLastInteractionSyncLimit
+        ) { localResult in
+            switch localResult {
+            case .failure(let err):
+                if case SHBackgroundOperationError.missingE2EEDetailsForThread(_) = err {
+                    shouldCreateE2EEDetailsLocally = true
+                } else {
+                    error = err
+                    self.log.error("failed to retrieve local interactions for thread \(threadId)")
+                }
+            case .success(let localInteractions):
+                localMessages = localInteractions.messages
+                localReactions = localInteractions.reactions
+            }
+            dispatchGroup.leave()
+        }
+        
+        dispatchGroup.notify(queue: .global(qos: qos)) {
+            guard error == nil else {
+                self.log.error("error syncing interactions for thread \(threadId). \(error!.localizedDescription)")
+                completionHandler(.failure(error!))
+                return
+            }
+            guard let remoteInteractions else {
+                self.log.error("error retrieving remote interactions for thread \(threadId)")
+                completionHandler(.failure(SHBackgroundOperationError.fatalError("error retrieving interactions for thread \(threadId)")))
+                return
+            }
+            
+            ///
+            /// Add the E2EE encryption details for the group locally if missing
+            ///
+            
+            if shouldCreateE2EEDetailsLocally {
+                dispatchGroup.enter()
+                self.serverProxy.localServer.createOrUpdateThread(
+                    serverThread: thread
+                ) { threadCreateResult in
+                    switch threadCreateResult {
+                    case .success(_):
+                        break
+                    case .failure(let err):
+                        self.log.error("Cache interactions for thread \(threadId) won't be readable because setting the E2EE details for such thread failed: \(err.localizedDescription)")
+                    }
+                    dispatchGroup.leave()
+                }
+            }
+            
+            dispatchGroup.notify(queue: .global(qos: qos)) {
+                
+                var errors = [Error]()
+                
+                ///
+                /// Sync (create, update and delete) reactions
+                ///
+                
+                let remoteReactions = remoteInteractions.reactions
+                dispatchGroup.enter()
+                self.syncReactions(
+                    anchor: .thread,
+                    anchorId: threadId,
+                    localReactions: localReactions,
+                    remoteReactions: remoteReactions,
+                    qos: qos
+                ) { result in
+                    if case .failure(let err) = result {
+                        errors.append(err)
+                    }
+                    dispatchGroup.leave()
+                }
+                
+                ///
+                /// Sync (create, update and delete) messages
+                ///
+                
+                let encryptionDetails = EncryptionDetailsClass(
+                    ephemeralPublicKey: remoteInteractions.ephemeralPublicKey,
+                    encryptedSecret: remoteInteractions.encryptedSecret,
+                    secretPublicSignature: remoteInteractions.secretPublicSignature,
+                    senderPublicSignature: remoteInteractions.senderPublicSignature
+                )
+                let remoteMessages = remoteInteractions.messages
+                dispatchGroup.enter()
+                self.syncMessages(
+                    anchor: .thread,
+                    anchorId: threadId,
+                    localMessages: localMessages,
+                    remoteMessages: remoteMessages,
+                    encryptionDetails: encryptionDetails,
+                    qos: qos
+                ) { result in
+                    if case .failure(let err) = result {
+                        errors.append(err)
+                    }
+                    dispatchGroup.leave()
+                }
+                
+                dispatchGroup.notify(queue: .global(qos: qos)) {
+                    guard errors.isEmpty else {
+                        self.log.warning("error while syncing messages and reactions retrieved from server on local for thread \(threadId): \(errors.map({ $0.localizedDescription }))")
+                        completionHandler(.failure(errors.first!))
+                        return
+                    }
+                    
+                    completionHandler(.success(()))
+                }
+            }
+        }
+    }
 }
