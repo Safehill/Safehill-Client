@@ -1,8 +1,8 @@
 
 public struct InteractionsGroupSummaryDTO: Codable {
-    let numComments: Int
-    let firstEncryptedMessage: MessageOutputDTO?
-    let reactions: [ReactionOutputDTO]
+    public let numComments: Int
+    public let firstEncryptedMessage: MessageOutputDTO?
+    public let reactions: [ReactionOutputDTO]
     
     enum CodingKeys: String, CodingKey {
         case numComments

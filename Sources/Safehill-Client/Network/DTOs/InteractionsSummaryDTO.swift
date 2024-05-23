@@ -1,7 +1,7 @@
 
 public struct InteractionsSummaryDTO: Codable {
-    let summaryByThreadId: [String: InteractionsThreadSummaryDTO]
-    let summaryByGroupId: [String: InteractionsGroupSummaryDTO]
+    public let summaryByThreadId: [String: InteractionsThreadSummaryDTO]
+    public let summaryByGroupId: [String: InteractionsGroupSummaryDTO]
     
     enum CodingKeys: String, CodingKey {
         case summaryByThreadId

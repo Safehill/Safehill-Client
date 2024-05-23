@@ -1,9 +1,9 @@
 
 public struct InteractionsThreadSummaryDTO: Codable {
-    let thread: ConversationThreadOutputDTO
-    let lastEncryptedMessage: MessageOutputDTO?
-    let numMessages: Int
-    let numAssets: Int
+    public let thread: ConversationThreadOutputDTO
+    public let lastEncryptedMessage: MessageOutputDTO?
+    public let numMessages: Int
+    public let numAssets: Int
     
     enum CodingKeys: String, CodingKey {
         case thread
