@@ -1067,6 +1067,22 @@ struct SHServerHTTPAPI : SHServerAPI {
         self.post("interactions/summary", parameters: nil, completionHandler: completionHandler)
     }
     
+    func topLevelThreadsInteractionsSummary(
+        completionHandler: @escaping (Result<[String : InteractionsThreadSummaryDTO], Error>) -> ()
+    ) {
+        self.post("interactions/\(SHInteractionAnchor.thread.rawValue)/summary", 
+                  parameters: nil,
+                  completionHandler: completionHandler)
+    }
+    
+    func topLevelGroupsInteractionsSummary(
+        completionHandler: @escaping (Result<[String : InteractionsGroupSummaryDTO], Error>) -> ()
+    ) {
+        self.post("interactions/\(SHInteractionAnchor.group.rawValue)/summary", 
+                  parameters: nil,
+                  completionHandler: completionHandler)
+    }
+    
     func addReactions(
         _ reactions: [ReactionInput],
         inGroup groupId: String,

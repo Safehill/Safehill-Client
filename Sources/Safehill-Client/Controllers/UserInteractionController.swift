@@ -229,10 +229,12 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.serverProxy.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
-    public func fetchInteractionsSummary(
-        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
-    ) {
-        self.serverProxy.topLevelInteractionsSummary(completionHandler: completionHandler)
+    public func fetchThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO] {
+        return try await self.serverProxy.topLevelThreadsInteractionsSummary()
+    }
+    
+    private func fetchGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
+        return try await self.serverProxy.topLevelGroupsInteractionsSummary()
     }
     
     public func getAssets(

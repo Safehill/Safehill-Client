@@ -291,6 +291,18 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
     )
     
+    /// Retrieve an overall summary of all interactions in all threads
+    /// - Parameter completionHandler: the callback method
+    func topLevelThreadsInteractionsSummary(
+        completionHandler: @escaping (Result<[String: InteractionsThreadSummaryDTO], Error>) -> ()
+    )
+    
+    /// Retrieve an overall summary of all interactions in all groups
+    /// - Parameter completionHandler: the callback method
+    func topLevelGroupsInteractionsSummary(
+        completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()
+    )
+    
     /// Adds reactions to a share (group)
     /// - Parameters:
     ///   - reactions: the reactions details

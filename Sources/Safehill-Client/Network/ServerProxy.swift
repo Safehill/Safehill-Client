@@ -1120,16 +1120,6 @@ extension SHServerProxy {
                     self.remoteServer.getThread(
                         withId: threadId
                     ) { remoteResult in
-                        if case .success(let thread) = remoteResult,
-                           let thread
-                        {
-                            self.createKnownUserThreadsLocallyIfMissing(
-                                [thread],
-                                localThreads: nil,
-                                qos: .background
-                            ) {}
-                        }
-                        
                         completionHandler(remoteResult)
                     }
                 }
@@ -1259,7 +1249,7 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.localServer.addReactions(
-            reactions, 
+            reactions,
             inGroup: groupId,
             completionHandler: completionHandler
         )
@@ -1443,115 +1433,144 @@ extension SHServerProxy {
         }
     }
     
-    internal func topLevelInteractionsSummary(
-        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
-    ) {
-        self.remoteServer.topLevelInteractionsSummary {
-            result in
-            switch result {
-                
-            case .failure(let error):
-                log.warning("failed to get interactions summary from server. Fetching local summary. \(error.localizedDescription)")
-                self.localServer.topLevelInteractionsSummary(completionHandler: completionHandler)
-                
-            case .success(let interactionsSummary):
-                let serverThreads = interactionsSummary.summaryByThreadId.values.map { $0.thread }
-                
-                ///
-                /// Create the threads if they don't exist
-                /// and if they are from users that are authorized
-                ///
-                self.createKnownUserThreadsLocallyIfMissing(
-                    serverThreads,
-                    localThreads: nil,
-                    qos: .default
-                ) {
-                    let dispatchGroup = DispatchGroup()
+    internal func topLevelInteractionsSummary() async throws -> InteractionsSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.topLevelInteractionsSummary { result in
+                switch result {
                     
-                    for (threadId, threadSummary) in interactionsSummary.summaryByThreadId {
-                        let lastEncryptedMessage = threadSummary.lastEncryptedMessage
-                        
-                        ///
-                        /// Add the last message pulled from the summary to the thread
-                        ///
-                        dispatchGroup.enter()
-                        self.addLocalMessages(
-                            [lastEncryptedMessage],
-                            inThread: threadId
-                        ) { _ in
-                            dispatchGroup.leave()
+                case .failure(let error):
+                    log.warning("failed to get interactions summary from server. Fetching local summary. \(error.localizedDescription)")
+                    self.localServer.topLevelInteractionsSummary {
+                        localResult in
+                        switch localResult {
+                        case .success(let success):
+                            continuation.resume(returning: success)
+                        case .failure(let failure):
+                            continuation.resume(throwing: failure)
                         }
                     }
                     
-                    ///
-                    /// Add all the interactions referenced in the summary
-                    ///
-                    for (groupId, groupSummary) in interactionsSummary.summaryByGroupId {
-                        dispatchGroup.enter()
-                        self.addLocalReactions(
-                            groupSummary.reactions,
-                            inGroup: groupId
-                        ) { _ in
-                            dispatchGroup.leave()
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                }
+            }
+        }
+    }
+    
+    internal func topLevelThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.topLevelThreadsInteractionsSummary {
+                result in
+                switch result {
+                    
+                case .failure(let error):
+                    log.warning("failed to get threads interactions summary from server. Fetching local summary. \(error.localizedDescription)")
+                    self.localServer.topLevelThreadsInteractionsSummary {
+                        localResult in
+                        switch localResult {
+                        case .success(let success):
+                            continuation.resume(returning: success)
+                        case .failure(let failure):
+                            continuation.resume(throwing: failure)
                         }
                     }
                     
-                    completionHandler(.success(interactionsSummary))
+                case .success(let summaryByThreadId):
+                    continuation.resume(returning: summaryByThreadId)
+                }
+            }
+        }
+    }
+    
+    internal func topLevelGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.topLevelGroupsInteractionsSummary {
+                result in
+                switch result {
+                    
+                case .failure(let error):
+                    log.warning("failed to get groups interactions summary from server. Fetching local summary. \(error.localizedDescription)")
+                    self.localServer.topLevelGroupsInteractionsSummary {
+                        localResult in
+                        switch localResult {
+                        case .success(let success):
+                            continuation.resume(returning: success)
+                        case .failure(let failure):
+                            continuation.resume(throwing: failure)
+                        }
+                    }
+                    
+                case .success(let summaryByGroupId):
+                    continuation.resume(returning: summaryByGroupId)
                 }
             }
         }
     }
     
     internal func topLevelLocalInteractionsSummary(
-        for groupId: String,
-        completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()
-    ) {
-        self.localServer.topLevelInteractionsSummary(inGroup: groupId, completionHandler: completionHandler)
+        for groupId: String
+    ) async throws -> InteractionsGroupSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelInteractionsSummary(inGroup: groupId) { result in
+                switch result {
+                case .success(let success):
+                    continuation.resume(returning: success)
+                case .failure(let failure):
+                    continuation.resume(throwing: failure)
+                }
+            }
+        }
     }
     
-    internal func createKnownUserThreadsLocallyIfMissing(
+    /// Create in the local server the threads missing in the local server
+    /// - Parameters:
+    ///   - threadsToCreate: the list of threads to create locally
+    ///   - localThreads: the list of thread that already exists locally
+    /// - Returns: the list of threads created
+    internal func createThreadsLocallyIfMissing(
         _ threadsToCreate: [ConversationThreadOutputDTO],
-        localThreads: [ConversationThreadOutputDTO]?,
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping () -> Void
-    ) {
-        var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
-        
-        if let localThreads {
-            let localThreadIds = localThreads.map({ $0.threadId })
-            notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
-        } else {
-            self.listLocalThreads(
-                withIdentifiers: threadsToCreate.map({ $0.threadId })
-            ) { getThreadsResult in
-                
-                switch getThreadsResult {
+        localThreads: [ConversationThreadOutputDTO]? = nil
+    ) async -> [ConversationThreadOutputDTO] {
+        await withUnsafeContinuation { continuation in
+            
+            var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
+            
+            if let localThreads {
+                let localThreadIds = localThreads.map({ $0.threadId })
+                notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
+            } else {
+                self.listLocalThreads(
+                    withIdentifiers: threadsToCreate.map({ $0.threadId })
+                ) { getThreadsResult in
                     
-                case .failure(let failure):
-                    log.error("failed to get local threads when syncing. Assuming no threads on local. \(failure.localizedDescription)")
-                    
-                case .success(let localThreads):
-                    let localThreadIds = localThreads.map({ $0.threadId })
-                    notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
+                    switch getThreadsResult {
+                        
+                    case .failure(let failure):
+                        log.error("failed to get local threads when syncing. Assuming no threads on local. \(failure.localizedDescription)")
+                        
+                    case .success(let localThreads):
+                        let localThreadIds = localThreads.map({ $0.threadId })
+                        notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
+                    }
                 }
             }
-        }
-        
-        let dispatchGroup = DispatchGroup()
-        for threadToCreateLocally in notYetOnLocal {
-            dispatchGroup.enter()
-            self.localServer.createOrUpdateThread(
-                serverThread: threadToCreateLocally
-            ) { createResult in
-                if case .failure(let error) = createResult {
-                    log.error("failed to create thread locally. \(error.localizedDescription)")
+            
+            let dispatchGroup = DispatchGroup()
+            for threadToCreateLocally in notYetOnLocal {
+                dispatchGroup.enter()
+                self.localServer.createOrUpdateThread(
+                    serverThread: threadToCreateLocally
+                ) { createResult in
+                    if case .failure(let error) = createResult {
+                        log.error("failed to create thread locally. \(error.localizedDescription)")
+                    }
+                    dispatchGroup.leave()
                 }
-                dispatchGroup.leave()
             }
-        }
-        
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            completionHandler()
+            
+            dispatchGroup.notify(queue: .global()) {
+                continuation.resume(returning: notYetOnLocal)
+            }
         }
     }
     

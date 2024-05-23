@@ -186,9 +186,11 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     )
     
-    func topLevelInteractionsSummary(
-        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
-    )
+    func topLevelInteractionsSummary() async throws -> InteractionsSummaryDTO
+    
+    func topLevelThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO]
+    
+    func topLevelGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO]
     
     func getThread(
         withUsers users: [any SHServerUser],

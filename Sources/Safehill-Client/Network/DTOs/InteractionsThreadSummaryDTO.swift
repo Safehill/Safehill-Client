@@ -1,7 +1,7 @@
 
 public struct InteractionsThreadSummaryDTO: Codable {
     let thread: ConversationThreadOutputDTO
-    let lastEncryptedMessage: MessageOutputDTO
+    let lastEncryptedMessage: MessageOutputDTO?
     let numMessages: Int
     let numAssets: Int
     
@@ -14,7 +14,7 @@ public struct InteractionsThreadSummaryDTO: Codable {
     
     init(
         thread: ConversationThreadOutputDTO,
-        lastEncryptedMessage: MessageOutputDTO,
+        lastEncryptedMessage: MessageOutputDTO?,
         numMessages: Int,
         numAssets: Int
     ) {
@@ -27,7 +27,7 @@ public struct InteractionsThreadSummaryDTO: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         thread = try container.decode(ConversationThreadOutputDTO.self, forKey: .thread)
-        lastEncryptedMessage = try container.decode(MessageOutputDTO.self, forKey: .lastEncryptedMessage)
+        lastEncryptedMessage = try container.decode(MessageOutputDTO?.self, forKey: .lastEncryptedMessage)
         numMessages = try container.decode(Int.self, forKey: .numMessages)
         numAssets = try container.decode(Int.self, forKey: .numAssets)
     }

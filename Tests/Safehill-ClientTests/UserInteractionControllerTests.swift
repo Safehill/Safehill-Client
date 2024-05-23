@@ -151,10 +151,46 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.retrieveInteraction(anchorType: .group, anchorId: groupId, withId: interactionIdentifier, completionHandler: completionHandler)
     }
     
-    func topLevelInteractionsSummary(
-        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
-    ) {
-        self.localServer.topLevelInteractionsSummary(completionHandler: completionHandler)
+    func topLevelInteractionsSummary() async throws -> InteractionsSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelInteractionsSummary {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    func topLevelThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelThreadsInteractionsSummary {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    func topLevelGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelGroupsInteractionsSummary {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
     
     func retrieveUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {

@@ -1860,12 +1860,12 @@ struct LocalServer : SHServerAPI {
     }
     
     func topLevelInteractionsSummary(completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()) {
-        self.topLevelThreadInteractionsSummary { threadsResult in
+        self.topLevelThreadsInteractionsSummary { threadsResult in
             switch threadsResult {
             case .failure(let error):
                 completionHandler(.failure(error))
             case .success(let threadsSummary):
-                self.topLevelGroupInteractionsSummary { groupsResult in
+                self.topLevelGroupsInteractionsSummary { groupsResult in
                     switch groupsResult {
                     case .failure(let error):
                         completionHandler(.failure(error))
@@ -1881,7 +1881,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func topLevelThreadInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsThreadSummaryDTO], Error>) -> ()) {
+    func topLevelThreadsInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsThreadSummaryDTO], Error>) -> ()) {
         guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -1983,7 +1983,7 @@ struct LocalServer : SHServerAPI {
                             thread: thread,
                             lastEncryptedMessage: lastMessage,
                             numMessages: numMessagesByThreadId[threadId] ?? 0,
-                            numAssets: 0 // TODO: Figure out assets
+                            numAssets: 0 // TODO: Figure out how to retrieve the number of assets in the thread
                         )
                         threadSummaryById[threadId] = threadSummary
                     }
@@ -1993,7 +1993,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func topLevelGroupInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()) {
+    func topLevelGroupsInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()) {
         guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -2080,6 +2080,7 @@ struct LocalServer : SHServerAPI {
             for groupId in allGroupIds {
                 let groupSummary = InteractionsGroupSummaryDTO(
                     numComments: numCommentsByGroupId[groupId] ?? 0,
+                    firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
                     reactions: reactionsByGroupId[groupId] ?? []
                 )
                 
@@ -2131,7 +2132,11 @@ struct LocalServer : SHServerAPI {
                     log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
                 }
                 
-                let response = InteractionsGroupSummaryDTO(numComments: numMessages, reactions: reactions)
+                let response = InteractionsGroupSummaryDTO(
+                    numComments: numMessages,
+                    firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
+                    reactions: reactions
+                )
                 completionHandler(.success(response))
             }
         }
