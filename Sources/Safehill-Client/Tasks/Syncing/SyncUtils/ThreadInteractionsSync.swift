@@ -52,12 +52,6 @@ extension SHInteractionsSyncOperation {
                 guard remoteError == nil else {
                     self.log.error("[sync] error getting all threads from server. \(remoteError!.localizedDescription)")
                     
-                    let interactionsSyncDelegates = self.interactionsSyncDelegates
-                    let localThreadsImmutable = localThreads
-                    self.delegatesQueue.async {
-                        interactionsSyncDelegates.forEach({ $0.didUpdateThreadsList(localThreadsImmutable) })
-                    }
-                    
                     continuation.resume(throwing: remoteError!)
                     return
                 }
