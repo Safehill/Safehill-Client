@@ -1,21 +1,22 @@
 import Foundation
 
-public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
+public actor SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     
     private var runningOperations = [String: Bool]()
-    private var timers = [String: DispatchSourceTimer]()
-    
-    private let operationQueue: DispatchQueue
+    private var tasks = [String: Task<(), any Error>]()
     
     var operationKey: String {
         String(describing: T.self)
     }
     
-    internal init() {
-        self.operationQueue = DispatchQueue(
-            label: "com.gf.safehill.SHBackgroundOperationProcessor.\(String(describing: T.self))",
-            attributes: .concurrent
-        )
+    /// Check if an operation is running
+    private func isOperationRunning(_ key: String) -> Bool {
+        return runningOperations[key] ?? false
+    }
+
+    /// Set the running state of an operation
+    private func setOperationRunning(_ key: String, running: Bool) {
+        runningOperations[key] = running
     }
     
     /// Run a single operation
@@ -26,27 +27,26 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult) -> Void
     ) {
-        let operationKey = self.operationKey
-        log.debug("\(operationKey): run at qos=\(qos.toTaskPriority().rawValue)")
-        
-        operationQueue.async { [weak self] in
+        Task { [weak self] in
             guard let self = self else { return }
+            let operationKey = await self.operationKey
+            log.debug("\(operationKey): run at qos=\(qos.toTaskPriority().rawValue)")
             
             ///
             /// If another operation of the same type is running, skip this cycle
             ///
-            guard self.runningOperations[operationKey] == nil || !self.runningOperations[operationKey]! else {
+            let isRunning = await self.runningOperations[operationKey] ?? false
+            guard !isRunning else {
                 return
             }
             
-            self.runningOperations[operationKey] = true
-        }
-        
-        operation.run(qos: qos) { [weak self] result in
-            completion(result)
-            
-            self?.operationQueue.async {
-                self?.runningOperations[operationKey] = false
+            await self.setOperationRunning(operationKey, running: true)
+            operation.run(qos: qos) { result in
+                completion(result)
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    await self.setOperationRunning(operationKey, running: false)
+                }
             }
         }
     }
@@ -55,7 +55,7 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     /// - Parameters:
     ///   - initialDelay: the initial delay
     ///   - repeatInterval: the interval between each run
-    ///   - completion: the calback
+    ///   - completion: the callback
     public func runRepeatedOperation(
         _ operation: T,
         initialDelay: TimeInterval,
@@ -66,27 +66,25 @@ public class SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         let operationKey = self.operationKey
         log.debug("\(operationKey, privacy: .public): scheduled repeated run at qos=\(qos.toTaskPriority().rawValue) with delay=\(initialDelay) interval=\(repeatInterval)")
         
-        let timer = DispatchSource.makeTimerSource(queue: operationQueue)
-        timer.schedule(deadline: .now() + initialDelay, repeating: repeatInterval)
-        timer.setEventHandler { [weak self] in
-            self?.runOperation(operation, qos: qos, completion: completion)
+        let task = Task { [weak self] in
+            guard let self = self else { return }
+            try await Task.sleep(nanoseconds: UInt64(initialDelay * 1_000_000_000))
+            
+            while !Task.isCancelled {
+                await self.runOperation(operation, qos: qos, completion: completion)
+                try await Task.sleep(nanoseconds: UInt64(repeatInterval * 1_000_000_000))
+            }
         }
-        timer.resume()
         
-        operationQueue.async {
-            self.timers[operationKey] = timer
-        }
+        tasks[operationKey] = task
     }
     
     /// Stop an operation that was previously run on repeat
-    /// - Parameter operationType: the operation type
     public func stopRepeatedOperation() {
         let operationKey = self.operationKey
-        operationQueue.async {
-            if let timer = self.timers[operationKey] {
-                timer.cancel()
-                self.timers[operationKey] = nil
-            }
+        if let task = tasks[operationKey] {
+            task.cancel()
+            tasks[operationKey] = nil
         }
     }
 }
