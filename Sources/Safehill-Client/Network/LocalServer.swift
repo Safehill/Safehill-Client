@@ -1898,7 +1898,7 @@ struct LocalServer : SHServerAPI {
                 
                 var threadsById = [String: ConversationThreadOutputDTO]()
                 var lastMessageByThreadId = [String: MessageOutputDTO]()
-                var numMessagesByThreadId = [String: Int]()
+                var interactionIdsByThreadId = [String: Set<String>]()
                 
                 let dispatchGroup = DispatchGroup()
                 
@@ -1923,10 +1923,18 @@ struct LocalServer : SHServerAPI {
                         sort: .descending
                     ) { messagesResult in
                         
-                        guard case .success(let messagesKvts) = messagesResult,
-                              let lastCreatedMessageKvts = messagesKvts.first
-                        else {
-                            log.error("failed to fetch messages for condition \(threadCondition)")
+                        let lastCreatedMessageKvts: KBKVPairWithTimestamp
+                        
+                        switch messagesResult {
+                        case .success(let messagesKvts):
+                            if let firstMessagesKvts = messagesKvts.first {
+                                lastCreatedMessageKvts = firstMessagesKvts
+                            } else {
+                                dispatchGroup.leave()
+                                return
+                            }
+                        case .failure(let error):
+                            log.error("failed to fetch messages for condition \(threadCondition): \(error.localizedDescription)")
                             dispatchGroup.leave()
                             return
                         }
@@ -1952,8 +1960,13 @@ struct LocalServer : SHServerAPI {
                         matching: threadCondition
                     ) { messagesResult in
                         
-                        guard case .success(let keys) = messagesResult else {
-                            log.error("failed to fetch messages for condition nil")
+                        let keys: [String]
+                        
+                        switch messagesResult {
+                        case .success(let ks):
+                            keys = ks
+                        case .failure(let error):
+                            log.error("failed to fetch messages for condition nil. \(error.localizedDescription)")
                             dispatchGroup.leave()
                             return
                         }
@@ -1965,7 +1978,11 @@ struct LocalServer : SHServerAPI {
                                 continue
                             }
                             let threadId = keyComponents[1]
-                            numMessagesByThreadId[threadId] = (numMessagesByThreadId[threadId] ?? 0) + 1
+                            let interactionId = keyComponents[5]
+                            if interactionIdsByThreadId[threadId] == nil {
+                                interactionIdsByThreadId[threadId] = Set()
+                            }
+                            interactionIdsByThreadId[threadId]!.insert(interactionId)
                         }
                         
                         dispatchGroup.leave()
@@ -1982,7 +1999,7 @@ struct LocalServer : SHServerAPI {
                         let threadSummary = InteractionsThreadSummaryDTO(
                             thread: thread,
                             lastEncryptedMessage: lastMessage,
-                            numMessages: numMessagesByThreadId[threadId] ?? 0,
+                            numMessages: interactionIdsByThreadId[threadId]?.count ?? 0,
                             numAssets: 0 // TODO: Figure out how to retrieve the number of assets in the thread
                         )
                         threadSummaryById[threadId] = threadSummary
@@ -2054,8 +2071,13 @@ struct LocalServer : SHServerAPI {
         dispatchGroup.enter()
         messagesQueue.keys(matching: allGroupsCondition) { messagesResult in
             
-            guard case .success(let keys) = messagesResult else {
-                log.error("failed to fetch messages for condition nil")
+            let keys: [String]
+            
+            switch messagesResult {
+            case .success(let ks):
+                keys = ks
+            case .failure(let error):
+                log.error("failed to fetch messages for condition nil. \(error.localizedDescription)")
                 dispatchGroup.leave()
                 return
             }
