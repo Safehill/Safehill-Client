@@ -144,6 +144,8 @@ extension LocalServer {
                                 // TODO: Edits
                             }
                         }
+                        
+                        usleep(useconds_t(10 * 1000)) // sleep 10ms
                     }
                     
                     ///

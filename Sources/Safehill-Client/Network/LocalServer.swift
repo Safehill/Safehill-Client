@@ -745,6 +745,8 @@ struct LocalServer : SHServerAPI {
                     group.leave()
                 }
             }
+            
+            usleep(useconds_t(10 * 1000)) // sleep 10ms
         }
         
         group.notify(queue: .global()) {
@@ -1369,19 +1371,18 @@ struct LocalServer : SHServerAPI {
                     group.leave()
                 }
             }
+            
+            usleep(useconds_t(10 * 1000)) // sleep 10ms
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 5))
-        guard dispatchResult == .success else {
-            return completionHandler(.failure(SHBackgroundOperationError.timedOut))
+        group.notify(queue: .global()) {
+            guard err == nil else {
+                completionHandler(.failure(err!))
+                return
+            }
+            
+            completionHandler(.success(Array(removedGlobalIdentifiers)))
         }
-        
-        guard err == nil else {
-            completionHandler(.failure(err!))
-            return
-        }
-        
-        completionHandler(.success(Array(removedGlobalIdentifiers)))
     }
     
     @available(*, deprecated, renamed: "createOrUpdateThread(serverThread:completionHandler:)", message: "Do not use the protocol method when storing a thread locally. Information from server should be provided.")
@@ -1907,86 +1908,90 @@ struct LocalServer : SHServerAPI {
                 /// 1. One to retrieve the last message (encrypted)
                 /// 2. One to retrieve the number of messages in the thread
                 ///
-                for thread in threads {
-                    let threadId = thread.threadId
-                    threadsById[threadId] = thread
-                    
-                    dispatchGroup.enter()
-                    
-                    let threadCondition = KBGenericCondition(
-                        .beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)"
-                    )
-                    messagesQueue.keyValuesAndTimestamps(
-                        forKeysMatching: threadCondition,
-                        timestampMatching: nil,
-                        paginate: KBPaginationOptions(limit: 1, offset: 0),
-                        sort: .descending
-                    ) { messagesResult in
+                for threadsChunk in threads.chunked(into: 10) {
+                    for thread in threadsChunk {
+                        let threadId = thread.threadId
+                        threadsById[threadId] = thread
                         
-                        let lastCreatedMessageKvts: KBKVPairWithTimestamp
+                        dispatchGroup.enter()
                         
-                        switch messagesResult {
-                        case .success(let messagesKvts):
-                            if let firstMessagesKvts = messagesKvts.first {
-                                lastCreatedMessageKvts = firstMessagesKvts
-                            } else {
+                        let threadCondition = KBGenericCondition(
+                            .beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)"
+                        )
+                        messagesQueue.keyValuesAndTimestamps(
+                            forKeysMatching: threadCondition,
+                            timestampMatching: nil,
+                            paginate: KBPaginationOptions(limit: 1, offset: 0),
+                            sort: .descending
+                        ) { messagesResult in
+                            
+                            let lastCreatedMessageKvts: KBKVPairWithTimestamp
+                            
+                            switch messagesResult {
+                            case .success(let messagesKvts):
+                                if let firstMessagesKvts = messagesKvts.first {
+                                    lastCreatedMessageKvts = firstMessagesKvts
+                                } else {
+                                    dispatchGroup.leave()
+                                    return
+                                }
+                            case .failure(let error):
+                                log.error("failed to fetch messages for condition \(threadCondition): \(error.localizedDescription)")
                                 dispatchGroup.leave()
                                 return
                             }
-                        case .failure(let error):
-                            log.error("failed to fetch messages for condition \(threadCondition): \(error.localizedDescription)")
+                            
+                            let keyComponents = lastCreatedMessageKvts.key.components(separatedBy: "::")
+                            guard keyComponents.count == 6 else {
+                                log.warning("invalid reaction key in local DB: \(lastCreatedMessageKvts.key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                                dispatchGroup.leave()
+                                return
+                            }
+                            guard let messageOutput = try? LocalServer.toMessageOutput(lastCreatedMessageKvts) else {
+                                dispatchGroup.leave()
+                                return
+                            }
+                            
+                            lastMessageByThreadId[threadId] = messageOutput
+                            
                             dispatchGroup.leave()
-                            return
                         }
                         
-                        let keyComponents = lastCreatedMessageKvts.key.components(separatedBy: "::")
-                        guard keyComponents.count == 6 else {
-                            log.warning("invalid reaction key in local DB: \(lastCreatedMessageKvts.key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                        dispatchGroup.enter()
+                        messagesQueue.keys(
+                            matching: threadCondition
+                        ) { messagesResult in
+                            
+                            let keys: [String]
+                            
+                            switch messagesResult {
+                            case .success(let ks):
+                                keys = ks
+                            case .failure(let error):
+                                log.error("failed to fetch messages for condition nil. \(error.localizedDescription)")
+                                dispatchGroup.leave()
+                                return
+                            }
+                            
+                            for key in keys {
+                                let keyComponents = key.components(separatedBy: "::")
+                                guard keyComponents.count == 6 else {
+                                    log.warning("invalid message key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
+                                    continue
+                                }
+                                let threadId = keyComponents[1]
+                                let interactionId = keyComponents[5]
+                                if interactionIdsByThreadId[threadId] == nil {
+                                    interactionIdsByThreadId[threadId] = Set()
+                                }
+                                interactionIdsByThreadId[threadId]!.insert(interactionId)
+                            }
+                            
                             dispatchGroup.leave()
-                            return
                         }
-                        guard let messageOutput = try? LocalServer.toMessageOutput(lastCreatedMessageKvts) else {
-                            dispatchGroup.leave()
-                            return
-                        }
-                        
-                        lastMessageByThreadId[threadId] = messageOutput
-                        
-                        dispatchGroup.leave()
                     }
                     
-                    dispatchGroup.enter()
-                    messagesQueue.keys(
-                        matching: threadCondition
-                    ) { messagesResult in
-                        
-                        let keys: [String]
-                        
-                        switch messagesResult {
-                        case .success(let ks):
-                            keys = ks
-                        case .failure(let error):
-                            log.error("failed to fetch messages for condition nil. \(error.localizedDescription)")
-                            dispatchGroup.leave()
-                            return
-                        }
-                        
-                        for key in keys {
-                            let keyComponents = key.components(separatedBy: "::")
-                            guard keyComponents.count == 6 else {
-                                log.warning("invalid message key in local DB: \(key). Expected `<anchorType>::<anchorId>::<senderId>::<inReplyToInteractionId>::<inReplyToAssetId>::<interactionId>")
-                                continue
-                            }
-                            let threadId = keyComponents[1]
-                            let interactionId = keyComponents[5]
-                            if interactionIdsByThreadId[threadId] == nil {
-                                interactionIdsByThreadId[threadId] = Set()
-                            }
-                            interactionIdsByThreadId[threadId]!.insert(interactionId)
-                        }
-                        
-                        dispatchGroup.leave()
-                    }
+                    usleep(useconds_t(10 * 1000)) // sleep 10ms
                 }
                 
                 dispatchGroup.notify(queue: .global()) {

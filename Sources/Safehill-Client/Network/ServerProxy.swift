@@ -116,7 +116,7 @@ extension SHServerProxy {
     ) {
         let group = DispatchGroup()
         
-        for (i, serverUserChunk) in serverUsers.chunked(into: 10).enumerated() {
+        for serverUserChunk in serverUsers.chunked(into: 10) {
             for serverUser in serverUserChunk {
                 group.enter()
                 self.localServer.createOrUpdateUser(
@@ -131,9 +131,8 @@ extension SHServerProxy {
                     group.leave()
                 }
             }
-            if serverUserChunk.count > 0, i < serverUserChunk.count {
-                usleep(useconds_t(10 * 1000)) // sleep 10ms
-            }
+            
+            usleep(useconds_t(10 * 1000)) // sleep 10ms
         }
         
         group.notify(queue: .global(qos: .background)) {
