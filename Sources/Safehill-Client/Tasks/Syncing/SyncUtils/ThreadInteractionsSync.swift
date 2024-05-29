@@ -204,7 +204,7 @@ extension SHInteractionsSyncOperation {
                             )
                             self.delegatesQueue.async {
                                 interactionsSyncDelegates.forEach({
-                                    $0.didReceiveMessagesFromUnauthorized(users: unauthorizedUsersImmutable.compactMap({ uid in usersDict[uid] }))
+                                    $0.didReceiveTextMessagesFromUnauthorized(users: unauthorizedUsersImmutable.compactMap({ uid in usersDict[uid] }))
                                 })
                             }
                         } catch {
