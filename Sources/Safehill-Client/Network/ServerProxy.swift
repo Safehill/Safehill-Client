@@ -1428,6 +1428,19 @@ extension SHServerProxy {
         }
     }
     
+    internal func topLevelInteractionsSummaryFromRemote() async throws -> InteractionsSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.topLevelInteractionsSummary { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                }
+            }
+        }
+    }
+    
     internal func topLevelInteractionsSummary() async throws -> InteractionsSummaryDTO {
         try await withUnsafeThrowingContinuation { continuation in
             self.remoteServer.topLevelInteractionsSummary { result in

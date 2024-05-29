@@ -210,7 +210,7 @@ public class SHInteractionsSyncOperation: Operation {
             ///
             /// Get the summary to update the latest messages and interactions
             /// in threads and groups
-            let summary = try await self.serverProxy.topLevelInteractionsSummary()
+            let summary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
             
             self.delegatesQueue.async { [weak self] in
                 self?.interactionsSyncDelegates.forEach {
