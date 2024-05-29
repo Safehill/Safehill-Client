@@ -27,7 +27,7 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func didAddThread(_: ConversationThreadOutputDTO)
     
-    func didReceiveMessagesFromUnauthorized(users: [any SHServerUser])
+    func didReceiveTextMessagesFromUnauthorized(users: [any SHServerUser])
     
     func didReceiveTextMessages(_ messages: [MessageOutputDTO],
                                 inGroup groupId: String)
