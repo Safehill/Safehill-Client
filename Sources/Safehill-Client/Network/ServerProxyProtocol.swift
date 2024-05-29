@@ -37,7 +37,7 @@ internal protocol SHServerProxyProtocol {
     
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     )
     
     func addReactions(

@@ -28,13 +28,13 @@ public struct SHUploadPipeline {
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
-    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread, meaning that it should be linked to it
+    ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread, and it should show as a message
     public static func enqueueUpload(
         localIdentifier: String,
         groupId: String,
         sender: SHServerUser,
         recipients: [SHServerUser],
-        shouldLinkToThread: Bool
+        isPhotoMessage: Bool
     ) throws {
         do {
             let queueItem = SHLocalFetchRequestQueueItem(
@@ -43,7 +43,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients,
                 shouldUpload: true,
-                shouldLinkToThread: shouldLinkToThread
+                isPhotoMessage: isPhotoMessage
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
         } catch {
@@ -52,7 +52,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
-                shouldLinkToThread: shouldLinkToThread
+                isPhotoMessage: isPhotoMessage
             )
             try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedUpload))
             
@@ -62,7 +62,7 @@ public struct SHUploadPipeline {
                     groupId: groupId,
                     eventOriginator: sender,
                     sharedWith: recipients,
-                    shouldLinkToThread: shouldLinkToThread
+                    isPhotoMessage: isPhotoMessage
                 )
                 try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
             }
@@ -81,7 +81,7 @@ public struct SHUploadPipeline {
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - forceUpload: whether or not it's a force-retry (and should re-upload)
-    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread, meaning that it should be linked to it
+    ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread, and it should show as a message
     public static func enqueueShare(
         localIdentifier: String,
         globalIdentifier: String?,
@@ -89,7 +89,7 @@ public struct SHUploadPipeline {
         sender: SHAuthenticatedLocalUser,
         recipients: [SHServerUser],
         forceUpload: Bool,
-        shouldLinkToThread: Bool
+        isPhotoMessage: Bool
     ) throws {
         ///
         /// First, check if the asset already exists in the local store.
@@ -118,7 +118,7 @@ public struct SHUploadPipeline {
                 eventOriginator: sender,
                 sharedWith: recipients,
                 shouldUpload: forceUpload,
-                shouldLinkToThread: shouldLinkToThread
+                isPhotoMessage: isPhotoMessage
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
             
@@ -129,7 +129,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
-                shouldLinkToThread: shouldLinkToThread
+                isPhotoMessage: isPhotoMessage
             )
             try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
             

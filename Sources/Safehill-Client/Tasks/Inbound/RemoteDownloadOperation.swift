@@ -691,7 +691,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         groupId: groupId,
                         eventOriginator: myUser,
                         sharedWith: [],
-                        shouldLinkToThread: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                        isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                         isBackground: false
                     )
                     
@@ -725,7 +725,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     groupId: groupId,
                     eventOriginator: myUser,
                     sharedWith: shareInfo.map({ $0.with }),
-                    shouldLinkToThread: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                    isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                     isBackground: false
                 )
                 

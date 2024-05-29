@@ -61,7 +61,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
@@ -82,7 +82,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -119,7 +119,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
@@ -140,7 +140,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: [],
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: isBackground
         )
         
@@ -189,7 +189,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     eventOriginator: eventOriginator,
                     sharedWith: sharedWith,
                     shouldUpload: false,
-                    shouldLinkToThread: shouldLinkToThread,
+                    isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
                 try fetchRequest.enqueue(in: fetchQueue)
@@ -217,7 +217,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                         eventOriginator: request.eventOriginator,
                         sharedWith: request.sharedWith,
                         shouldUpload: true,
-                        shouldLinkToThread: false,
+                        isPhotoMessage: false,
                         isBackground: true
                     )
                     try hiResFetchQueueItem.enqueue(in: fetchQueue)

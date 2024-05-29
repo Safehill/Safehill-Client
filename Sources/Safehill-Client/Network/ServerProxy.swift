@@ -902,12 +902,12 @@ extension SHServerProxy {
     }
     
     func share(_ asset: SHShareableEncryptedAsset,
-               shouldLinkToThread: Bool,
+               isPhotoMessage: Bool,
                suppressNotification: Bool = false,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.share(
             asset: asset,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             suppressNotification: suppressNotification,
             completionHandler: completionHandler
         )
@@ -1151,16 +1151,12 @@ extension SHServerProxy {
     ///   - completionHandler: the callback method
     internal func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
         self.localServer.getAssets(inThread: threadId) { remoteResult in
             switch remoteResult {
             case .success(let threadAssets):
-                if threadAssets.count > 0 {
-                    completionHandler(.success(threadAssets))
-                } else {
-                    self.remoteServer.getAssets(inThread: threadId, completionHandler: completionHandler)
-                }
+                completionHandler(.success(threadAssets))
             case .failure(let failure):
                 log.error("failed to get assets in thread \(threadId) from remote server, trying local. \(failure.localizedDescription)")
                 self.remoteServer.getAssets(inThread: threadId, completionHandler: completionHandler)

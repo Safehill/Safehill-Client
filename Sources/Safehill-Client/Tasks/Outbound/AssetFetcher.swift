@@ -85,7 +85,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         // Dequeue from FETCH queue
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
@@ -109,7 +109,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -146,7 +146,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let shouldUpload = request.shouldUpload
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         let isBackground = request.isBackground
         
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
@@ -168,7 +168,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
-                    shouldLinkToThread: shouldLinkToThread,
+                    isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
                 try encryptionRequest.enqueue(in: encryptionQueue)
@@ -199,7 +199,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
-                    shouldLinkToThread: shouldLinkToThread,
+                    isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
                 try encryptionForSharingRequest.enqueue(in: shareQueue)

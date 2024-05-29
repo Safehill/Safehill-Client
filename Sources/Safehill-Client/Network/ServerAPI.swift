@@ -125,11 +125,11 @@ public protocol SHServerAPI {
     /// Shares one or more assets with a set of users
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
-    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread so a link between the thread and the asset should be made
+    ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread and it should show as a message
     ///   - suppressNotification: do not send a notification to the user. For instance, when the high resolution is shared in the background
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
-               shouldLinkToThread: Bool,
+               isPhotoMessage: Bool,
                suppressNotification: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ())
     
@@ -248,7 +248,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     )
     
     // MARK: Groups

@@ -21,7 +21,7 @@ extension SHInteractionsSyncOperation {
         var error: Error? = nil
         
         ///
-        /// Retrieve the REMOTE thread assets
+        /// Retrieve the REMOTE thread assets photo messages
         ///
         var remoteThreadAssets = [ConversationThreadAssetDTO]()
         dispatchGroup.enter()
@@ -32,13 +32,13 @@ extension SHInteractionsSyncOperation {
             case .failure(let err):
                 error = err
             case .success(let threadAssetsDTO):
-                remoteThreadAssets = threadAssetsDTO
+                remoteThreadAssets = threadAssetsDTO.photoMessages
             }
             dispatchGroup.leave()
         }
         
         ///
-        /// Retrieve the LOCAL thread assets
+        /// Retrieve the LOCAL thread assets photo messages
         ///
         var localThreadAssets = [ConversationThreadAssetDTO]()
         dispatchGroup.enter()
@@ -50,7 +50,7 @@ extension SHInteractionsSyncOperation {
                 error = err
                 self.log.error("failed to retrieve local assets for thread \(threadId)")
             case .success(let threadAssetsDTO):
-                localThreadAssets = threadAssetsDTO
+                localThreadAssets = threadAssetsDTO.photoMessages
             }
             dispatchGroup.leave()
         }

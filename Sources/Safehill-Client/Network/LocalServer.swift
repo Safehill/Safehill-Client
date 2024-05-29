@@ -1126,7 +1126,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               shouldLinkToThread: Bool = false,
+               isPhotoMessage: Bool = false,
                suppressNotification: Bool = true,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -1695,7 +1695,7 @@ struct LocalServer : SHServerAPI {
     
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
             completionHandler(.failure(KBError.databaseNotReady))
@@ -1746,7 +1746,7 @@ struct LocalServer : SHServerAPI {
                                     return result
                                 }
                                 
-                                let result = assetsGids.compactMap {
+                                let photoMessages = assetsGids.compactMap {
                                     (gid: GlobalIdentifier) -> ConversationThreadAssetDTO? in
                                     
                                     guard let descriptor = descriptorsDict[gid] else {
@@ -1768,6 +1768,46 @@ struct LocalServer : SHServerAPI {
                                         groupId: groupId
                                     )
                                 }
+                                
+                                var otherAssets = [UsersGroupAssetDTO]()
+                                
+                                do {
+                                    ///
+                                    /// Retrieve all assets shared with the people in this thread
+                                    /// (regardless if they are photo messages)
+                                    /// then filter out the photo messages
+                                    ///
+                                    var triples = try SHKGQuery.assetGlobalIdentifiers(
+                                        amongst: serverThread.membersPublicIdentifier,
+                                        requestingUserId: self.requestor.identifier
+                                    )
+                                    for assetsGid in triples.keys {
+                                        triples.removeValue(forKey: assetsGid)
+                                    }
+                                    
+                                    otherAssets = triples.compactMap {
+                                        let gid = $0.key
+                                        for (predicate, userId) in $0.value {
+                                            if predicate == SHKGPredicate.shares {
+                                                let senderId = userId
+                                                return UsersGroupAssetDTO(
+                                                    globalIdentifier: gid,
+                                                    addedByUserIdentifier: senderId,
+                                                    addedAt: Date().iso8601withFractionalSeconds // TODO: How do we retrieve this date from the graph?
+                                                )
+                                            }
+                                        }
+                                        return nil
+                                    }
+                                } catch {
+                                    log.critical("failed to fetch or parse photo sharing information from the graph")
+                                }
+                                
+                                let result = ConversationThreadAssetsDTO(
+                                    photoMessages: photoMessages,
+                                    otherAssets: otherAssets
+                                )
+                                
                                 completionHandler(.success(result))
                             case .failure(let failure):
                                 completionHandler(.failure(failure))

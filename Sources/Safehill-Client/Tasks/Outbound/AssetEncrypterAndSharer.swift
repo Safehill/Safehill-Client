@@ -57,7 +57,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
@@ -74,7 +74,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
 
@@ -114,7 +114,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
@@ -131,7 +131,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -221,7 +221,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 
                 self.serverProxy.share(
                     shareableEncryptedAsset,
-                    shouldLinkToThread: request.shouldLinkToThread,
+                    isPhotoMessage: request.isPhotoMessage,
                     suppressNotification: request.isBackground
                 ) { shareResult in
                     if case .failure(let err) = shareResult {
@@ -418,7 +418,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 if shareRequest.isBackground == false {
                     self.initializeGroupAndThread(
                         shareRequest: shareRequest,
-                        skipThreadCreation: shareRequest.shouldLinkToThread == false,
+                        skipThreadCreation: shareRequest.isPhotoMessage == false,
                         qos: qos
                     ) { result in
                         switch result {

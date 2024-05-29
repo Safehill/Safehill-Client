@@ -693,7 +693,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               shouldLinkToThread: Bool,
+               isPhotoMessage: Bool,
                suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
@@ -718,7 +718,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "globalAssetIdentifier": asset.globalIdentifier,
             "versionSharingDetails": versions,
             "groupId": asset.groupId,
-            "shouldLinkToThread": shouldLinkToThread,
+            "isPhotoMessage": isPhotoMessage,
             "suppressNotification": suppressNotification
         ]
         
@@ -1037,7 +1037,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
         self.post(
             "threads/retrieve/\(threadId)/assets",

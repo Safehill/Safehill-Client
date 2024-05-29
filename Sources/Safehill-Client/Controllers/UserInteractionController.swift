@@ -245,7 +245,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     
     public func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
         self.serverProxy.getAssets(inThread: threadId, completionHandler: completionHandler)
     }
