@@ -8,6 +8,7 @@ public struct WebSocketMessage: Codable {
         case reactionAdd = "reaction-add"
         case reactionRemove = "reaction-remove"
         case threadAdd = "thread-add"
+        case assetsShare = "assets-share"
     }
     
     let type: MessageType
@@ -39,5 +40,10 @@ public struct WebSocketMessage: Codable {
         let senderPublicIdentifier: String
         let reactionType: ReactionType.RawValue // Int
         let updatedAt: String // ISO8601 formatted datetime
+    }
+    
+    struct ThreadAssets: Codable {
+        let threadId: String
+        let assets: [ConversationThreadAssetDTO]
     }
 }

@@ -45,6 +45,8 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
                            inGroup groupId: String)
     func didRemoveReaction(_: ReactionOutputDTO,
                            inThread threadId: String)
+    
+    func didAddPhotos(_: [ConversationThreadAssetDTO], to threadId: String)
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {

@@ -175,6 +175,20 @@ public class SHInteractionsSyncOperation: Operation {
                     remoteThreads: [threadOutputDTO],
                     qos: .default
                 ) { _ in }
+                
+            case .assetsShare:
+                
+                guard let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                let threadId = threadAssetsWsMessage.threadId
+                let threadAssets = threadAssetsWsMessage.assets
+                
+                interactionsSyncDelegates.forEach({
+                    $0.didAddPhotos(threadAssets, to: threadId)
+                })
             }
         }
     }
