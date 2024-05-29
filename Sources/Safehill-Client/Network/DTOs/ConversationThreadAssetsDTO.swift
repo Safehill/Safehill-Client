@@ -1,8 +1,8 @@
 import Foundation
 
 public struct ConversationThreadAssetsDTO: Codable {
-    let photoMessages: [ConversationThreadAssetDTO]
-    let otherAssets: [UsersGroupAssetDTO]
+    public let photoMessages: [ConversationThreadAssetDTO]
+    public let otherAssets: [UsersGroupAssetDTO]
     
     enum CodingKeys: String, CodingKey {
         case photoMessages
