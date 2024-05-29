@@ -235,7 +235,7 @@ extension SHInteractionsSyncOperation {
                     let interactionsSyncDelegates = self.interactionsSyncDelegates
                     self.delegatesQueue.async {
                         interactionsSyncDelegates.forEach({ delegate in
-                            delegate.didReceiveMessages(messages, inThread: threadId)
+                            delegate.didReceiveTextMessages(messages, inThread: threadId)
                         })
                     }
                 }
@@ -277,7 +277,7 @@ extension SHInteractionsSyncOperation {
                     let interactionsSyncDelegates = self.interactionsSyncDelegates
                     self.delegatesQueue.async {
                         interactionsSyncDelegates.forEach({ delegate in
-                            delegate.didReceiveMessages(messages, inGroup: groupId)
+                            delegate.didReceiveTextMessages(messages, inGroup: groupId)
                         })
                     }
                 }

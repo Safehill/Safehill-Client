@@ -118,9 +118,9 @@ public class SHInteractionsSyncOperation: Operation {
                 interactionsSyncDelegates.forEach({
                     switch SHInteractionAnchor(rawValue: textMessage.anchorType) {
                     case .group:
-                        $0.didReceiveMessages([messageOutput], inGroup: textMessage.anchorId)
+                        $0.didReceiveTextMessages([messageOutput], inGroup: textMessage.anchorId)
                     case .thread:
-                        $0.didReceiveMessages([messageOutput], inThread: textMessage.anchorId)
+                        $0.didReceiveTextMessages([messageOutput], inThread: textMessage.anchorId)
                     case .none:
                         self.log.critical("[ws] invalid anchor type from server: \(textMessage.anchorType)")
                     }
@@ -187,7 +187,7 @@ public class SHInteractionsSyncOperation: Operation {
                 let threadAssets = threadAssetsWsMessage.assets
                 
                 interactionsSyncDelegates.forEach({
-                    $0.didAddPhotos(threadAssets, to: threadId)
+                    $0.didReceivePhotoMessages(threadAssets, in: threadId)
                 })
             }
         }

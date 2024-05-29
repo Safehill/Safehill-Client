@@ -42,14 +42,14 @@ extension SHInteractionsSyncOperation {
                     switch anchor {
                     case .group:
                         interactionsSyncDelegates.forEach({
-                            $0.didReceiveMessages(
+                            $0.didReceiveTextMessages(
                                 messages,
                                 inGroup: anchorId
                             )
                         })
                     case .thread:
                         interactionsSyncDelegates.forEach({
-                            $0.didReceiveMessages(
+                            $0.didReceiveTextMessages(
                                 messages,
                                 inThread: anchorId
                             )

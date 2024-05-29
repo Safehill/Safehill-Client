@@ -29,10 +29,13 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func didReceiveMessagesFromUnauthorized(users: [any SHServerUser])
     
-    func didReceiveMessages(_ messages: [MessageOutputDTO],
-                           inGroup groupId: String)
-    func didReceiveMessages(_: [MessageOutputDTO],
-                           inThread threadId: String)
+    func didReceiveTextMessages(_ messages: [MessageOutputDTO],
+                                inGroup groupId: String)
+    func didReceiveTextMessages(_: [MessageOutputDTO],
+                                inThread threadId: String)
+    
+    func didReceivePhotoMessages(_: [ConversationThreadAssetDTO], 
+                                 in threadId: String)
     
     func reactionsDidChange(inThread threadId: String)
     func reactionsDidChange(inGroup groupId: String)
@@ -45,8 +48,6 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
                            inGroup groupId: String)
     func didRemoveReaction(_: ReactionOutputDTO,
                            inThread threadId: String)
-    
-    func didAddPhotos(_: [ConversationThreadAssetDTO], to threadId: String)
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
