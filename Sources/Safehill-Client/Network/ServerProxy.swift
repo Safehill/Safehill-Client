@@ -1153,13 +1153,21 @@ extension SHServerProxy {
         inThread threadId: String,
         completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
-        self.localServer.getAssets(inThread: threadId) { remoteResult in
+        self.remoteServer.getAssets(inThread: threadId) { remoteResult in
             switch remoteResult {
+                
             case .success(let threadAssets):
                 completionHandler(.success(threadAssets))
+                /// 
+                /// Cache thread assets for offline consumption
+                ///
+                Task(priority: .background) {
+                    try await self.localServer.cache(threadAssets, in: threadId)
+                }
+                
             case .failure(let failure):
                 log.error("failed to get assets in thread \(threadId) from remote server, trying local. \(failure.localizedDescription)")
-                self.remoteServer.getAssets(inThread: threadId, completionHandler: completionHandler)
+                self.localServer.getAssets(inThread: threadId, completionHandler: completionHandler)
             }
         }
     }
@@ -1863,17 +1871,21 @@ extension SHServerProxy {
         var serverResult: Result<SHReceiptValidationResponse, Error>? = nil
         
         group.enter()
-        self.localServer.validateTransaction(originalTransactionId: originalTransactionId,
-                                             receipt: receipt,
-                                             productId: productId) { result in
+        self.localServer.validateTransaction(
+            originalTransactionId: originalTransactionId,
+            receipt: receipt,
+            productId: productId
+        ) { result in
             localResult = result
             group.leave()
         }
         
         group.enter()
-        self.remoteServer.validateTransaction(originalTransactionId: originalTransactionId,
-                                              receipt: receipt,
-                                              productId: productId) { result in
+        self.remoteServer.validateTransaction(
+            originalTransactionId: originalTransactionId,
+            receipt: receipt,
+            productId: productId
+        ) { result in
             serverResult = result
             group.leave()
         }

@@ -279,7 +279,7 @@ struct LocalServer : SHServerAPI {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -1464,8 +1464,6 @@ struct LocalServer : SHServerAPI {
             condition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::")
         }
         
-        condition = condition.and(KBGenericCondition(.contains, value: "::assets::", negated: true))
-        
         let kvPairs: KBKVPairs
         do {
             kvPairs = try userStore
@@ -1613,7 +1611,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -1693,6 +1691,36 @@ struct LocalServer : SHServerAPI {
         return groupId
     }
     
+    internal func cache(
+        _ threadAssets: ConversationThreadAssetsDTO,
+        in threadId: String
+    ) async throws {
+        try await withUnsafeThrowingContinuation { continuation in
+            
+            self.getThread(withId: threadId) { threadResult in
+                switch threadResult {
+                case .success(let serverThread):
+                    if let serverThread {
+                        do {
+                            try SHKGQuery.ingest(
+                                threadAssets,
+                                in: serverThread
+                            )
+                            continuation.resume()
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    } else {
+                        log.warning("failed to cache assets in non-existing local thread \(threadId)")
+                        continuation.resume()
+                    }
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
     func getAssets(
         inThread threadId: String,
         completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
@@ -1748,71 +1776,31 @@ struct LocalServer : SHServerAPI {
                         /// Get the photo messages in this thread,
                         /// previously synced by the `SHInteractionSyncOperation`
                         ///
-                        let assetsGids = try userStore
-                            .keys(
-                                matching: KBGenericCondition(
+                        let photoMessages = try userStore
+                            .values(
+                                forKeysMatching: KBGenericCondition(
                                     .beginsWith,
                                     value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets"
                                 )
                             )
-                            .compactMap {
-                                let components = $0.components(separatedBy: "::")
-                                if components.count == 4, let assetGid = components.last {
-                                    return assetGid
+                            .compactMap { (value: Any) -> ConversationThreadAssetDTO? in
+                                guard let data = value as? Data else {
+                                    log.critical("unexpected non-data photo message in thread \(threadId)")
+                                    return nil
                                 }
-                                return nil
+                                guard let photoMessage = try? ConversationThreadAssetClass.fromData(data) else {
+                                    log.critical("failed to decode photo message in thread \(threadId)")
+                                    return nil
+                                }
+                                return photoMessage.toDTO()
                             }
                         
-                        ///
-                        /// Get the assets descriptors for these assets,
-                        /// so that we can retrieve sharing information such as the share date and the sender.
-                        /// 
-                        /// Although we do store the sender information in the userStore KVS as a value for the thread-asset keys
-                        /// we ignore it here and trust the descriptor instead.
-                        ///
-                        self.getAssetDescriptors(forAssetGlobalIdentifiers: assetsGids) { descriptorsResult in
-                            switch descriptorsResult {
-                            case .success(let descriptors):
-                                let descriptorsDict = descriptors.reduce([GlobalIdentifier: any SHAssetDescriptor]()) {
-                                    partialResult, descriptor in
-                                    var result = partialResult
-                                    result[descriptor.globalIdentifier] = descriptor
-                                    return result
-                                }
-                                
-                                let photoMessages = assetsGids.compactMap {
-                                    (gid: GlobalIdentifier) -> ConversationThreadAssetDTO? in
-                                    
-                                    guard let descriptor = descriptorsDict[gid] else {
-                                        return nil
-                                    }
-                                        
-                                    guard let groupId = self.getGroupId(for: serverThread.membersPublicIdentifier, in: descriptor) else {
-                                        return nil
-                                    }
-                                    
-                                    guard let date = descriptor.sharingInfo.groupInfoById[groupId]?.createdAt else {
-                                        return nil
-                                    }
-                                    
-                                    return ConversationThreadAssetDTO(
-                                        globalIdentifier: gid,
-                                        addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
-                                        addedAt: date.iso8601withFractionalSeconds,
-                                        groupId: groupId
-                                    )
-                                }
-                                
-                                let result = ConversationThreadAssetsDTO(
-                                    photoMessages: photoMessages,
-                                    otherAssets: otherAssets
-                                )
-                                
-                                completionHandler(.success(result))
-                            case .failure(let failure):
-                                completionHandler(.failure(failure))
-                            }
-                        }
+                        let result = ConversationThreadAssetsDTO(
+                            photoMessages: photoMessages,
+                            otherAssets: otherAssets
+                        )
+                        completionHandler(.success(result))
+                        
                     } catch {
                         completionHandler(.failure(error))
                     }
@@ -1923,7 +1911,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func topLevelThreadsInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsThreadSummaryDTO], Error>) -> ()) {
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2061,7 +2049,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2167,7 +2155,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2350,7 +2338,7 @@ struct LocalServer : SHServerAPI {
         from userId: UserIdentifier,
         completionHandler: @escaping (Result<Int, Error>) -> ()
     ) {
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2415,7 +2403,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2654,7 +2642,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2849,7 +2837,7 @@ struct LocalServer : SHServerAPI {
         anchorId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
-        guard let messagesQueue = SHDBManager.sharedInstance.messageQueue else {
+        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }

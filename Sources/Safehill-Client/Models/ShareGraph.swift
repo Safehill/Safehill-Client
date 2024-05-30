@@ -140,50 +140,82 @@ public struct SHKGQuery {
         }
     }
     
+    internal static func ingest(
+        _ conversationThreadAssets: ConversationThreadAssetsDTO,
+        in thread: ConversationThreadOutputDTO
+    ) throws {
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
+            }
+            
+            guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
+                throw KBError.databaseNotReady
+            }
+            let writeBatch = messagesQueue.writeBatch()
+            
+            for photoMessage in conversationThreadAssets.photoMessages {
+                writeBatch.set(
+                    value: ConversationThreadAssetClass.fromDTO(photoMessage),
+                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets",
+                    timestamp: photoMessage.addedAt.iso8601withFractionalSeconds ?? Date()
+                )
+                
+                try self.ingestShare(
+                    of: photoMessage.globalIdentifier,
+                    from: photoMessage.addedByUserIdentifier,
+                    to: thread.membersPublicIdentifier,
+                    in: graph
+                )
+            }
+            
+            for otherAsset in conversationThreadAssets.otherAssets {
+                try self.ingestShare(
+                    of: otherAsset.globalIdentifier,
+                    from: otherAsset.addedByUserIdentifier,
+                    to: thread.membersPublicIdentifier,
+                    in: graph
+                )
+            }
+            
+            try writeBatch.write()
+        }
+    }
+    
     internal static func ingestProvisionalShare(
         of assetIdentifier: GlobalIdentifier,
         localIdentifier: String?,
         from senderUserId: UserIdentifier,
         to receiverUserIds: [UserIdentifier]
     ) throws {
-        var errors = [Error]()
-        
         let receiverUserIds = Array(Set(receiverUserIds))
         
-        do {
-            try readWriteGraphQueue.sync(flags: .barrier) {
-                guard let graph = SHDBManager.sharedInstance.graph else {
-                    throw KBError.databaseNotReady
-                }
-                
-                let kgSender = graph.entity(withIdentifier: senderUserId)
-                let kgAsset = graph.entity(withIdentifier: assetIdentifier)
-                
-                log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicate.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
-                try kgSender.link(to: kgAsset, withPredicate: SHKGPredicate.attemptedShare.rawValue)
-                
-                if let localIdentifier {
-                    let kgCorrespondingLocalAsset = graph.entity(withIdentifier: localIdentifier)
-                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.localAssetIdEquivalent.rawValue), localAsset=\(kgCorrespondingLocalAsset.identifier)>")
-                    try kgAsset.link(to: kgCorrespondingLocalAsset, withPredicate: SHKGPredicate.localAssetIdEquivalent.rawValue)
-                }
-                
-                for userId in receiverUserIds {
-                    if userId == senderUserId {
-                        continue
-                    }
-                    let kgOtherUser = graph.entity(withIdentifier: userId)
-                    try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
-                    log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
-                }
+        try readWriteGraphQueue.sync(flags: .barrier) {
+            guard let graph = SHDBManager.sharedInstance.graph else {
+                throw KBError.databaseNotReady
             }
-        } catch {
-            log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
-            errors.append(error)
-        }
-        
-        if errors.isEmpty == false {
-            throw errors.first!
+            
+            let kgSender = graph.entity(withIdentifier: senderUserId)
+            let kgAsset = graph.entity(withIdentifier: assetIdentifier)
+            
+            log.debug("[sh-kg] adding triple <user=\(kgSender.identifier), \(SHKGPredicate.attemptedShare.rawValue), asset=\(kgAsset.identifier)>")
+            try kgSender.link(to: kgAsset, withPredicate: SHKGPredicate.attemptedShare.rawValue)
+            
+            if let localIdentifier {
+                let kgCorrespondingLocalAsset = graph.entity(withIdentifier: localIdentifier)
+                log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.localAssetIdEquivalent.rawValue), localAsset=\(kgCorrespondingLocalAsset.identifier)>")
+                try kgAsset.link(to: kgCorrespondingLocalAsset, withPredicate: SHKGPredicate.localAssetIdEquivalent.rawValue)
+            }
+            
+            for userId in receiverUserIds {
+                if userId == senderUserId {
+                    continue
+                }
+                let kgOtherUser = graph.entity(withIdentifier: userId)
+                try kgAsset.link(to: kgOtherUser, withPredicate: SHKGPredicate.sharedWith.rawValue)
+                log.debug("[sh-kg] adding triple <asset=\(kgAsset.identifier), \(SHKGPredicate.sharedWith.rawValue), user=\(kgOtherUser.identifier)>")
+            }
         }
     }
     

@@ -171,7 +171,7 @@ public class SHInteractionsSyncOperation: Operation {
                     return
                 }
                 
-                self.syncThreadsFromAuthorizedUsers(
+                self.syncThreads(
                     remoteThreads: [threadOutputDTO],
                     qos: .default
                 ) { _ in }
@@ -194,9 +194,9 @@ public class SHInteractionsSyncOperation: Operation {
     }
     
     /// Main run.
-    /// 1. Pull the summary for threads and groups
-    /// 2. Start the WEBSOCKET connection for updates
-    /// 3. In the background sync the last interactions for all threads
+    /// 1. Sync the threads list between local and remote
+    /// 2. Pull the summary for threads and groups
+    /// 3. Start the WEBSOCKET connection for updates
     public override func start() {
         super.start()
         
@@ -205,7 +205,7 @@ public class SHInteractionsSyncOperation: Operation {
             /// Sync the threads (creates, removals)
             /// based on the list from server
             ///
-            let threadsFromKnownUsers = try await self.syncThreads(qos: .default)
+            let _ = try await self.syncThreads(qos: .default)
             
             ///
             /// Get the summary to update the latest messages and interactions
@@ -226,57 +226,6 @@ public class SHInteractionsSyncOperation: Operation {
             /// Start syncing interactions via the web socket
             ///
             try await self.startWebSocketAndReconnectOnFailure()
-            
-            ///
-            /// Optimization: start syncing the last 20 for each thread in the background
-            ///
-//            try await self.syncThreadInteractions(
-//                in: threadsFromKnownUsers,
-//                qos: .background
-//            )
-        }
-    }
-    
-    public func run(
-        for anchor: SHInteractionAnchor,
-        anchorId: String,
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        switch anchor {
-        case .group:
-            self.syncGroupInteractions(groupId: anchorId, qos: qos) { result in
-                switch result {
-                case .failure(let err):
-                    self.log.error("[sync] failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
-                    completionHandler(.failure(err))
-                case .success:
-                    completionHandler(.success(()))
-                }
-            }
-        case .thread:
-            self.serverProxy.remoteServer.getThread(withId: anchorId) { getThreadResult in
-                switch getThreadResult {
-                case .failure(let error):
-                    self.log.error("[sync] failed to get thread with id \(anchorId) from server")
-                    completionHandler(.failure(error))
-                case .success(let serverThread):
-                    guard let serverThread else {
-                        self.log.warning("[sync] no such thread with id \(anchorId) from server")
-                        completionHandler(.success(()))
-                        return
-                    }
-                    self.syncThreadInteractions(in: serverThread, qos: qos) { syncResult in
-                        switch syncResult {
-                        case .failure(let err):
-                            self.log.error("[sync] failed to sync interactions in \(anchor.rawValue) \(anchorId): \(err.localizedDescription)")
-                            completionHandler(.failure(err))
-                        case .success:
-                            completionHandler(.success(()))
-                        }
-                    }
-                }
-            }
         }
     }
 }

@@ -85,14 +85,14 @@ public class SHDBManager {
         case userStore = "com.gf.safehill.LocalServer.users"
         case assetStore = "com.gf.safehill.LocalServer.assets"
         case reactionStore = "com.gf.safehill.LocalServer.reactions"
-        case messageQueue = "com.gf.safehill.LocalServer.messages"
+        case messagesQueue = "com.gf.safehill.LocalServer.messages"
         case knowledgeGraph = "com.gf.safehill.KnowledgeGraph"
     }
     
     private var _userStore: KBKVStore?
     private var _assetStore: KBKVStore?
     private var _reactionStore: KBKVStore?
-    private var _messageQueue: KBQueueStore?
+    private var _messagesQueue: KBQueueStore?
     private var _knowledgeGraph: KBKnowledgeStore?
     private var _backgroundQueues: [BackgroundOperationQueue.OperationType: KBQueueStore?]
     
@@ -114,7 +114,7 @@ public class SHDBManager {
         self._userStore = nil
         self._assetStore = nil
         self._reactionStore = nil
-        self._messageQueue = nil
+        self._messagesQueue = nil
         self._knowledgeGraph = nil
     }
     
@@ -177,11 +177,11 @@ public class SHDBManager {
         }
         return self._reactionStore
     }
-    public var messageQueue: KBQueueStore? {
-        if self._messageQueue == nil {
-            self._messageQueue = SHDBManager.getQueueStore(name: DBName.messageQueue.rawValue, type: .lifo)
+    public var messagesQueue: KBQueueStore? {
+        if self._messagesQueue == nil {
+            self._messagesQueue = SHDBManager.getQueueStore(name: DBName.messagesQueue.rawValue, type: .lifo)
         }
-        return self._messageQueue
+        return self._messagesQueue
     }
     public var graph: KBKnowledgeStore? {
         if self._knowledgeGraph == nil,
