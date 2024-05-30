@@ -1162,7 +1162,11 @@ extension SHServerProxy {
                 /// Cache thread assets for offline consumption
                 ///
                 Task(priority: .background) {
-                    try await self.localServer.cache(threadAssets, in: threadId)
+                    do {
+                        try await self.localServer.cache(threadAssets, in: threadId)
+                    } catch {
+                        log.warning("failed to cache thread assets: \(error)")
+                    }
                 }
                 
             case .failure(let failure):
