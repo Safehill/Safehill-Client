@@ -439,8 +439,8 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         dispatchGroup.enter()
         let usersController = SHUsersController(localUser: self.user)
         let userIds = Set<UserIdentifier>(
-            interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
-            + interactionsGroup.messages.map({ $0.senderUserIdentifier! })
+            interactionsGroup.reactions.map({ $0.senderPublicIdentifier! })
+            + interactionsGroup.messages.map({ $0.senderPublicIdentifier! })
         )
         
         usersController.getUsers(withIdentifiers: Array(userIds)) {
@@ -452,7 +452,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             case .success(let usersDict):
                 reactions = interactionsGroup.reactions.compactMap({
                     reaction in
-                    guard let sender = usersDict[reaction.senderUserIdentifier!] else {
+                    guard let sender = usersDict[reaction.senderPublicIdentifier!] else {
                         return nil
                     }
                     
@@ -796,7 +796,7 @@ extension SHUserInteractionController {
         )
         
          SHUsersController(localUser: self.user).getUsers(
-            withIdentifiers: encryptedMessages.map({ $0.senderUserIdentifier! })
+            withIdentifiers: encryptedMessages.map({ $0.senderPublicIdentifier! })
          ) { result in
              switch result {
              case .failure(let error):
@@ -805,8 +805,8 @@ extension SHUserInteractionController {
                  var decryptedMessages = [SHDecryptedMessage]()
                  
                  for encryptedMessage in encryptedMessages {
-                     guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderUserIdentifier!] else {
-                         log.warning("couldn't find user with identifier \(encryptedMessage.senderUserIdentifier!)")
+                     guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderPublicIdentifier!] else {
+                         log.warning("couldn't find user with identifier \(encryptedMessage.senderPublicIdentifier!)")
                          continue
                      }
                      guard let createdAt = encryptedMessage.createdAt?.iso8601withFractionalSeconds else {
@@ -824,7 +824,7 @@ extension SHUserInteractionController {
                              signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
                          )
                      } catch {
-                         log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderUserIdentifier!). error=\(error.localizedDescription)")
+                         log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderPublicIdentifier!). error=\(error.localizedDescription)")
                          continue
                      }
                      guard let decryptedMessage = String(data: decryptedData, encoding: .utf8) else {

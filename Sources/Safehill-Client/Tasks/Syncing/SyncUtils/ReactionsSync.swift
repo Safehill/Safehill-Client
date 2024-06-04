@@ -14,7 +14,7 @@ extension SHInteractionsSyncOperation {
         var reactionsToRemove = [ReactionOutputDTO]()
         for remoteReaction in remoteReactions {
             let existing = localReactions.first(where: {
-                $0.senderUserIdentifier == remoteReaction.senderUserIdentifier
+                $0.senderPublicIdentifier == remoteReaction.senderPublicIdentifier
                 && $0.inReplyToInteractionId == remoteReaction.inReplyToInteractionId
                 && $0.inReplyToAssetGlobalIdentifier == remoteReaction.inReplyToAssetGlobalIdentifier
                 && $0.reactionType == remoteReaction.reactionType
@@ -26,7 +26,7 @@ extension SHInteractionsSyncOperation {
         
         for localReaction in localReactions {
             let existingOnRemote = remoteReactions.first(where: {
-                $0.senderUserIdentifier == localReaction.senderUserIdentifier
+                $0.senderPublicIdentifier == localReaction.senderPublicIdentifier
                 && $0.inReplyToInteractionId == localReaction.inReplyToInteractionId
                 && $0.inReplyToAssetGlobalIdentifier == localReaction.inReplyToAssetGlobalIdentifier
                 && $0.reactionType == localReaction.reactionType

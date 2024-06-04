@@ -2,7 +2,7 @@ import Foundation
 
 public protocol MessageInput {
     var interactionId: String? { get }
-    var senderUserIdentifier: String? { get }
+    var senderPublicIdentifier: String? { get }
     var senderPublicSignature: String? { get }
     var inReplyToAssetGlobalIdentifier: String? { get }
     var inReplyToInteractionId: String? { get }
@@ -30,7 +30,7 @@ extension MessageInputDTO: MessageInput {
         return nil
     }
     
-    public var senderUserIdentifier: String? {
+    public var senderPublicIdentifier: String? {
         return nil
     }
     

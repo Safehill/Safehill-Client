@@ -48,7 +48,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func addMessage(_ message: MessageInputDTO, inGroup groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: UUID().uuidString,
-            senderUserIdentifier: self.localServer.requestor.identifier,
+            senderPublicIdentifier: self.localServer.requestor.identifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
             encryptedMessage: message.encryptedMessage,
@@ -67,7 +67,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func addMessage(_ message: MessageInputDTO, inThread threadId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: UUID().uuidString,
-            senderUserIdentifier: self.localServer.requestor.identifier,
+            senderPublicIdentifier: self.localServer.requestor.identifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
             encryptedMessage: message.encryptedMessage,

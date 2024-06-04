@@ -108,7 +108,7 @@ public class SHInteractionsSyncOperation: Operation {
                 
                 let messageOutput = MessageOutputDTO(
                     interactionId: interactionId,
-                    senderUserIdentifier: textMessage.senderPublicIdentifier,
+                    senderPublicIdentifier: textMessage.senderPublicIdentifier,
                     inReplyToAssetGlobalIdentifier: textMessage.inReplyToAssetGlobalIdentifier,
                     inReplyToInteractionId: textMessage.inReplyToInteractionId,
                     encryptedMessage: textMessage.encryptedMessage,
@@ -138,7 +138,7 @@ public class SHInteractionsSyncOperation: Operation {
                 
                 let reactionOutput = ReactionOutputDTO(
                     interactionId: interactionId,
-                    senderUserIdentifier: reaction.senderPublicIdentifier,
+                    senderPublicIdentifier: reaction.senderPublicIdentifier,
                     inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
                     inReplyToInteractionId: reaction.inReplyToInteractionId,
                     reactionType: reactionType,

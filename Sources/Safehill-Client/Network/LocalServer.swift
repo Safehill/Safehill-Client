@@ -2228,7 +2228,7 @@ struct LocalServer : SHServerAPI {
         for reaction in reactions {
             deleteCondition = deleteCondition
                 .or(
-                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderUserIdentifier!)")
+                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)")
                 )
         }
         reactionStore.removeValues(forKeysMatching: deleteCondition) { result in
@@ -2244,7 +2244,7 @@ struct LocalServer : SHServerAPI {
                     log.warning("can not save interaction to local store without an interaction identifier from server")
                     continue
                 }
-                var key = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderUserIdentifier!)"
+                var key = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)"
                 if let interactionId = reaction.inReplyToInteractionId {
                     key += "::\(interactionId)"
                 } else {
@@ -2306,7 +2306,7 @@ struct LocalServer : SHServerAPI {
         
         var condition = KBGenericCondition(value: false)
         for reaction in reactions {
-            var keyStart = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderUserIdentifier!)"
+            var keyStart = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)"
             if let interactionId = reaction.inReplyToInteractionId {
                 keyStart += "::\(interactionId)"
             } else {
@@ -2576,7 +2576,7 @@ struct LocalServer : SHServerAPI {
         
         return MessageOutputDTO(
             interactionId: message.interactionId,
-            senderUserIdentifier: message.senderUserIdentifier,
+            senderPublicIdentifier: message.senderPublicIdentifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
             encryptedMessage: message.encryptedMessage,
@@ -2620,7 +2620,7 @@ struct LocalServer : SHServerAPI {
         
         return ReactionOutputDTO(
             interactionId: interactionId,
-            senderUserIdentifier: senderId,
+            senderPublicIdentifier: senderId,
             inReplyToAssetGlobalIdentifier: inReplyToAssetGid,
             inReplyToInteractionId: inReplyToInteractionGid,
             reactionType: reactionType,
@@ -2853,7 +2853,7 @@ struct LocalServer : SHServerAPI {
             
             let messageOutput = MessageOutputDTO(
                 interactionId: interactionId,
-                senderUserIdentifier: message.senderUserIdentifier!,
+                senderPublicIdentifier: message.senderPublicIdentifier!,
                 inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
                 inReplyToInteractionId: message.inReplyToInteractionId,
                 encryptedMessage: message.encryptedMessage,
@@ -2861,7 +2861,7 @@ struct LocalServer : SHServerAPI {
             )
             
             do {
-                var key = "\(anchorType.rawValue)::\(anchorId)::\(message.senderUserIdentifier!)"
+                var key = "\(anchorType.rawValue)::\(anchorId)::\(message.senderPublicIdentifier!)"
                 if let interactionId = message.inReplyToInteractionId {
                     key += "::\(interactionId)"
                 } else {
@@ -2875,7 +2875,7 @@ struct LocalServer : SHServerAPI {
                 key += "::\(interactionId)"
                 let value = DBSecureSerializableUserMessage(
                     interactionId: message.interactionId!,
-                    senderUserIdentifier: message.senderUserIdentifier!,
+                    senderPublicIdentifier: message.senderPublicIdentifier!,
                     inReplyToAssetGlobalIdentifier: message.inReplyToInteractionId,
                     inReplyToInteractionId: message.inReplyToInteractionId,
                     encryptedMessage: message.encryptedMessage,
