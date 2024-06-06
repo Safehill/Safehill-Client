@@ -2026,12 +2026,9 @@ struct LocalServer : SHServerAPI {
                     var threadSummaryById = [String: InteractionsThreadSummaryDTO]()
                     
                     for (threadId, thread) in threadsById {
-                        guard let lastMessage = lastMessageByThreadId[threadId] else {
-                            continue
-                        }
                         let threadSummary = InteractionsThreadSummaryDTO(
                             thread: thread,
-                            lastEncryptedMessage: lastMessage,
+                            lastEncryptedMessage: lastMessageByThreadId[threadId],
                             numMessages: interactionIdsByThreadId[threadId]?.count ?? 0,
                             numAssets: 0 // TODO: Figure out how to retrieve the number of assets in the thread
                         )
