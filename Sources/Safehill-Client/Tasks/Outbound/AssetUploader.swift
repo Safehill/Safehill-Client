@@ -3,7 +3,7 @@ import os
 import KnowledgeBase
 
 
-internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
     
     let operationType = BackgroundOperationQueue.OperationType.upload
     let processingState = ProcessingState.uploading
@@ -28,13 +28,6 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         self.localAssetStoreController = localAssetStoreController
         self.limit = limit
         self.delegates = delegates
-    }
-    
-    public func clone() -> SHBackgroundOperationProtocol {
-        SHUploadOperation(user: self.user,
-                          localAssetStoreController: self.localAssetStoreController,
-                          delegates: self.delegates,
-                          limitPerRun: self.limit)
     }
     
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
@@ -68,7 +61,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
@@ -89,7 +82,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -126,7 +119,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
@@ -147,7 +140,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: [],
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: isBackground
         )
         
@@ -196,7 +189,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
                     eventOriginator: eventOriginator,
                     sharedWith: sharedWith,
                     shouldUpload: false,
-                    shouldLinkToThread: shouldLinkToThread,
+                    isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
                 try fetchRequest.enqueue(in: fetchQueue)
@@ -224,7 +217,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
                         eventOriginator: request.eventOriginator,
                         sharedWith: request.sharedWith,
                         shouldUpload: true,
-                        shouldLinkToThread: false,
+                        isPhotoMessage: false,
                         isBackground: true
                     )
                     try hiResFetchQueueItem.enqueue(in: fetchQueue)
@@ -240,6 +233,7 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
     
     func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let uploadRequest: SHUploadRequestQueueItem
@@ -353,25 +347,5 @@ internal class SHUploadOperation: SHAbstractBackgroundOperation, SHOutboundBackg
                 }
             }
         }
-    }
-    
-    public override func run(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.runOnce(completionHandler: completionHandler)
-    }
-}
-
-internal class SHAssetsUploaderQueueProcessor : SHBackgroundOperationProcessor<SHUploadOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetsUploaderQueueProcessor(
-        delayedStartInSeconds: 4,
-        dispatchIntervalInSeconds: 2
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds,
-                   dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

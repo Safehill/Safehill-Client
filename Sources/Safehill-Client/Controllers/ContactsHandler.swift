@@ -228,14 +228,16 @@ public class SHAddressBookContactHandler {
                 group.leave()
             }
             
-            group.notify(queue: .global()) {
-                guard error == nil else {
-                    completionHandler(.failure(error!))
-                    return
-                }
-                
-                completionHandler(.success(usersByPhoneNumber))
+            usleep(useconds_t(100 * 1000)) // sleep 100ms
+        }
+        
+        group.notify(queue: .global()) {
+            guard error == nil else {
+                completionHandler(.failure(error!))
+                return
             }
+            
+            completionHandler(.success(usersByPhoneNumber))
         }
     }
     

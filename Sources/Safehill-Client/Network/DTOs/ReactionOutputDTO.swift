@@ -3,7 +3,7 @@ import Foundation
 
 public struct ReactionOutputDTO {
     private let _interactionId: String
-    private let _senderUserIdentifier: String
+    private let _senderPublicIdentifier: String
     public let inReplyToAssetGlobalIdentifier: String?
     public let inReplyToInteractionId: String?
     public let reactionType: ReactionType
@@ -11,14 +11,14 @@ public struct ReactionOutputDTO {
     
     public init(
         interactionId: String,
-        senderUserIdentifier: String,
+        senderPublicIdentifier: String,
         inReplyToAssetGlobalIdentifier: String?,
         inReplyToInteractionId: String?,
         reactionType: ReactionType,
         addedAt: String
     ) {
         self._interactionId = interactionId
-        self._senderUserIdentifier = senderUserIdentifier
+        self._senderPublicIdentifier = senderPublicIdentifier
         self.inReplyToAssetGlobalIdentifier = inReplyToAssetGlobalIdentifier
         self.inReplyToInteractionId = inReplyToInteractionId
         self.reactionType = reactionType
@@ -31,8 +31,8 @@ extension ReactionOutputDTO: ReactionInput {
         self._interactionId
     }
     
-    public var senderUserIdentifier: String? {
-        self._senderUserIdentifier
+    public var senderPublicIdentifier: String? {
+        self._senderPublicIdentifier
     }
     
     public var addedAt: String? {
@@ -46,7 +46,7 @@ extension ReactionOutputDTO: ReactionInput {
 extension ReactionOutputDTO: Codable {
     enum CodingKeys: String, CodingKey {
         case interactionId
-        case senderUserIdentifier
+        case senderPublicIdentifier
         case inReplyToAssetGlobalIdentifier
         case inReplyToInteractionId
         case reactionType
@@ -56,7 +56,7 @@ extension ReactionOutputDTO: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         _interactionId = try container.decode(String.self, forKey: .interactionId)
-        _senderUserIdentifier = try container.decode(String.self, forKey: .senderUserIdentifier)
+        _senderPublicIdentifier = try container.decode(String.self, forKey: .senderPublicIdentifier)
         inReplyToInteractionId = try? container.decode(String?.self, forKey: .inReplyToInteractionId)
         inReplyToAssetGlobalIdentifier = try? container.decode(String?.self, forKey: .inReplyToAssetGlobalIdentifier)
         if let reactionType = ReactionType(rawValue: try container.decode(Int.self, forKey: .reactionType)) {
@@ -70,7 +70,7 @@ extension ReactionOutputDTO: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(_interactionId, forKey: .interactionId)
-        try container.encode(_senderUserIdentifier, forKey: .senderUserIdentifier)
+        try container.encode(_senderPublicIdentifier, forKey: .senderPublicIdentifier)
         try container.encode(inReplyToInteractionId, forKey: .inReplyToInteractionId)
         try container.encode(inReplyToAssetGlobalIdentifier, forKey: .inReplyToAssetGlobalIdentifier)
         try container.encode(reactionType.rawValue, forKey: .reactionType)

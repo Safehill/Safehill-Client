@@ -15,7 +15,7 @@ private let PublicKeyKey = "publicKey"
 private let PublicSignatureKey = "publicSignature"
 private let AssetDescriptorKey = "assetDescriptor"
 private let AssetShouldUploadKey = "shouldUpload"
-private let ThreadShouldBeLinked = "shouldLinkToThread"
+private let IsPhotoMessageInThread = "isPhotoMessage"
 
 
 /// A class (not a swift struct, such as SHRemoteUser) for SHServer objects
@@ -205,7 +205,7 @@ public extension SHShareableGroupableQueueItem {
 }
 
 public protocol SHOutboundShareableGroupableQueueItem: SHShareableGroupableQueueItem {
-    var shouldLinkToThread: Bool { get }
+    var isPhotoMessage: Bool { get }
 }
 
 public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutboundShareableGroupableQueueItem {
@@ -229,7 +229,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     public let eventOriginator: SHServerUser
     public let sharedWith: [SHServerUser] // Empty if it's just a backup request
     
-    public let shouldLinkToThread: Bool
+    public let isPhotoMessage: Bool
     
     ///
     /// The recommended versions based on the type of request.
@@ -258,7 +258,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
-                shouldLinkToThread: Bool,
+                isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = SHAbstractOutboundShareableGroupableQueueItem.recommendedVersions(forSharingWith: users)
@@ -266,7 +266,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         self.eventOriginator = eventOriginator
         self.sharedWith = users
         self.isBackground = isBackground
-        self.shouldLinkToThread = shouldLinkToThread
+        self.isPhotoMessage = isPhotoMessage
     }
     
     public init(localIdentifier: String,
@@ -274,7 +274,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
-                shouldLinkToThread: Bool,
+                isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = versions
@@ -282,7 +282,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         self.eventOriginator = eventOriginator
         self.sharedWith = users
         self.isBackground = isBackground
-        self.shouldLinkToThread = shouldLinkToThread
+        self.isPhotoMessage = isPhotoMessage
     }
     
     public func encode(with coder: NSCoder) {
@@ -300,7 +300,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
             SHRemoteUserClass(identifier: $0.identifier, name: $0.name, publicKeyData: $0.publicKeyData, publicSignatureData: $0.publicSignatureData)
         }
         coder.encode(remoteReceivers, forKey: SharedWithKey)
-        coder.encode(NSNumber(booleanLiteral: self.shouldLinkToThread), forKey: ThreadShouldBeLinked)
+        coder.encode(NSNumber(booleanLiteral: self.isPhotoMessage), forKey: IsPhotoMessageInThread)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
@@ -310,7 +310,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         let sender = decoder.decodeObject(of: SHRemoteUserClass.self, forKey: EventOriginatorKey)
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: SharedWithKey)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: IsBackgroundKey)
-        let shouldLinkToThread = decoder.decodeObject(of: NSNumber.self, forKey: ThreadShouldBeLinked)
+        let isPhotoMessage = decoder.decodeObject(of: NSNumber.self, forKey: IsPhotoMessageInThread)
         
         guard let assetId = assetId as? String else {
             log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
@@ -373,7 +373,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                   groupId: groupId,
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
-                  shouldLinkToThread: shouldLinkToThread?.boolValue ?? false,
+                  isPhotoMessage: isPhotoMessage?.boolValue ?? false,
                   isBackground: isBg.boolValue)
     }
     
@@ -410,7 +410,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
-                shouldLinkToThread: Bool,
+                isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
@@ -418,7 +418,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
-                   shouldLinkToThread: shouldLinkToThread,
+                   isPhotoMessage: isPhotoMessage,
                    isBackground: isBackground)
     }
     
@@ -429,7 +429,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser],
                 shouldUpload: Bool,
-                shouldLinkToThread: Bool,
+                isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
@@ -438,7 +438,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
-                   shouldLinkToThread: shouldLinkToThread,
+                   isPhotoMessage: isPhotoMessage,
                    isBackground: isBackground)
     }
     
@@ -465,7 +465,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
                       shouldUpload: su.boolValue,
-                      shouldLinkToThread: superSelf.shouldLinkToThread,
+                      isPhotoMessage: superSelf.isPhotoMessage,
                       isBackground: superSelf.isBackground)
             return
         }
@@ -487,7 +487,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractOutboundShareableGr
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],
-                shouldLinkToThread: Bool,
+                isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.asset = asset
         super.init(localIdentifier: asset.phAsset.localIdentifier,
@@ -495,7 +495,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractOutboundShareableGr
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
-                   shouldLinkToThread: shouldLinkToThread,
+                   isPhotoMessage: isPhotoMessage,
                    isBackground: isBackground)
     }
     
@@ -518,7 +518,7 @@ public class SHConcreteEncryptionRequestQueueItem: SHAbstractOutboundShareableGr
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
-                      shouldLinkToThread: superSelf.shouldLinkToThread,
+                      isPhotoMessage: superSelf.isPhotoMessage,
                       isBackground: superSelf.isBackground)
             return
         }
@@ -539,7 +539,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractOutboundShareableG
                 groupId: String,
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],
-                shouldLinkToThread: Bool,
+                isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.globalAssetId = globalAssetId
         super.init(localIdentifier: localAssetId,
@@ -547,7 +547,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractOutboundShareableG
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
-                   shouldLinkToThread: shouldLinkToThread,
+                   isPhotoMessage: isPhotoMessage,
                    isBackground: isBackground)
     }
     
@@ -572,7 +572,7 @@ public class SHConcreteShareableGroupableQueueItem: SHAbstractOutboundShareableG
                 groupId: superSelf.groupId,
                 eventOriginator: superSelf.eventOriginator,
                 sharedWith: superSelf.sharedWith,
-                shouldLinkToThread: superSelf.shouldLinkToThread,
+                isPhotoMessage: superSelf.isPhotoMessage,
                 isBackground: superSelf.isBackground
             )
             return
@@ -592,7 +592,7 @@ public class SHFailedQueueItem: SHAbstractOutboundShareableGroupableQueueItem, N
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
-                      shouldLinkToThread: superSelf.shouldLinkToThread,
+                      isPhotoMessage: superSelf.isPhotoMessage,
                       isBackground: superSelf.isBackground)
             return
         }

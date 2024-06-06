@@ -14,15 +14,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.encryptAndShare.delegates")
     
-    public override func clone() -> SHBackgroundOperationProtocol {
-        SHEncryptAndShareOperation(
-            user: self.user,
-            assetsDelegates: self.assetDelegates,
-            limitPerRun: self.limit,
-            imageManager: self.imageManager
-        )
-    }
-    
     public override func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)
@@ -66,7 +57,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
@@ -83,7 +74,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
 
@@ -123,7 +114,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
@@ -140,7 +131,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -230,7 +221,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 
                 self.serverProxy.share(
                     shareableEncryptedAsset,
-                    shouldLinkToThread: request.shouldLinkToThread,
+                    isPhotoMessage: request.isPhotoMessage,
                     suppressNotification: request.isBackground
                 ) { shareResult in
                     if case .failure(let err) = shareResult {
@@ -248,6 +239,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     private func initializeGroupAndThread(
         shareRequest: SHEncryptionForSharingRequestQueueItem,
         skipThreadCreation: Bool,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         var errorInitializingGroup: Error? = nil
@@ -290,7 +282,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             self.log.info("skipping thread creation as instructed by request \(shareRequest.identifier)")
         }
         
-        dispatchGroup.notify(queue: .global()) {
+        dispatchGroup.notify(queue: .global(qos: qos)) {
             guard errorInitializingGroup == nil,
                   errorInitializingThread == nil else {
                 self.log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
@@ -305,6 +297,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     internal override func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let shareRequest: SHEncryptionForSharingRequestQueueItem
@@ -425,7 +418,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 if shareRequest.isBackground == false {
                     self.initializeGroupAndThread(
                         shareRequest: shareRequest,
-                        skipThreadCreation: shareRequest.shouldLinkToThread == false
+                        skipThreadCreation: false,
+                        qos: qos
                     ) { result in
                         switch result {
                         case .failure(let error):
@@ -451,18 +445,5 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 }
             }
         }
-    }
-}
-
-internal class SHAssetEncryptAndShareQueueProcessor : SHBackgroundOperationProcessor<SHEncryptAndShareOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetEncryptAndShareQueueProcessor(
-        delayedStartInSeconds: 5,
-        dispatchIntervalInSeconds: 2
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

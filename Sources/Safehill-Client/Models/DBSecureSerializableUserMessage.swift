@@ -15,20 +15,20 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
     }
     
     let interactionId: String
-    let senderUserIdentifier: String
+    let senderPublicIdentifier: String
     let inReplyToAssetGlobalIdentifier: String?
     let inReplyToInteractionId: String?
     let encryptedMessage: String // base64EncodedData with the cipher
     let createdAt: String // ISO8601 formatted datetime
     
     init(interactionId: String,
-         senderUserIdentifier: String,
+         senderPublicIdentifier: String,
          inReplyToAssetGlobalIdentifier: String?,
          inReplyToInteractionId: String?,
          encryptedMessage: String,
          createdAt: String) {
         self.interactionId = interactionId
-        self.senderUserIdentifier = senderUserIdentifier
+        self.senderPublicIdentifier = senderPublicIdentifier
         self.inReplyToAssetGlobalIdentifier = inReplyToAssetGlobalIdentifier
         self.inReplyToInteractionId = inReplyToInteractionId
         self.encryptedMessage = encryptedMessage
@@ -37,7 +37,7 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
     
     required convenience init?(coder decoder: NSCoder) {
         let interactionId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.interactionId.rawValue)
-        let senderUserIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderUserIdentifier.rawValue)
+        let senderPublicIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderUserIdentifier.rawValue)
         let inReplyToInteractionId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.inReplyToInteractionId.rawValue)
         let inReplyToAssetGlobalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.inReplyToAssetGlobalIdentifier.rawValue)
         let encryptedMessage = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.encryptedMessage.rawValue)
@@ -47,8 +47,8 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
             log.error("unexpected value for interactionId when decoding SecureSerializableUserMessage object")
             return nil
         }
-        guard let senderUserIdentifier = senderUserIdentifier as? String else {
-            log.error("unexpected senderUserIdentifier for name when decoding SecureSerializableUserMessage object")
+        guard let senderPublicIdentifier = senderPublicIdentifier as? String else {
+            log.error("unexpected senderPublicIdentifier for name when decoding SecureSerializableUserMessage object")
             return nil
         }
         guard let encryptedMessage = encryptedMessage as? String else {
@@ -62,7 +62,7 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
         
         self.init(
             interactionId: interactionId,
-            senderUserIdentifier: senderUserIdentifier,
+            senderPublicIdentifier: senderPublicIdentifier,
             inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier as? String,
             inReplyToInteractionId: inReplyToInteractionId as? String,
             encryptedMessage: encryptedMessage,
@@ -72,7 +72,7 @@ class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
     
     func encode(with coder: NSCoder) {
         coder.encode(interactionId, forKey: CodingKeys.interactionId.rawValue)
-        coder.encode(senderUserIdentifier, forKey: CodingKeys.senderUserIdentifier.rawValue)
+        coder.encode(senderPublicIdentifier, forKey: CodingKeys.senderUserIdentifier.rawValue)
         coder.encode(inReplyToInteractionId, forKey: CodingKeys.inReplyToInteractionId.rawValue)
         coder.encode(inReplyToAssetGlobalIdentifier, forKey: CodingKeys.inReplyToAssetGlobalIdentifier.rawValue)
         coder.encode(encryptedMessage, forKey: CodingKeys.encryptedMessage.rawValue)

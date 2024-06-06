@@ -11,13 +11,13 @@ public enum SHLocalUserError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidKeychainEntry:
-            "invalid entry in the keychain"
+            "Invalid entry in the keychain"
         case .failedToRemoveKeychainEntry:
-            "failed to remove keychain entry"
+            "Failed to remove keychain entry"
         case .missingProtocolSalt:
-            "protocol salt was never retrieved from server"
+            "Encryption salt missing"
         case .notAuthenticated:
-            "you need to be authenticated to perform this operation"
+            "Not authenticated"
         }
     }
 }

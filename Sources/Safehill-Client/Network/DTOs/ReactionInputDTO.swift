@@ -7,7 +7,7 @@ public enum ReactionType: Int {
 
 public protocol ReactionInput {
     var interactionId: String? { get }
-    var senderUserIdentifier: String? { get }
+    var senderPublicIdentifier: String? { get }
     var inReplyToAssetGlobalIdentifier: String? { get }
     var inReplyToInteractionId: String? { get }
     var reactionType: ReactionType { get }
@@ -25,7 +25,7 @@ extension ReactionInputDTO : ReactionInput {
         return nil
     }
     
-    public var senderUserIdentifier: String? {
+    public var senderPublicIdentifier: String? {
         return nil
     }
     

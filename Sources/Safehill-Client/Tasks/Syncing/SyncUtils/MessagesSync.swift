@@ -1,6 +1,6 @@
 import Foundation
 
-extension SHSyncOperation {
+extension SHInteractionsSyncOperation {
     
     func syncMessages(
         anchor: SHInteractionAnchor,
@@ -37,23 +37,21 @@ extension SHSyncOperation {
                 self.log.warning("failed to add messages retrieved from server on local. \(failure.localizedDescription)")
                 errors.append(failure)
             case .success(let messages):
-                let threadsDelegates = self.threadsDelegates
+                let interactionsSyncDelegates = self.interactionsSyncDelegates
                 self.delegatesQueue.async {
                     switch anchor {
                     case .group:
-                        threadsDelegates.forEach({
-                            $0.didReceiveMessages(
+                        interactionsSyncDelegates.forEach({
+                            $0.didReceiveTextMessages(
                                 messages,
-                                inGroup: anchorId,
-                                encryptionDetails: encryptionDetails
+                                inGroup: anchorId
                             )
                         })
                     case .thread:
-                        threadsDelegates.forEach({
-                            $0.didReceiveMessages(
+                        interactionsSyncDelegates.forEach({
+                            $0.didReceiveTextMessages(
                                 messages,
-                                inThread: anchorId,
-                                encryptionDetails: encryptionDetails
+                                inThread: anchorId
                             )
                         })
                     }

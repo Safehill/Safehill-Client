@@ -2,8 +2,6 @@ import Foundation
 import Safehill_Crypto
 import CryptoKit
 
-public typealias InteractionsCounts = (reactions: [ReactionType: [UserIdentifier]], messages: Int)
-
 public enum InteractionType: String {
     case message = "message", reaction = "reaction"
 }
@@ -33,21 +31,6 @@ public struct SHUserInteractionController {
     
     func createNewSecret() -> SymmetricKey {
         SymmetricKey(size: .bits256)
-    }
-    
-    public func listThreads(
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
-    ) {
-        self.serverProxy.listThreads(
-            filteringUnknownUsers: true,
-            completionHandler: completionHandler
-        )
-    }
-    
-    public func listLocalThreads(
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
-    ) {
-        self.serverProxy.listLocalThreads(completionHandler: completionHandler)
     }
     
     public func setupThread(
@@ -246,20 +229,30 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.serverProxy.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
-    public func countInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
+    public func fetchThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO] {
+        return try await self.serverProxy.topLevelThreadsInteractionsSummary()
+    }
+    
+    public func fetchGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
+        return try await self.serverProxy.topLevelGroupsInteractionsSummary()
+    }
+    
+    public func reloadLocalInteractionsSummary(
+        for groupId: String
+    ) async throws -> InteractionsGroupSummaryDTO {
+        return try await self.serverProxy.topLevelLocalInteractionsSummary(for: groupId)
+    }
+    
+    public func getAssets(
+        inThread threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
-        self.serverProxy.countLocalInteractions(
-            inGroup: groupId,
-            completionHandler: completionHandler
-        )
+        self.serverProxy.getAssets(inThread: threadId, completionHandler: completionHandler)
     }
     
     /// Retrieve the last message in the thread.
     /// Because the last `ThreadLastInteractionSyncLimit` interactions
-    /// are synced via the `SHSyncOperation`,
-    /// we can safely collect the last message from local
+    /// are synced via the `SHInteractionsSyncOperation`, we can safely collect the last message from local
     ///
     /// - Parameters:
     ///   - threadId: the thread identifier
@@ -354,25 +347,59 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveLocalInteraction(
         inThread threadId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inThread: threadId,
-            withId: interactionIdentifier,
-            completionHandler: completionHandler
-        )
+            withId: interactionIdentifier
+        ) { firstResult in
+            switch firstResult {
+            case .success(let localInteractionsGroup):
+                self.decryptMessages(
+                    in: localInteractionsGroup,
+                    for: .thread,
+                    anchorId: threadId
+                ) { secondResult in
+                    switch secondResult {
+                    case .success(let res):
+                        completionHandler(.success(res as! SHConversationThreadInteractions))
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     public func retrieveLocalInteraction(
         inGroup groupId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inGroup: groupId,
-            withId: interactionIdentifier,
-            completionHandler: completionHandler
-        )
+            withId: interactionIdentifier
+        ) { firstResult in
+            switch firstResult {
+            case .success(let localInteractionsGroup):
+                self.decryptMessages(
+                    in: localInteractionsGroup,
+                    for: .group,
+                    anchorId: groupId
+                ) { secondResult in
+                    switch secondResult {
+                    case .success(let res):
+                        completionHandler(.success(res as! SHAssetsGroupInteractions))
+                    case .failure(let err):
+                        completionHandler(.failure(err))
+                    }
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     private func decryptMessages(
@@ -412,8 +439,8 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         dispatchGroup.enter()
         let usersController = SHUsersController(localUser: self.user)
         let userIds = Set<UserIdentifier>(
-            interactionsGroup.reactions.map({ $0.senderUserIdentifier! })
-            + interactionsGroup.messages.map({ $0.senderUserIdentifier! })
+            interactionsGroup.reactions.map({ $0.senderPublicIdentifier! })
+            + interactionsGroup.messages.map({ $0.senderPublicIdentifier! })
         )
         
         usersController.getUsers(withIdentifiers: Array(userIds)) {
@@ -425,7 +452,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             case .success(let usersDict):
                 reactions = interactionsGroup.reactions.compactMap({
                     reaction in
-                    guard let sender = usersDict[reaction.senderUserIdentifier!] else {
+                    guard let sender = usersDict[reaction.senderPublicIdentifier!] else {
                         return nil
                     }
                     
@@ -598,14 +625,22 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inGroup groupId: String,
         inReplyToAssetGlobalIdentifier: String? = nil,
         inReplyToInteractionId: String? = nil,
-        completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ReactionOutputDTO, Error>) -> ()
     ) {
         let reactionInput = ReactionInputDTO(
             inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: inReplyToInteractionId,
             reactionType: reactionType
         )
-        self.serverProxy.addReactions([reactionInput], inGroup: groupId, completionHandler: completionHandler)
+        self.serverProxy.addReactions([reactionInput], inGroup: groupId) {
+            result in
+            switch result {
+            case .success(let reactionOutputs):
+                completionHandler(.success(reactionOutputs.first!))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     public func removeReaction(
@@ -695,10 +730,11 @@ extension SHUserInteractionController {
     
     public func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
-        usingEncryptionDetails encryptionDetails: EncryptionDetailsClass
+        in anchor: SHInteractionAnchor,
+        anchorId: String
     ) async throws -> [SHDecryptedMessage] {
         try await withUnsafeThrowingContinuation { continuation in
-            self.decryptMessages(encryptedMessages, usingEncryptionDetails: encryptionDetails) {
+            self.decryptMessages(encryptedMessages, in: anchor, anchorId: anchorId) {
                 result in
                 continuation.resume(with: result)
             }
@@ -706,6 +742,44 @@ extension SHUserInteractionController {
     }
     
     public func decryptMessages(
+        _ encryptedMessages: [MessageOutputDTO],
+        in anchor: SHInteractionAnchor,
+        anchorId: String,
+        completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
+    ) {
+        let encryptionDetails: RecipientEncryptionDetailsDTO
+        do {
+            let maybeEncryptionDetails = try self.fetchSelfEncryptionDetails(forAnchor: anchor, anchorId: anchorId)
+            guard let maybeEncryptionDetails else {
+                switch anchor {
+                case .thread:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForThread(anchorId)))
+                case .group:
+                    completionHandler(.failure(SHBackgroundOperationError.missingE2EEDetailsForGroup(anchorId)))
+                }
+                return
+            }
+            encryptionDetails = maybeEncryptionDetails
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let encryptionDetailsClass = EncryptionDetailsClass(
+            ephemeralPublicKey: encryptionDetails.ephemeralPublicKey,
+            encryptedSecret: encryptionDetails.encryptedSecret,
+            secretPublicSignature: encryptionDetails.secretPublicSignature,
+            senderPublicSignature: encryptionDetails.senderPublicSignature
+        )
+        
+        decryptMessages(
+            encryptedMessages,
+            usingEncryptionDetails: encryptionDetailsClass,
+            completionHandler: completionHandler
+        )
+    }
+    
+    private func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
         usingEncryptionDetails encryptionDetails: EncryptionDetailsClass,
         completionHandler: @escaping (Result<[SHDecryptedMessage], Error>) -> Void
@@ -722,7 +796,7 @@ extension SHUserInteractionController {
         )
         
          SHUsersController(localUser: self.user).getUsers(
-            withIdentifiers: encryptedMessages.map({ $0.senderUserIdentifier! })
+            withIdentifiers: encryptedMessages.map({ $0.senderPublicIdentifier! })
          ) { result in
              switch result {
              case .failure(let error):
@@ -731,8 +805,8 @@ extension SHUserInteractionController {
                  var decryptedMessages = [SHDecryptedMessage]()
                  
                  for encryptedMessage in encryptedMessages {
-                     guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderUserIdentifier!] else {
-                         log.warning("couldn't find user with identifier \(encryptedMessage.senderUserIdentifier!)")
+                     guard let sender = usersWithMessagesKeyedById[encryptedMessage.senderPublicIdentifier!] else {
+                         log.warning("couldn't find user with identifier \(encryptedMessage.senderPublicIdentifier!)")
                          continue
                      }
                      guard let createdAt = encryptedMessage.createdAt?.iso8601withFractionalSeconds else {
@@ -750,7 +824,7 @@ extension SHUserInteractionController {
                              signedWith: Data(base64Encoded: encryptionDetails.senderPublicSignature)!
                          )
                      } catch {
-                         log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderUserIdentifier!). error=\(error.localizedDescription)")
+                         log.critical("failed to decrypt message \(encryptedMessage.interactionId!) from \(encryptedMessage.senderPublicIdentifier!). error=\(error.localizedDescription)")
                          continue
                      }
                      guard let decryptedMessage = String(data: decryptedData, encoding: .utf8) else {
@@ -772,132 +846,5 @@ extension SHUserInteractionController {
                  completionHandler(.success(decryptedMessages))
              }
          }
-    }
-}
-
-
-extension SHUserInteractionController {
-    
-    func startCachingInteractions(
-        _ anchor: SHInteractionAnchor,
-        anchorId: String,
-        ofType type: InteractionType?,
-        underMessage messageId: String?,
-        before: Date?,
-        limit: Int,
-        localInteractionsGroup: InteractionsGroupDTO,
-        completionHandler: @escaping (Result<([MessageOutputDTO], [ReactionOutputDTO]), Error>) -> Void
-    ) {
-        let process = { (remoteInteractionsGroup: InteractionsGroupDTO) in
-            
-            let localReactionIds = localInteractionsGroup.reactions.map({ $0.interactionId })
-            let localMessageIds = localInteractionsGroup.messages.map({ $0.interactionId })
-            let missingReactions = remoteInteractionsGroup.reactions.filter({
-                localReactionIds.contains($0.interactionId) == false
-            })
-            let missingMessages = remoteInteractionsGroup.messages.filter({
-                localMessageIds.contains($0.interactionId) == false
-            })
-            
-            log.debug("""
-[SHUserInteractionController] Started from \(localInteractionsGroup.messages.count) messages and \(localInteractionsGroup.reactions.count) reactions. Retrieved \(remoteInteractionsGroup.messages.count) messages and \(remoteInteractionsGroup.reactions.count) reactions from remote server. \(missingMessages.count) messages and \(missingReactions.count) are not in local
-""")
-            
-            let dispatchGroup = DispatchGroup()
-            
-            switch anchor {
-            case .thread:
-                if missingReactions.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalReactions(
-                        missingReactions,
-                        inThread: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-                
-                if missingMessages.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalMessages(
-                        missingMessages,
-                        inThread: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-            case .group:
-                if missingReactions.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalReactions(
-                        missingReactions,
-                        inGroup: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote reactions to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-                
-                if missingMessages.isEmpty == false {
-                    dispatchGroup.enter()
-                    self.serverProxy.addLocalMessages(
-                        missingMessages,
-                        inGroup: anchorId
-                    ) { res in
-                        if case .failure(let failure) = res {
-                            log.critical("[SHUserInteractionController] failed to add remote messages to local \(anchor.rawValue) \(anchorId): \(failure.localizedDescription)")
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-            }
-            
-            dispatchGroup.notify(queue: .global()) {
-                completionHandler(.success((missingMessages, missingReactions)))
-            }
-        }
-        
-        switch anchor {
-        case .group:
-            self.serverProxy.retrieveRemoteInteractions(
-                inGroup: anchorId,
-                ofType: type,
-                underMessage: messageId,
-                before: before,
-                limit: 100
-            ) { result in
-                
-                switch result {
-                case .success(let remoteInteractionsGroup):
-                    process(remoteInteractionsGroup)
-                case .failure(let err):
-                    completionHandler(.failure(err))
-                }
-            }
-        case .thread:
-            self.serverProxy.retrieveRemoteInteractions(
-                inThread: anchorId,
-                ofType: type,
-                underMessage: messageId,
-                before: before,
-                limit: 100
-            ) { result in
-                
-                switch result {
-                case .success(let remoteInteractionsGroup):
-                    process(remoteInteractionsGroup)
-                case .failure(let err):
-                    completionHandler(.failure(err))
-                }
-            }
-        }
     }
 }

@@ -31,7 +31,9 @@ extension SHApplePhotoAsset {
     }
 }
 
-internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation {
+    
+    typealias OperationResult = Result<Void, Error>
     
     var operationType: BackgroundOperationQueue.OperationType { .encryption }
     var processingState: ProcessingState { .encrypting }
@@ -62,15 +64,6 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
     
     var serverProxy: SHServerProxy {
         self.user.serverProxy
-    }
-    
-    public func clone() -> SHBackgroundOperationProtocol {
-        SHEncryptionOperation(
-            user: self.user,
-            assetsDelegates: self.assetDelegates,
-            limitPerRun: self.limit,
-            imageManager: self.imageManager
-        )
     }
     
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
@@ -214,7 +207,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         ///
         /// Dequeue from Encryption queue
@@ -237,7 +230,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -277,7 +270,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let isBackground = request.isBackground
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         do {
             ///
@@ -299,7 +292,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: isBackground
         )
         
@@ -330,6 +323,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
     
     internal func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let encryptionRequest: SHEncryptionRequestQueueItem
@@ -439,7 +433,7 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global()) {
+        dispatchGroup.notify(queue: .global(qos: qos)) {
             guard secretRetrievalError == nil else {
                 handleError(secretRetrievalError!)
                 return
@@ -493,24 +487,5 @@ internal class SHEncryptionOperation: SHAbstractBackgroundOperation, SHOutboundB
                 }
             }
         }
-    }
-    
-    public override func run(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.runOnce(completionHandler: completionHandler)
-    }
-}
-
-internal class SHAssetsEncrypterQueueProcessor : SHBackgroundOperationProcessor<SHEncryptionOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetsEncrypterQueueProcessor(
-        delayedStartInSeconds: 3,
-        dispatchIntervalInSeconds: 2
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

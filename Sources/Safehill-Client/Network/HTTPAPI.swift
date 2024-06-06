@@ -513,9 +513,9 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func registerDevice(_ deviceName: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
-            "deviceId": deviceName,
+            "deviceId": deviceId,
             "token": token
         ]
         self.post("users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
@@ -527,16 +527,35 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
     }
+    
+    func countUploaded(
+        completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
+    ) {
+        self.get("assets/countUploaded", parameters: nil) { (result: Result<Int, Error>) in
+            switch result {
+            case .success(let count):
+                completionHandler(.success(count))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
         filteringGroupIds: [String]?,
+        after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        let parameters = [
+        var parameters = [
             "globalIdentifiers": forAssetGlobalIdentifiers,
             "groupIds": filteringGroupIds ?? []
-        ]
+        ] as [String: Any]
+        
+        if let after {
+            parameters["after"] = after.iso8601withFractionalSeconds
+        }
+        
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
@@ -547,15 +566,21 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func getAssetDescriptors(since: Date,
-                             completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()) {
-        let parameters = [
-//            "since": date?.iso8601withFractionalSeconds
-            :
-        ] as [String: Any]
+    func getAssetDescriptors(
+        after: Date?,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
+        var parameters = [String: Any]()
+        if let after {
+            parameters["after"] = after.iso8601withFractionalSeconds
+        }
+        
+        log.debug("[rest-api] retrieving all asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
+        
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
+                log.debug("[rest-api] retrieved \(descriptors.count) asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
                 completionHandler(.success(descriptors))
             case .failure(let error):
                 completionHandler(.failure(error))
@@ -601,17 +626,13 @@ struct SHServerHTTPAPI : SHServerAPI {
                     }
                 }
                 
-                let allAssetsVersionsCount = assets.reduce(0, { partialResult, asset in partialResult + asset.versions.count })
-                let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDownloadTimeoutInMilliseconds * allAssetsVersionsCount))
-                guard dispatchResult == .success else {
-                    return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+                group.notify(queue: .global()) {
+                    let errorsDict = errors.toDict()
+                    guard errorsDict.count == 0 else {
+                        return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
+                    }
+                    completionHandler(.success(manifest.dictionary))
                 }
-                
-                let errorsDict = errors.toDict()
-                guard errorsDict.count == 0 else {
-                    return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
-                }
-                completionHandler(.success(manifest.dictionary))
                 
             case .failure(let error):
                 completionHandler(.failure(error))
@@ -672,7 +693,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               shouldLinkToThread: Bool,
+               isPhotoMessage: Bool,
                suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
@@ -697,7 +718,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             "globalAssetIdentifier": asset.globalIdentifier,
             "versionSharingDetails": versions,
             "groupId": asset.groupId,
-            "shouldLinkToThread": shouldLinkToThread,
+            "isPhotoMessage": isPhotoMessage,
             "suppressNotification": suppressNotification
         ]
         
@@ -1016,7 +1037,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     ) {
         self.post(
             "threads/retrieve/\(threadId)/assets",
@@ -1038,6 +1059,28 @@ struct SHServerHTTPAPI : SHServerAPI {
                 completionHandler(.failure(err))
             }
         }
+    }
+    
+    func topLevelInteractionsSummary(
+        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
+    ) {
+        self.post("interactions/summary", parameters: nil, completionHandler: completionHandler)
+    }
+    
+    func topLevelThreadsInteractionsSummary(
+        completionHandler: @escaping (Result<[String : InteractionsThreadSummaryDTO], Error>) -> ()
+    ) {
+        self.post("interactions/\(SHInteractionAnchor.thread.rawValue)/summary", 
+                  parameters: nil,
+                  completionHandler: completionHandler)
+    }
+    
+    func topLevelGroupsInteractionsSummary(
+        completionHandler: @escaping (Result<[String : InteractionsGroupSummaryDTO], Error>) -> ()
+    ) {
+        self.post("interactions/\(SHInteractionAnchor.group.rawValue)/summary", 
+                  parameters: nil,
+                  completionHandler: completionHandler)
     }
     
     func addReactions(

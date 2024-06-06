@@ -133,7 +133,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 eventOriginator: sender,
                 sharedWith: [],
                 shouldUpload: true,
-                shouldLinkToThread: false
+                isPhotoMessage: false
             ),
             SHLocalFetchRequestQueueItem(
                 localIdentifier: "localIdentifier",
@@ -142,7 +142,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 eventOriginator: sender,
                 sharedWith: [sender],
                 shouldUpload: false,
-                shouldLinkToThread: true,
+                isPhotoMessage: true,
                 isBackground: true
             ),
         ]
@@ -166,7 +166,7 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssert(queueItem.sharedWith.count == deserialized.sharedWith.count)
             XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
             XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
-            XCTAssertEqual(queueItem.shouldLinkToThread, deserialized.shouldLinkToThread)
+            XCTAssertEqual(queueItem.isPhotoMessage, deserialized.isPhotoMessage)
             XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)
         }
     }

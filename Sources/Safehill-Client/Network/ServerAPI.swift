@@ -69,23 +69,32 @@ public protocol SHServerAPI {
     
     // MARK: Assets Management
     
+    /// Count how many assets were created by this user
+    /// - Parameters:
+    ///   - completionHandler: the callback method
+    func countUploaded(
+        completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
+    )
+    
     /// Get descriptors for specific asset global identifiers
     /// - Parameters:
-    ///   - forAssetGlobalIdentifiers: the asset gids
-    ///   - filteringGroupIds: only returns assets that are shared via the group ids, and restricts the group information returned to these group ids
+    ///   - forAssetGlobalIdentifiers: if not empty, retrieve only the provided asset gids
+    ///   - after: retrieve only the ones uploaded or shared after this date
+    ///   - filteringGroupIds: only returns descriptors for assets that are shared via the group ids, and return the group information only for the provided these group ids
     ///   - completionHandler: the callback method
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
         filteringGroupIds: [String]?,
+        after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     )
     
     /// Retrieve asset descriptor created or updated since the reference date
     /// - Parameters:
-    ///   - since: the reference date
+    ///   - after: retrieve only the ones uploaded or shared after this date
     ///   - completionHandler: the callback method
     func getAssetDescriptors(
-        since: Date,
+        after: Date?,
         completionHandler: @escaping (Swift.Result<[any SHAssetDescriptor], Error>) -> ()
     )
     
@@ -116,11 +125,11 @@ public protocol SHServerAPI {
     /// Shares one or more assets with a set of users
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
-    ///   - shouldLinkToThread: whether or not the asset is being shared in the context of a thread so a link between the thread and the asset should be made
+    ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread and it should show as a message
     ///   - suppressNotification: do not send a notification to the user. For instance, when the high resolution is shared in the background
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
-               shouldLinkToThread: Bool,
+               isPhotoMessage: Bool,
                suppressNotification: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ())
     
@@ -239,7 +248,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<[ConversationThreadAssetDTO], Error>) -> ()
+        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
     )
     
     // MARK: Groups
@@ -275,6 +284,24 @@ public protocol SHServerAPI {
     )
     
     // MARK: Interactions
+    
+    /// Retrieve an overall summary of all interactions in threads and groups
+    /// - Parameter completionHandler: the callback method
+    func topLevelInteractionsSummary(
+        completionHandler: @escaping (Result<InteractionsSummaryDTO, Error>) -> ()
+    )
+    
+    /// Retrieve an overall summary of all interactions in all threads
+    /// - Parameter completionHandler: the callback method
+    func topLevelThreadsInteractionsSummary(
+        completionHandler: @escaping (Result<[String: InteractionsThreadSummaryDTO], Error>) -> ()
+    )
+    
+    /// Retrieve an overall summary of all interactions in all groups
+    /// - Parameter completionHandler: the callback method
+    func topLevelGroupsInteractionsSummary(
+        completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()
+    )
     
     /// Adds reactions to a share (group)
     /// - Parameters:

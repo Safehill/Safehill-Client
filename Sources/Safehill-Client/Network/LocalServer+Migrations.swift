@@ -3,9 +3,38 @@ import KnowledgeBase
 
 public extension Array {
     func chunked(into size: Int) -> [[Element]] {
+        guard !isEmpty && size > 0 else {
+            return []
+        }
+        
         return stride(from: 0, to: count, by: size).map {
             Array(self[$0 ..< Swift.min($0 + size, count)])
         }
+    }
+    
+    func chunkedWithLinearDecrease() -> [[Element]] {
+        guard !isEmpty else {
+            return []
+        }
+        
+        let totalElements = count
+        var chunks: [[Element]] = []
+        var ratio = 0.5
+        var currentChunkSize = Swift.max(1, Int(Double(totalElements) * ratio))
+        
+        var currentIndex = 0
+        while currentIndex < totalElements {
+            let endIndex = Swift.min(currentIndex + currentChunkSize, totalElements)
+            let chunk = Array(self[currentIndex..<endIndex])
+            chunks.append(chunk)
+            
+            currentIndex += currentChunkSize
+            let remainingElements = totalElements - currentIndex
+            ratio *= 1.5
+            currentChunkSize = Swift.max(1, Int(Double(remainingElements) * ratio))
+        }
+        
+        return chunks
     }
 }
 
@@ -68,7 +97,7 @@ extension LocalServer {
         dryRun: Bool = true,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.requestor.serverProxy.getRemoteAssetDescriptors { remoteResult in
+        self.requestor.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
             switch remoteResult {
             case .success(let remoteDescriptors):
                 var uniqueAssetGids = Set<GlobalIdentifier>()
@@ -115,6 +144,8 @@ extension LocalServer {
                                 // TODO: Edits
                             }
                         }
+                        
+                        usleep(useconds_t(10 * 1000)) // sleep 10ms
                     }
                     
                     ///
@@ -199,31 +230,31 @@ extension LocalServer {
             
             /// Hi Res migrations
             condition = KBGenericCondition(.beginsWith, value: "hi::")
-
-            for chunk in Array(assetIdentifiers).chunked(into: 10) {
-                var assetCondition = KBGenericCondition(value: false)
-                for assetIdentifier in chunk {
-                    assetCondition = assetCondition.or(KBGenericCondition(.endsWith, value: assetIdentifier))
-                }
-                condition = condition.and(assetCondition)
-                
-                group.enter()
-                assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
-                    switch result {
-                    case .success(let keyValues):
-                        do {
-                            if keyValues.count > 0 {
-                                let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+            
+            group.enter()
+            assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
+                switch result {
+                case .success(let keyValues):
+                    let relevantKeyValues = keyValues.filter {
+                        for assetIdentifier in assetIdentifiers {
+                            if $0.key.hasSuffix("::\(assetIdentifier)") {
+                                return true
                             }
-                        } catch {
-                            log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
-                            errors.append(error)
                         }
-                    case .failure(let error):
+                        return false
+                    }
+                    do {
+                        if relevantKeyValues.count > 0 {
+                            let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                        }
+                    } catch {
+                        log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
                         errors.append(error)
                     }
-                    group.leave()
+                case .failure(let error):
+                    errors.append(error)
                 }
+                group.leave()
             }
             
             group.notify(queue: .global()) {

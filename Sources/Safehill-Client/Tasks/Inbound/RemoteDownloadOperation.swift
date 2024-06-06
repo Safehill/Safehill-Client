@@ -9,6 +9,8 @@ protocol SHDownloadOperation {}
 ///
 /// This pipeline operation is responsible for keeping assets in the remote server and local server in sync.
 /// It **ignores all assets in the local server**, except for when determining the set it needs to operate on.
+/// The restoration delegates are notified about successful uploads and shares from this user. If these items are not present in the history queues, they are created and persisted there.
+///
 ///
 /// The steps are:
 /// 1. `fetchDescriptors(for:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
@@ -17,17 +19,15 @@ protocol SHDownloadOperation {}
 ///     - for the assets shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
 ///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
 /// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt the ones from "known" authorized users and append to the unauthorized queue for the "uknown" users
-/// 5. `sync(remoteDescriptors:localDescriptors:qos:completionHandler:)` : similarly to how step 2.1 takes care of creating assets that do not exist on local server, this step takes care of assets that are both in local and remote server as well as the ones only in local. Local server is updated according to remote server information.
-/// 6. `syncGroupInteractions(remoteDescriptors:qos:completionHandler:)` : From the remote descriptors determine all group identifiers and sync the interactions (reactions and comments) for these groups by updating the local interactions store
 ///
 /// The pipeline sequence is:
 /// ```
 /// 1 -->   2 -->    3 -->    4
-///   \->   5
-///   \->   6
 /// ```
 ///
-public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol, SHDownloadOperation {
+public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
+    
+    internal static var lastFetchDate: Date? = nil
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -37,123 +37,65 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     let user: SHLocalUserProtocol
     
     let downloaderDelegates: [SHAssetDownloaderDelegate]
-    let assetsSyncDelegates: [SHAssetSyncingDelegate]
-    let threadsSyncDelegates: [SHThreadSyncingDelegate]
     let restorationDelegate: SHAssetActivityRestorationDelegate
     
     let photoIndexer: SHPhotosIndexer
     
     public init(user: SHLocalUserProtocol,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
-                assetsSyncDelegates: [SHAssetSyncingDelegate],
-                threadsSyncDelegates: [SHThreadSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
                 photoIndexer: SHPhotosIndexer,
                 limitPerRun limit: Int? = nil) {
         self.user = user
         self.limit = limit
         self.downloaderDelegates = downloaderDelegates
-        self.assetsSyncDelegates = assetsSyncDelegates
-        self.threadsSyncDelegates = threadsSyncDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    public func clone() -> SHBackgroundOperationProtocol {
-        SHRemoteDownloadOperation(
-            user: self.user,
-            downloaderDelegates: self.downloaderDelegates,
-            assetsSyncDelegates: self.assetsSyncDelegates,
-            threadsSyncDelegates: self.threadsSyncDelegates,
-            restorationDelegate: self.restorationDelegate,
-            photoIndexer: self.photoIndexer,
-            limitPerRun: self.limit
-        )
-    }
-    
     internal func fetchDescriptors(
         for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroups: [String]? = nil,
-        completionHandler: @escaping (
-            Result<(
-                allRemote: [any SHAssetDescriptor],
-                allLocal: [any SHAssetDescriptor],
-                remoteOnly: [any SHAssetDescriptor],
-                localAndRemote: [any SHAssetDescriptor]
-            ), Error>
-        ) -> Void
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        
-        let dispatchGroup = DispatchGroup()
-        
-        var localDescriptors = [any SHAssetDescriptor]()
-        var remoteDescriptors = [any SHAssetDescriptor]()
-        var localError: Error? = nil
-        var remoteError: Error? = nil
-        
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
-        dispatchGroup.enter()
         self.serverProxy.getRemoteAssetDescriptors(
             for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!,
-            filteringGroups: filteringGroups
+            filteringGroups: filteringGroups,
+            after: Self.lastFetchDate
         ) { remoteResult in
             switch remoteResult {
-            case .success(let descriptors):
-                remoteDescriptors = descriptors
+            case .success(let remoteDescriptors):
+                ///
+                /// Get all the corresponding local descriptors.
+                /// The extra ones (to be DELETED) will be removed by the sync operation
+                /// The ones that changed (to be UPDATED) will be changed by the sync operation
+                ///
+                self.serverProxy.getLocalAssetDescriptors(
+                    for: remoteDescriptors.map { $0.globalIdentifier }
+                ) { localResult in
+                    switch localResult {
+                    case .success(let localDescriptors):
+                        completionHandler(.success(remoteDescriptors.filter({
+                            remoteDesc in
+                            localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier }) == false
+                        })))
+                        
+                    case .failure(let err):
+                        self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
+                        completionHandler(.failure(err))
+                    }
+                }
+                
             case .failure(let err):
                 self.log.error("[\(type(of: self))] failed to fetch descriptors from REMOTE server when syncing: \(err.localizedDescription)")
-                remoteError = err
+                completionHandler(.failure(err))
             }
-            dispatchGroup.leave()
-        }
-        
-        ///
-        /// Get all the local descriptors.
-        /// These need to be filtered out. Syncing will take care of updating descriptors that are present locally
-        ///
-        dispatchGroup.enter()
-        self.serverProxy.getLocalAssetDescriptors(
-            for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!,
-            filteringGroups: filteringGroups
-        ) { localResult in
-            switch localResult {
-            case .success(let descriptors):
-                localDescriptors = descriptors
-            case .failure(let err):
-                self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
-                localError = err
-            }
-            dispatchGroup.leave()
-        }
-        
-        dispatchGroup.notify(queue: .global()) {
-            guard remoteError == nil else {
-                completionHandler(.failure(remoteError!))
-                return
-            }
-            guard localError == nil else {
-                completionHandler(.failure(localError!))
-                return
-            }
-            
-            var remoteDescriptorsCopy = Array(remoteDescriptors)
-            let p = remoteDescriptorsCopy.partition { remoteDesc in
-                localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier })
-            }
-            let remoteOnlyDescriptors = remoteDescriptorsCopy[..<p]
-            let remoteAndLocalDescriptors = remoteDescriptorsCopy[p...]
-            
-            completionHandler(.success((
-                allRemote: remoteDescriptors,
-                allLocal: localDescriptors,
-                remoteOnly: Array(remoteOnlyDescriptors),
-                localAndRemote: Array(remoteAndLocalDescriptors)
-            )))
         }
     }
     
@@ -193,8 +135,8 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
         Task(priority: qos.toTaskPriority()) {
-            let globalIdentifiers = descriptors.map({ $0.globalIdentifier })
-            var senderIds = descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })
+            let globalIdentifiers = Array(Set(descriptors.map({ $0.globalIdentifier })))
+            var senderIds = Array(Set(descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })))
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
                 assetGlobalIdentifiers: globalIdentifiers
             )
@@ -250,7 +192,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                     /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
                     /// filter out the ones whose sender is unknown.
                     /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-                    senderIds = filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })
+                    senderIds = Array(Set(filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })))
                     var knownUsers = [UserIdentifier: Bool]()
                     do {
                         for senderId in senderIds {
@@ -300,14 +242,17 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     ///
-    /// Get the apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier
-    /// If they exist, then do not decrypt them but just serve the local asset.
-    /// If they don't, return them in the callback method so they can be decrypted.
+    /// Notifies the delegates about matches between the assets on the server and the local library.
+    ///
+    ///
+    /// It retrieves apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier.
+    /// - If they exist, then do not decrypt them but just serve the local asset.
+    /// - If they don't, return them in the callback method so they can be decrypted.
     ///
     /// - Parameters:
     ///   - descriptorsByGlobalIdentifier: all the descriptors by local identifier
     ///   - completionHandler: the callback method
-    internal func mergeDescriptorsWithApplePhotosAssets(
+    internal func filterOutMatchesInPhotoLibrary(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
         completionHandler: @escaping (Result<[GlobalIdentifier], Error>) -> Void
@@ -535,7 +480,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         /// These don't need to be downloaded.
         /// The delegate needs to be notified that they should be marked as "uploaded on the server"
         ///
-        self.mergeDescriptorsWithApplePhotosAssets(
+        self.filterOutMatchesInPhotoLibrary(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
             filteringKeys: sharedBySelfGlobalIdentifiers
         ) { result in
@@ -564,32 +509,33 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     private func recreateLocalAssetsAndQueueItems(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys globalIdentifiers: [GlobalIdentifier],
+        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
+        filteringKeys globalIdentifiersSharedBySelf: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        guard globalIdentifiers.count > 0 else {
+        guard original.count > 0 else {
             completionHandler(.success(()))
             return
         }
         
-        let descriptorsByGlobalIdentifier = descriptorsByGlobalIdentifier.filter({
-            globalIdentifiers.contains($0.value.globalIdentifier)
+        guard globalIdentifiersSharedBySelf.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
+        let descriptorsByGlobalIdentifier = original.filter({
+            globalIdentifiersSharedBySelf.contains($0.value.globalIdentifier)
+            && $0.value.localIdentifier != nil
         })
         
-        guard descriptorsByGlobalIdentifier.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        self.log.debug("[\(type(of: self))] recreating local assets and queue items for \(globalIdentifiers)")
+        self.log.debug("[\(type(of: self))] recreating local assets and queue items for \(globalIdentifiersSharedBySelf)")
         
         ///
         /// Get the `.lowResolution` assets data from the remote server
         ///
         self.serverProxy.remoteServer.getAssets(
-            withGlobalIdentifiers: globalIdentifiers,
+            withGlobalIdentifiers: globalIdentifiersSharedBySelf,
             versions: [.lowResolution]
         ) { fetchResult in
             switch fetchResult {
@@ -640,181 +586,169 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let myUser = self.user
-        
-        let descriptorsByGlobalIdentifier = descriptorsByGlobalIdentifier.filter({
-            $0.value.sharingInfo.sharedByUserIdentifier == myUser.identifier
-        })
-        
         guard descriptorsByGlobalIdentifier.count > 0 else {
             completionHandler(.success(()))
             return
         }
         
-        let group = DispatchGroup()
+        var allUserIdsInDescriptors = Set<UserIdentifier>()
+        for descriptor in descriptorsByGlobalIdentifier.values {
+            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                allUserIdsInDescriptors.insert(recipientId)
+            }
+        }
         
-        var otherUsersById = [String: any SHServerUser]()
-        var getUserError: Error? = nil
-        
-        group.enter()
-        self.serverProxy.getUsers(inAssetDescriptors: Array(descriptorsByGlobalIdentifier.values)) {
-            getUsersResult in
+        self.getUsers(withIdentifiers: Array(allUserIdsInDescriptors)) { getUsersResult in
             switch getUsersResult {
-            case .success(let otherUsers):
-                otherUsersById = otherUsers.reduce([:]) { partialResult, user in
-                    var result = partialResult
-                    result[user.identifier] = user
-                    return result
-                }
-                
                 
             case .failure(let error):
-                getUserError = error
-            }
-            group.leave()
-        }
-            
-        group.notify(queue: .global(qos: qos)) {
-            guard getUserError == nil else {
-                completionHandler(.failure(getUserError!))
-                return
-            }
-            
-            let remoteServerDescriptorByAssetGid = descriptorsByGlobalIdentifier.filter({
-                $0.value.localIdentifier != nil
-            })
-            
-            let restorationDelegate = self.restorationDelegate
-            self.delegatesQueue.async {
-                restorationDelegate.didStartRestoration()
-            }
-            
-            var userIdsInvolvedInRestoration = Set<UserIdentifier>()
-            
-            for remoteDescriptor in remoteServerDescriptorByAssetGid.values {
+                completionHandler(.failure(error))
                 
-                var uploadLocalAssetIdByGroupId = [String: Set<LocalIdentifier>]()
-                var shareLocalAssetIdsByGroupId = [String: Set<LocalIdentifier>]()
-                var groupIdToUploadItem = [String: (SHUploadHistoryItem, Date)]()
-                var groupIdToShareItem = [String: (SHShareHistoryItem, Date)]()
+            case .success(let usersDict):
                 
-                for (recipientUserId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    let localIdentifier = remoteDescriptor.localIdentifier!
-                    let groupCreationDate = remoteDescriptor.sharingInfo.groupInfoById[groupId]!.createdAt!
+                let (
+                    groupIdToUploadItems,
+                    groupIdToShareItems
+                ) = self.createHistoryItems(
+                    from: Array(descriptorsByGlobalIdentifier.values),
+                    usersDict: usersDict
+                )
                     
-                    if recipientUserId == myUser.identifier {
-                        if uploadLocalAssetIdByGroupId[groupId] == nil {
-                            uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
-                        } else {
-                            uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
-                        }
-                        
-                        let item = SHUploadHistoryItem(
-                            localAssetId: localIdentifier,
-                            globalAssetId: remoteDescriptor.globalIdentifier,
-                            versions: [.lowResolution, .hiResolution],
-                            groupId: groupId,
-                            eventOriginator: myUser,
-                            sharedWith: [],
-                            shouldLinkToThread: false,
-                            isBackground: false
-                        )
-                        groupIdToUploadItem[groupId] = (item, groupCreationDate)
-                    } else {
-                        guard let user = otherUsersById[recipientUserId] else {
-                            self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server")
-                            continue
-                        }
-                        
-                        if shareLocalAssetIdsByGroupId[groupId] == nil {
-                            shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
-                        } else {
-                            shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
-                        }
-                        if groupIdToShareItem[groupId] == nil {
-                            let item = SHShareHistoryItem(
-                                localAssetId: localIdentifier,
-                                globalAssetId: remoteDescriptor.globalIdentifier,
-                                versions: [.lowResolution, .hiResolution],
-                                groupId: groupId,
-                                eventOriginator: myUser,
-                                sharedWith: [user],
-                                shouldLinkToThread: false,
-                                isBackground: false
-                            )
-                            groupIdToShareItem[groupId] = (item, groupCreationDate)
-                            
-                            userIdsInvolvedInRestoration.insert(user.identifier)
-                        } else {
-                            var users = [any SHServerUser]()
-                            users.append(contentsOf: groupIdToShareItem[groupId]!.0.sharedWith)
-                            users.append(user)
-                            let item = SHShareHistoryItem(
-                                localAssetId: localIdentifier,
-                                globalAssetId: remoteDescriptor.globalIdentifier,
-                                versions: [.lowResolution, .hiResolution],
-                                groupId: groupId,
-                                eventOriginator: myUser,
-                                sharedWith: users,
-                                shouldLinkToThread: false,
-                                isBackground: false
-                            )
-                            groupIdToShareItem[groupId] = (item, groupCreationDate)
-                            
-                            for user in users {
-                                userIdsInvolvedInRestoration.insert(user.identifier)
-                            }
+                for groupIdToUploadItem in groupIdToUploadItems.values {
+                    for (uploadItem, timestamp) in groupIdToUploadItem {
+                        if (try? uploadItem.insert(
+                            in: BackgroundOperationQueue.of(type: .successfulUpload),
+                            at: timestamp
+                        )) == nil {
+                            self.log.warning("[\(type(of: self))] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
                         }
                     }
                 }
                 
-                guard groupIdToUploadItem.count + groupIdToShareItem.count > 0 else {
-                    continue
-                }
-                
-                for (uploadItem, timestamp) in groupIdToUploadItem.values {
-                    if (try? uploadItem.insert(
-                        in: BackgroundOperationQueue.of(type: .successfulUpload),
-                        at: timestamp
-                    )) == nil {
-                        self.log.warning("[\(type(of: self))] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
-                    }
-                }
-                for (shareItem, timestamp) in groupIdToShareItem.values {
-                    if (try? shareItem.insert(
-                        in: BackgroundOperationQueue.of(type: .successfulShare),
-                        at: timestamp
-                    )) == nil {
-                        self.log.warning("[\(type(of: self))] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
+                for groupIdToShareItem in groupIdToShareItems.values {
+                    for (shareItem, timestamp) in groupIdToShareItem {
+                        if (try? shareItem.insert(
+                            in: BackgroundOperationQueue.of(type: .successfulShare),
+                            at: timestamp
+                        )) == nil {
+                            self.log.warning("[\(type(of: self))] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
+                        }
                     }
                 }
 
-                self.log.debug("[\(type(of: self))] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-                self.log.debug("[\(type(of: self))] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
-
+                let restorationDelegate = self.restorationDelegate
                 self.delegatesQueue.async {
-                    for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
-                        restorationDelegate.restoreUploadQueueItems(
-                            forLocalIdentifiers: Array(localIdentifiers),
-                            in: groupId
-                        )
+                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
+                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
+                }
+                
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    /// For each descriptor (there's one per asset), create in-memory representation of:
+    /// - `SHUploadHistoryItem`s, aka the upload event (by this user)
+    /// - `SHShareHistoryItem`s, aka all share events for the asset (performed by this user)
+    ///
+    /// Such representation is keyed by groupId.
+    /// In other words, for each group there is as many history items as many assets were shared in the group.
+    ///
+    /// - Parameters:
+    ///   - descriptors: the descriptors to process
+    ///   - usersDict: the users mentioned in the descriptors, keyed by identifier
+    ///
+    internal func createHistoryItems(
+        from descriptors: [any SHAssetDescriptor],
+        usersDict: [UserIdentifier: any SHServerUser]
+    ) -> (
+        [String: [(SHUploadHistoryItem, Date)]],
+        [String: [(SHShareHistoryItem, Date)]]
+    ) {
+        let myUser = self.user
+        
+        var groupIdToUploadItems = [String: [(SHUploadHistoryItem, Date)]]()
+        var groupIdToShareItems = [String: [(SHShareHistoryItem, Date)]]()
+        
+        for descriptor in descriptors {
+            
+            guard let localIdentifier = descriptor.localIdentifier else {
+                continue
+            }
+            
+            var otherUserIdsSharedWith = [String: [(with: any SHServerUser, at: Date)]]()
+            
+            for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                
+                let groupCreationDate = descriptor.sharingInfo.groupInfoById[groupId]!.createdAt!
+                
+                if recipientUserId == myUser.identifier {
+                    
+                    let item = SHUploadHistoryItem(
+                        localAssetId: localIdentifier,
+                        globalAssetId: descriptor.globalIdentifier,
+                        versions: [.lowResolution, .hiResolution],
+                        groupId: groupId,
+                        eventOriginator: myUser,
+                        sharedWith: [],
+                        isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                        isBackground: false
+                    )
+                    
+                    if groupIdToUploadItems[groupId] == nil {
+                        groupIdToUploadItems[groupId] = [(item, groupCreationDate)]
+                    } else {
+                        groupIdToUploadItems[groupId]!.append((item, groupCreationDate))
                     }
                     
-                    for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
-                        restorationDelegate.restoreShareQueueItems(
-                            forLocalIdentifiers: Array(localIdentifiers),
-                            in: groupId
+                } else {
+                    guard let recipient = usersDict[recipientUserId] else {
+                        self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server")
+                        continue
+                    }
+                    if otherUserIdsSharedWith[groupId] == nil {
+                        otherUserIdsSharedWith[groupId] = [(with: recipient, at: groupCreationDate)]
+                    } else {
+                        otherUserIdsSharedWith[groupId]?.append(
+                            missingContentsFrom: [(with: recipient, at: groupCreationDate)],
+                            compareUsing: { $0.with.identifier == $1.with.identifier }
                         )
                     }
                 }
             }
             
-            self.delegatesQueue.async {
-                restorationDelegate.didCompleteRestoration(userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration))
+            for (groupId, shareInfo) in otherUserIdsSharedWith {
+                let item = SHShareHistoryItem(
+                    localAssetId: localIdentifier,
+                    globalAssetId: descriptor.globalIdentifier,
+                    versions: [.lowResolution, .hiResolution],
+                    groupId: groupId,
+                    eventOriginator: myUser,
+                    sharedWith: shareInfo.map({ $0.with }),
+                    isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                    isBackground: false
+                )
+                
+                let maxDate: Date = shareInfo.reduce(Date.distantPast) { 
+                    (currentMax, tuple) in
+                    if currentMax.compare(tuple.at) == .orderedAscending {
+                        return tuple.at
+                    }
+                    return currentMax
+                }
+                
+                if groupIdToShareItems[groupId] == nil {
+                    groupIdToShareItems[groupId] = [(item, maxDate)]
+                } else {
+                    groupIdToShareItems[groupId]!.append((item, maxDate))
+                }
             }
-            
-            completionHandler(.success(()))
         }
+        
+        return (
+            groupIdToUploadItems,
+            groupIdToShareItems
+        )
     }
     
     internal func processForDownload(
@@ -946,8 +880,7 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         for descriptor in descriptors {
             guard !self.isCancelled else {
                 log.info("[\(type(of: self))] download task cancelled. Finishing")
-                state = .finished
-                break
+                return
             }
             
             guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
@@ -1033,147 +966,86 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
     
     private func process(
-        _ descriptors: (
-            allRemote: [any SHAssetDescriptor],
-            allLocal: [any SHAssetDescriptor],
-            remoteOnly: [any SHAssetDescriptor],
-            localAndRemote: [any SHAssetDescriptor]
-        ),
+        _ remoteOnly: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        var filteredDescriptorsByAssetGid = [GlobalIdentifier: any SHAssetDescriptor]()
-        
-        let start = CFAbsoluteTimeGetCurrent()
-        var processingError: Error? = nil
-        
         ///
-        /// **CREATES**
+        /// This processing takes care of the **CREATES**, namely the new assets on the server not present locally
         /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded after filtering
         ///
         
-        self.log.debug("[\(type(of: self))] original descriptors: \(descriptors.remoteOnly.count)")
+        self.log.debug("[\(type(of: self))] original descriptors: \(remoteOnly.count)")
         
-        let dispatchGroup = DispatchGroup()
-        
-        dispatchGroup.enter()
-        self.processDescriptors(descriptors.remoteOnly, qos: qos) { descResult in
+        self.processDescriptors(remoteOnly, qos: qos) { descResult in
+            
             switch descResult {
+                
             case .failure(let err):
                 self.log.error("[\(type(of: self))] failed to download descriptors: \(err.localizedDescription)")
-                processingError = err
-            case .success(let val):
-                filteredDescriptorsByAssetGid = val.fromRetrievableUsers
-            }
-            dispatchGroup.leave()
-            
-            let end = CFAbsoluteTimeGetCurrent()
-            self.log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to fetch \(descriptors.remoteOnly.count) descriptors")
-        }
-        
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard processingError == nil else {
-                completionHandler(.failure(processingError!))
-                return
-            }
-            
-            dispatchGroup.enter()
-            
-#if DEBUG
-            let delta = Set(descriptors.remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
-            self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
-#endif
-            
-            var successfullyDownloadedAssets = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
-            
-            self.processAssetsInDescriptors(
-                descriptorsByGlobalIdentifier: filteredDescriptorsByAssetGid,
-                qos: qos
-            ) { descAssetResult in
-                switch descAssetResult {
-                case .failure(let err):
-                    self.log.error("[\(type(of: self))] failed to process assets in descriptors: \(err.localizedDescription)")
-                    processingError = err
-                    dispatchGroup.leave()
-                case .success(let descriptorsReadyToDownload):
-#if DEBUG
-                    let delta1 = Set(filteredDescriptorsByAssetGid.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
-                    let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
-                    self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
-#endif
-                    
-                    guard descriptorsReadyToDownload.isEmpty == false else {
-                        dispatchGroup.leave()
-                        return
-                    }
-                    
-                    do {
-                        try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)
-                    } catch {
-                        processingError = error
-                        dispatchGroup.leave()
-                        return
-                    }
-                    
-                    self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
-                        switch downloadResult {
-                        case .success(let list):
-                            successfullyDownloadedAssets = list
-                        case .failure(let error):
-                            processingError = error
-                        }
-                        dispatchGroup.leave()
-                    }
-                }
-            }
-            
-            ///
-            /// **UPDATES and DELETES**
-            /// Given the whole remote descriptors set, sync local and remote state
-            ///
-            let syncOperation = SHSyncOperation(
-                user: self.user as! SHAuthenticatedLocalUser,
-                assetsDelegates: self.assetsSyncDelegates,
-                threadsDelegates: self.threadsSyncDelegates
-            )
-            dispatchGroup.enter()
-            syncOperation.sync(
-                remoteAndLocalDescriptors: descriptors.localAndRemote,
-                localDescriptors: descriptors.allLocal,
-                qos: qos
-            ) { syncResult in
-                dispatchGroup.leave()
-            }
-
-            ///
-            /// Given the whole remote descriptors set (to retrieve threads and groups),
-            /// sync the comments and reactions in posts
-            ///
-            dispatchGroup.enter()
-            syncOperation.syncGroupInteractions(
-                remoteDescriptors: descriptors.allRemote,
-                qos: qos
-            ) { syncInteractionsResult in
-                dispatchGroup.leave()
-            }
-            
-            dispatchGroup.notify(queue: .global(qos: qos)) {
-                guard processingError == nil else {
-                    completionHandler(.failure(processingError!))
-                    return
-                }
+                completionHandler(.failure(err))
                 
-                completionHandler(.success(successfullyDownloadedAssets))
+            case .success(let val):
+                let filteredDescriptorsByAssetGid = val.fromRetrievableUsers
+                
+#if DEBUG
+                let delta = Set(remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
+                self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
+#endif
+                
+                self.processAssetsInDescriptors(
+                    descriptorsByGlobalIdentifier: filteredDescriptorsByAssetGid,
+                    qos: qos
+                ) { descAssetResult in
+                    switch descAssetResult {
+                        
+                    case .failure(let err):
+                        self.log.error("[\(type(of: self))] failed to process assets in descriptors: \(err.localizedDescription)")
+                        completionHandler(.failure(err))
+                        
+                    case .success(let descriptorsReadyToDownload):
+#if DEBUG
+                        let delta1 = Set(filteredDescriptorsByAssetGid.keys).subtracting(descriptorsReadyToDownload.map({ $0.globalIdentifier }))
+                        let delta2 = Set(descriptorsReadyToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
+                        self.log.debug("[\(type(of: self))] ready for download: \(descriptorsReadyToDownload.count). onlyInProcessed=\(delta1) onlyInToDownload=\(delta2)")
+#endif
+                        
+                        guard descriptorsReadyToDownload.isEmpty == false else {
+                            completionHandler(.success([]))
+                            return
+                        }
+                        
+                        do {
+                            try SHKGQuery.ingest(descriptorsReadyToDownload, receiverUserId: self.user.identifier)
+                        } catch {
+                            completionHandler(.failure(error))
+                            return
+                        }
+                        
+                        self.downloadAssets(for: descriptorsReadyToDownload) { downloadResult in
+                            switch downloadResult {
+                            
+                            case .success(let list):
+                                completionHandler(.success(list))
+                            
+                            case .failure(let error):
+                                completionHandler(.failure(error))
+                            }
+                        }
+                    }
+                }
             }
         }
     }
     
-    public func runOnce(
+    public func run(
         for assetGlobalIdentifiers: [GlobalIdentifier]?,
         filteringGroups groupIds: [String]?,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        let fetchStartedAt = Date()
+        
         let handleResult = { (result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) in
             let downloaderDelegates = self.downloaderDelegates
             self.delegatesQueue.async {
@@ -1182,6 +1054,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 })
             }
             completionHandler(result)
+            
+            if case .success(let tuples) = result, tuples.count > 0 {
+                Self.lastFetchDate = fetchStartedAt
+            }
         }
         
         guard self.user is SHAuthenticatedLocalUser else {
@@ -1194,15 +1070,10 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
                 for: assetGlobalIdentifiers,
                 filteringGroups: groupIds
             ) {
-                (result: Result<(
-                    allRemote: [any SHAssetDescriptor],
-                    allLocal: [any SHAssetDescriptor],
-                    remoteOnly: [any SHAssetDescriptor],
-                    localAndRemote: [any SHAssetDescriptor]
-                ), Error>) in
+                (result: Result<([any SHAssetDescriptor]), Error>) in
                 switch result {
-                case .success(let descriptors):
-                    self.process(descriptors, qos: qos) { result in
+                case .success(let onlyRemoteDescriptors):
+                    self.process(onlyRemoteDescriptors, qos: qos) { result in
                         handleResult(result)
                     }
                 case .failure(let error):
@@ -1212,17 +1083,18 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
         }
     }
     
-    public func runOnce(
+    internal func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        self.runOnce(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
+        self.run(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
     }
     
-    public override func run(
+    public func run(
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        self.runOnce(qos: .default) { result in
+        self.runOnce(qos: qos) { result in
             if case .failure(let failure) = result {
                 completionHandler(.failure(failure))
             } else {
@@ -1232,16 +1104,4 @@ public class SHRemoteDownloadOperation: SHAbstractBackgroundOperation, SHBackgro
     }
 }
 
-// MARK: - Download Operation Processor
-
-public class SHRemoteDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHRemoteDownloadOperation> {
-    
-    public static var shared = SHRemoteDownloadPipelineProcessor(
-        delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 5
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
-    }
-}
+public let RemoteDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHRemoteDownloadOperation>()

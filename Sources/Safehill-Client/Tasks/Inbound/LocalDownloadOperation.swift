@@ -5,40 +5,43 @@ import os
 
 
 ///
-/// This pipeline operation deals with assets in the LocalServer and the Apple Photos Library.
-/// **IT DOES NOT** deal with remote server or remote descriptors. See `SHRemoteDwonloadOperation` for remote descriptor processing.
-/// It is responsible for identifying the mapping between the assets in the two sets, and then decrypt the assets in the local store for the ones that don't have a mapping to the local photo library.
+/// This pipeline operation deals with assets present the LocalServer.
+/// **It does not** deal with remote server or remote descriptors. See `SHRemoteDownloadOperation` for remote descriptor processing.
+/// The local pipeline is responsible for identifying the mapping between the assets in the photos library and the assets in the local server. The ones that don't have a mapping to the local photo library,  are decrypted from the local server and served via the `SHAssetDownloaderDelegate`.
+/// The restoration delegates are notified about successful uploads and shares from this user. It assumes the history queues on disk are in sync with the local server, so it doesn't try to create history items like the `SHRemoteDownloadOperation`.
+///
 ///
 /// The steps are:
 /// 1. `fetchDescriptorsFromServer()` : the descriptors are fetched from the local server
-/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
+/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This pipeline **does not** deal with use authorization, because assets in the local server are expected to have been previously authorized.
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
 ///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
-///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
+///     - the assets shared by from _other_ users are returned so they can be decrypted
 /// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted asset to the delegates
 ///
-/// The `isRestoring` flag determines whether step 4 is run.
 /// Usually in the lifecycle of the application, the decryption happens only once.
 /// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
-/// Hence, it's advised to run it with that flag set to true once (at start) and then run it continously with that flag set to false.
-/// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor,
-/// running `SHRemoteDownloadOperation`s.
+/// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
 ///
 /// The pipeline sequence is:
 /// ```
-/// 1 -->   2 -->    3 -->    4 (optional)
+/// 1 -->   2 -->    3 -->    4
 /// ```
 ///
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
-    let isRestoring: Bool
+    private static var alreadyProcessed = Set<GlobalIdentifier>()
+    
+    static func markAsAlreadyProcessed(_ gids: [GlobalIdentifier]) {
+        for gid in gids {
+            Self.alreadyProcessed.insert(gid)
+        }
+    }
     
     @available(*, unavailable)
     public override init(
         user: SHLocalUserProtocol,
         downloaderDelegates: [SHAssetDownloaderDelegate],
-        assetsSyncDelegates: [SHAssetSyncingDelegate],
-        threadsSyncDelegates: [SHThreadSyncingDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         photoIndexer: SHPhotosIndexer,
         limitPerRun limit: Int? = nil
@@ -50,40 +53,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         user: SHLocalUserProtocol,
         delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
-        isRestoring: Bool,
         photoIndexer: SHPhotosIndexer
     ) {
-        self.isRestoring = isRestoring
         super.init(
             user: user,
             downloaderDelegates: delegates,
-            assetsSyncDelegates: [],
-            threadsSyncDelegates: [],
             restorationDelegate: restorationDelegate,
             photoIndexer: photoIndexer
-        )
-    }
-    
-    public override func clone() -> SHBackgroundOperationProtocol {
-        SHLocalDownloadOperation(
-            user: self.user,
-            delegates: self.downloaderDelegates,
-            restorationDelegate: self.restorationDelegate,
-            isRestoring: self.isRestoring,
-            photoIndexer: self.photoIndexer
-        )
-    }
-    
-    /// Clone as above, but override the `isRestoring` flag
-    /// - Parameter isRestoring: the overriden value
-    /// - Returns: the cloned object
-    public func clone(isRestoring: Bool) -> SHBackgroundOperationProtocol {
-        SHLocalDownloadOperation(
-            user: self.user,
-            delegates: self.downloaderDelegates,
-            restorationDelegate: self.restorationDelegate,
-            isRestoring: isRestoring,
-            photoIndexer: self.photoIndexer
         )
     }
     
@@ -93,10 +69,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     internal func fetchDescriptorsFromLocalServer(
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        serverProxy.getLocalAssetDescriptors { result in
+        serverProxy.getLocalAssetDescriptors(after: nil) { result in
             switch result {
             case .success(let descs):
-                completionHandler(.success(descs))
+                let unprocessed = descs.filter({
+                    Self.alreadyProcessed.contains($0.globalIdentifier) == false
+                })
+                completionHandler(.success(unprocessed))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -107,7 +86,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         withIdentifiers userIdentifiers: [UserIdentifier],
         completionHandler: @escaping (Result<[UserIdentifier: any SHServerUser], Error>) -> Void
     ) {
-        SHUsersController(localUser: self.user).getUsersOrCached(with: userIdentifiers, completionHandler: completionHandler)
+        Task {
+            do {
+                let usersDict = try await SHUsersController(localUser: self.user).getUsersOrCached(with: userIdentifiers)
+                completionHandler(.success(usersDict))
+            } catch {
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     ///
@@ -115,16 +101,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// about all groups that need to be restored.
     /// Uploads and shares will be reported separately, according to the contract in the delegate.
     /// Because these assets exist in the local server, the assumption is that they will also be present in the
-    /// upload and history queues, so they don't need to be re-created, as it happens in the sister method
+    /// upload and history queues, so they don't need to be re-created.
+    /// The recreation only happens in the sister method:
     /// `SHRemoteDownloadOperation::restoreQueueItems(descriptorsByGlobalIdentifier:qos:completionHandler:)`
     ///
     /// - Parameters:
     ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
+    ///   - globalIdentifiersSharedBySelf: the asset global identifiers shared by self
     ///   - completionHandler: the callback method
     ///
     func restoreQueueItems(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
+        filteringKeys globalIdentifiersSharedBySelf: [GlobalIdentifier],
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         guard original.count > 0 else {
@@ -132,9 +120,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
+        guard globalIdentifiersSharedBySelf.count > 0 else {
+            completionHandler(.success(()))
+            return
+        }
+        
         let descriptors = original.values.filter({
-            filteringKeys.contains($0.globalIdentifier)
-            && $0.sharingInfo.sharedByUserIdentifier == self.user.identifier
+            globalIdentifiersSharedBySelf.contains($0.globalIdentifier)
             && $0.localIdentifier != nil
         })
         
@@ -143,73 +135,38 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             return
         }
         
-        let restorationDelegate = self.restorationDelegate
-        self.delegatesQueue.async {
-            restorationDelegate.didStartRestoration()
-        }
-        
-        var uploadLocalAssetIdByGroupId = [String: Set<LocalIdentifier>]()
-        var shareLocalAssetIdsByGroupId = [String: Set<LocalIdentifier>]()
-        var userIdsInvolvedInRestoration = Set<UserIdentifier>()
-        
+        var allUserIdsInDescriptors = Set<UserIdentifier>()
         for descriptor in descriptors {
-            
-            guard let localIdentifier = descriptor.localIdentifier else {
-                continue
-            }
-            
-            if descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.count == 1,
-               let recipientUserId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.first,
-               recipientUserId == user.identifier {
-                ///
-                /// This handles assets just shared with self, meaning that they were just uploaded to the lockbox.
-                /// Restore the upload from the queue
-                ///
-                let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[recipientUserId]!
-                
-                if uploadLocalAssetIdByGroupId[groupId] == nil {
-                    uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
-                } else {
-                    uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
-                }
-                
-                userIdsInvolvedInRestoration.insert(recipientUserId)
-            } else {
-                for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    if uploadLocalAssetIdByGroupId[groupId] == nil {
-                        uploadLocalAssetIdByGroupId[groupId] = [localIdentifier]
-                    } else {
-                        uploadLocalAssetIdByGroupId[groupId]!.insert(localIdentifier)
-                    }
-                    if shareLocalAssetIdsByGroupId[groupId] == nil {
-                        shareLocalAssetIdsByGroupId[groupId] = [localIdentifier]
-                    } else {
-                        shareLocalAssetIdsByGroupId[groupId]!.insert(localIdentifier)
-                    }
-                    
-                    userIdsInvolvedInRestoration.insert(recipientUserId)
-                }
+            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                allUserIdsInDescriptors.insert(recipientId)
             }
         }
         
-        self.log.debug("[\(type(of: self))] upload local asset identifiers by group \(uploadLocalAssetIdByGroupId)")
-        self.log.debug("[\(type(of: self))] share local asset identifiers by group \(shareLocalAssetIdsByGroupId)")
-        
-        self.delegatesQueue.async {
-            for (groupId, localIdentifiers) in uploadLocalAssetIdByGroupId {
-                restorationDelegate.restoreUploadQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
-            }
+        self.getUsers(withIdentifiers: Array(allUserIdsInDescriptors)) { getUsersResult in
+            switch getUsersResult {
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
             
-            for (groupId, localIdentifiers) in shareLocalAssetIdsByGroupId {
-                restorationDelegate.restoreShareQueueItems(forLocalIdentifiers: Array(localIdentifiers), in: groupId)
+            case .success(let usersDict):
+                
+                let (
+                    groupIdToUploadItems,
+                    groupIdToShareItems
+                ) = self.createHistoryItems(
+                    from: descriptors,
+                    usersDict: usersDict
+                )
+                
+                let restorationDelegate = self.restorationDelegate
+                self.delegatesQueue.async {
+                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
+                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
+                }
+                
+                completionHandler(.success(()))
             }
-            
-            restorationDelegate.didCompleteRestoration(
-                userIdsInvolvedInRestoration: Array(userIdsInvolvedInRestoration)
-            )
         }
-        
-        completionHandler(.success(()))
     }
     
     
@@ -326,18 +283,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        /// 
-        /// Only call the restoration delegate for items to restore from the history queues
-        /// when restoring. Otherwise the delegate will be called at every cycle
-        /// with items that have already been restored
-        ///
-        guard isRestoring else {
-            self.log.debug("[\(type(of: self))] skipping restoration and local decryption step")
-            
-            completionHandler(.success([]))
-            return
-        }
-        
         // TODO: This method does not re-create missing items from the history queues. If an item is missing it will not be restored
         
         ///
@@ -352,7 +297,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         self.restoreQueueItems(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
             filteringKeys: sharedBySelfGlobalIdentifiers
-        ) { _ in
+        ) { restoreResult in
+            
+            if case .failure(let err) = restoreResult {
+                self.log.critical("failure while restoring queue items \(sharedBySelfGlobalIdentifiers): \(err.localizedDescription)")
+            } else {
+                Self.markAsAlreadyProcessed(sharedBySelfGlobalIdentifiers)
+            }
             
             ///
             /// FOR THE ONES SHARED BY OTHER USERS
@@ -380,7 +331,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    public override func runOnce(
+    internal override func runOnce(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
@@ -457,6 +408,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     }
                                     
                                     completionHandler(thirdResult)
+                                    
+                                    if case .success(let tuples) = thirdResult, tuples.count > 0 {
+                                        Self.markAsAlreadyProcessed(tuples.map({ $0.1.globalIdentifier }))
+                                    }
                                 }
                                 
                             case .failure(let error):
@@ -470,17 +425,4 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     }
 }
 
-
-// MARK: - Local Download Operation Processor
-
-public class SHLocalDownloadPipelineProcessor : SHBackgroundOperationProcessor<SHLocalDownloadOperation> {
-    
-    public static var shared = SHLocalDownloadPipelineProcessor(
-        delayedStartInSeconds: 0,
-        dispatchIntervalInSeconds: 5
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
-    }
-}
+public let LocalDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHLocalDownloadOperation>()

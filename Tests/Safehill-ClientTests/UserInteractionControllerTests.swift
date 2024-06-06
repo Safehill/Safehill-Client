@@ -48,7 +48,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func addMessage(_ message: MessageInputDTO, inGroup groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: UUID().uuidString,
-            senderUserIdentifier: self.localServer.requestor.identifier,
+            senderPublicIdentifier: self.localServer.requestor.identifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
             encryptedMessage: message.encryptedMessage,
@@ -67,7 +67,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func addMessage(_ message: MessageInputDTO, inThread threadId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: UUID().uuidString,
-            senderUserIdentifier: self.localServer.requestor.identifier,
+            senderPublicIdentifier: self.localServer.requestor.identifier,
             inReplyToAssetGlobalIdentifier: message.inReplyToAssetGlobalIdentifier,
             inReplyToInteractionId: message.inReplyToInteractionId,
             encryptedMessage: message.encryptedMessage,
@@ -151,11 +151,60 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.retrieveInteraction(anchorType: .group, anchorId: groupId, withId: interactionIdentifier, completionHandler: completionHandler)
     }
     
-    func countLocalInteractions(
-        inGroup groupId: String,
-        completionHandler: @escaping (Result<InteractionsCounts, Error>) -> ()
-    ) {
-        self.localServer.countInteractions(inGroup: groupId, completionHandler: completionHandler)
+    func topLevelInteractionsSummary() async throws -> InteractionsSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelInteractionsSummary {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    func topLevelThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelThreadsInteractionsSummary {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    func topLevelGroupsInteractionsSummary() async throws -> [String: InteractionsGroupSummaryDTO] {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelGroupsInteractionsSummary {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    func topLevelLocalInteractionsSummary(for groupId: String) async throws -> InteractionsGroupSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelInteractionsSummary(inGroup: groupId) {
+                result in
+                switch result {
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
     
     func retrieveUserEncryptionDetails(forGroup groupId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
@@ -192,7 +241,9 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func listLocalThreads(completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
+    func listLocalThreads(
+        withIdentifiers threadIds: [String]?,
+        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
         self.listThreads(filteringUnknownUsers: false, completionHandler: completionHandler)
     }
     
@@ -279,6 +330,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         completionHandler(.success(serverThread))
     }
     
+    func getAssets(inThread threadId: String, completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()) {
+        completionHandler(.success(ConversationThreadAssetsDTO(photoMessages: [], otherAssets: [])))
+    }
+    
     func removeReaction(_ reaction: ReactionInput, inGroup groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.removeReactions([reaction], inGroup: groupId, completionHandler: completionHandler)
     }
@@ -317,7 +372,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let _ = try SHDBManager.sharedInstance.userStore?.removeAll()
         let _ = try SHDBManager.sharedInstance.assetStore?.removeAll()
         let _ = try SHDBManager.sharedInstance.reactionStore?.removeAll()
-        let _ = try SHDBManager.sharedInstance.messageQueue?.removeAll()
+        let _ = try SHDBManager.sharedInstance.messagesQueue?.removeAll()
         
         for keychainPrefix in ["com.gf.safehill.client.testUser", "com.gf.safehill.client.recipient1"] {
             try? SHLocalUser.deleteKeys(keychainPrefix, synchronizable: false)

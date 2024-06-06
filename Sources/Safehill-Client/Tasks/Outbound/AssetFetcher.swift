@@ -4,7 +4,7 @@ import KnowledgeBase
 import Photos
 import os
 
-internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundBackgroundOperation, SHBackgroundQueueProcessorOperationProtocol {
+internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation {
     
     let operationType = BackgroundOperationQueue.OperationType.fetch
     let processingState = ProcessingState.fetching
@@ -16,26 +16,14 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
     
     public let limit: Int
     public var delegates: [SHOutboundAssetOperationDelegate]
-    var imageManager: PHCachingImageManager
     let photoIndexer: SHPhotosIndexer
     
     public init(delegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int,
-                photoIndexer: SHPhotosIndexer,
-                imageManager: PHCachingImageManager? = nil) {
+                photoIndexer: SHPhotosIndexer) {
         self.limit = limit
         self.delegates = delegates
-        self.imageManager = imageManager ?? PHCachingImageManager()
         self.photoIndexer = photoIndexer
-    }
-    
-    public func clone() -> SHBackgroundOperationProtocol {
-        SHLocalFetchOperation(
-            delegates: self.delegates,
-            limitPerRun: self.limit,
-            photoIndexer: self.photoIndexer,
-            imageManager: self.imageManager
-        )
     }
     
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
@@ -81,7 +69,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
                 
                 let photoAsset = SHApplePhotoAsset(
                     for: phAsset,
-                    usingCachingImageManager: self.imageManager
+                    usingCachingImageManager: self.photoIndexer.imageManager
                 )
                 completionHandler(.success(photoAsset))
             }
@@ -97,7 +85,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         
         // Dequeue from FETCH queue
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
@@ -121,7 +109,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            shouldLinkToThread: shouldLinkToThread,
+            isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
         
@@ -158,7 +146,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let shouldUpload = request.shouldUpload
-        let shouldLinkToThread = request.shouldLinkToThread
+        let isPhotoMessage = request.isPhotoMessage
         let isBackground = request.isBackground
         
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
@@ -180,7 +168,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
-                    shouldLinkToThread: shouldLinkToThread,
+                    isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
                 try encryptionRequest.enqueue(in: encryptionQueue)
@@ -211,7 +199,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
-                    shouldLinkToThread: shouldLinkToThread,
+                    isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
                 try encryptionForSharingRequest.enqueue(in: shareQueue)
@@ -235,6 +223,7 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
     
     internal func process(
         _ item: KBQueueItem,
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let fetchRequest: SHLocalFetchRequestQueueItem
@@ -338,24 +327,5 @@ internal class SHLocalFetchOperation: SHAbstractBackgroundOperation, SHOutboundB
                 handleError(failure)
             }
         }
-    }
-    
-    public override func run(
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.runOnce(completionHandler: completionHandler)
-    }
-}
-
-internal class SHAssetsFetcherQueueProcessor : SHBackgroundOperationProcessor<SHLocalFetchOperation> {
-    /// Singleton (with private initializer)
-    public static var shared = SHAssetsFetcherQueueProcessor(
-        delayedStartInSeconds: 1,
-        dispatchIntervalInSeconds: 3
-    )
-    
-    private override init(delayedStartInSeconds: Int = 0,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
     }
 }

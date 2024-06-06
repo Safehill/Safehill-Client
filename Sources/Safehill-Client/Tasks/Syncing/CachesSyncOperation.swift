@@ -2,9 +2,8 @@ import Foundation
 import KnowledgeBase
 import os
 
-// MARK: - Low Priority Sync Operation
 
-public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgroundOperationProtocol {
+public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-LP-SYNC")
     
@@ -23,13 +22,6 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
-    
-    public func clone() -> SHBackgroundOperationProtocol {
-        SHLowPrioritySyncOperation(
-            user: self.user,
-            assetsSyncDelegates: self.assetsSyncDelegates
-        )
-    }
     
     private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
         var userIdsDescriptorsSet = Set<UserIdentifier>()
@@ -58,7 +50,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         /// Get all asset descriptors associated with this user from the server.
         ///
         dispatchGroup.enter()
-        self.serverProxy.getRemoteAssetDescriptors() { remoteResult in
+        self.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
             switch remoteResult {
             case .success(let descriptors):
                 remoteDescriptors = descriptors
@@ -73,7 +65,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         /// Get all the local descriptors.
         ///
         dispatchGroup.enter()
-        self.serverProxy.getLocalAssetDescriptors { localResult in
+        self.serverProxy.getLocalAssetDescriptors(after: nil) { localResult in
             switch localResult {
             case .success(let descriptors):
                 localDescriptors = descriptors
@@ -212,10 +204,7 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
         }
     }
     
-    public func runOnce(
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
+    public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
         DispatchQueue.global(qos: qos).async {
             self.fetchDescriptors(qos: qos) {
                 (result: Result<(
@@ -236,21 +225,6 @@ public class SHLowPrioritySyncOperation: SHAbstractBackgroundOperation, SHBackgr
             }
         }
     }
-    
-    public override func run(completionHandler: @escaping (Result<Void, Error>) -> Void) {
-        self.runOnce(qos: .background, completionHandler: completionHandler)
-    }
 }
 
-
-public class SHLowPrioritySyncProcessor : SHBackgroundOperationProcessor<SHLowPrioritySyncOperation> {
-    
-    public static var shared = SHLowPrioritySyncProcessor(
-        delayedStartInSeconds: 20,
-        dispatchIntervalInSeconds: 120
-    )
-    private override init(delayedStartInSeconds: Int,
-                          dispatchIntervalInSeconds: Int? = nil) {
-        super.init(delayedStartInSeconds: delayedStartInSeconds, dispatchIntervalInSeconds: dispatchIntervalInSeconds)
-    }
-}
+public let CachesSyncProcessor = SHBackgroundOperationProcessor<SHCachesSyncOperation>()
