@@ -418,7 +418,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 if shareRequest.isBackground == false {
                     self.initializeGroupAndThread(
                         shareRequest: shareRequest,
-                        skipThreadCreation: shareRequest.isPhotoMessage == false,
+                        skipThreadCreation: false,
                         qos: qos
                     ) { result in
                         switch result {

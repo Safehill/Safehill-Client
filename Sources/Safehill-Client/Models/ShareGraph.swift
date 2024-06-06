@@ -150,10 +150,10 @@ public struct SHKGQuery {
                 throw KBError.databaseNotReady
             }
             
-            guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
+            guard let userStore = SHDBManager.sharedInstance.userStore else {
                 throw KBError.databaseNotReady
             }
-            let writeBatch = messagesQueue.writeBatch()
+            let writeBatch = userStore.writeBatch()
             
             for photoMessage in conversationThreadAssets.photoMessages {
                 writeBatch.set(
