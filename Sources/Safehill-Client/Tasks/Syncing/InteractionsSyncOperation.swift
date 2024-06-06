@@ -201,31 +201,35 @@ public class SHInteractionsSyncOperation: Operation {
         super.start()
         
         Task {
-            ///
-            /// Sync the threads (creates, removals)
-            /// based on the list from server
-            ///
-            let _ = try await self.syncThreads(qos: .default)
-            
-            ///
-            /// Get the summary to update the latest messages and interactions
-            /// in threads and groups
-            let summary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
-            
-            self.delegatesQueue.async { [weak self] in
-                self?.interactionsSyncDelegates.forEach {
-                    $0.didFetchRemoteThreadSummary(summary.summaryByThreadId)
-                    $0.didFetchRemoteGroupSummary(summary.summaryByGroupId)
+            do {
+                ///
+                /// Sync the threads (creates, removals)
+                /// based on the list from server
+                ///
+                let _ = try await self.syncThreads(qos: .default)
+                
+                ///
+                /// Get the summary to update the latest messages and interactions
+                /// in threads and groups
+                let summary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
+                
+                self.delegatesQueue.async { [weak self] in
+                    self?.interactionsSyncDelegates.forEach {
+                        $0.didFetchRemoteThreadSummary(summary.summaryByThreadId)
+                        $0.didFetchRemoteGroupSummary(summary.summaryByGroupId)
+                    }
                 }
+                
+                self.updateThreadsInteractions(using: summary.summaryByThreadId)
+                self.updateGroupsInteractions(using: summary.summaryByGroupId)
+                
+                ///
+                /// Start syncing interactions via the web socket
+                ///
+                try await self.startWebSocketAndReconnectOnFailure()
+            } catch {
+                log.error("\(error.localizedDescription)")
             }
-            
-            self.updateThreadsInteractions(using: summary.summaryByThreadId)
-            self.updateGroupsInteractions(using: summary.summaryByGroupId)
-            
-            ///
-            /// Start syncing interactions via the web socket
-            ///
-            try await self.startWebSocketAndReconnectOnFailure()
         }
     }
 }
