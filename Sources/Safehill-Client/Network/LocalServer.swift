@@ -1467,12 +1467,14 @@ struct LocalServer : SHServerAPI {
             condition = KBGenericCondition(
                 .beginsWith, 
                 value: "\(SHInteractionAnchor.thread.rawValue)::"
-            ).and(KBGenericCondition(
-                .contains,
-                value: "::assets",
-                negated: true
-            ))
+            )
         }
+        
+        condition = condition.and(KBGenericCondition(
+            .contains,
+            value: "::assets::",
+            negated: true
+        ))
         
         let kvPairs: KBKVPairs
         do {
