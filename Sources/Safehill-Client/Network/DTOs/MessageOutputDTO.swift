@@ -47,7 +47,7 @@ extension MessageOutputDTO: MessageInput {
 extension MessageOutputDTO: Codable {
     enum CodingKeys: String, CodingKey {
         case interactionId
-        case senderPublicIdentifier
+        case senderPublicIdentifier = "senderUserIdentifier"
         case inReplyToAssetGlobalIdentifier
         case inReplyToInteractionId
         case encryptedMessage
