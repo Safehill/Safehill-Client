@@ -53,11 +53,18 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     
     /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)
-    /// - Parameter descriptors: the descriptors
+    /// - Parameter descriptors: the descriptors fetched from local server
     /// - Parameter users: the `SHServerUser` objects for user ids mentioned in the descriptors
     /// - Parameter completionHandler: called when handling is complete
-    func didReceiveAssetDescriptors(_ descriptors: [any SHAssetDescriptor],
-                                    referencing users: [UserIdentifier: any SHServerUser])
+    func didReceiveLocalAssetDescriptors(_ descriptors: [any SHAssetDescriptor],
+                                         referencing users: [UserIdentifier: any SHServerUser])
+    
+    /// The list of asset descriptors fetched from the server, filtering out what's already available locally (based on the 2 methods above)
+    /// - Parameter descriptors: the descriptors fetched from remote server
+    /// - Parameter users: the `SHServerUser` objects for user ids mentioned in the descriptors
+    /// - Parameter completionHandler: called when handling is complete
+    func didReceiveRemoteAssetDescriptors(_ descriptors: [any SHAssetDescriptor],
+                                          referencing users: [UserIdentifier: any SHServerUser])
     
     /// Notifies there are assets to download from unknown users
     /// - Parameters:
@@ -116,8 +123,11 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter result:  a callback returning either the descriptors for the assets downloaded,
     /// or  an error if items couldn't be dequeued, or the descriptors couldn't be fetched
     func didCompleteDownloadCycle(
-        with result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>
+        restored: [(any SHDecryptedAsset, any SHAssetDescriptor)],
+        downloaded: [(any SHDecryptedAsset, any SHAssetDescriptor)]
     )
+    
+    func didFailDownloadCycle(with: Error)
     
 }
 

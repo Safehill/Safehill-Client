@@ -14,7 +14,8 @@ protocol SHDownloadOperation {}
 ///
 /// The steps are:
 /// 1. `fetchDescriptors(for:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
-/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
+/// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`.
+/// Both known and unknwon users are included, but the delegate method `didReceiveRemoteAssetRemoteDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
 ///     - for the assets shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
 ///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
@@ -120,6 +121,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///
     internal func processDescriptors(
         _ descriptors: [any SHAssetDescriptor],
+        fromRemote: Bool,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<(
                 fromRetrievableUsers: [GlobalIdentifier: any SHAssetDescriptor],
@@ -153,9 +155,15 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             guard filteredDescriptors.count > 0 else {
                 let downloaderDelegates = self.downloaderDelegates
                 self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didReceiveAssetDescriptors([], referencing: [:])
-                    })
+                    if fromRemote {
+                        downloaderDelegates.forEach({
+                            $0.didReceiveRemoteAssetDescriptors([], referencing: [:])
+                        })
+                    } else {
+                        downloaderDelegates.forEach({
+                            $0.didReceiveLocalAssetDescriptors([], referencing: [:])
+                        })
+                    }
                 }
                 completionHandler(.success((fromRetrievableUsers: [:], fromKnownUsers: [])))
                 return
@@ -189,8 +197,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         return true
                     }
                     
-                    /// When calling the delegate method `didReceiveAssetDescriptors(_:referencing:)`
-                    /// filter out the ones whose sender is unknown.
+                    /// When calling the delegate method `didReceiveLocalAssetDescriptors(_:referencing:)`
+                    /// or `didReceiveRemoteAssetDescriptors(_:referencing:)` filter out the ones whose sender is unknown.
                     /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
                     senderIds = Array(Set(filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })))
                     var knownUsers = [UserIdentifier: Bool]()
@@ -216,10 +224,21 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     let userDictsImmutable = usersDict
                     let downloaderDelegates = self.downloaderDelegates
                     self.delegatesQueue.async {
-                        downloaderDelegates.forEach({
-                            $0.didReceiveAssetDescriptors(descriptorsFromKnownUsers,
-                                                          referencing: userDictsImmutable)
-                        })
+                        if fromRemote {
+                            downloaderDelegates.forEach({
+                                $0.didReceiveRemoteAssetDescriptors(
+                                    descriptorsFromKnownUsers,
+                                    referencing: userDictsImmutable
+                                )
+                            })
+                        } else {
+                            downloaderDelegates.forEach({
+                                $0.didReceiveLocalAssetDescriptors(
+                                    descriptorsFromKnownUsers,
+                                    referencing: userDictsImmutable
+                                )
+                            })
+                        }
                     }
                     
                     var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
@@ -977,7 +996,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         self.log.debug("[\(type(of: self))] original descriptors: \(remoteOnly.count)")
         
-        self.processDescriptors(remoteOnly, qos: qos) { descResult in
+        self.processDescriptors(remoteOnly, fromRemote: true, qos: qos) { descResult in
             
             switch descResult {
                 
@@ -1049,9 +1068,20 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         let handleResult = { (result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) in
             let downloaderDelegates = self.downloaderDelegates
             self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: result)
-                })
+                switch result {
+                case .failure(let error):
+                    downloaderDelegates.forEach({
+                        $0.didFailDownloadCycle(with: error)
+                    })
+                    
+                case .success(let tuples):
+                    downloaderDelegates.forEach({
+                        $0.didCompleteDownloadCycle(
+                            restored: [],
+                            downloaded: tuples
+                        )
+                    })
+                }
             }
             completionHandler(result)
             

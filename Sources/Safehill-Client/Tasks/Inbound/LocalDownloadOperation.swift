@@ -13,7 +13,7 @@ import os
 ///
 /// The steps are:
 /// 1. `fetchDescriptorsFromServer()` : the descriptors are fetched from the local server
-/// 2. `processDescriptors(_:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This pipeline **does not** deal with use authorization, because assets in the local server are expected to have been previously authorized.
+/// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`. Both known and unknwon users are included, but the delegate method `didReceiveLocalAssetDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This pipeline **does not** deal with use authorization, because assets in the local server are expected to have been previously authorized.
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
 ///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
 ///     - the assets shared by from _other_ users are returned so they can be decrypted
@@ -339,7 +339,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             let downloaderDelegates = self.downloaderDelegates
             self.delegatesQueue.async {
                 downloaderDelegates.forEach({
-                    $0.didCompleteDownloadCycle(with: .failure(error))
+                    $0.didFailDownloadCycle(with: error)
                 })
             }
             completionHandler(.failure(error))
@@ -354,7 +354,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 return
             case .success(let fullDescriptorList):
                 self.log.debug("[\(type(of: self))] original descriptors: \(fullDescriptorList.count)")
-                self.processDescriptors(fullDescriptorList, qos: qos) { result in
+                self.processDescriptors(fullDescriptorList, fromRemote: false, qos: qos) { result in
                     switch result {
                     case .failure(let error):
                         self.log.error("[\(type(of: self))] failed to process descriptors: \(error.localizedDescription)")
@@ -367,16 +367,16 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         ///
                         /// The `SHLocalDownloadOperation` doesn't deal with request authorizations.
                         /// The `SHRemoteDownloadOperation` is responsible for it.
-                        /// The `didReceiveAssetDescriptors(_:referencing:)` delegate method is called
+                        /// The `didReceiveLocalAssetDescriptors(_:referencing:)` delegate method is called
                         /// with descriptors from known users only.
                         /// Hence, the decryption should only happen for those, and - in turn - we only want to call the downloader
                         /// delegate for assets that are not from known users. No assets not referenced in the call to
-                        /// `didReceiveAssetDescriptors(_:referencing:)` should be referenced in `didStartDownloadOfAsset`, `didCompleteDownloadOfAsset` or `didFailDownloadOfAsset`.
+                        /// `didReceiveAssetLocalDescriptors(_:referencing:)` should be referenced in `didStartDownloadOfAsset`, `didCompleteDownloadOfAsset` or `didFailDownloadOfAsset`.
                         ///
-                        /// The reason why the `didReceiveAssetDescriptors` method is called with descriptors for known users
+                        /// The reason why the `didReceiveAssetLocalDescriptors` method is called with descriptors for known users
                         /// is because the `SHRemoteDownloadOperation` treats differently known (not needing authorization) and unknown users (needing authorization).
                         /// In order to avoid initiating/starting a download for an asset from an unknown user,
-                        /// `didReceiveAssetDescriptors` should never reference those.
+                        /// `didReceiveLocalAssetDescriptors` should never reference those.
                         ///
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsFromKnownUsersByGid.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsFromKnownUsersByGid.count). delta=\(delta)")
@@ -402,9 +402,20 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     
                                     let downloaderDelegates = self.downloaderDelegates
                                     self.delegatesQueue.async {
-                                        downloaderDelegates.forEach({
-                                            $0.didCompleteDownloadCycle(with: thirdResult)
-                                        })
+                                        switch thirdResult {
+                                        case .failure(let error):
+                                            downloaderDelegates.forEach({
+                                                $0.didFailDownloadCycle(with: error)
+                                            })
+                                            
+                                        case .success(let tuples):
+                                            downloaderDelegates.forEach({
+                                                $0.didCompleteDownloadCycle(
+                                                    restored: tuples,
+                                                    downloaded: []
+                                                )
+                                            })
+                                        }
                                     }
                                     
                                     completionHandler(thirdResult)
