@@ -119,14 +119,20 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
         in groupId: String
     )
     
-    /// One cycle of downloads has finished
-    /// - Parameter result:  a callback returning either the descriptors for the assets downloaded,
-    /// or  an error if items couldn't be dequeued, or the descriptors couldn't be fetched
+    /// One cycle of downloads has finished from local server
+    /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
     func didCompleteDownloadCycle(
-        restored: [(any SHDecryptedAsset, any SHAssetDescriptor)],
-        downloaded: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+        localDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
     )
     
+    /// One cycle of downloads has finished from remote server
+    /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
+    func didCompleteDownloadCycle(
+        remoteDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+    )
+    
+    /// The download cycle failed
+    /// - Parameter with: the error
     func didFailDownloadCycle(with: Error)
     
 }

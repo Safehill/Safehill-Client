@@ -1077,8 +1077,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 case .success(let tuples):
                     downloaderDelegates.forEach({
                         $0.didCompleteDownloadCycle(
-                            restored: [],
-                            downloaded: tuples
+                            remoteDescriptors: tuples
                         )
                     })
                 }

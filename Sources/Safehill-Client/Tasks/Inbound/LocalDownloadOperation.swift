@@ -411,8 +411,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                         case .success(let tuples):
                                             downloaderDelegates.forEach({
                                                 $0.didCompleteDownloadCycle(
-                                                    restored: tuples,
-                                                    downloaded: []
+                                                    localDescriptors: tuples
                                                 )
                                             })
                                         }
