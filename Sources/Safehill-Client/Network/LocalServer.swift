@@ -2341,28 +2341,6 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func countMessages(
-        inAnchor anchor: SHInteractionAnchor,
-        anchorId: String,
-        from userId: UserIdentifier,
-        completionHandler: @escaping (Result<Int, Error>) -> ()
-    ) {
-        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        let condition = KBGenericCondition(.beginsWith, value: "\(anchor.rawValue)::\(anchorId)::\(userId)")
-        messagesQueue.keys(matching: condition) { messagesResult in
-            switch messagesResult {
-            case .success(let messagesKeys):
-                completionHandler(.success(messagesKeys.count))
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
-        }
-    }
-    
     func retrieveInteractions(
         inGroup groupId: String,
         ofType type: InteractionType?,

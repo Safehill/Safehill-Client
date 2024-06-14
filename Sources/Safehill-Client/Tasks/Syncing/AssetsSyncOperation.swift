@@ -61,7 +61,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         )
         
         ///
-        /// Remove users that should be removed from local server
+        /// Remove assets that are no longer returned by the remote server
         ///
         if diff.assetsRemovedOnRemote.count > 0 {
             let globalIdentifiers = diff.assetsRemovedOnRemote.compactMap { $0.globalIdentifier }
@@ -72,18 +72,6 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                 case .failure(let error):
                     self.log.error("some assets were deleted on server but couldn't be deleted from local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 case .success:
-                    ///
-                    /// Remove items in DOWNLOAD queues and indices that no longer exist
-                    ///
-                    do {
-                        let downloadsManager = SHAssetsDownloadManager(user: self.user)
-                        try downloadsManager.cleanEntries(
-                            for: diff.assetsRemovedOnRemote.map({ $0.globalIdentifier })
-                        )
-                    } catch {
-                        self.log.error("[sync] failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
-                    }
-                    
                     ///
                     /// Remove items in the UPLOAD and SHARE queues that no longer exist
                     ///

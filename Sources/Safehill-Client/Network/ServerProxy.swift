@@ -995,113 +995,43 @@ extension SHServerProxy {
         }
     }
     
-    /// Filter the input threads, removing the threads for which
-    /// either the creator is now known (no assets shared previously, no explicit authorization),
-    /// or "this" user has never sent a message to.
-    ///
-    /// - Parameters:
-    ///   - serverThreads: the unfiltered list
-    ///   - filterIfThisUserHasSentMessages: controls filtering based on whether the requestor has sent messages in this thread
-    ///   - completionHandler: the callback, returning the filtered list
-    internal func filterThreadsCreatedByUnknownUsers(
-        _ serverThreads: [ConversationThreadOutputDTO],
-        filterIfThisUserHasSentMessages: Bool = true,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> Void
-    ) {
-        let threadCreatorUserIds = Array(Set(serverThreads
-            .compactMap({ $0.creatorPublicIdentifier })
-        ))
-        
-        var knownUsers = [UserIdentifier: Bool]()
-        do {
-            for senderId in threadCreatorUserIds {
-                knownUsers[senderId] = try SHKGQuery.isUserKnown(
-                    withIdentifier: senderId,
-                    by: self.remoteServer.requestor.identifier
-                )
-            }
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var messagesFromThisUserInThread = [String: Int]()
-        
-        let dispatchGroup = DispatchGroup()
-        for thread in serverThreads {
-            dispatchGroup.enter()
-            self.localServer.countMessages(
-                inAnchor: .thread,
-                anchorId: thread.threadId,
-                from: self.localServer.requestor.identifier
-            ) { result in
-                switch result {
-                case .success(let count):
-                    messagesFromThisUserInThread[thread.threadId] = count
-                case .failure:
-                    break
-                }
-                dispatchGroup.leave()
-            }
-        }
-        
-        dispatchGroup.notify(queue: .global()) {
-            var threadIdsToFilterOut = [String]()
-            
-            for thread in serverThreads {
-                if thread.creatorPublicIdentifier == self.remoteServer.requestor.identifier {
-                    continue
-                } else if thread.creatorPublicIdentifier == nil {
-                    continue
-                } else if filterIfThisUserHasSentMessages == false || (messagesFromThisUserInThread[thread.threadId] ?? 0) > 0 {
-                    continue
-                } else if (knownUsers[thread.creatorPublicIdentifier!] ?? false) == false {
-                    log.info("filtering thread \(thread.threadId) because thread creator \(thread.creatorPublicIdentifier!) is not a connection")
-                    threadIdsToFilterOut.append(thread.threadId)
-                }
-            }
-            
-            completionHandler(.success(
-                serverThreads.filter({ threadIdsToFilterOut.contains($0.threadId) == false })
-            ))
-        }
-    }
-    
-    internal func listThreads(
-        filteringUnknownUsers: Bool = true,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    ) {
-        self.remoteServer.listThreads { remoteResult in
-            switch remoteResult {
-            case .success(let serverThreads):
-                guard filteringUnknownUsers else {
-                    completionHandler(.success(serverThreads))
-                    return
-                }
-                
-                self.filterThreadsCreatedByUnknownUsers(serverThreads) { result in
-                    switch result {
-                    case .failure(let error):
-                        completionHandler(.failure(error))
-                    case .success(let filteredThreads):
-                        completionHandler(.success(filteredThreads))
+    internal func listThreads() async throws -> [ConversationThreadOutputDTO] {
+        return try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.listThreads { remoteResult in
+                switch remoteResult {
+                case .success(let serverThreads):
+                    continuation.resume(returning: serverThreads)
+                case .failure(let error):
+                    log.warning("failed to fetch threads from server. Returning local version. \(error.localizedDescription)")
+                    self.localServer.listThreads {
+                        localResult in
+                        switch localResult {
+                        case .success(let localThreads):
+                            continuation.resume(returning: localThreads)
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
                     }
                 }
-            case .failure(let error):
-                log.warning("failed to fetch threads from server. Returning local version. \(error.localizedDescription)")
-                self.listLocalThreads(completionHandler: completionHandler)
             }
         }
     }
     
     internal func listLocalThreads(
-        withIdentifiers threadIds: [String]? = nil,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    ) {
-        self.localServer.listThreads(
-            withIdentifiers: threadIds,
-            completionHandler: completionHandler
-        )
+        withIdentifiers threadIds: [String]? = nil
+    ) async throws -> [ConversationThreadOutputDTO]{
+        return try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.listThreads(
+                withIdentifiers: threadIds
+            ) { result in
+                switch result {
+                case .success(let list):
+                    continuation.resume(returning: list)
+                case .failure(let err):
+                    continuation.resume(throwing: err)
+                }
+            }
+        }
     }
     
     internal func getThread(
@@ -1551,30 +1481,26 @@ extension SHServerProxy {
         _ threadsToCreate: [ConversationThreadOutputDTO],
         localThreads: [ConversationThreadOutputDTO]? = nil
     ) async -> [ConversationThreadOutputDTO] {
-        await withUnsafeContinuation { continuation in
-            
-            var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
-            
-            if let localThreads {
-                let localThreadIds = localThreads.map({ $0.threadId })
-                notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
-            } else {
-                self.listLocalThreads(
+        
+        var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
+        
+        if let localThreads {
+            let localThreadIds = localThreads.map({ $0.threadId })
+            notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
+        } else {
+            do {
+                let localThreads = try await self.listLocalThreads(
                     withIdentifiers: threadsToCreate.map({ $0.threadId })
-                ) { getThreadsResult in
-                    
-                    switch getThreadsResult {
-                        
-                    case .failure(let failure):
-                        log.error("failed to get local threads when syncing. Assuming no threads on local. \(failure.localizedDescription)")
-                        
-                    case .success(let localThreads):
-                        let localThreadIds = localThreads.map({ $0.threadId })
-                        notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
-                    }
+                )
+                let localThreadIds = localThreads.map({ $0.threadId })
+                notYetOnLocal = threadsToCreate.filter { localThreadIds.contains($0.threadId) == false
                 }
+            } catch {
+                log.error("failed to get local threads when syncing. Assuming no threads on local. \(error.localizedDescription)")
             }
-            
+        }
+        
+        return await withUnsafeContinuation { continuation in
             let dispatchGroup = DispatchGroup()
             for threadToCreateLocally in notYetOnLocal {
                 dispatchGroup.enter()

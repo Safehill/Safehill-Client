@@ -20,16 +20,21 @@ public class SHInteractionsSyncOperation: Operation {
     let socket: WebSocketAPI
     
     let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
+    let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
     
-    public init(user: SHAuthenticatedLocalUser,
-                deviceId: String,
-                interactionsSyncDelegates: [SHInteractionsSyncingDelegate]) throws {
+    public init(
+        user: SHAuthenticatedLocalUser,
+        deviceId: String,
+        interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
+        userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+    ) throws {
         self.user = user
         self.deviceId = deviceId
         self.interactionsSyncDelegates = interactionsSyncDelegates
+        self.userConnectionsDelegates = userConnectionsDelegates
         self.socket = WebSocketAPI()
     }
     
@@ -88,6 +93,7 @@ public class SHInteractionsSyncOperation: Operation {
         }
         
         let interactionsSyncDelegates = self.interactionsSyncDelegates
+        let userConnectionsDelegates = self.userConnectionsDelegates
         
         self.delegatesQueue.async {
             
@@ -97,6 +103,32 @@ public class SHInteractionsSyncOperation: Operation {
                     return
                 }
                 self.log.debug("[ws] CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
+                
+                
+            case .connectionRequest:
+                guard let encoded = try? JSONDecoder().decode(WebSocketMessage.NewUserConnection.self, from: contentData) else {
+                    return
+                }
+                
+                let requestor = encoded.requestor
+                
+                guard let publicKeyData = requestor.publicKey.data(using: .utf8),
+                      let publicSignatureData = requestor.publicSignature.data(using: .utf8)
+                else {
+                    self.log.error("failed to decode user requesting a connection. Public key or signature can not be decoded")
+                    return
+                }
+                
+                let serverUser = SHRemoteUser(
+                    identifier: requestor.identifier,
+                    name: requestor.name,
+                    publicKeyData: publicKeyData, 
+                    publicSignatureData: publicSignatureData
+                )
+                
+                userConnectionsDelegates.forEach({
+                    $0.didReceiveAuthorizationRequest(from: serverUser)
+                })
                 
             case .message:
                 
@@ -171,12 +203,13 @@ public class SHInteractionsSyncOperation: Operation {
                     return
                 }
                 
-                self.syncThreads(
-                    remoteThreads: [threadOutputDTO],
-                    qos: .default
-                ) { _ in }
+                Task {
+                    await self.syncThreads(
+                        remoteThreads: [threadOutputDTO]
+                    )
+                }
                 
-            case .assetsShare:
+            case .threadAssetsShare, .groupAssetsShare:
                 
                 guard let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
@@ -187,7 +220,11 @@ public class SHInteractionsSyncOperation: Operation {
                 let threadAssets = threadAssetsWsMessage.assets
                 
                 interactionsSyncDelegates.forEach({
-                    $0.didReceivePhotoMessages(threadAssets, in: threadId)
+                    if message.type == .threadAssetsShare {
+                        $0.didReceivePhotoMessages(threadAssets, in: threadId)
+                    } else {
+                        $0.didReceivePhotos(threadAssets, in: threadId)
+                    }
                 })
             }
         }

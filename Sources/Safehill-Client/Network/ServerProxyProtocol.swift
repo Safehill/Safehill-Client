@@ -3,15 +3,11 @@ import Foundation
 internal protocol SHServerProxyProtocol {
     init(user: SHLocalUserProtocol)
     
-    func listThreads(
-        filteringUnknownUsers: Bool,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    )
+    func listThreads() async throws -> [ConversationThreadOutputDTO]
     
     func listLocalThreads(
-        withIdentifiers: [String]?,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    )
+        withIdentifiers threadIds: [String]?
+    ) async throws -> [ConversationThreadOutputDTO]
     
     func createOrUpdateThread(
         name: String?,

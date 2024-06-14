@@ -19,6 +19,15 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     )
 }
 
+public protocol SHUserConnectionRequestDelegate {
+    
+    /// Let the delegates know there's a connection request,
+    /// namely an unauthorized user trying to share content with this user
+    /// - Parameters
+    ///   - user: the `SHServerUser` requesting to connect
+    func didReceiveAuthorizationRequest(from user: any SHServerUser)
+}
+
 public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     func didUpdateThreadsList(_: [ConversationThreadOutputDTO])
     
@@ -27,8 +36,6 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func didAddThread(_: ConversationThreadOutputDTO)
     
-    func didReceiveTextMessagesFromUnauthorized(users: [any SHServerUser])
-    
     func didReceiveTextMessages(_ messages: [MessageOutputDTO],
                                 inGroup groupId: String)
     func didReceiveTextMessages(_: [MessageOutputDTO],
@@ -36,6 +43,9 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func didReceivePhotoMessages(_: [ConversationThreadAssetDTO], 
                                  in threadId: String)
+    
+    func didReceivePhotos(_: [ConversationThreadAssetDTO],
+                          in threadId: String)
     
     func reactionsDidChange(inThread threadId: String)
     func reactionsDidChange(inGroup groupId: String)
@@ -65,13 +75,6 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter completionHandler: called when handling is complete
     func didReceiveRemoteAssetDescriptors(_ descriptors: [any SHAssetDescriptor],
                                           referencing users: [UserIdentifier: any SHServerUser])
-    
-    /// Notifies there are assets to download from unknown users
-    /// - Parameters:
-    ///   - descriptors: the descriptors to authorize
-    ///   - users: the `SHServerUser` objects for user ids mentioned in the descriptors
-    func didReceiveAuthorizationRequest(for descriptors: [any SHAssetDescriptor],
-                                        referencing users: [UserIdentifier: any SHServerUser])
     
     /// Notifies about the start of a network download of a an asset from the CDN
     /// - Parameter downloadRequest: the request

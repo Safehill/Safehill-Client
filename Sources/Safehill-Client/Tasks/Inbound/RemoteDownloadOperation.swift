@@ -13,13 +13,12 @@ protocol SHDownloadOperation {}
 ///
 ///
 /// The steps are:
-/// 1. `fetchDescriptors(for:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
+/// 1. `fetchDescriptorsForItemsToDownload(filteringAssets:filteringGroups:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
 /// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered based on blacklisting of users or assets, "retrievability" of users, or if the asset upload status is neither `.started` nor `.partial`.
-/// Both known and unknwon users are included, but the delegate method `didReceiveRemoteAssetRemoteDescriptors(_:referencing:)` is called for the ones from "known" users. A known user is a user that is present in the knowledge graph and is also "retrievable", namely _this_ user can fetch its details from the server. This further segmentation is required because the delegate method `didReceiveAuthorizationRequest(for:referencing:)` is called for the "unknown" (aka still unauthorized) users
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
 ///     - for the assets shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
-///     - for the assets shared by from _other_ users, the authorization is requested for the "unknown" users, and the remaining assets ready for download are returned
-/// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt the ones from "known" authorized users and append to the unauthorized queue for the "uknown" users
+///     - for the assets shared by from _other_ users, the assets ready for download are returned
+/// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt them
 ///
 /// The pipeline sequence is:
 /// ```
@@ -56,9 +55,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    internal func fetchDescriptors(
-        for assetGlobalIdentifiers: [GlobalIdentifier]? = nil,
-        filteringGroups: [String]? = nil,
+    internal func fetchDescriptorsForItemsToDownload(
+        filteringAssets globalIdentifiers: [GlobalIdentifier]? = nil,
+        filteringGroups groupIds: [String]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
@@ -66,8 +65,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// Descriptors serve as a manifest to determine what to download.
         ///
         self.serverProxy.getRemoteAssetDescriptors(
-            for: (assetGlobalIdentifiers?.isEmpty ?? true) ? nil : assetGlobalIdentifiers!,
-            filteringGroups: filteringGroups,
+            for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
+            filteringGroups: groupIds,
             after: Self.lastFetchDate
         ) { remoteResult in
             switch remoteResult {
@@ -110,7 +109,13 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///
     /// Takes the full list of descriptors from server (remote or local, depending on whether it's running as part of the
     /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
-    /// Filters out the blacklisted assets and users, as well as the non-completed uploads.
+    ///
+    ///
+    /// Filters out
+    /// - the ones referencing blacklisted assets (items that have been tried to download too many times),
+    /// - the ones where any of the users referenced can't be retrieved
+    /// - the ones for which the upload hasn't started
+    ///
     /// Call the delegate with the full manifest of assets shared by OTHER users, regardless of the limit on the task config) for the assets.
     /// Returns the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
     ///
@@ -123,10 +128,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         _ descriptors: [any SHAssetDescriptor],
         fromRemote: Bool,
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<(
-                fromRetrievableUsers: [GlobalIdentifier: any SHAssetDescriptor],
-                fromKnownUsers: [GlobalIdentifier]
-            ), Error>
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>
         ) -> Void
     ) {
         
@@ -138,17 +140,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         Task(priority: qos.toTaskPriority()) {
             let globalIdentifiers = Array(Set(descriptors.map({ $0.globalIdentifier })))
-            var senderIds = Array(Set(descriptors.map({ $0.sharingInfo.sharedByUserIdentifier })))
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
                 assetGlobalIdentifiers: globalIdentifiers
-            )
-            let blacklistedUsers = await SHDownloadBlacklist.shared.areBlacklisted(
-                userIdentifiers: senderIds
             )
             
             let filteredDescriptors = descriptors.filter {
                 (blacklistedAssets[$0.globalIdentifier] ?? false) == false
-                && (blacklistedUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false) == false
                 && $0.uploadState == .completed || $0.uploadState == .partial
             }
             
@@ -165,7 +162,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         })
                     }
                 }
-                completionHandler(.success((fromRetrievableUsers: [:], fromKnownUsers: [])))
+                completionHandler(.success([:]))
                 return
             }
             
@@ -197,28 +194,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         return true
                     }
                     
-                    /// When calling the delegate method `didReceiveLocalAssetDescriptors(_:referencing:)`
-                    /// or `didReceiveRemoteAssetDescriptors(_:referencing:)` filter out the ones whose sender is unknown.
-                    /// The delegate method `didReceiveAuthorizationRequest(for:referencing:)` will take care of those.
-                    senderIds = Array(Set(filteredDescriptorsFromRetrievableUsers.map({ $0.sharingInfo.sharedByUserIdentifier })))
-                    var knownUsers = [UserIdentifier: Bool]()
-                    do {
-                        for senderId in senderIds {
-                            knownUsers[senderId] = try SHKGQuery.isUserKnown(withIdentifier: senderId, by: self.user.identifier)
-                        }
-                    }
-                    catch {
-                        self.log.critical("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating download operation early. \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                        return
-                    }
-                    
-                    let descriptorsFromKnownUsers = filteredDescriptorsFromRetrievableUsers.filter {
-                        knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
-                    }
-                    
                     ///
-                    /// Call the delegate with the full manifest of whitelisted assets **ONLY for the assets shared by other known users**.
+                    /// Call the delegate with the full manifest of whitelisted assets.
                     /// The ones shared by THIS user will be restored through the restoration delegate.
                     ///
                     let userDictsImmutable = usersDict
@@ -227,14 +204,14 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         if fromRemote {
                             downloaderDelegates.forEach({
                                 $0.didReceiveRemoteAssetDescriptors(
-                                    descriptorsFromKnownUsers,
+                                    filteredDescriptorsFromRetrievableUsers,
                                     referencing: userDictsImmutable
                                 )
                             })
                         } else {
                             downloaderDelegates.forEach({
                                 $0.didReceiveLocalAssetDescriptors(
-                                    descriptorsFromKnownUsers,
+                                    filteredDescriptorsFromRetrievableUsers,
                                     referencing: userDictsImmutable
                                 )
                             })
@@ -251,10 +228,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                             break
                         }
                     }
-                    completionHandler(.success((
-                        fromRetrievableUsers: descriptorsByGlobalIdentifier,
-                        fromKnownUsers: descriptorsFromKnownUsers.map({ $0.globalIdentifier })
-                    )))
+                    completionHandler(.success(descriptorsByGlobalIdentifier))
                 }
             }
         }
@@ -321,141 +295,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 }
                 
                 completionHandler(.success(filteredGlobalIdentifiers))
-            }
-        }
-    }
-    
-    ///
-    /// For downloads waiting explicit authorization:
-    /// - descriptors are added to the unauthorized download queue
-    /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
-    /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
-    ///
-    /// When the authorization comes (via `SHAssetDownloadController::authorizeDownloads(for:completionHandler:)`):
-    /// - the downloads will move from the unauthorized to the authorized queue
-    /// - the delegate method `handleAssetDescriptorResults(for:user:)` is called
-    ///
-    private func waitForAuthorization(
-        _ unauthorizedDownloadDescriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard unauthorizedDownloadDescriptors.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        let downloadsManager = SHAssetsDownloadManager(user: self.user)
-        downloadsManager.waitForDownloadAuthorization(forDescriptors: unauthorizedDownloadDescriptors) { result in
-            switch result {
-            case .failure(let error):
-                if case SHBackgroundOperationError.alreadyProcessed = error {
-                    // TODO: When running on a cron, avoid notifying delegates about authorizations over and over
-                    break
-                } else {
-                    self.log.critical("[\(type(of: self))] failed to enqueue unauthorized download for \(unauthorizedDownloadDescriptors.count) descriptors. \(error.localizedDescription). This operation will be attempted again")
-                }
-            default:
-                break
-            }
-            
-            var userIdentifiers = Set(unauthorizedDownloadDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
-            userIdentifiers.formUnion(Set(unauthorizedDownloadDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier }))
-            
-            SHUsersController(localUser: self.user).getUsers(
-                withIdentifiers: Array(userIdentifiers)
-            ) { result in
-                switch result {
-                case .failure(let error):
-                    self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
-                    completionHandler(.failure(error))
-                case .success(let usersDict):
-                    let downloaderDelegates = self.downloaderDelegates
-                    self.delegatesQueue.async {
-                        downloaderDelegates.forEach({
-                            $0.didReceiveAuthorizationRequest(
-                                for: unauthorizedDownloadDescriptors,
-                                referencing: usersDict
-                            )
-                        })
-                    }
-                    completionHandler(.success(()))
-                }
-            }
-        }
-    }
-    
-    ///
-    /// Request authorization for the ones that need authorization, and return the assets that are authorized to start downloading.
-    /// A download needs explicit authorization from the user if the sender has never shared an asset with this user before.
-    /// Once the link is established, all other downloads won't need authorization.
-    ///
-    /// - Parameter descriptorsByGlobalIdentifier: the descriptors keyed by their global identifier
-    /// - Parameter completionHandler: the callback method, returning the descriptors that are ready to be downloaded
-    private func checkIfAuthorizationRequired(
-        forAssetsIn descriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
-    ) {
-        guard descriptors.count > 0 else {
-            completionHandler(.success([]))
-            return
-        }
-        
-        /// 
-        /// This method is called for every download cycle.
-        /// Once a user that is "uknown" is enqueued for authorization, we don't need to re-add them to the queue (although it would be replaced, not appended)
-        /// For known users, that don't need authorization, nothing will be filtered out by the following filter if the user is not in the unauthorized queue.
-        /// In other words, we expect descriptors for a "known" user to always pass the condition below.
-        ///
-        let notEnqueuedAsUnauthorized = descriptors.filter { descriptor in
-            (try? SHAssetsDownloadManager.unauthorizedDownloads(for: descriptor.sharingInfo.sharedByUserIdentifier))?.isEmpty ?? true
-            // If current unauth status can't be feched safely re-add them to the unauthorized queue as needed (hence, default to true)
-        }
-        self.log.info("[\(type(of: self))] of \(descriptors.count) \(notEnqueuedAsUnauthorized.count) have already been enqueued as unauthorized")
-        
-        guard notEnqueuedAsUnauthorized.count > 0 else {
-            completionHandler(.success([]))
-            return
-        }
-        
-        /// 
-        /// For the ones that are not already marked as unauthorized (all descriptors MINUS unauthorized)
-        /// - check if the user is known (if not known, add them to the unauthorized queue)
-        /// - return the rest so they can be downloaded
-        ///
-        let senderIds = notEnqueuedAsUnauthorized.map({ $0.sharingInfo.sharedByUserIdentifier })
-        var knownUsers = [UserIdentifier: Bool]()
-        do {
-            for senderId in senderIds {
-                knownUsers[senderId] = try SHKGQuery.isUserKnown(withIdentifier: senderId, by: self.user.identifier)
-            }
-        }
-        catch {
-            log.error("[\(type(of: self))] failed to read from the graph to fetch \"known user\" information. Terminating authorization request operation early. \(error.localizedDescription)")
-            completionHandler(.failure(error))
-            return
-        }
-        
-        var mutableDescriptors = notEnqueuedAsUnauthorized
-        let partitionIndex = mutableDescriptors.partition {
-            knownUsers[$0.sharingInfo.sharedByUserIdentifier] ?? false
-        }
-        let unauthorizedDownloadDescriptors = Array(mutableDescriptors[..<partitionIndex])
-        let authorizedDownloadDescriptors = Array(mutableDescriptors[partitionIndex...])
-        
-        self.log.info("[\(type(of: self))] of \(notEnqueuedAsUnauthorized.count) need to authorize \(unauthorizedDownloadDescriptors.count), can download \(authorizedDownloadDescriptors.count)")
-        
-        self.waitForAuthorization(unauthorizedDownloadDescriptors) { result in
-            switch result {
-            case .failure(let error):
-                completionHandler(.failure(error))
-            case .success:
-                ///
-                /// For downloads that don't need authorization:
-                /// - the delegate method `handleDownloadAuthorization(ofDescriptors:users:)` is called
-                /// - descriptors are returned
-                /// - the index of assets to authorized per user is updated (userStore, keyed by `auth-<USER_ID>`)
-                ///
-                completionHandler(.success(authorizedDownloadDescriptors))
             }
         }
     }
@@ -784,7 +623,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         ///
         /// FOR THE ASSETS SHARED BY THIS USER
-        /// Because assets that are already in the local server are filtered out by when this method is called (by `fetchDescriptors` of `SHRemoteDownloadOperation`, we only deal with assets that:
+        /// Because assets that are already in the local server are filtered out by the time this method 
+        /// is called (by `fetchDescriptorsForItemsToDownload(filteringAssets:filteringGroups:)`,
+        /// we only deal with assets that:
         /// - are shared by THIS user
         /// - are not in the local server
         ///
@@ -804,7 +645,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         
         /// 
-        /// (1)
+        /// SUBCASE (1)
         ///
         
         var restorationError: Error? = nil
@@ -831,7 +672,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             }
             
             ///
-            /// (2)
+            /// SUBCASE (2)
             ///
             
             /// Collect all items ready to download, starting from the ones shared by self
@@ -843,39 +684,19 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             /// - not shared by self
             /// - not in the Apple Photos Library
             ///
-            /// If any of them is from an "unknown" user (a user you never received anything from) they require authorization.
-            /// If they do, the `checkIfAuthorizationRequired(forAssetsIn:completionHandler:)` adds them
-            /// to a special queue for authorization.
-            /// For the rest (from "known" users), this method returns their descriptor as "ready to download".
-            /// Those ready to download will be sent back to the caller to start download and decryption. In particular:
+            /// The descriptors ready to download will be returned to the caller to start download and decryption. In particular:
             /// - When run on a `SHRemoteDownloadOperation`, the caller eventually calls `downloadAssets(for:completionHandler:)` using this list to dowload them from remote server and decrypt.
-            /// - When run on a `SHLocalDownloadOperation`, the caller calls
-            /// `decryptFromLocalStore(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`
+            /// - When run on a `SHLocalDownloadOperation`, the caller calls `decryptFromLocalStore(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`
             /// which is performing the decryption from the local store (downloading from local doesn't make sense)
             ///
             
-            group.enter()
-            self.checkIfAuthorizationRequired(
-                forAssetsIn: sharedByOthersGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
-            ) { result in
-                switch result {
-                case .success(let descs):
-                    /// Add the ones shared by others that can be downloaded to the "ready to download" set
-                    descriptorsReadyToDownload.append(contentsOf: descs)
-                case .failure(let failure):
-                    errors.append(failure)
+            descriptorsReadyToDownload.append(
+                contentsOf: sharedByOthersGlobalIdentifiers.compactMap {
+                    descriptorsByGlobalIdentifier[$0]
                 }
-                group.leave()
-            }
+            )
             
-            group.notify(queue: DispatchQueue.global(qos: qos)) {
-                if errors.count > 0 {
-                    self.log.error("[\(type(of: self))] failed downloading assets with errors: \(errors.map({ $0.localizedDescription }).joined(separator: ","))")
-                    completionHandler(.failure(errors.first!))
-                } else {
-                    completionHandler(.success(descriptorsReadyToDownload))
-                }
-            }
+            completionHandler(.success(descriptorsReadyToDownload))
         }
     }
     
@@ -885,6 +706,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ) {
         guard descriptors.count > 0 else {
             completionHandler(.success([]))
+            return
+        }
+        
+        guard let authedUser = self.user as? SHAuthenticatedLocalUser else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
         }
         
@@ -920,7 +746,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             }
             
             dispatchGroup.enter()
-            SHAssetsDownloadManager(user: self.user).downloadAsset(for: descriptor) {
+            SHAssetsDownloadManager(user: authedUser).downloadAsset(for: descriptor) {
                 result in
                 
                 switch result {
@@ -985,7 +811,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     }
     
     private func process(
-        _ remoteOnly: [any SHAssetDescriptor],
+        _ descriptorsForItemsToDownload: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
@@ -994,9 +820,13 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded after filtering
         ///
         
-        self.log.debug("[\(type(of: self))] original descriptors: \(remoteOnly.count)")
+        self.log.debug("[\(type(of: self))] original descriptors: \(descriptorsForItemsToDownload.count)")
         
-        self.processDescriptors(remoteOnly, fromRemote: true, qos: qos) { descResult in
+        self.processDescriptors(
+            descriptorsForItemsToDownload,
+            fromRemote: true,
+            qos: qos
+        ) { descResult in
             
             switch descResult {
                 
@@ -1004,11 +834,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 self.log.error("[\(type(of: self))] failed to download descriptors: \(err.localizedDescription)")
                 completionHandler(.failure(err))
                 
-            case .success(let val):
-                let filteredDescriptorsByAssetGid = val.fromRetrievableUsers
+            case .success(let filteredDescriptorsByAssetGid):
                 
 #if DEBUG
-                let delta = Set(remoteOnly.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
+                let delta = Set(descriptorsForItemsToDownload.map({ $0.globalIdentifier })).subtracting(filteredDescriptorsByAssetGid.keys)
                 self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptorsByAssetGid.count). delta=\(delta)")
 #endif
                 
@@ -1095,16 +924,18 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
         
         DispatchQueue.global(qos: qos).async {
-            self.fetchDescriptors(
-                for: assetGlobalIdentifiers,
+            self.fetchDescriptorsForItemsToDownload(
+                filteringAssets: assetGlobalIdentifiers,
                 filteringGroups: groupIds
             ) {
                 (result: Result<([any SHAssetDescriptor]), Error>) in
                 switch result {
-                case .success(let onlyRemoteDescriptors):
-                    self.process(onlyRemoteDescriptors, qos: qos) { result in
-                        handleResult(result)
-                    }
+                case .success(let descriptorsForItemsToDownload):
+                    self.process(
+                        descriptorsForItemsToDownload,
+                        qos: qos,
+                        completionHandler: handleResult
+                    )
                 case .failure(let error):
                     handleResult(.failure(error))
                 }
