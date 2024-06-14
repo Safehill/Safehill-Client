@@ -366,7 +366,31 @@ extension SHServerProxy {
         self.remoteServer.registerDevice(deviceId, token: token, completionHandler: completionHandler)
     }
 }
- 
+
+extension SHServerProxy {
+    
+    // MARK: - User Connections / Authorizations
+    
+    func authorizeUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.authorizeUsers(with: userPublicIdentifiers, completionHandler: completionHandler)
+    }
+    
+    func blockUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.blockUsers(with: userPublicIdentifiers, completionHandler: completionHandler)
+    }
+    
+    func pendingOrBlockedUsers(
+        completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
+    ) {
+        self.remoteServer.pendingOrBlockedUsers(completionHandler: completionHandler)
+    }
+}
 
 extension SHServerProxy {
     

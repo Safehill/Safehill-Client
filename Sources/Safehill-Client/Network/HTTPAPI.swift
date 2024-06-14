@@ -540,6 +540,46 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
     }
+    
+    func authorizeUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let parameters = [
+            "userPublicIdentifiers": userPublicIdentifiers
+        ]
+        self.post("users/authorize", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func blockUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let parameters = [
+            "userPublicIdentifiers": userPublicIdentifiers
+        ]
+        self.post("users/block", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func pendingOrBlockedUsers(
+        completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
+    ) {
+        self.post("users/authorization-status", parameters: nil, completionHandler: completionHandler)
+    }
 
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],

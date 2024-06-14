@@ -67,6 +67,23 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func searchUsers(query: String, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
     
+    
+    // MARK: User Connection Management
+    
+    func authorizeUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func blockUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func pendingOrBlockedUsers(
+        completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
+    )
+    
     // MARK: Assets Management
     
     /// Count how many assets were created by this user

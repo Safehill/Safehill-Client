@@ -441,6 +441,26 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
+    func authorizeUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func blockUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func pendingOrBlockedUsers(
+        completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func getAssetDescriptors(
         after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
