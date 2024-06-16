@@ -371,21 +371,21 @@ extension SHServerProxy {
     
     // MARK: - User Connections / Authorizations
     
-    func authorizeUsers(
+    public func authorizeUsers(
         with userPublicIdentifiers: [String],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.remoteServer.authorizeUsers(with: userPublicIdentifiers, completionHandler: completionHandler)
     }
     
-    func blockUsers(
+    public func blockUsers(
         with userPublicIdentifiers: [String],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.remoteServer.blockUsers(with: userPublicIdentifiers, completionHandler: completionHandler)
     }
     
-    func pendingOrBlockedUsers(
+    public func pendingOrBlockedUsers(
         completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
     ) {
         self.remoteServer.pendingOrBlockedUsers(completionHandler: completionHandler)
