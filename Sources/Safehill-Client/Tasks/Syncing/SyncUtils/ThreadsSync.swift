@@ -9,7 +9,7 @@ extension SHInteractionsSyncOperation {
     ///
     /// - Parameter qos: the quality of service
     /// - Returns: the list of threads from known users
-    internal func syncThreads(
+    public func syncThreads(
         qos: DispatchQoS.QoSClass
     ) async throws {
         
