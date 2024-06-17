@@ -1,6 +1,6 @@
 import Foundation
 
 public struct UserAuthorizationStatusDTO: Codable {
-    let pending: [UserDTO]
-    let blocked: [UserDTO]
+    public let pending: [SHRemoteUser]
+    public let blocked: [SHRemoteUser]
 }

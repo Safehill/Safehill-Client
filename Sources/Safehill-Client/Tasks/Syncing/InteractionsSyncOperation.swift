@@ -112,18 +112,11 @@ public class SHInteractionsSyncOperation: Operation {
                 
                 let requestor = encoded.requestor
                 
-                guard let publicKeyData = requestor.publicKey.data(using: .utf8),
-                      let publicSignatureData = requestor.publicSignature.data(using: .utf8)
-                else {
-                    self.log.error("failed to decode user requesting a connection. Public key or signature can not be decoded")
-                    return
-                }
-                
                 let serverUser = SHRemoteUser(
                     identifier: requestor.identifier,
                     name: requestor.name,
-                    publicKeyData: publicKeyData, 
-                    publicSignatureData: publicSignatureData
+                    publicKeyData: requestor.publicKeyData,
+                    publicSignatureData: requestor.publicSignatureData
                 )
                 
                 userConnectionsDelegates.forEach({

@@ -50,6 +50,6 @@ public struct WebSocketMessage: Codable {
     }
     
     struct NewUserConnection: Codable {
-        let requestor: UserDTO
+        let requestor: SHRemoteUser
     }
 }
