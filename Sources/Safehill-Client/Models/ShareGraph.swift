@@ -6,7 +6,6 @@ public enum SHKGPredicate: String {
     case localAssetIdEquivalent = "localAssetIdEquivalent"
     case shares = "shares"
     case sharedWith = "sharedWith"
-    case authorized = "authorized"
 }
 
 var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
@@ -15,107 +14,6 @@ var UserIdToAssetGidSharedWithCache = [UserIdentifier: Set<GlobalIdentifier>]()
 public struct SHKGQuery {
     
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
-    
-    /// Determines which user is known.
-    ///
-    ///
-    /// The definition of a known user is:
-    /// - At least one asset has been shared previously from this user to the other user
-    /// - At least one asset has been shared previously from the other user to this user
-    /// - An explicit authorization record exists
-    ///
-    /// - Parameters:
-    ///   - userId: the user identifiers to check
-    ///   - by: who is asking?
-    /// - Returns: the "known" value
-    public static func isUserKnown(
-        withIdentifier userId: UserIdentifier,
-        by thisUserIdentifier: UserIdentifier
-    ) throws -> Bool {
-        if userId == thisUserIdentifier {
-            /// Checking whether SELF knows SELF returns true
-            return true
-        }
-        
-        /// An asset is shared by any of the users with this user, and recorded in the graph -> KNOWN
-        let sharedBy = try SHKGQuery.assetGlobalIdentifiers(
-            sharedBy: [userId],
-            with: [thisUserIdentifier],
-            filterOutInProgress: false
-        )
-        /// An asset is shared by this user with any of the users, and recorded in the graph -> KNOWN
-        let sharedWith = try SHKGQuery.assetGlobalIdentifiers(
-            sharedWith: [userId],
-            by: thisUserIdentifier
-        )
-        
-        for (_, uid) in sharedBy {
-            if uid == userId {
-                return true
-            }
-        }
-        
-        for (_, uids) in sharedWith {
-            for uid in uids {
-                if uid == userId {
-                    return true
-                }
-            }
-        }
-        
-        var result = false
-        
-        /// An explicit authorization record exists for user -> KNOWN
-        try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.sharedInstance.graph else {
-                throw KBError.databaseNotReady
-            }
-            
-            let condition = KBTripleCondition(
-                subject: thisUserIdentifier,
-                predicate: SHKGPredicate.authorized.rawValue,
-                object: userId
-            )
-            if try graph.triples(matching: condition).isEmpty == false {
-                result = true
-            }
-        }
-        
-        return result
-    }
-    
-    internal static func recordExplicitAuthorization(
-        by authorizer: UserIdentifier,
-        for authorizee: UserIdentifier
-    ) throws {
-        try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.sharedInstance.graph else {
-                throw KBError.databaseNotReady
-            }
-            
-            try graph.entity(withIdentifier: authorizer)
-                .link(
-                    to: graph.entity(withIdentifier: authorizee),
-                    withPredicate: SHKGPredicate.authorized.rawValue
-                )
-        }
-    }
-    
-    internal static func removeExplicitAuthorizationRecord(
-        for authorizee: UserIdentifier
-    ) throws {
-        try readWriteGraphQueue.sync(flags: .barrier) {
-            guard let graph = SHDBManager.sharedInstance.graph else {
-                throw KBError.databaseNotReady
-            }
-            
-            try graph.removeTriples(matching: KBTripleCondition(
-                subject: nil,
-                predicate: SHKGPredicate.authorized.rawValue,
-                object: authorizee
-            ))
-        }
-    }
     
     internal static func ingest(_ descriptors: [any SHAssetDescriptor], receiverUserId: UserIdentifier) throws {
         var errors = [Error]()

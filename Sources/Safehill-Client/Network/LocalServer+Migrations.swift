@@ -113,20 +113,12 @@ extension LocalServer {
                         let relevantRemoteDescriptors = remoteDescriptors.filter({ uniqueAssetGidsChunk.contains($0.globalIdentifier) })
                         
                         let sendersInBatch = Array(Set(relevantRemoteDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })))
-                        var knownUsersInBatch = [UserIdentifier: Bool]()
-                        for senderId in sendersInBatch {
-                            knownUsersInBatch[senderId] = try SHKGQuery.isUserKnown(withIdentifier: senderId, by: self.requestor.identifier)
-                        }
                         
                         ///
                         /// Additions and Edits
                         ///
                         for remoteDescriptor in relevantRemoteDescriptors {
                             let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
-                            
-                            guard (knownUsersInBatch[sender] ?? false) == true else {
-                                continue
-                            }
                             
                             let assetGid = remoteDescriptor.globalIdentifier
                             

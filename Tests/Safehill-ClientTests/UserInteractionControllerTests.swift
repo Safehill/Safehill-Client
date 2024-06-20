@@ -215,36 +215,28 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.deleteGroup(groupId: groupId, completionHandler: completionHandler)
     }
     
-    func listThreads(
-        filteringUnknownUsers: Bool,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
-    ) {
-        do {
-            let threads: [ConversationThreadOutputDTO] = try self.state.threads?.map { mockThread in
-                let encryptionDetails = mockThread.encryptionDetails
-                guard let selfEncryptionDetails = encryptionDetails.first(where: { $0.recipientUserIdentifier == self.localServer.requestor.identifier }) else {
-                    throw SHHTTPError.ClientError.badRequest("thread encryption details were not set up for some threads yet on the mock server")
-                }
-                return ConversationThreadOutputDTO(
-                    threadId: mockThread.threadId,
-                    name: mockThread.name,
-                    creatorPublicIdentifier: mockThread.creatorId,
-                    membersPublicIdentifier: mockThread.userIds,
-                    createdAt: Date().iso8601withFractionalSeconds,
-                    lastUpdatedAt: Date().iso8601withFractionalSeconds,
-                    encryptionDetails: selfEncryptionDetails
-                )
-            } ?? []
-            completionHandler(.success(threads))
-        } catch {
-            completionHandler(.failure(error))
-        }
+    func listThreads() async throws -> [ConversationThreadOutputDTO] {
+        return try self.state.threads?.map { mockThread in
+            let encryptionDetails = mockThread.encryptionDetails
+            guard let selfEncryptionDetails = encryptionDetails.first(where: { $0.recipientUserIdentifier == self.localServer.requestor.identifier }) else {
+                throw SHHTTPError.ClientError.badRequest("thread encryption details were not set up for some threads yet on the mock server")
+            }
+            return ConversationThreadOutputDTO(
+                threadId: mockThread.threadId,
+                name: mockThread.name,
+                creatorPublicIdentifier: mockThread.creatorId,
+                membersPublicIdentifier: mockThread.userIds,
+                createdAt: Date().iso8601withFractionalSeconds,
+                lastUpdatedAt: Date().iso8601withFractionalSeconds,
+                encryptionDetails: selfEncryptionDetails
+            )
+        } ?? []
     }
     
     func listLocalThreads(
-        withIdentifiers threadIds: [String]?,
-        completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()) {
-        self.listThreads(filteringUnknownUsers: false, completionHandler: completionHandler)
+        withIdentifiers threadIds: [String]?
+    ) async throws -> [ConversationThreadOutputDTO] {
+        try await self.listThreads()
     }
     
     func createOrUpdateThread(name: String?, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()) {

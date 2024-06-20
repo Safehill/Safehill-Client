@@ -152,7 +152,7 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
                         /// ** !!!!!!!!!! **
                         /// ** !!!!!!!!!! **
                         /// ** !!!!!!!!!! **
-        //                try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
+                        //                try SHUsersController(localUser: self.user).deleteUsers(withIdentifiers: uIdsToRemoveFromLocal)
                     } catch {
                         self.log.warning("error removing local users, but this operation will be retried")
                     }
@@ -175,30 +175,6 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
                     assetsDelegates.forEach({
                         $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
                     })
-                }
-                
-                ///
-                /// Remove all users that don't exist on the server from any blacklist
-                ///
-                /// If a user that was in the blacklist no longer exists on the server
-                /// that user can be safely removed from the blacklist,
-                /// as well as all downloads from that user currently awaiting authorization
-                ///
-                Task(priority: qos.toTaskPriority()) {
-                    await SHDownloadBlacklist.shared.removeFromBlacklistIfNotIn(
-                        userIdentifiers: userIdsInRemoteDescriptors
-                    )
-                }
-                
-                do {
-                    try SHAssetsDownloadManager.cleanEntriesNotIn(
-                        allSharedAssetIds: Array(assetIdToUserIds.keys),
-                        allUserIds: userIdsInRemoteDescriptors
-                    )
-                    completionHandler(.success(()))
-                } catch {
-                    self.log.error("failed to clean up download queues and index on deleted assets: \(error.localizedDescription)")
-                    completionHandler(.failure(error))
                 }
             }
         }

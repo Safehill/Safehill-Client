@@ -441,6 +441,26 @@ struct LocalServer : SHServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
+    func authorizeUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func blockUsers(
+        with userPublicIdentifiers: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func pendingOrBlockedUsers(
+        completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func getAssetDescriptors(
         after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
@@ -2337,28 +2357,6 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.success(()))
             case .failure(let err):
                 completionHandler(.failure(err))
-            }
-        }
-    }
-    
-    func countMessages(
-        inAnchor anchor: SHInteractionAnchor,
-        anchorId: String,
-        from userId: UserIdentifier,
-        completionHandler: @escaping (Result<Int, Error>) -> ()
-    ) {
-        guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        let condition = KBGenericCondition(.beginsWith, value: "\(anchor.rawValue)::\(anchorId)::\(userId)")
-        messagesQueue.keys(matching: condition) { messagesResult in
-            switch messagesResult {
-            case .success(let messagesKeys):
-                completionHandler(.success(messagesKeys.count))
-            case .failure(let error):
-                completionHandler(.failure(error))
             }
         }
     }

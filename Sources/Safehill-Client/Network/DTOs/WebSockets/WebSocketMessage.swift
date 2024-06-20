@@ -8,7 +8,9 @@ public struct WebSocketMessage: Codable {
         case reactionAdd = "reaction-add"
         case reactionRemove = "reaction-remove"
         case threadAdd = "thread-add"
-        case assetsShare = "assets-share"
+        case threadAssetsShare = "thread-assets-share"
+        case groupAssetsShare = "group-assets-share"
+        case connectionRequest = "connection-request"
     }
     
     let type: MessageType
@@ -45,5 +47,9 @@ public struct WebSocketMessage: Codable {
     struct ThreadAssets: Codable {
         let threadId: String
         let assets: [ConversationThreadAssetDTO]
+    }
+    
+    struct NewUserConnection: Codable {
+        let requestor: SHRemoteUser
     }
 }
