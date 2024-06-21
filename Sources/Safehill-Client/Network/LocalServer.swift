@@ -1771,48 +1771,14 @@ struct LocalServer : SHServerAPI {
                 if let serverThread {
                     do {
                         ///
-                        /// Retrieve all assets shared with the people in this thread
-                        /// (regardless if they are photo messages)
-                        /// then filter out the photo messages
-                        ///
-                        var otherAssets = [UsersGroupAssetDTO]()
-                        
-                        do {
-                            var triples = try SHKGQuery.assetGlobalIdentifiers(
-                                amongst: serverThread.membersPublicIdentifier,
-                                requestingUserId: self.requestor.identifier
-                            )
-                            for assetsGid in triples.keys {
-                                triples.removeValue(forKey: assetsGid)
-                            }
-                            
-                            otherAssets = triples.compactMap {
-                                let gid = $0.key
-                                for (predicate, userId) in $0.value {
-                                    if predicate == SHKGPredicate.shares {
-                                        let senderId = userId
-                                        return UsersGroupAssetDTO(
-                                            globalIdentifier: gid,
-                                            addedByUserIdentifier: senderId,
-                                            addedAt: Date().iso8601withFractionalSeconds // TODO: How do we retrieve this date from the graph?
-                                        )
-                                    }
-                                }
-                                return nil
-                            }
-                        } catch {
-                            log.critical("failed to fetch or parse photo sharing information from the graph")
-                        }
-                        
-                        ///
                         /// Get the photo messages in this thread,
-                        /// previously synced by the `SHInteractionSyncOperation`
+                        /// previously synced by the method `LocalServer::cache(_:in)`
                         ///
                         let photoMessages = try userStore
                             .values(
                                 forKeysMatching: KBGenericCondition(
                                     .beginsWith,
-                                    value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets"
+                                    value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessages"
                                 )
                             )
                             .compactMap { (value: Any) -> ConversationThreadAssetDTO? in
@@ -1825,6 +1791,30 @@ struct LocalServer : SHServerAPI {
                                     return nil
                                 }
                                 return photoMessage.toDTO()
+                            }
+                        
+                        ///
+                        /// Retrieve all assets shared with the people in this thread
+                        /// (regardless if they are photo messages)
+                        /// then filter out the photo messages
+                        ///
+                        let otherAssets = try userStore
+                            .values(
+                                forKeysMatching: KBGenericCondition(
+                                    .beginsWith,
+                                    value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessages"
+                                )
+                            )
+                            .compactMap { (value: Any) -> UsersGroupAssetDTO? in
+                                guard let data = value as? Data else {
+                                    log.critical("unexpected non-data non-photo-message in thread \(threadId)")
+                                    return nil
+                                }
+                                guard let otherAsset = try? UsersGroupAssetClass.fromData(data) else {
+                                    log.critical("failed to decode photo message in thread \(threadId)")
+                                    return nil
+                                }
+                                return otherAsset.toDTO()
                             }
                         
                         let result = ConversationThreadAssetsDTO(

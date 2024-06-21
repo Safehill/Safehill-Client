@@ -164,20 +164,13 @@ extension LocalServer {
         }
     }
     
-    /// Run migration of data in local databases
-    /// - Parameters:
-    ///   - currentBuild: the current client build, if available
-    ///   - completionHandler: the callback
-    public func runDataMigrations(
+    ///
+    /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
+    ///
+    private func runAssetDataMigration(
         currentBuild: Int?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
-        dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
-        
-        ///
-        /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
-        ///
-        
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             log.warning("failed to connect to the local asset store")
             completionHandler(.failure(KBError.databaseNotReady))
@@ -186,13 +179,9 @@ extension LocalServer {
         
         var assetIdentifiers = Set<String>()
         
-        // Low Res migrations
+        /// Low Res migrations
         var condition = KBGenericCondition(.beginsWith, value: "low::")
         
-        let group = DispatchGroup()
-        var errors = [Error]()
-        
-        group.enter()
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
             case .success(let keyValues):
@@ -206,57 +195,117 @@ extension LocalServer {
                     let _ = try self.moveDataToNewKeyFormat(for: keyValues)
                 } catch {
                     log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
-                    errors.append(error)
+                    completionHandler(.failure(error))
+                    return
                 }
+                
+                /// Hi Res migrations
+                condition = KBGenericCondition(.beginsWith, value: "hi::")
+                
+                assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
+                    switch result {
+                    case .success(let keyValues):
+                        let relevantKeyValues = keyValues.filter {
+                            for assetIdentifier in assetIdentifiers {
+                                if $0.key.hasSuffix("::\(assetIdentifier)") {
+                                    return true
+                                }
+                            }
+                            return false
+                        }
+                        do {
+                            if relevantKeyValues.count > 0 {
+                                let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                            }
+                        } catch {
+                            log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
+                            completionHandler(.failure(error))
+                        }
+                        
+                        completionHandler(.success(()))
+                        
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+                
             case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    ///
+    /// Photo messages in threads used to be cached under the `user-thread::<thread_id>::assets`
+    /// and now are cached under `user-thread::<thread_id>::assets::photoMessages`,
+    /// alongside `user-thread::<thread_id>::assets::nonPhotoMessages`.
+    /// Simply remove the old keys
+    ///
+    func runAssetThreadsMigration(
+        currentBuild: Int?,
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            log.warning("failed to connect to the local user store")
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let condition = KBGenericCondition(
+            .beginsWith,
+            value: SHInteractionAnchor.thread.rawValue + "::"
+        ).and(KBGenericCondition(
+            .endsWith,
+            value: "::assets"
+        ))
+        
+        userStore.removeValues(forKeysMatching: condition) { result in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+        
+    
+    /// Run migration of data in local databases
+    /// - Parameters:
+    ///   - currentBuild: the current client build, if available
+    ///   - completionHandler: the callback
+    public func runDataMigrations(
+        currentBuild: Int?,
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
+    ) {
+        dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
+        
+        var errors = [Error]()
+        
+        let group = DispatchGroup()
+        
+        group.enter()
+        self.runAssetDataMigration(currentBuild: currentBuild) { result1 in
+            if case .failure(let error) = result1 {
                 errors.append(error)
             }
-            group.leave()
+            
+            self.runAssetThreadsMigration(currentBuild: currentBuild) { result2 in
+                if case .failure(let error) = result2 {
+                    errors.append(error)
+                }
+                
+                group.leave()
+            }
         }
         
         group.notify(queue: .global()) {
-            guard errors.count == 0 else {
+            guard errors.isEmpty == true else {
                 completionHandler(.failure(errors.first!))
                 return
             }
             
-            /// Hi Res migrations
-            condition = KBGenericCondition(.beginsWith, value: "hi::")
-            
-            group.enter()
-            assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
-                switch result {
-                case .success(let keyValues):
-                    let relevantKeyValues = keyValues.filter {
-                        for assetIdentifier in assetIdentifiers {
-                            if $0.key.hasSuffix("::\(assetIdentifier)") {
-                                return true
-                            }
-                        }
-                        return false
-                    }
-                    do {
-                        if relevantKeyValues.count > 0 {
-                            let _ = try self.moveDataToNewKeyFormat(for: keyValues)
-                        }
-                    } catch {
-                        log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
-                        errors.append(error)
-                    }
-                case .failure(let error):
-                    errors.append(error)
-                }
-                group.leave()
-            }
-            
-            group.notify(queue: .global()) {
-                guard errors.count == 0 else {
-                    completionHandler(.failure(errors.first!))
-                    return
-                }
-                
-                completionHandler(.success(()))
-            }
+            completionHandler(.success(()))
         }
     }
 }
