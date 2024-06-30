@@ -57,7 +57,7 @@ public struct SHUserInteractionController {
                     let symmetricKey: SymmetricKey
                     
                     if let conversationThread {
-                        log.info("found thread with users \(users.map({ $0.identifier })) from remote")
+                        log.info("found thread with users \(users.map({ $0.identifier })) from local or remote")
                         completionHandler(.success(conversationThread))
                         return
                     } else {

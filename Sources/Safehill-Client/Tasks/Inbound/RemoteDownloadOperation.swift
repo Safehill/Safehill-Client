@@ -793,6 +793,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         })
                     }
                     
+                    // TODO: Is this thread safe?
                     successfullyDownloadedAssetsAndDescriptors.append((decryptedAsset, descriptor))
                 }
                 
