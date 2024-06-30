@@ -26,6 +26,22 @@ public let SafehillServerURLComponents: URLComponents = {
     return components
 }()
 
+public let SafehillServerURLComponentsForWebsockets: URLComponents = {
+    var components = URLComponents()
+    
+#if targetEnvironment(simulator)
+    components.scheme = "ws"
+    components.host = "127.0.0.1"
+    components.port = 8080
+#else
+    components.scheme = "wss"
+    components.host = "app.safehill.io"
+    components.port = 443
+#endif
+    
+    return components
+}()
+
 
 internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfiguration {
     let configuration = URLSessionConfiguration.default

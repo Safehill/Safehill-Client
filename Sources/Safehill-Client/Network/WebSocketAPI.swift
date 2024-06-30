@@ -12,13 +12,11 @@ public enum WebSocketConnectionError: Error {
 
 public actor WebSocketAPI {
     
-    private var urlComponents: URLComponents
+    private let urlComponents: URLComponents
     var webSocketTask: URLSessionWebSocketTask?
     
     init() {
-        var components = SafehillServerURLComponents
-        components.scheme = "ws"
-        self.urlComponents = components
+        self.urlComponents = SafehillServerURLComponentsForWebsockets
     }
     
     init(url: String) throws {
@@ -42,6 +40,7 @@ public actor WebSocketAPI {
             return
         }
         
+        var urlComponents = self.urlComponents
         let param = URLQueryItem(name: "deviceId", value: deviceId)
         urlComponents.queryItems = [param]
         guard let url = urlComponents.url else {
