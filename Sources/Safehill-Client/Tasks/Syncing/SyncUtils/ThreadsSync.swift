@@ -53,7 +53,7 @@ extension SHInteractionsSyncOperation {
         ///
         /// Create threads locally as needed, and notify the delegates
         ///
-        await self.syncThreads(
+        await self.createThreadsLocallyIfMissing(
             remoteThreads: allThreads,
             localThreads: localThreads
         )
@@ -68,7 +68,7 @@ extension SHInteractionsSyncOperation {
     ///   - threads: the threads from server
     ///   - localThreads: the local threads if already available. If `nil`, the corresponding local threads will be fetched from DB
     ///   - completionHandler: the callback method
-    internal func syncThreads(
+    internal func createThreadsLocallyIfMissing(
         remoteThreads: [ConversationThreadOutputDTO],
         localThreads: [ConversationThreadOutputDTO]? = nil
     ) async {

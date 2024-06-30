@@ -263,7 +263,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
         
         let localIdentifiersInDescriptors = descriptorsByGlobalIdentifier.values.compactMap({ $0.localIdentifier })
-        var phAssetsByLocalIdentifier = [String: PHAsset]()
+        var phAssetsByLocalIdentifier = [LocalIdentifier: PHAsset]()
         
         self.photoIndexer.fetchAllAssets(withFilters: [.withLocalIdentifiers(localIdentifiersInDescriptors)]) {
             result in
@@ -619,7 +619,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ) {
         
         let group = DispatchGroup()
-        var errors = [Error]()
         
         ///
         /// FOR THE ASSETS SHARED BY THIS USER
@@ -794,6 +793,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         })
                     }
                     
+                    // TODO: Is this thread safe?
                     successfullyDownloadedAssetsAndDescriptors.append((decryptedAsset, descriptor))
                 }
                 

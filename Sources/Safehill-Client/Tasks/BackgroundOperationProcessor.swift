@@ -25,7 +25,7 @@ public actor SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
     public func runOperation(
         _ operation: T,
         qos: DispatchQoS.QoSClass,
-        completion: @escaping (T.OperationResult) -> Void
+        completion: @escaping (T.OperationResult?) -> Void
     ) {
         Task { [weak self] in
             guard let self = self else { return }
@@ -37,6 +37,7 @@ public actor SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
             ///
             let isRunning = await self.runningOperations[operationKey] ?? false
             guard !isRunning else {
+                completion(nil)
                 return
             }
             
@@ -61,7 +62,7 @@ public actor SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         initialDelay: TimeInterval,
         repeatInterval: TimeInterval,
         qos: DispatchQoS.QoSClass,
-        completion: @escaping (T.OperationResult) -> Void
+        completion: @escaping (T.OperationResult?) -> Void
     ) {
         let operationKey = self.operationKey
         log.debug("\(operationKey, privacy: .public): scheduled repeated run at qos=\(qos.toTaskPriority().rawValue) with delay=\(initialDelay) interval=\(repeatInterval)")

@@ -56,7 +56,7 @@ public struct SHKGQuery {
             for photoMessage in conversationThreadAssets.photoMessages {
                 writeBatch.set(
                     value: ConversationThreadAssetClass.fromDTO(photoMessage),
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets",
+                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::photoMessages",
                     timestamp: photoMessage.addedAt.iso8601withFractionalSeconds ?? Date()
                 )
                 
@@ -69,6 +69,11 @@ public struct SHKGQuery {
             }
             
             for otherAsset in conversationThreadAssets.otherAssets {
+                writeBatch.set(
+                    value: UsersGroupAssetClass.fromDTO(otherAsset),
+                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::nonPhotoMessages",
+                    timestamp: otherAsset.addedAt.iso8601withFractionalSeconds ?? Date()
+                )
                 try self.ingestShare(
                     of: otherAsset.globalIdentifier,
                     from: otherAsset.addedByUserIdentifier,

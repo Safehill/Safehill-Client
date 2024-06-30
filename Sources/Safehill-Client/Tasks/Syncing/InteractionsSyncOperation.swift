@@ -197,7 +197,7 @@ public class SHInteractionsSyncOperation: Operation {
                 }
                 
                 Task {
-                    await self.syncThreads(
+                    await self.createThreadsLocallyIfMissing(
                         remoteThreads: [threadOutputDTO]
                     )
                 }
