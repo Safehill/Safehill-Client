@@ -538,7 +538,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             
             for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 
-                let groupCreationDate = descriptor.sharingInfo.groupInfoById[groupId]!.createdAt!
+                guard let groupCreationDate = descriptor.sharingInfo.groupInfoById[groupId]?.createdAt {
+                    self.log.critical("[\(type(of: self))] no group info in descriptor for id \(groupId)")
+                    continue
+                }
                 
                 if recipientUserId == myUser.identifier {
                     
