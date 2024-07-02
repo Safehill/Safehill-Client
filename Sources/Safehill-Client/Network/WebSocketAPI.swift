@@ -13,7 +13,7 @@ public enum WebSocketConnectionError: Error {
 public actor WebSocketAPI {
     
     private let urlComponents: URLComponents
-    var webSocketTask: URLSessionWebSocketTask?
+    private var webSocketTask: URLSessionWebSocketTask?
     
     init() {
         self.urlComponents = SafehillServerURLComponentsForWebsockets
@@ -56,7 +56,6 @@ public actor WebSocketAPI {
     
     public func disconnect() {
         self.webSocketTask?.cancel(with: .normalClosure, reason: nil)
-        self.webSocketTask = nil
     }
 }
 

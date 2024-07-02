@@ -73,7 +73,7 @@ public final class SHAddressBookContact: NSObject, NSSecureCoding {
         return systemContact.phoneNumbers.compactMap({
             (value: CNLabeledValue<CNPhoneNumber>) in
 
-            let localizedLabel = CNLabeledValue<NSString>.localizedString(forLabel: value.label ?? "")
+            let localizedLabel = value.label ?? ""
             return (label: localizedLabel, stringValue: value.value.stringValue)
         })
     }
