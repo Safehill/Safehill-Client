@@ -1524,6 +1524,10 @@ extension SHServerProxy {
             }
         }
         
+        guard notYetOnLocal.isEmpty == false else {
+            return []
+        }
+        
         return await withUnsafeContinuation { continuation in
             let dispatchGroup = DispatchGroup()
             for threadToCreateLocally in notYetOnLocal {
