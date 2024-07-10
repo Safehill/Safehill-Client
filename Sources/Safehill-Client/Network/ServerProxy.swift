@@ -5,11 +5,11 @@ import Contacts
 public struct SHServerProxy: SHServerProxyProtocol {
     
     let localServer: LocalServer
-    let remoteServer: SHServerHTTPAPI
+    let remoteServer: RemoteServer
     
     public init(user: SHLocalUserProtocol) {
         self.localServer = LocalServer(requestor: user)
-        self.remoteServer = SHServerHTTPAPI(requestor: user)
+        self.remoteServer = RemoteServer(requestor: user)
     }
 }
 

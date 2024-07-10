@@ -44,7 +44,7 @@ struct GenericFailureResponse: Decodable {
     let reason: String?
 }
 
-struct SHServerHTTPAPI : SHServerAPI {
+struct RemoteServer : SHServerAPI {
     
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
@@ -238,7 +238,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         }
         
-        SHServerHTTPAPI.makeRequest(
+        RemoteServer.makeRequest(
             request: request,
             usingSession: Self.safehillURLSession,
             decodingResponseAs: T.self,
@@ -273,7 +273,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        SHServerHTTPAPI.makeRequest(
+        RemoteServer.makeRequest(
             request: request,
             usingSession: Self.safehillURLSession,
             decodingResponseAs: T.self,
@@ -867,11 +867,15 @@ struct SHServerHTTPAPI : SHServerAPI {
                 ].joined(separator: "::")
             ) {
                 result in
-                if case .success(_) = result {
+                switch result {
+                case .success:
                     self.markAsset(with: asset.globalIdentifier,
                                    quality: encryptedAssetVersion.quality,
                                    as: .completed) { _ in
                     }
+                
+                case .failure(let error):
+                    log.critical("error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
                 }
             }
             
