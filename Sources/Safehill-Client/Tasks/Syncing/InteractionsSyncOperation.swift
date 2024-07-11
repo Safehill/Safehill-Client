@@ -67,6 +67,8 @@ public class SHInteractionsSyncOperation: Operation {
             if let error = error as? WebSocketConnectionError {
                 switch error {
                 case .disconnected, .closed, .connectionError, .transportError:
+                    log.info("[ws] websocket connection error: \(error.localizedDescription)")
+                    
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
                     await self.stopWebSocket()
                     
@@ -84,6 +86,7 @@ public class SHInteractionsSyncOperation: Operation {
     
     public func stopWebSocket() async {
         await self.socket.disconnect()
+        self.log.debug("[ws] DISCONNECTED")
     }
     
     private func processMessage(_ message: WebSocketMessage) {
