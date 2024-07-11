@@ -269,26 +269,7 @@ public class SHInteractionsSyncOperation: Operation {
         
         Task {
             do {
-                ///
-                /// Sync the threads (creates, removals)
-                /// based on the list from server
-                ///
-                let _ = try await self.syncThreads(qos: .default)
-                
-                ///
-                /// Get the summary to update the latest messages and interactions
-                /// in threads and groups
-                let summary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
-                
-                self.delegatesQueue.async { [weak self] in
-                    self?.interactionsSyncDelegates.forEach {
-                        $0.didFetchRemoteThreadSummary(summary.summaryByThreadId)
-                        $0.didFetchRemoteGroupSummary(summary.summaryByGroupId)
-                    }
-                }
-                
-                self.updateThreadsInteractions(using: summary.summaryByThreadId)
-                self.updateGroupsInteractions(using: summary.summaryByGroupId)
+                try await self.refreshInteractions()
                 
                 ///
                 /// Start syncing interactions via the web socket
