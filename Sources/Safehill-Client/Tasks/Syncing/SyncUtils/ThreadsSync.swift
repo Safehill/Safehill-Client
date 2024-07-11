@@ -4,7 +4,7 @@ let ThreadLastInteractionSyncLimit = 20
 
 extension SHInteractionsSyncOperation {
     
-    public func refreshInteractions() async throws {
+    public func syncInteractionSummaries() async throws {
         ///
         /// Sync the threads (creates, removals)
         /// based on the list from server

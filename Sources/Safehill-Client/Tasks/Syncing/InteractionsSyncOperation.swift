@@ -280,7 +280,7 @@ public class SHInteractionsSyncOperation: Operation {
         
         Task {
             do {
-                try await self.refreshInteractions()
+                try await self.syncInteractionSummaries()
                 
                 ///
                 /// Start syncing interactions via the web socket
