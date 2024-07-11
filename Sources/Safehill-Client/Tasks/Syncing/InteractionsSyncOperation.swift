@@ -44,12 +44,6 @@ public class SHInteractionsSyncOperation: Operation {
         self.socket = WebSocketAPI()
     }
     
-    deinit {
-        Task {
-            await self.stopWebSocket(error: nil)
-        }
-    }
-    
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     private func startWebSocket() async throws {
