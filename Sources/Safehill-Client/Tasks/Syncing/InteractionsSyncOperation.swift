@@ -10,6 +10,9 @@ public class SHInteractionsSyncOperation: Operation {
     
     public typealias OperationResult = Result<Void, Error>
     
+    private static var isWebSocketConnected = false
+    private static let memberAccessQueue = DispatchQueue(label: "SHInteractionsSyncOperation.memberAccessQueue")
+    
     public let log = Logger(subsystem: "com.safehill", category: "BG-INTERACTIONS-SYNC")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.threads-interactions-sync.delegates")
@@ -47,6 +50,15 @@ public class SHInteractionsSyncOperation: Operation {
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     private func startWebSocket() async throws {
+        var isAlreadyConnected = false
+        Self.memberAccessQueue.sync {
+            isAlreadyConnected = Self.isWebSocketConnected
+        }
+        
+        guard isAlreadyConnected == false else {
+            return
+        }
+        
         try await socket.connect(to: "ws/messages", as: self.user, from: self.deviceId)
         
         for try await message in await socket.receive() {
@@ -87,6 +99,10 @@ public class SHInteractionsSyncOperation: Operation {
     public func stopWebSocket() async {
         await self.socket.disconnect()
         self.log.debug("[ws] DISCONNECTED")
+        
+        Self.memberAccessQueue.sync {
+            Self.isWebSocketConnected = false
+        }
     }
     
     private func processMessage(_ message: WebSocketMessage) {
@@ -107,6 +123,9 @@ public class SHInteractionsSyncOperation: Operation {
                 }
                 self.log.debug("[ws] CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
                 
+                Self.memberAccessQueue.sync {
+                    Self.isWebSocketConnected = true
+                }
                 
             case .connectionRequest:
                 guard let encoded = try? JSONDecoder().decode(WebSocketMessage.NewUserConnection.self, from: contentData) else {
