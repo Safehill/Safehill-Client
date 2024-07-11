@@ -22,6 +22,7 @@ public class SHInteractionsSyncOperation: Operation {
     
     let socket: WebSocketAPI
     
+    let websocketConnectionDelegates: [WebSocketDelegate]
     let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     
@@ -31,11 +32,13 @@ public class SHInteractionsSyncOperation: Operation {
     public init(
         user: SHAuthenticatedLocalUser,
         deviceId: String,
+        websocketConnectionDelegates: [WebSocketDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     ) throws {
         self.user = user
         self.deviceId = deviceId
+        self.websocketConnectionDelegates = websocketConnectionDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.socket = WebSocketAPI()
@@ -43,7 +46,7 @@ public class SHInteractionsSyncOperation: Operation {
     
     deinit {
         Task {
-            await self.stopWebSocket()
+            await self.stopWebSocket(error: nil)
         }
     }
     
@@ -67,7 +70,7 @@ public class SHInteractionsSyncOperation: Operation {
                 self.processMessage(message)
                 
                 if self.isCancelled {
-                    await self.stopWebSocket()
+                    await self.stopWebSocket(error: nil)
                     break
                 }
             }
@@ -87,7 +90,7 @@ public class SHInteractionsSyncOperation: Operation {
                     log.info("[ws] websocket connection error: \(error.localizedDescription)")
                     
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
-                    await self.stopWebSocket()
+                    await self.stopWebSocket(error: error)
                     
                     /// Exponential retry with backoff
                     try await Task.sleep(nanoseconds: self.retryDelay * 1_000_000_000)
@@ -101,9 +104,13 @@ public class SHInteractionsSyncOperation: Operation {
         }
     }
     
-    public func stopWebSocket() async {
+    public func stopWebSocket(error: Error?) async {
         await self.socket.disconnect()
         self.log.debug("[ws] DISCONNECTED")
+        
+        websocketConnectionDelegates.forEach {
+            $0.didDisconnect(error: error)
+        }
         
         Self.memberAccessQueue.sync {
             Self.isWebSocketConnected = false
@@ -127,6 +134,10 @@ public class SHInteractionsSyncOperation: Operation {
                     return
                 }
                 self.log.debug("[ws] CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
+                
+                self.websocketConnectionDelegates.forEach {
+                    $0.didConnect()
+                }
                 
                 Self.memberAccessQueue.sync {
                     Self.isWebSocketConnected = true
