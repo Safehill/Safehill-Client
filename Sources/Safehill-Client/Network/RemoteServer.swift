@@ -1114,17 +1114,29 @@ struct RemoteServer : SHServerAPI {
     func topLevelThreadsInteractionsSummary(
         completionHandler: @escaping (Result<[String : InteractionsThreadSummaryDTO], Error>) -> ()
     ) {
-        self.post("interactions/\(SHInteractionAnchor.thread.rawValue)/summary", 
-                  parameters: nil,
-                  completionHandler: completionHandler)
+        self.post("interactions/\(SHInteractionAnchor.thread.rawValue)/summary", parameters: nil) {
+            (result: Result<InteractionsSummaryDTO, Error>) in
+            switch result {
+            case .success(let interactionsSummaryDTO):
+                completionHandler(.success(interactionsSummaryDTO.summaryByThreadId))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func topLevelGroupsInteractionsSummary(
         completionHandler: @escaping (Result<[String : InteractionsGroupSummaryDTO], Error>) -> ()
     ) {
-        self.post("interactions/\(SHInteractionAnchor.group.rawValue)/summary", 
-                  parameters: nil,
-                  completionHandler: completionHandler)
+        self.post("interactions/\(SHInteractionAnchor.group.rawValue)/summary", parameters: nil) {
+            (result: Result<InteractionsSummaryDTO, Error>) in
+            switch result {
+            case .success(let interactionsSummaryDTO):
+                completionHandler(.success(interactionsSummaryDTO.summaryByGroupId))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func addReactions(
