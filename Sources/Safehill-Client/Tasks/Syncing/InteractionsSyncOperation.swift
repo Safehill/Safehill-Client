@@ -61,14 +61,19 @@ public class SHInteractionsSyncOperation: Operation {
         
         try await socket.connect(to: "ws/messages", as: self.user, from: self.deviceId)
         
-        for try await message in await socket.receive() {
-            
-            self.processMessage(message)
-            
-            if self.isCancelled {
-                await self.stopWebSocket()
-                break
+        do {
+            for try await message in await socket.receive() {
+                
+                self.processMessage(message)
+                
+                if self.isCancelled {
+                    await self.stopWebSocket()
+                    break
+                }
             }
+        } catch {
+            log.error("[ws] websocket failure: \(error)")
+            throw error
         }
     }
     
@@ -134,6 +139,8 @@ public class SHInteractionsSyncOperation: Operation {
                 
                 let requestor = encoded.requestor
                 
+                self.log.debug("[ws] USERCONNECTION: request from \(requestor.name)")
+                
                 let serverUser = SHRemoteUser(
                     identifier: requestor.identifier,
                     name: requestor.name,
@@ -152,6 +159,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] NEWMESSAGE: interaction id \(interactionId)")
                 
                 let messageOutput = MessageOutputDTO(
                     interactionId: interactionId,
@@ -182,6 +191,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed or without an ID, or invalid reaction type. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] NEWREACTION: interaction id \(interactionId)")
                 
                 let reactionOutput = ReactionOutputDTO(
                     interactionId: interactionId,
@@ -218,6 +229,8 @@ public class SHInteractionsSyncOperation: Operation {
                     return
                 }
                 
+                self.log.debug("[ws] NEWTHREAD: thread id \(threadOutputDTO.threadId)")
+                
                 Task {
                     await self.createThreadsLocallyIfMissing(
                         remoteThreads: [threadOutputDTO]
@@ -230,6 +243,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
                 
                 let threadId = threadAssetsWsMessage.threadId
                 let threadAssets = threadAssetsWsMessage.assets
