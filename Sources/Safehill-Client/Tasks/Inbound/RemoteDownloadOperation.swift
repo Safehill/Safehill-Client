@@ -641,7 +641,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///         - they were deleted from the local library
         ///         - they were shared from a different device and they are not on this device's Photo Library
         ///
-        /// (2) is handled by downloading them as regular downloads from other users, with the only difference that authorization is skipped
+        /// (2) is handled by downloading them as regular downloads from other users
         ///
         /// For (1), identification `didIdentify(globalToLocalAssets:)` happens in `mergeDescriptorsWithApplePhotosAssets(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server, add items to the success queue (upload and share) and call the restoration delegate.
         ///
