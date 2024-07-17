@@ -262,7 +262,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inThread threadId: String,
         ofType type: InteractionType? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> Void
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> Void
     ) {
         self.serverProxy.retrieveLocalInteractions(
             inThread: threadId,
@@ -300,7 +300,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.retrieveInteractions(
             inAnchor: .group,
@@ -406,7 +406,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         in interactionsGroup: InteractionsGroupDTO,
         for anchor: SHInteractionAnchor,
         anchorId: String,
-        completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         let encryptionDetails = EncryptionDetailsClass(
             ephemeralPublicKey: interactionsGroup.ephemeralPublicKey,
@@ -501,7 +501,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         underMessage messageId: String? = nil,
         before: Date?,
         limit: Int,
-        completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         log.debug("""
 [SHUserInteractionController] retrieving interactions (\(type?.rawValue ?? "messages+reactions")) for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))

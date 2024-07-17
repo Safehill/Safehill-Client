@@ -590,6 +590,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let groupInteractions):
+                guard let groupInteractions = groupInteractions as? SHAssetsGroupInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(groupInteractions.groupId, groupId)
                 XCTAssertEqual(groupInteractions.messages.count, 1)
                 
