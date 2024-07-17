@@ -193,7 +193,7 @@ public class SHInteractionsSyncOperation: Operation {
                     }
                 })
                 
-            case .reactionAdd, .reactionRemove:
+            case .reactionAdd:
                 
                 guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
                       let interactionId = reaction.interactionId,
@@ -217,17 +217,43 @@ public class SHInteractionsSyncOperation: Operation {
                 interactionsSyncDelegates.forEach({
                     switch SHInteractionAnchor(rawValue: reaction.anchorType) {
                     case .group:
-                        if message.type == .reactionAdd {
-                            $0.didAddReaction(reactionOutput, inGroup: reaction.anchorId)
-                        } else {
-                            $0.didRemoveReaction(reactionOutput, inGroup: reaction.anchorId)
-                        }
+                        $0.didAddReaction(reactionOutput, inGroup: reaction.anchorId)
                     case .thread:
-                        if message.type == .reactionAdd {
-                            $0.didAddReaction(reactionOutput, inThread: reaction.anchorId)
-                        } else {
-                            $0.didRemoveReaction(reactionOutput, inThread: reaction.anchorId)
-                        }
+                        $0.didAddReaction(reactionOutput, inThread: reaction.anchorId)
+                    case .none:
+                        self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
+                    }
+                })
+                
+            case .reactionRemove:
+                
+                guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
+                      let reactionType = ReactionType(rawValue: reaction.reactionType)
+                else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] REMOVEREACTION")
+                
+                interactionsSyncDelegates.forEach({
+                    switch SHInteractionAnchor(rawValue: reaction.anchorType) {
+                    case .group:
+                        $0.didRemoveReaction(
+                            from: reaction.senderPublicIdentifier,
+                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                            inReplyToInteractionId: reaction.inReplyToInteractionId,
+                            reactionType: reactionType,
+                            inGroup: reaction.anchorId
+                        )
+                    case .thread:
+                        $0.didRemoveReaction(
+                            from: reaction.senderPublicIdentifier,
+                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                            inReplyToInteractionId: reaction.inReplyToInteractionId,
+                            reactionType: reactionType,
+                            inThread: reaction.anchorId
+                        )
                     case .none:
                         self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
                     }

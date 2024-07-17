@@ -54,9 +54,15 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
                         inGroup groupId: String)
     func didAddReaction(_: ReactionOutputDTO,
                         inThread threadId: String)
-    func didRemoveReaction(_: ReactionOutputDTO,
+    func didRemoveReaction(from senderPublicIdentifier: UserIdentifier,
+                           inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+                           inReplyToInteractionId: String?,
+                           reactionType: ReactionType,
                            inGroup groupId: String)
-    func didRemoveReaction(_: ReactionOutputDTO,
+    func didRemoveReaction(from senderPublicIdentifier: UserIdentifier,
+                           inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+                           inReplyToInteractionId: String?,
+                           reactionType: ReactionType,
                            inThread threadId: String)
 }
 
