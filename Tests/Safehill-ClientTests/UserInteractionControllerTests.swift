@@ -764,6 +764,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 1)
                 
@@ -832,6 +836,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 1)
                 
@@ -885,6 +893,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 2)
                 
@@ -927,6 +939,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 1)
                 
@@ -956,6 +972,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 1)
                 
@@ -985,6 +1005,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 0)
             }
@@ -1013,6 +1037,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 2)
                 
@@ -1059,6 +1087,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 2)
                 
@@ -1100,6 +1132,10 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             case .failure(let err):
                 XCTFail(err.localizedDescription)
             case .success(let threadInteractions):
+                guard let threadInteractions = threadInteractions as? SHConversationThreadInteractions else {
+                    XCTFail()
+                    return
+                }
                 XCTAssertEqual(threadInteractions.threadId, threadId)
                 XCTAssertEqual(threadInteractions.messages.count, 0)
             }

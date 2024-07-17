@@ -312,7 +312,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         ) { result in
             switch result {
             case .success(let res):
-                completionHandler(.success(res as! SHAssetsGroupInteractions))
+                completionHandler(.success(res))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -325,7 +325,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.retrieveInteractions(
             inAnchor: .thread,
@@ -347,7 +347,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveLocalInteraction(
         inThread threadId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inThread: threadId,
@@ -376,7 +376,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveLocalInteraction(
         inGroup groupId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inGroup: groupId,
@@ -391,7 +391,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 ) { secondResult in
                     switch secondResult {
                     case .success(let res):
-                        completionHandler(.success(res as! SHAssetsGroupInteractions))
+                        completionHandler(.success(res))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }
