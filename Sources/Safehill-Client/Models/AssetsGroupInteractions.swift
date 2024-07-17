@@ -5,5 +5,5 @@ public struct SHAssetsGroupInteractions : SHInteractionsCollectionProtocol {
     public let messages: [SHDecryptedMessage]
     public let reactions: [SHReaction]
     
-    var collectionId: String { groupId }
+    public var collectionId: String { groupId }
 }
