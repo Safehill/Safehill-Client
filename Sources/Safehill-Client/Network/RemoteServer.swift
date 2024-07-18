@@ -1141,7 +1141,7 @@ struct RemoteServer : SHServerAPI {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.addReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
@@ -1149,7 +1149,7 @@ struct RemoteServer : SHServerAPI {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.addReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
@@ -1188,41 +1188,58 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inGroup groupId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.removeReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+        self.removeReaction(
+            reactionType,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            anchorType: .group,
+            anchorId: groupId,
+            completionHandler: completionHandler
+        )
     }
     
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inThread threadId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.removeReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+        self.removeReaction(
+            reactionType,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            anchorType: .thread,
+            anchorId: threadId,
+            completionHandler: completionHandler
+        )
     }
     
-    private func removeReactions(
-        _ reactions: [ReactionInput],
+    private func removeReaction(
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
         anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        guard reactions.count == 1, let reaction = reactions.first else {
-            completionHandler(.failure(SHHTTPError.ClientError.badRequest("can't remove more than one reaction at a time")))
-            return
-        }
-        
         var parameters = [
-            "reactionType": reaction.reactionType.rawValue,
+            "reactionType": reactionType.rawValue,
         ] as [String: Any]
 
-        if let iId = reaction.inReplyToInteractionId {
+        if let iId = inReplyToInteractionId {
             parameters["inReplyToInteractionId"] = iId
         }
-        if let aGid = reaction.inReplyToAssetGlobalIdentifier {
+        if let aGid = inReplyToAssetGlobalIdentifier {
             parameters["inReplyToAssetGlobalIdentifier"] = aGid
         }
         
@@ -1308,7 +1325,7 @@ struct RemoteServer : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.addMessages(messages, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
@@ -1316,7 +1333,7 @@ struct RemoteServer : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.addMessages(messages, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)

@@ -2218,7 +2218,7 @@ struct LocalServer : SHServerAPI {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.addReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
@@ -2226,7 +2226,7 @@ struct LocalServer : SHServerAPI {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.addReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
@@ -2245,9 +2245,14 @@ struct LocalServer : SHServerAPI {
         
         var deleteCondition = KBGenericCondition(value: false)
         for reaction in reactions {
+            guard let senderPublicIdentifier = reaction.senderPublicIdentifier else {
+                log.warning("[LocalServer] failed to remove reaction from \(anchorType.rawValue) \(anchorId): sender information is missing")
+                continue
+            }
+            
             deleteCondition = deleteCondition
                 .or(
-                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)")
+                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(senderPublicIdentifier)")
                 )
         }
         reactionStore.removeValues(forKeysMatching: deleteCondition) { result in
@@ -2260,10 +2265,14 @@ struct LocalServer : SHServerAPI {
             
             for reaction in reactions {
                 guard let interactionId = reaction.interactionId else {
-                    log.warning("can not save interaction to local store without an interaction identifier from server")
+                    log.warning("[LocalServer] failed to save reaction in \(anchorType.rawValue) \(anchorId): interaction identifier is missing")
                     continue
                 }
-                var key = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)"
+                guard let senderPublicIdentifier = reaction.senderPublicIdentifier else {
+                    log.warning("[LocalServer] failed to save reaction: sender information is missing")
+                    continue
+                }
+                var key = "\(anchorType.rawValue)::\(anchorId)::\(senderPublicIdentifier)"
                 if let interactionId = reaction.inReplyToInteractionId {
                     key += "::\(interactionId)"
                 } else {
@@ -2291,55 +2300,71 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inGroup groupId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.removeReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+        self.removeReaction(
+            reactionType,
+            senderPublicIdentifier: senderPublicIdentifier,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            anchorType: .group,
+            anchorId: groupId,
+            completionHandler: completionHandler
+        )
     }
     
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inThread threadId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.removeReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+        self.removeReaction(
+            reactionType,
+            senderPublicIdentifier: senderPublicIdentifier,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            anchorType: .thread,
+            anchorId: threadId,
+            completionHandler: completionHandler
+        )
     }
     
-    private func removeReactions(
-        _ reactions: [ReactionInput],
+    private func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
         anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        guard reactions.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
         guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        var condition = KBGenericCondition(value: false)
-        for reaction in reactions {
-            var keyStart = "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)"
-            if let interactionId = reaction.inReplyToInteractionId {
-                keyStart += "::\(interactionId)"
-            } else {
-                keyStart += "::"
-            }
-            if let assetGid = reaction.inReplyToAssetGlobalIdentifier {
-                keyStart += "::\(assetGid)"
-            } else {
-                keyStart += "::"
-            }
-            
-            let thisCondition = KBGenericCondition(.beginsWith, value: keyStart)
-            condition = condition.or(thisCondition)
+        var keyStart = "\(anchorType.rawValue)::\(anchorId)::\(senderPublicIdentifier)"
+        if let interactionId = inReplyToInteractionId {
+            keyStart += "::\(interactionId)"
+        } else {
+            keyStart += "::"
         }
+        if let assetGid = inReplyToAssetGlobalIdentifier {
+            keyStart += "::\(assetGid)"
+        } else {
+            keyStart += "::"
+        }
+        
+        let condition = KBGenericCondition(.beginsWith, value: keyStart)
         
         reactionStore.removeValues(forKeysMatching: condition) { result in
             switch result {
@@ -2814,7 +2839,7 @@ struct LocalServer : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.addMessages(messages, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
@@ -2822,7 +2847,7 @@ struct LocalServer : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.addMessages(messages, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)

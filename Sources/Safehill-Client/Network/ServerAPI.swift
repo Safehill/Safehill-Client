@@ -327,7 +327,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func addReactions(
         _: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
@@ -339,29 +339,39 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func addReactions(
         _: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
     /// Removes reactions to an asset or a message in a share (group)
     /// - Parameters:
-    ///   - reaction: the reaction type and references to remove
-    ///   - groupId: the group the reaction belongs to
+    ///   - reactionType: the reaction type and references to remove
+    ///   - inReplyToAssetGlobalIdentifier: the referenced asset
+    ///   - inReplyToInteractionId: the referenced interaction
+    ///   - groupId: the container group
     ///   - completionHandler: the callback method
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inGroup groupId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
     /// Removes a set of reactions to a message
     /// - Parameters:
-    ///   - reaction: the reaction type and references to remove
-    ///   - fromGroupId: the group the reaction belongs to
+    ///   - reactionType: the reaction type and references to remove
+    ///   - inReplyToAssetGlobalIdentifier: the referenced asset
+    ///   - inReplyToInteractionId: the referenced interaction
+    ///   - threadId: the container thread
     ///   - completionHandler: the callback method
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inThread threadId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
@@ -405,7 +415,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func addMessages(
         _ messages: [MessageInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
     
@@ -418,7 +428,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func addMessages(
         _ messages: [MessageInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
 }

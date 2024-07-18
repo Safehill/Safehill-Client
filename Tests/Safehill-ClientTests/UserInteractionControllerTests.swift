@@ -41,11 +41,11 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         )
     }
     
-    func addReactions(_ reactions: [ReactionInput], inGroup groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
-        self.localServer.addReactions(reactions, inGroup: groupId, completionHandler: completionHandler)
+    func addReactions(_ reactions: [ReactionInput], toGroup groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+        self.localServer.addReactions(reactions, toGroup: groupId, completionHandler: completionHandler)
     }
     
-    func addMessage(_ message: MessageInputDTO, inGroup groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
+    func addMessage(_ message: MessageInputDTO, toGroup groupId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: UUID().uuidString,
             senderPublicIdentifier: self.localServer.requestor.identifier,
@@ -54,7 +54,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             encryptedMessage: message.encryptedMessage,
             createdAt: Date().iso8601withFractionalSeconds
         )
-        self.addLocalMessages([messageOutput], inGroup: groupId) { result in
+        self.addLocalMessages([messageOutput], toGroup: groupId) { result in
             switch result {
             case .success(let messages):
                 completionHandler(.success(messages.first!))
@@ -64,7 +64,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func addMessage(_ message: MessageInputDTO, inThread threadId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
+    func addMessage(_ message: MessageInputDTO, toThread threadId: String, completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()) {
         let messageOutput = MessageOutputDTO(
             interactionId: UUID().uuidString,
             senderPublicIdentifier: self.localServer.requestor.identifier,
@@ -73,7 +73,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             encryptedMessage: message.encryptedMessage,
             createdAt: Date().iso8601withFractionalSeconds
         )
-        self.addLocalMessages([messageOutput], inThread: threadId) { result in
+        self.addLocalMessages([messageOutput], toThread: threadId) { result in
             switch result {
             case .success(let messages):
                 completionHandler(.success(messages.first!))
@@ -326,32 +326,45 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         completionHandler(.success(ConversationThreadAssetsDTO(photoMessages: [], otherAssets: [])))
     }
     
-    func removeReaction(_ reaction: ReactionInput, inGroup groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.removeReactions([reaction], inGroup: groupId, completionHandler: completionHandler)
-    }
-    
-    func addLocalMessages(_ messages: [MessageInput], inGroup groupId: String, completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()) {
-        self.localServer.addMessages(
-            messages,
-            inGroup: groupId,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.removeReaction(
+            reactionType,
+            senderPublicIdentifier: self.localServer.requestor.identifier,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            fromGroup: groupId,
             completionHandler: completionHandler
         )
     }
     
-    func addLocalMessages(_ messages: [MessageInput], inThread threadId: String, completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()) {
+    func addLocalMessages(_ messages: [MessageInput], toGroup groupId: String, completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()) {
         self.localServer.addMessages(
             messages,
-            inThread: threadId,
+            toGroup: groupId,
             completionHandler: completionHandler
         )
     }
     
-    func addLocalReactions(_ reactions: [ReactionInput], inGroup groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
-        self.localServer.addReactions(reactions, inGroup: groupId, completionHandler: completionHandler)
+    func addLocalMessages(_ messages: [MessageInput], toThread threadId: String, completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()) {
+        self.localServer.addMessages(
+            messages,
+            toThread: threadId,
+            completionHandler: completionHandler
+        )
     }
     
-    func addLocalReactions(_ reactions: [ReactionInput], inThread threadId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
-        self.localServer.addReactions(reactions, inThread: threadId, completionHandler: completionHandler)
+    func addLocalReactions(_ reactions: [ReactionInput], toGroup groupId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+        self.localServer.addReactions(reactions, toGroup: groupId, completionHandler: completionHandler)
+    }
+    
+    func addLocalReactions(_ reactions: [ReactionInput], toThread threadId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
+        self.localServer.addReactions(reactions, toThread: threadId, completionHandler: completionHandler)
     }
 }
 

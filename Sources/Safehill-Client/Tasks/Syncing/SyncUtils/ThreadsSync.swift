@@ -121,7 +121,7 @@ extension SHInteractionsSyncOperation {
             if let lastMessage = threadSummary.lastEncryptedMessage {
                 self.serverProxy.addLocalMessages(
                     [lastMessage],
-                    inThread: threadId
+                    toThread: threadId
                 ) { result in
                     guard case .success(let messages) = result else {
                         return
@@ -146,7 +146,7 @@ extension SHInteractionsSyncOperation {
             
             self.serverProxy.addLocalReactions(
                 groupSummary.reactions,
-                inGroup: groupId
+                toGroup: groupId
             ) { result in
                 guard case .success = result else {
                     return
@@ -163,7 +163,7 @@ extension SHInteractionsSyncOperation {
             if let firstMessage = groupSummary.firstEncryptedMessage {
                 self.serverProxy.addLocalMessages(
                     [firstMessage],
-                    inGroup: groupId
+                    toGroup: groupId
                 ) { result in
                     guard case .success(let messages) = result else {
                         return

@@ -591,9 +591,17 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             
             switch anchor {
             case .thread:
-                self.serverProxy.addMessage(messageInput, inThread: anchorId, completionHandler: completionHandler)
+                self.serverProxy.addMessage(
+                    messageInput,
+                    toThread: anchorId,
+                    completionHandler: completionHandler
+                )
             case .group:
-                self.serverProxy.addMessage(messageInput, inGroup: anchorId, completionHandler: completionHandler)
+                self.serverProxy.addMessage(
+                    messageInput,
+                    toGroup: anchorId,
+                    completionHandler: completionHandler
+                )
             }
         } catch {
             completionHandler(.failure(error))
@@ -632,7 +640,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             inReplyToInteractionId: inReplyToInteractionId,
             reactionType: reactionType
         )
-        self.serverProxy.addReactions([reactionInput], inGroup: groupId) {
+        self.serverProxy.addReactions([reactionInput], toGroup: groupId) {
             result in
             switch result {
             case .success(let reactionOutputs):
@@ -644,13 +652,17 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     }
     
     public func removeReaction(
-        _ reaction: ReactionInput,
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
         fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.serverProxy.removeReaction(
-            reaction,
-            inGroup: groupId,
+            reactionType,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            fromGroup: groupId,
             completionHandler: completionHandler
         )
     }

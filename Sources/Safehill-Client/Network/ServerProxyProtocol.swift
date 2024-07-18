@@ -38,49 +38,51 @@ internal protocol SHServerProxyProtocol {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
     func removeReaction(
-        _: ReactionInput,
-        inGroup groupId: String,
+        _: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
     func addMessage(
         _ message: MessageInputDTO,
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     )
     
     func addMessage(
         _ message: MessageInputDTO,
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     )
     
     func addLocalMessages(
         _ messages: [MessageInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
     
     func addLocalMessages(
         _ messages: [MessageInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
     
     func addLocalReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     
     func addLocalReactions(
         _ reactions: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     )
     

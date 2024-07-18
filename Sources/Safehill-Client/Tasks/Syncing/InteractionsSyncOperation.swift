@@ -240,18 +240,18 @@ public class SHInteractionsSyncOperation: Operation {
                     switch SHInteractionAnchor(rawValue: reaction.anchorType) {
                     case .group:
                         $0.didRemoveReaction(
-                            from: reaction.senderPublicIdentifier,
+                            reactionType,
+                            addedBy: reaction.senderPublicIdentifier,
                             inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
                             inReplyToInteractionId: reaction.inReplyToInteractionId,
-                            reactionType: reactionType,
                             inGroup: reaction.anchorId
                         )
                     case .thread:
                         $0.didRemoveReaction(
-                            from: reaction.senderPublicIdentifier,
+                            reactionType,
+                            addedBy: reaction.senderPublicIdentifier,
                             inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
                             inReplyToInteractionId: reaction.inReplyToInteractionId,
-                            reactionType: reactionType,
                             inThread: reaction.anchorId
                         )
                     case .none:

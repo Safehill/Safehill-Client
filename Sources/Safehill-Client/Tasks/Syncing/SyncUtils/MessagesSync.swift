@@ -64,7 +64,7 @@ extension SHInteractionsSyncOperation {
         case .group:
             serverProxy.addLocalMessages(
                 messagesToUpdate,
-                inGroup: anchorId
+                toGroup: anchorId
             ) {
                 self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
                 callback($0)
@@ -73,7 +73,7 @@ extension SHInteractionsSyncOperation {
         case .thread:
             serverProxy.addLocalMessages(
                 messagesToUpdate,
-                inThread: anchorId
+                toThread: anchorId
             ) {
                 self.log.debug("[sync] done syncing messages in \(anchor.rawValue) \(anchorId)")
                 callback($0)

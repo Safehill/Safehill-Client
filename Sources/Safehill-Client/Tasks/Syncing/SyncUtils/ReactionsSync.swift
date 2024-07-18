@@ -8,7 +8,7 @@ extension SHInteractionsSyncOperation {
         localReactions: [ReactionOutputDTO],
         remoteReactions: [ReactionOutputDTO],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
+        completionHandler: @escaping () -> Void
     ) {
         var reactionsToUpdate = [ReactionOutputDTO]()
         var reactionsToRemove = [ReactionOutputDTO]()
@@ -37,20 +37,15 @@ extension SHInteractionsSyncOperation {
         }
         
         let dispatchGroup = DispatchGroup()
-        var errors = [Error]()
-        var anyChanged = false
         
         if reactionsToUpdate.count > 0 {
             dispatchGroup.enter()
             
-            log.debug("[sync] syncing reactions in \(anchor.rawValue) \(anchorId). toUpdate=\(reactionsToUpdate.count)")
+            log.debug("[reaction-sync] syncing reactions in \(anchor.rawValue) \(anchorId). toUpdate=\(reactionsToUpdate.count)")
             
             let callback = { (addReactionsResult: Result<[ReactionOutputDTO], Error>) in
                 if case .failure(let failure) = addReactionsResult {
-                    self.log.warning("failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
-                    errors.append(failure)
-                } else {
-                    anyChanged = true
+                    self.log.warning("[reaction-sync] failed to add reactions retrieved from server on local. \(failure.localizedDescription)")
                 }
                 dispatchGroup.leave()
             }
@@ -59,48 +54,66 @@ extension SHInteractionsSyncOperation {
             case .group:
                 serverProxy.addLocalReactions(
                     reactionsToUpdate,
-                    inGroup: anchorId,
+                    toGroup: anchorId,
                     completionHandler: callback
                 )
             case .thread:
                 serverProxy.addLocalReactions(
                     reactionsToUpdate,
-                    inThread: anchorId,
+                    toThread: anchorId,
                     completionHandler: callback
                 )
             }
         }
         
         if reactionsToRemove.count > 0 {
-            let callback = { (removeReactionsResult: Result<Void, Error>) in
-                if case .failure(let failure) = removeReactionsResult {
-                    self.log.warning("failed to remove reactions from local. \(failure.localizedDescription)")
-                    errors.append(failure)
-                } else {
-                    anyChanged = true
-                }
-                dispatchGroup.leave()
-            }
-            
-            dispatchGroup.enter()
             switch anchor {
             case .thread:
-                serverProxy.localServer.removeReactions(
-                    reactionsToRemove,
-                    inThread: anchorId,
-                    completionHandler: callback
-                )
+                for reaction in reactionsToRemove {
+                    guard let senderPublicIdentifier = reaction.senderPublicIdentifier else {
+                        self.log.warning("[reaction-sync] No sender information in reaction to remove from thread \(anchorId) on local")
+                        continue
+                    }
+                    
+                    dispatchGroup.enter()
+                    serverProxy.localServer.removeReaction(
+                        reaction.reactionType,
+                        senderPublicIdentifier: senderPublicIdentifier,
+                        inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                        inReplyToInteractionId: reaction.inReplyToInteractionId,
+                        fromThread: anchorId
+                    ) { result in
+                        if case .failure(let failure) = result {
+                            self.log.warning("[reaction-sync] failed to add reactions retrieved from server to thread \(anchorId) on local. \(failure.localizedDescription)")
+                        }
+                        dispatchGroup.leave()
+                    }
+                }
             case .group:
-                serverProxy.localServer.removeReactions(
-                    reactionsToRemove,
-                    inGroup: anchorId,
-                    completionHandler: callback
-                )
+                for reaction in reactionsToRemove {
+                    guard let senderPublicIdentifier = reaction.senderPublicIdentifier else {
+                        self.log.warning("[reaction-sync] No sender information in reaction to remove from thread \(anchorId) on local")
+                        continue
+                    }
+                    
+                    dispatchGroup.enter()
+                    serverProxy.localServer.removeReaction(
+                        reaction.reactionType,
+                        senderPublicIdentifier: senderPublicIdentifier,
+                        inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                        inReplyToInteractionId: reaction.inReplyToInteractionId,
+                        fromGroup: anchorId
+                    ) { result in
+                        if case .failure(let failure) = result {
+                            self.log.warning("failed to add reactions retrieved from server to group \(anchorId) on local. \(failure.localizedDescription)")
+                        }
+                        dispatchGroup.leave()
+                    }
+                }
             }
-            
         }
         
-        if anyChanged {
+        dispatchGroup.notify(queue: DispatchQueue.global(qos: qos)) {
             let interactionsSyncDelegates = self.interactionsSyncDelegates
             self.delegatesQueue.async {
                 switch anchor {
@@ -110,14 +123,8 @@ extension SHInteractionsSyncOperation {
                     interactionsSyncDelegates.forEach({ $0.reactionsDidChange(inGroup: anchorId) })
                 }
             }
-        }
-        
-        dispatchGroup.notify(queue: DispatchQueue.global(qos: qos)) {
-            if errors.isEmpty {
-                completionHandler(.success(()))
-            } else {
-                completionHandler(.failure(errors.first!))
-            }
+            
+            completionHandler()
         }
     }
     
