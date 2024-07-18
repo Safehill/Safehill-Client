@@ -217,9 +217,9 @@ public class SHInteractionsSyncOperation: Operation {
                 interactionsSyncDelegates.forEach({
                     switch SHInteractionAnchor(rawValue: reaction.anchorType) {
                     case .group:
-                        $0.didAddReaction(reactionOutput, inGroup: reaction.anchorId)
+                        $0.didAddReaction(reactionOutput, toGroup: reaction.anchorId)
                     case .thread:
-                        $0.didAddReaction(reactionOutput, inThread: reaction.anchorId)
+                        $0.didAddReaction(reactionOutput, toThread: reaction.anchorId)
                     case .none:
                         self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
                     }
@@ -244,7 +244,7 @@ public class SHInteractionsSyncOperation: Operation {
                             addedBy: reaction.senderPublicIdentifier,
                             inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
                             inReplyToInteractionId: reaction.inReplyToInteractionId,
-                            inGroup: reaction.anchorId
+                            fromGroup: reaction.anchorId
                         )
                     case .thread:
                         $0.didRemoveReaction(
@@ -252,7 +252,7 @@ public class SHInteractionsSyncOperation: Operation {
                             addedBy: reaction.senderPublicIdentifier,
                             inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
                             inReplyToInteractionId: reaction.inReplyToInteractionId,
-                            inThread: reaction.anchorId
+                            fromThread: reaction.anchorId
                         )
                     case .none:
                         self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
