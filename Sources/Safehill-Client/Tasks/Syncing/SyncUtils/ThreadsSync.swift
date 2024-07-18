@@ -4,12 +4,35 @@ let ThreadLastInteractionSyncLimit = 20
 
 extension SHInteractionsSyncOperation {
     
+    public func syncInteractionSummaries() async throws {
+        ///
+        /// Sync the threads (creates, removals)
+        /// based on the list from server
+        ///
+        try await self.syncRemoteAndLocalThreads(qos: .default)
+        
+        ///
+        /// Get the summary to update the latest messages and interactions
+        /// in threads and groups
+        let summary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
+        
+        self.delegatesQueue.async { [weak self] in
+            self?.interactionsSyncDelegates.forEach {
+                $0.didFetchRemoteThreadSummary(summary.summaryByThreadId)
+                $0.didFetchRemoteGroupSummary(summary.summaryByGroupId)
+            }
+        }
+        
+        self.updateThreadsInteractions(using: summary.summaryByThreadId)
+        self.updateGroupsInteractions(using: summary.summaryByGroupId)
+    }
+    
     /// Sync the threads betwen remote and local server
     /// and returns the list of threads that have been synced, filtering out the ones where users are unauthorized.
     ///
     /// - Parameter qos: the quality of service
     /// - Returns: the list of threads from known users
-    public func syncThreads(
+    func syncRemoteAndLocalThreads(
         qos: DispatchQoS.QoSClass
     ) async throws {
         
@@ -98,7 +121,7 @@ extension SHInteractionsSyncOperation {
             if let lastMessage = threadSummary.lastEncryptedMessage {
                 self.serverProxy.addLocalMessages(
                     [lastMessage],
-                    inThread: threadId
+                    toThread: threadId
                 ) { result in
                     guard case .success(let messages) = result else {
                         return
@@ -123,7 +146,7 @@ extension SHInteractionsSyncOperation {
             
             self.serverProxy.addLocalReactions(
                 groupSummary.reactions,
-                inGroup: groupId
+                toGroup: groupId
             ) { result in
                 guard case .success = result else {
                     return
@@ -140,7 +163,7 @@ extension SHInteractionsSyncOperation {
             if let firstMessage = groupSummary.firstEncryptedMessage {
                 self.serverProxy.addLocalMessages(
                     [firstMessage],
-                    inGroup: groupId
+                    toGroup: groupId
                 ) { result in
                     guard case .success(let messages) = result else {
                         return

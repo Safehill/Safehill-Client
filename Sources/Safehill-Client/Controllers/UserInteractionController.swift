@@ -262,7 +262,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         inThread threadId: String,
         ofType type: InteractionType? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> Void
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> Void
     ) {
         self.serverProxy.retrieveLocalInteractions(
             inThread: threadId,
@@ -300,7 +300,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.retrieveInteractions(
             inAnchor: .group,
@@ -312,7 +312,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         ) { result in
             switch result {
             case .success(let res):
-                completionHandler(.success(res as! SHAssetsGroupInteractions))
+                completionHandler(.success(res))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -325,7 +325,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         underMessage messageId: String? = nil,
         before: Date? = nil,
         limit: Int,
-        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.retrieveInteractions(
             inAnchor: .thread,
@@ -347,7 +347,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveLocalInteraction(
         inThread threadId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<SHConversationThreadInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inThread: threadId,
@@ -376,7 +376,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     public func retrieveLocalInteraction(
         inGroup groupId: String,
         withId interactionIdentifier: String,
-        completionHandler: @escaping (Result<SHAssetsGroupInteractions, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         self.serverProxy.retrieveLocalInteraction(
             inGroup: groupId,
@@ -391,7 +391,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
                 ) { secondResult in
                     switch secondResult {
                     case .success(let res):
-                        completionHandler(.success(res as! SHAssetsGroupInteractions))
+                        completionHandler(.success(res))
                     case .failure(let err):
                         completionHandler(.failure(err))
                     }
@@ -406,7 +406,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         in interactionsGroup: InteractionsGroupDTO,
         for anchor: SHInteractionAnchor,
         anchorId: String,
-        completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         let encryptionDetails = EncryptionDetailsClass(
             ephemeralPublicKey: interactionsGroup.ephemeralPublicKey,
@@ -501,7 +501,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         underMessage messageId: String? = nil,
         before: Date?,
         limit: Int,
-        completionHandler: @escaping (Result<SHInteractionsCollectionProtocol, Error>) -> ()
+        completionHandler: @escaping (Result<any SHInteractionsCollectionProtocol, Error>) -> ()
     ) {
         log.debug("""
 [SHUserInteractionController] retrieving interactions (\(type?.rawValue ?? "messages+reactions")) for \(anchor.rawValue) \(anchorId) before=\(before?.iso8601withFractionalSeconds ?? "nil") underMessage=\(messageId ?? "nil") (limit=\(limit))
@@ -591,9 +591,17 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             
             switch anchor {
             case .thread:
-                self.serverProxy.addMessage(messageInput, inThread: anchorId, completionHandler: completionHandler)
+                self.serverProxy.addMessage(
+                    messageInput,
+                    toThread: anchorId,
+                    completionHandler: completionHandler
+                )
             case .group:
-                self.serverProxy.addMessage(messageInput, inGroup: anchorId, completionHandler: completionHandler)
+                self.serverProxy.addMessage(
+                    messageInput,
+                    toGroup: anchorId,
+                    completionHandler: completionHandler
+                )
             }
         } catch {
             completionHandler(.failure(error))
@@ -632,7 +640,7 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
             inReplyToInteractionId: inReplyToInteractionId,
             reactionType: reactionType
         )
-        self.serverProxy.addReactions([reactionInput], inGroup: groupId) {
+        self.serverProxy.addReactions([reactionInput], toGroup: groupId) {
             result in
             switch result {
             case .success(let reactionOutputs):
@@ -644,13 +652,17 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
     }
     
     public func removeReaction(
-        _ reaction: ReactionInput,
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
         fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.serverProxy.removeReaction(
-            reaction,
-            inGroup: groupId,
+            reactionType,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            fromGroup: groupId,
             completionHandler: completionHandler
         )
     }

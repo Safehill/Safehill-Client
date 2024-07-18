@@ -10,6 +10,9 @@ public class SHInteractionsSyncOperation: Operation {
     
     public typealias OperationResult = Result<Void, Error>
     
+    private static var isWebSocketConnected = false
+    private static let memberAccessQueue = DispatchQueue(label: "SHInteractionsSyncOperation.memberAccessQueue")
+    
     public let log = Logger(subsystem: "com.safehill", category: "BG-INTERACTIONS-SYNC")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.threads-interactions-sync.delegates")
@@ -19,6 +22,7 @@ public class SHInteractionsSyncOperation: Operation {
     
     let socket: WebSocketAPI
     
+    let websocketConnectionDelegates: [WebSocketDelegate]
     let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     
@@ -28,35 +32,51 @@ public class SHInteractionsSyncOperation: Operation {
     public init(
         user: SHAuthenticatedLocalUser,
         deviceId: String,
+        websocketConnectionDelegates: [WebSocketDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     ) throws {
         self.user = user
         self.deviceId = deviceId
+        self.websocketConnectionDelegates = websocketConnectionDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.socket = WebSocketAPI()
     }
     
     deinit {
-        Task {
-            await self.stopWebSocket()
+        self.websocketConnectionDelegates.forEach {
+            $0.didDisconnect(error: nil)
         }
     }
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     private func startWebSocket() async throws {
+        var isAlreadyConnected = false
+        Self.memberAccessQueue.sync {
+            isAlreadyConnected = Self.isWebSocketConnected
+        }
+        
+        guard isAlreadyConnected == false else {
+            return
+        }
+        
         try await socket.connect(to: "ws/messages", as: self.user, from: self.deviceId)
         
-        for try await message in await socket.receive() {
-            
-            self.processMessage(message)
-            
-            if self.isCancelled {
-                await self.stopWebSocket()
-                break
+        do {
+            for try await message in await socket.receive() {
+                
+                self.processMessage(message)
+                
+                if self.isCancelled {
+                    await self.stopWebSocket(error: nil)
+                    break
+                }
             }
+        } catch {
+            log.error("[ws] websocket failure: \(error)")
+            throw error
         }
     }
     
@@ -67,8 +87,10 @@ public class SHInteractionsSyncOperation: Operation {
             if let error = error as? WebSocketConnectionError {
                 switch error {
                 case .disconnected, .closed, .connectionError, .transportError:
+                    log.info("[ws] websocket connection error: \(error.localizedDescription)")
+                    
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
-                    await self.stopWebSocket()
+                    await self.stopWebSocket(error: error)
                     
                     /// Exponential retry with backoff
                     try await Task.sleep(nanoseconds: self.retryDelay * 1_000_000_000)
@@ -82,8 +104,17 @@ public class SHInteractionsSyncOperation: Operation {
         }
     }
     
-    public func stopWebSocket() async {
+    public func stopWebSocket(error: Error?) async {
         await self.socket.disconnect()
+        self.log.debug("[ws] DISCONNECTED")
+        
+        websocketConnectionDelegates.forEach {
+            $0.didDisconnect(error: error)
+        }
+        
+        Self.memberAccessQueue.sync {
+            Self.isWebSocketConnected = false
+        }
     }
     
     private func processMessage(_ message: WebSocketMessage) {
@@ -104,6 +135,13 @@ public class SHInteractionsSyncOperation: Operation {
                 }
                 self.log.debug("[ws] CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
                 
+                self.websocketConnectionDelegates.forEach {
+                    $0.didConnect()
+                }
+                
+                Self.memberAccessQueue.sync {
+                    Self.isWebSocketConnected = true
+                }
                 
             case .connectionRequest:
                 guard let encoded = try? JSONDecoder().decode(WebSocketMessage.NewUserConnection.self, from: contentData) else {
@@ -111,6 +149,8 @@ public class SHInteractionsSyncOperation: Operation {
                 }
                 
                 let requestor = encoded.requestor
+                
+                self.log.debug("[ws] USERCONNECTION: request from \(requestor.name)")
                 
                 let serverUser = SHRemoteUser(
                     identifier: requestor.identifier,
@@ -130,6 +170,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] NEWMESSAGE: interaction id \(interactionId)")
                 
                 let messageOutput = MessageOutputDTO(
                     interactionId: interactionId,
@@ -151,7 +193,7 @@ public class SHInteractionsSyncOperation: Operation {
                     }
                 })
                 
-            case .reactionAdd, .reactionRemove:
+            case .reactionAdd:
                 
                 guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
                       let interactionId = reaction.interactionId,
@@ -160,6 +202,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed or without an ID, or invalid reaction type. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] NEWREACTION: interaction id \(interactionId)")
                 
                 let reactionOutput = ReactionOutputDTO(
                     interactionId: interactionId,
@@ -173,17 +217,43 @@ public class SHInteractionsSyncOperation: Operation {
                 interactionsSyncDelegates.forEach({
                     switch SHInteractionAnchor(rawValue: reaction.anchorType) {
                     case .group:
-                        if message.type == .reactionAdd {
-                            $0.didAddReaction(reactionOutput, inGroup: reaction.anchorId)
-                        } else {
-                            $0.didRemoveReaction(reactionOutput, inGroup: reaction.anchorId)
-                        }
+                        $0.didAddReaction(reactionOutput, toGroup: reaction.anchorId)
                     case .thread:
-                        if message.type == .reactionAdd {
-                            $0.didAddReaction(reactionOutput, inThread: reaction.anchorId)
-                        } else {
-                            $0.didRemoveReaction(reactionOutput, inThread: reaction.anchorId)
-                        }
+                        $0.didAddReaction(reactionOutput, toThread: reaction.anchorId)
+                    case .none:
+                        self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
+                    }
+                })
+                
+            case .reactionRemove:
+                
+                guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
+                      let reactionType = ReactionType(rawValue: reaction.reactionType)
+                else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] REMOVEREACTION")
+                
+                interactionsSyncDelegates.forEach({
+                    switch SHInteractionAnchor(rawValue: reaction.anchorType) {
+                    case .group:
+                        $0.didRemoveReaction(
+                            reactionType,
+                            addedBy: reaction.senderPublicIdentifier,
+                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                            inReplyToInteractionId: reaction.inReplyToInteractionId,
+                            fromGroup: reaction.anchorId
+                        )
+                    case .thread:
+                        $0.didRemoveReaction(
+                            reactionType,
+                            addedBy: reaction.senderPublicIdentifier,
+                            inReplyToAssetGlobalIdentifier: reaction.inReplyToAssetGlobalIdentifier,
+                            inReplyToInteractionId: reaction.inReplyToInteractionId,
+                            fromThread: reaction.anchorId
+                        )
                     case .none:
                         self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
                     }
@@ -195,6 +265,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] NEWTHREAD: thread id \(threadOutputDTO.threadId)")
                 
                 Task {
                     await self.createThreadsLocallyIfMissing(
@@ -208,6 +280,8 @@ public class SHInteractionsSyncOperation: Operation {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
                 
                 let threadId = threadAssetsWsMessage.threadId
                 let threadAssets = threadAssetsWsMessage.assets
@@ -232,26 +306,7 @@ public class SHInteractionsSyncOperation: Operation {
         
         Task {
             do {
-                ///
-                /// Sync the threads (creates, removals)
-                /// based on the list from server
-                ///
-                let _ = try await self.syncThreads(qos: .default)
-                
-                ///
-                /// Get the summary to update the latest messages and interactions
-                /// in threads and groups
-                let summary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
-                
-                self.delegatesQueue.async { [weak self] in
-                    self?.interactionsSyncDelegates.forEach {
-                        $0.didFetchRemoteThreadSummary(summary.summaryByThreadId)
-                        $0.didFetchRemoteGroupSummary(summary.summaryByGroupId)
-                    }
-                }
-                
-                self.updateThreadsInteractions(using: summary.summaryByThreadId)
-                self.updateGroupsInteractions(using: summary.summaryByGroupId)
+                try await self.syncInteractionSummaries()
                 
                 ///
                 /// Start syncing interactions via the web socket

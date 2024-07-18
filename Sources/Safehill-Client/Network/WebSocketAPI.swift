@@ -15,6 +15,8 @@ public actor WebSocketAPI {
     private let urlComponents: URLComponents
     private var webSocketTask: URLSessionWebSocketTask?
     
+    static let webSocketURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
+    
     init() {
         self.urlComponents = SafehillServerURLComponentsForWebsockets
     }
@@ -50,7 +52,7 @@ public actor WebSocketAPI {
         var request = URLRequest(url: url.appendingPathComponent(endpoint))
         request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         
-        self.webSocketTask = URLSession.shared.webSocketTask(with: request)
+        self.webSocketTask = WebSocketAPI.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
     }
     

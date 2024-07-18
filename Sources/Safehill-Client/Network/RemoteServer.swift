@@ -44,7 +44,7 @@ struct GenericFailureResponse: Decodable {
     let reason: String?
 }
 
-struct SHServerHTTPAPI : SHServerAPI {
+struct RemoteServer : SHServerAPI {
     
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
@@ -238,7 +238,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         }
         
-        SHServerHTTPAPI.makeRequest(
+        RemoteServer.makeRequest(
             request: request,
             usingSession: Self.safehillURLSession,
             decodingResponseAs: T.self,
@@ -273,7 +273,7 @@ struct SHServerHTTPAPI : SHServerAPI {
             }
         }
         
-        SHServerHTTPAPI.makeRequest(
+        RemoteServer.makeRequest(
             request: request,
             usingSession: Self.safehillURLSession,
             decodingResponseAs: T.self,
@@ -867,11 +867,15 @@ struct SHServerHTTPAPI : SHServerAPI {
                 ].joined(separator: "::")
             ) {
                 result in
-                if case .success(_) = result {
+                switch result {
+                case .success:
                     self.markAsset(with: asset.globalIdentifier,
                                    quality: encryptedAssetVersion.quality,
                                    as: .completed) { _ in
                     }
+                
+                case .failure(let error):
+                    log.critical("error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
                 }
             }
             
@@ -1110,22 +1114,34 @@ struct SHServerHTTPAPI : SHServerAPI {
     func topLevelThreadsInteractionsSummary(
         completionHandler: @escaping (Result<[String : InteractionsThreadSummaryDTO], Error>) -> ()
     ) {
-        self.post("interactions/\(SHInteractionAnchor.thread.rawValue)/summary", 
-                  parameters: nil,
-                  completionHandler: completionHandler)
+        self.post("interactions/\(SHInteractionAnchor.thread.rawValue)/summary", parameters: nil) {
+            (result: Result<InteractionsSummaryDTO, Error>) in
+            switch result {
+            case .success(let interactionsSummaryDTO):
+                completionHandler(.success(interactionsSummaryDTO.summaryByThreadId))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func topLevelGroupsInteractionsSummary(
         completionHandler: @escaping (Result<[String : InteractionsGroupSummaryDTO], Error>) -> ()
     ) {
-        self.post("interactions/\(SHInteractionAnchor.group.rawValue)/summary", 
-                  parameters: nil,
-                  completionHandler: completionHandler)
+        self.post("interactions/\(SHInteractionAnchor.group.rawValue)/summary", parameters: nil) {
+            (result: Result<InteractionsSummaryDTO, Error>) in
+            switch result {
+            case .success(let interactionsSummaryDTO):
+                completionHandler(.success(interactionsSummaryDTO.summaryByGroupId))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.addReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
@@ -1133,7 +1149,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func addReactions(
         _ reactions: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.addReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
@@ -1172,41 +1188,58 @@ struct SHServerHTTPAPI : SHServerAPI {
         }
     }
     
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inGroup groupId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.removeReactions(reactions, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
+        self.removeReaction(
+            reactionType,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            anchorType: .group,
+            anchorId: groupId,
+            completionHandler: completionHandler
+        )
     }
     
-    func removeReactions(
-        _ reactions: [ReactionInput],
-        inThread threadId: String,
+    func removeReaction(
+        _ reactionType: ReactionType,
+        senderPublicIdentifier: UserIdentifier,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.removeReactions(reactions, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)
+        self.removeReaction(
+            reactionType,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            anchorType: .thread,
+            anchorId: threadId,
+            completionHandler: completionHandler
+        )
     }
     
-    private func removeReactions(
-        _ reactions: [ReactionInput],
+    private func removeReaction(
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
         anchorType: SHInteractionAnchor,
         anchorId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        guard reactions.count == 1, let reaction = reactions.first else {
-            completionHandler(.failure(SHHTTPError.ClientError.badRequest("can't remove more than one reaction at a time")))
-            return
-        }
-        
         var parameters = [
-            "reactionType": reaction.reactionType.rawValue,
+            "reactionType": reactionType.rawValue,
         ] as [String: Any]
 
-        if let iId = reaction.inReplyToInteractionId {
+        if let iId = inReplyToInteractionId {
             parameters["inReplyToInteractionId"] = iId
         }
-        if let aGid = reaction.inReplyToAssetGlobalIdentifier {
+        if let aGid = inReplyToAssetGlobalIdentifier {
             parameters["inReplyToAssetGlobalIdentifier"] = aGid
         }
         
@@ -1292,7 +1325,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.addMessages(messages, anchorType: .group, anchorId: groupId, completionHandler: completionHandler)
@@ -1300,7 +1333,7 @@ struct SHServerHTTPAPI : SHServerAPI {
     
     func addMessages(
         _ messages: [MessageInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.addMessages(messages, anchorType: .thread, anchorId: threadId, completionHandler: completionHandler)

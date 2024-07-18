@@ -51,13 +51,19 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     func reactionsDidChange(inGroup groupId: String)
     
     func didAddReaction(_: ReactionOutputDTO,
-                        inGroup groupId: String)
+                        toGroup groupId: String)
     func didAddReaction(_: ReactionOutputDTO,
-                        inThread threadId: String)
-    func didRemoveReaction(_: ReactionOutputDTO,
-                           inGroup groupId: String)
-    func didRemoveReaction(_: ReactionOutputDTO,
-                           inThread threadId: String)
+                        toThread threadId: String)
+    func didRemoveReaction(_ reactionType: ReactionType,
+                           addedBy senderPublicIdentifier: UserIdentifier,
+                           inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+                           inReplyToInteractionId: String?,
+                           fromGroup groupId: String)
+    func didRemoveReaction(_ reactionType: ReactionType,
+                           addedBy senderPublicIdentifier: UserIdentifier,
+                           inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+                           inReplyToInteractionId: String?,
+                           fromThread threadId: String)
 }
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {

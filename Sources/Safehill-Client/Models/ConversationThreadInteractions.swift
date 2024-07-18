@@ -5,5 +5,5 @@ public struct SHConversationThreadInteractions : SHInteractionsCollectionProtoco
     public let messages: [SHDecryptedMessage]
     public let reactions: [SHReaction]
     
-    var collectionId: String { threadId }
+    public var collectionId: String { threadId }
 }
