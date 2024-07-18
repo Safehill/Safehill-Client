@@ -1206,34 +1206,34 @@ extension SHServerProxy {
     
     internal func addLocalReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.localServer.addReactions(
             reactions,
-            inGroup: groupId,
+            toGroup: groupId,
             completionHandler: completionHandler
         )
     }
     
     internal func addLocalReactions(
         _ reactions: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
         self.localServer.addReactions(
             reactions,
-            inThread: threadId,
+            toThread: threadId,
             completionHandler: completionHandler
         )
     }
     
     internal func addReactions(
         _ reactions: [ReactionInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
-        self.remoteServer.addReactions(reactions, inGroup: groupId) { remoteResult in
+        self.remoteServer.addReactions(reactions, toGroup: groupId) { remoteResult in
             switch remoteResult {
             case .success(let reactionsOutput):
                 ///
@@ -1242,7 +1242,7 @@ extension SHServerProxy {
                 ///
                 self.addLocalReactions(
                     reactionsOutput,
-                    inGroup: groupId
+                    toGroup: groupId
                 ) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
@@ -1257,10 +1257,10 @@ extension SHServerProxy {
     
     internal func addReactions(
         _ reactions: [ReactionInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()
     ) {
-        self.remoteServer.addReactions(reactions, inThread: threadId) { remoteResult in
+        self.remoteServer.addReactions(reactions, toThread: threadId) { remoteResult in
             switch remoteResult {
             case .success(let reactionsOutput):
                 ///
@@ -1269,7 +1269,7 @@ extension SHServerProxy {
                 ///
                 self.addLocalReactions(
                     reactionsOutput,
-                    inThread: threadId
+                    toThread: threadId
                 ) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction could not be recorded on the local server. This will lead to incosistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
@@ -1283,14 +1283,28 @@ extension SHServerProxy {
     }
     
     internal func removeReaction(
-        _ reaction: ReactionInput,
-        inGroup groupId: String,
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromGroup groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.remoteServer.removeReactions([reaction], inGroup: groupId) { remoteResult in
+        self.remoteServer.removeReaction(
+            reactionType,
+            senderPublicIdentifier: self.remoteServer.requestor.identifier,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            fromGroup: groupId
+        ) { remoteResult in
             switch remoteResult {
             case .success():
-                self.localServer.removeReactions([reaction], inGroup: groupId) { localResult in
+                self.localServer.removeReaction(
+                    reactionType,
+                    senderPublicIdentifier: self.localServer.requestor.identifier,
+                    inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+                    inReplyToInteractionId: inReplyToInteractionId,
+                    fromGroup: groupId
+                ) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1303,14 +1317,28 @@ extension SHServerProxy {
     }
     
     internal func removeReaction(
-        _ reaction: ReactionInput,
-        inThread threadId: String,
+        _ reactionType: ReactionType,
+        inReplyToAssetGlobalIdentifier: GlobalIdentifier?,
+        inReplyToInteractionId: String?,
+        fromThread threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.remoteServer.removeReactions([reaction], inThread: threadId) { remoteResult in
+        self.remoteServer.removeReaction(
+            reactionType,
+            senderPublicIdentifier: self.remoteServer.requestor.identifier,
+            inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+            inReplyToInteractionId: inReplyToInteractionId,
+            fromThread: threadId
+        ) { remoteResult in
             switch remoteResult {
             case .success():
-                self.localServer.removeReactions([reaction], inThread: threadId) { localResult in
+                self.localServer.removeReaction(
+                    reactionType,
+                    senderPublicIdentifier: self.localServer.requestor.identifier,
+                    inReplyToAssetGlobalIdentifier: inReplyToAssetGlobalIdentifier,
+                    inReplyToInteractionId: inReplyToInteractionId,
+                    fromThread: threadId
+                ) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The reaction was removed on the server but not locally. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1324,34 +1352,34 @@ extension SHServerProxy {
     
     internal func addLocalMessages(
         _ messages: [MessageInput],
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.localServer.addMessages(
             messages,
-            inGroup: groupId,
+            toGroup: groupId,
             completionHandler: completionHandler
         )
     }
     
     internal func addLocalMessages(
         _ messages: [MessageInput],
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     ) {
         self.localServer.addMessages(
             messages,
-            inThread: threadId,
+            toThread: threadId,
             completionHandler: completionHandler
         )
     }
     
     internal func addMessage(
         _ message: MessageInputDTO,
-        inGroup groupId: String,
+        toGroup groupId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     ) {
-        self.remoteServer.addMessages([message], inGroup: groupId) { remoteResult in
+        self.remoteServer.addMessages([message], toGroup: groupId) { remoteResult in
             switch remoteResult {
             case .success(let messageOutputs):
                 guard let messageOutput = messageOutputs.first else {
@@ -1359,7 +1387,7 @@ extension SHServerProxy {
                     return
                 }
                 completionHandler(.success(messageOutput))
-                self.addLocalMessages([messageOutput], inGroup: groupId) { localResult in
+                self.addLocalMessages([messageOutput], toGroup: groupId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1372,10 +1400,10 @@ extension SHServerProxy {
     
     internal func addMessage(
         _ message: MessageInputDTO,
-        inThread threadId: String,
+        toThread threadId: String,
         completionHandler: @escaping (Result<MessageOutputDTO, Error>) -> ()
     ) {
-        self.remoteServer.addMessages([message], inThread: threadId) { remoteResult in
+        self.remoteServer.addMessages([message], toThread: threadId) { remoteResult in
             switch remoteResult {
             case .success(let messageOutputs):
                 guard let messageOutput = messageOutputs.first else {
@@ -1383,7 +1411,7 @@ extension SHServerProxy {
                     return
                 }
                 completionHandler(.success(messageOutput))
-                self.addLocalMessages([messageOutput], inThread: threadId) { localResult in
+                self.addLocalMessages([messageOutput], toThread: threadId) { localResult in
                     if case .failure(let failure) = localResult {
                         log.critical("The message could not be recorded on the local server. This will lead to inconsistent results until a syncing mechanism is implemented. error=\(failure.localizedDescription)")
                     }
@@ -1463,7 +1491,10 @@ extension SHServerProxy {
                 switch result {
                     
                 case .failure(let error):
-                    log.warning("failed to get groups interactions summary from server. Fetching local summary. \(error.localizedDescription)")
+                    if error is URLError || error is SHHTTPError.TransportError {
+                    } else {
+                        log.warning("failed to get groups interactions summary from server. Fetching local summary. \(error.localizedDescription)")
+                    }
                     self.localServer.topLevelGroupsInteractionsSummary {
                         localResult in
                         switch localResult {
@@ -1576,7 +1607,7 @@ extension SHServerProxy {
             if remoteInteractions.messages.isEmpty == false {
                 self.addLocalMessages(
                     remoteInteractions.messages,
-                    inThread: anchorId,
+                    toThread: anchorId,
                     completionHandler: messagesCompletionBlock
                 )
             }
@@ -1584,7 +1615,7 @@ extension SHServerProxy {
             if remoteInteractions.reactions.isEmpty == false {
                 self.addLocalReactions(
                     remoteInteractions.reactions,
-                    inThread: anchorId,
+                    toThread: anchorId,
                     completionHandler: reactionsCompletionBlock
                 )
             }
@@ -1592,7 +1623,7 @@ extension SHServerProxy {
             if remoteInteractions.messages.isEmpty == false {
                 self.addLocalMessages(
                     remoteInteractions.messages,
-                    inGroup: anchorId,
+                    toGroup: anchorId,
                     completionHandler: messagesCompletionBlock
                 )
             }
@@ -1600,7 +1631,7 @@ extension SHServerProxy {
             if remoteInteractions.reactions.isEmpty == false {
                 self.addLocalReactions(
                     remoteInteractions.reactions,
-                    inGroup: anchorId,
+                    toGroup: anchorId,
                     completionHandler: reactionsCompletionBlock
                 )
             }
