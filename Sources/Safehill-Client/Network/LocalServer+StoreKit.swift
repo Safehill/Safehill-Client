@@ -34,7 +34,7 @@ public enum SHStoreKitHandlerError: Error, LocalizedError {
 public enum SHIAPProduct {
     case free, basic, premium, pro
     
-    var identifier: String? {
+    public var identifier: String? {
         switch self {
         case .free:
             nil
