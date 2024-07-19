@@ -32,23 +32,29 @@ public enum SHStoreKitHandlerError: Error, LocalizedError {
 }
 
 public enum SHIAPProduct {
-    case free, monthlyBasic, monthlyPremium, monthlyPro, monthlyBasicFamily
+    case free, basic, premium, pro
+    
+    var identifier: String? {
+        switch self {
+        case .free:
+            nil
+        case .basic:
+            "safehill.subscription.basic"
+        case .premium:
+            "safehill.subscription.premium"
+        case .pro:
+            "safehill.subscription.professional"
+        }
+    }
 }
 
-public let SHIAPProductIds = [
-    "safehill.subscription.basic": SHIAPProduct.monthlyBasic,
-    "safehill.subscription.premium": SHIAPProduct.monthlyPremium,
-    "safehill.subscription.professional": SHIAPProduct.monthlyPro,
-    "safehill.subscription.family.Apr2024": SHIAPProduct.monthlyBasicFamily,
-]
 public let SHIAPSharedSecret = "92267f6120324e16b1cf9b52c5ea26e7"
 
 public let SHIAPProductLimits = [
     SHIAPProduct.free: 50,
-    SHIAPProduct.monthlyBasic: 1000,
-    SHIAPProduct.monthlyPremium: 25000,
-    SHIAPProduct.monthlyPro: 1000000,
-    SHIAPProduct.monthlyBasicFamily: 40000,
+    SHIAPProduct.basic: 1000,
+    SHIAPProduct.premium: 25000,
+    SHIAPProduct.pro: 1000000
 ]
 
 
