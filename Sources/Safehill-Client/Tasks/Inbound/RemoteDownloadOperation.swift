@@ -139,6 +139,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
         ///
         Task(priority: qos.toTaskPriority()) {
+            guard !self.isCancelled else {
+                log.info("[\(type(of: self))] download task cancelled. Finishing")
+                completionHandler(.success([:]))
+                return
+            }
+            
             let globalIdentifiers = Array(Set(descriptors.map({ $0.globalIdentifier })))
             let blacklistedAssets = await SHDownloadBlacklist.shared.areBlacklisted(
                 assetGlobalIdentifiers: globalIdentifiers
@@ -309,6 +315,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
+        guard !self.isCancelled else {
+            log.info("[\(type(of: self))] download task cancelled. Finishing")
+            completionHandler(.success([]))
+            return
+        }
+        
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to decrypt
@@ -620,6 +632,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
+        guard !self.isCancelled else {
+            log.info("[\(type(of: self))] download task cancelled. Finishing")
+            completionHandler(.success([]))
+            return
+        }
         
         let group = DispatchGroup()
         
@@ -706,6 +723,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         for descriptors: [any SHAssetDescriptor],
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        guard !self.isCancelled else {
+            log.info("[\(type(of: self))] download task cancelled. Finishing")
+            completionHandler(.success([]))
+            return
+        }
+        
         guard descriptors.count > 0 else {
             completionHandler(.success([]))
             return
@@ -725,10 +748,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         let dispatchGroup = DispatchGroup()
         
         for descriptor in descriptors {
-            guard !self.isCancelled else {
-                log.info("[\(type(of: self))] download task cancelled. Finishing")
-                return
-            }
             
             guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
                 log.critical("[\(type(of: self))] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
@@ -818,6 +837,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        guard !self.isCancelled else {
+            log.info("[\(type(of: self))] download task cancelled. Finishing")
+            completionHandler(.success([]))
+            return
+        }
+        
         ///
         /// This processing takes care of the **CREATES**, namely the new assets on the server not present locally
         /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded after filtering
@@ -916,7 +941,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             }
             completionHandler(result)
             
-            if case .success(let tuples) = result, tuples.count > 0 {
+            if case .success(let tuples) = result {
                 Self.lastFetchDate = fetchStartedAt
             }
         }

@@ -286,6 +286,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
+        guard !self.isCancelled else {
+            log.info("[\(type(of: self))] download task cancelled. Finishing")
+            completionHandler(.success([]))
+            return
+        }
+        
         // TODO: This method does not re-create missing items from the history queues. If an item is missing it will not be restored
         
         ///
