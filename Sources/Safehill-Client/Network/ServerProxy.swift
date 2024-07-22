@@ -1435,6 +1435,19 @@ extension SHServerProxy {
         }
     }
     
+    internal func topLevelInteractionsSummaryFromLocal() async throws -> InteractionsSummaryDTO {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.topLevelInteractionsSummary { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let summary):
+                    continuation.resume(returning: summary)
+                }
+            }
+        }
+    }
+    
     internal func topLevelInteractionsSummary() async throws -> InteractionsSummaryDTO {
         try await withUnsafeThrowingContinuation { continuation in
             self.remoteServer.topLevelInteractionsSummary { result in
@@ -1527,41 +1540,21 @@ extension SHServerProxy {
         }
     }
     
-    /// Create in the local server the threads missing in the local server
+    /// Create in the local server the threads provided. If they exist they will be overwritten
     /// - Parameters:
     ///   - threadsToCreate: the list of threads to create locally
-    ///   - localThreads: the list of thread that already exists locally
     /// - Returns: the list of threads created
-    internal func createThreadsLocallyIfMissing(
-        _ threadsToCreate: [ConversationThreadOutputDTO],
-        localThreads: [ConversationThreadOutputDTO]? = nil
+    internal func createThreadsLocally(
+        _ threadsToCreate: [ConversationThreadOutputDTO]
     ) async -> [ConversationThreadOutputDTO] {
         
-        var notYetOnLocal: [ConversationThreadOutputDTO] = threadsToCreate
-        
-        if let localThreads {
-            let localThreadIds = localThreads.map({ $0.threadId })
-            notYetOnLocal = threadsToCreate.filter({ localThreadIds.contains($0.threadId) == false })
-        } else {
-            do {
-                let localThreads = try await self.listLocalThreads(
-                    withIdentifiers: threadsToCreate.map({ $0.threadId })
-                )
-                let localThreadIds = localThreads.map({ $0.threadId })
-                notYetOnLocal = threadsToCreate.filter { localThreadIds.contains($0.threadId) == false
-                }
-            } catch {
-                log.error("failed to get local threads when syncing. Assuming no threads on local. \(error.localizedDescription)")
-            }
-        }
-        
-        guard notYetOnLocal.isEmpty == false else {
+        guard threadsToCreate.isEmpty == false else {
             return []
         }
         
         return await withUnsafeContinuation { continuation in
             let dispatchGroup = DispatchGroup()
-            for threadToCreateLocally in notYetOnLocal {
+            for threadToCreateLocally in threadsToCreate {
                 dispatchGroup.enter()
                 self.localServer.createOrUpdateThread(
                     serverThread: threadToCreateLocally
@@ -1574,7 +1567,30 @@ extension SHServerProxy {
             }
             
             dispatchGroup.notify(queue: .global()) {
-                continuation.resume(returning: notYetOnLocal)
+                continuation.resume(returning: threadsToCreate)
+            }
+        }
+    }
+    
+    /// Update the last updated at based on the value in the provided threads
+    /// - Parameter threads: the threads
+    internal func updateLastUpdatedAt(
+        from threads: [ConversationThreadOutputDTO]
+    ) async throws {
+        guard threads.isEmpty == false else {
+            return
+        }
+        
+        return try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.updateLastUpdatedAt(
+                with: threads
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
             }
         }
     }

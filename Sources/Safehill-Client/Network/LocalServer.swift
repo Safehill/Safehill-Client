@@ -1457,6 +1457,31 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func updateLastUpdatedAt(
+        with remoteThreads: [ConversationThreadOutputDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let writeBatch = userStore.writeBatch()
+        
+        for remoteThread in remoteThreads {
+            writeBatch.set(value: remoteThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::lastUpdatedAt")
+        }
+        
+        writeBatch.write { result in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
