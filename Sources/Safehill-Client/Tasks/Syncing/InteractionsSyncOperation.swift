@@ -307,6 +307,15 @@ public class SHInteractionsSyncOperation: Operation {
         Task {
             do {
                 try await self.syncInteractionSummaries()
+                log.debug("[SHInteractionsSyncOperation] done syncing interaction summaries")
+            } catch {
+                log.error("\(error.localizedDescription)")
+            }
+        }
+        
+        Task {
+            do {
+                log.debug("[SHInteractionsSyncOperation] starting websocket")
                 
                 ///
                 /// Start syncing interactions via the web socket
