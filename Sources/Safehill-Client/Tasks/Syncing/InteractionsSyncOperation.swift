@@ -269,8 +269,8 @@ public class SHInteractionsSyncOperation: Operation {
                 self.log.debug("[ws] NEWTHREAD: thread id \(threadOutputDTO.threadId)")
                 
                 Task {
-                    await self.createThreadsLocallyIfMissing(
-                        remoteThreads: [threadOutputDTO]
+                    await self.serverProxy.createThreadsLocally(
+                        [threadOutputDTO]
                     )
                 }
                 
