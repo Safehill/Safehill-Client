@@ -2073,11 +2073,21 @@ struct LocalServer : SHServerAPI {
                     var threadSummaryById = [String: InteractionsThreadSummaryDTO]()
                     
                     for (threadId, thread) in threadsById {
+                        let assetIdsCount: Int
+                        do {
+                            let assetIds = try SHKGQuery.assetGlobalIdentifiers(
+                                amongst: thread.membersPublicIdentifier,
+                                requestingUserId: self.requestor.identifier
+                            )
+                            assetIdsCount = assetIds.count
+                        } catch {
+                            assetIdsCount = 0
+                        }
                         let threadSummary = InteractionsThreadSummaryDTO(
                             thread: thread,
                             lastEncryptedMessage: lastMessageByThreadId[threadId],
                             numMessages: interactionIdsByThreadId[threadId]?.count ?? 0,
-                            numAssets: 0 // TODO: Figure out how to retrieve the number of assets in the thread
+                            numAssets: assetIdsCount
                         )
                         threadSummaryById[threadId] = threadSummary
                     }
