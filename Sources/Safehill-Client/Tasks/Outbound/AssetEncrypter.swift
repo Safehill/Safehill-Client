@@ -256,6 +256,18 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 
                 completionHandler(.success(()))
             }
+        } else {
+            /// Notify the delegates
+            for delegate in self.assetDelegates {
+                if let delegate = delegate as? SHAssetEncrypterDelegate {
+                    delegate.didFailEncryption(queueItemIdentifier: request.identifier)
+                }
+                if users.count > 0 {
+                    if let delegate = delegate as? SHAssetSharerDelegate {
+                        delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                    }
+                }
+            }
         }
     }
     
@@ -349,18 +361,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         }
         
         let asset = encryptionRequest.asset
-        let globalIdentifier: GlobalIdentifier
-        
-        do {
-            ///
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            globalIdentifier = try asset.retrieveOrGenerateGlobalIdentifier()
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
+        let globalIdentifier = asset.globalIdentifier
         
         let handleError = { (error: Error) in
             self.log.error("FAIL in ENCRYPT: \(error.localizedDescription)")
@@ -372,6 +373,15 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             ) { _ in
                 completionHandler(.failure(error))
             }
+        }
+        
+        guard let globalIdentifier else {
+            ///
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
+            return
         }
         
         if encryptionRequest.isBackground == false {
