@@ -917,7 +917,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             }
             completionHandler(result)
             
-            if case .success(let tuples) = result {
+            if case .success = result {
                 Self.lastFetchDate = fetchStartedAt
             }
         }
