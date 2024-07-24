@@ -735,7 +735,7 @@ extension SHServerProxy {
         ///
         /// Get the asset from the local server cache
         /// Do this first to support offline access, and rely on the AssetDownloader to clean up local assets that were deleted on server.
-        /// The right thing way to do this is to retrieve descriptors first and fetch local assets later, but that would not support offline.
+        /// The right way to do this is to retrieve descriptors first and fetch local assets later, but that would not support offline.
         ///
         /// **NOTE**
         /// `cacheHiResolution` is set to `false` because this method's contract expects that the asset is retrieved and returned
