@@ -130,7 +130,7 @@ extension WebSocketAPI {
         }
     }
     
-    private func receiveOneMessage() async throws -> WebSocketMessage {
+    private func receiveOneMessage() async throws -> WebSocketMessage? {
         guard let webSocketTask = self.webSocketTask else {
             throw WebSocketConnectionError.closed
         }
@@ -139,8 +139,12 @@ extension WebSocketAPI {
             let message = try await webSocketTask.receive()
             switch message {
             case .string(let text):
-                let parsed = try self.parseEncodedMessage(text)
-                return parsed
+                if text == "pong" {
+                    return WebSocketMessage.init(type: .pong, content: "")
+                } else {
+                    let parsed = try self.parseEncodedMessage(text)
+                    return parsed
+                }
             case .data(_):
                 log.debug("[ws] received data message")
                 throw WebSocketConnectionError.decodingError

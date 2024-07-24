@@ -3,6 +3,7 @@ import Foundation
 public struct WebSocketMessage: Codable {
     
     enum MessageType: String, Codable {
+        case pong = "pong"
         case connectionAck = "connection-ack"
         case message = "message"
         case reactionAdd = "reaction-add"
