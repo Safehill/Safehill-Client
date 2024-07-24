@@ -111,11 +111,19 @@ public extension UIImage {
             return nil
         }
         
+        // Use UIGraphicsImageRenderer for efficient image rendering
         let renderer = UIGraphicsImageRenderer(size: sizeKeepingRatio)
         let resizedImage = renderer.image { _ in
             self.draw(in: CGRect(origin: .zero, size: sizeKeepingRatio))
         }
-        return resizedImage
+        
+        // Ensure the resized image is valid
+        guard let finalImage = resizedImage.cgImage else {
+            log.error("Failed to create resized image")
+            return nil
+        }
+        
+        return UIImage(cgImage: finalImage, scale: self.scale, orientation: self.imageOrientation)
     }
 }
 #endif
