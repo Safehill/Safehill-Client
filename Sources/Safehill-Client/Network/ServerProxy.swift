@@ -484,8 +484,10 @@ extension SHServerProxy {
     /// Fill the specified version of the requested assets in the local server (cache)
     /// - Parameter descriptorsKeyedByGlobalIdentifier: the assets' descriptors keyed by their global identifier
     /// - Parameter quality: the quality of the asset to cache
-    private func cacheAssets(for descriptorsKeyedByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-                             quality: SHAssetQuality) {
+    private func cacheAssets(
+        for descriptorsKeyedByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        quality: SHAssetQuality
+    ) {
         log.trace("[CACHING] Attempting to cache \(quality.rawValue) for assets \(descriptorsKeyedByGlobalIdentifier)")
         
         let globalIdentifiers = Array(descriptorsKeyedByGlobalIdentifier.keys)
@@ -522,8 +524,8 @@ extension SHServerProxy {
                         }
                     }
                 }
-            case .failure(_):
-                log.error("[CACHING] Unable to get assets \(globalIdentifiers) from remote server")
+            case .failure(let error):
+                log.error("[CACHING] Unable to get assets \(globalIdentifiers) from remote server. \(error.localizedDescription)")
             }
         }
     }
@@ -866,21 +868,13 @@ extension SHServerProxy {
         }
     }
     
-    func upload(serverAsset: SHServerAsset,
-                asset: any SHEncryptedAsset,
-                filterVersions: [SHAssetQuality]? = nil,
-                completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.remoteServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions) { result in
-            switch result {
-            case .success():
-                self.localServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions, completionHandler: completionHandler)
-            case .failure(let error):
-                log.critical("failed to mark asset as uploaded on the server. This asset is not marked as backed up: \(error.localizedDescription)")
-                // TODO: wanna retry later? Or the server should have a background process to update these states from S3?
-                completionHandler(.failure(error))
-            }
-            
-        }
+    func upload(
+        serverAsset: SHServerAsset,
+        asset: any SHEncryptedAsset,
+        filterVersions: [SHAssetQuality]? = nil
+    ) async throws {
+        try await self.remoteServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions)
+        try await self.localServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions)
     }
     
     public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [GlobalIdentifier],

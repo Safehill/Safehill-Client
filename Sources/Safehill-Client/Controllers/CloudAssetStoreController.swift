@@ -32,7 +32,7 @@ struct SHAssetStoreController {
         with groupId: String,
         filterVersions: [SHAssetQuality]? = nil,
         force: Bool
-    ) throws -> SHServerAsset
+    ) async throws -> SHServerAsset
     {
         let serverAsset = try self.createRemoteAsset(
             encryptedAsset,
@@ -42,7 +42,7 @@ struct SHAssetStoreController {
         )
         
         do {
-            try self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
+            try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
         } catch {
             try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
             throw error
@@ -125,34 +125,17 @@ extension SHAssetStoreController {
         }
     }
     
-    private func upload(serverAsset: SHServerAsset,
-                        asset: any SHEncryptedAsset,
-                        filterVersions: [SHAssetQuality]?) throws {
+    private func upload(
+        serverAsset: SHServerAsset,
+        asset: any SHEncryptedAsset,
+        filterVersions: [SHAssetQuality]?
+    ) async throws {
         log.info("uploading asset \(asset.globalIdentifier) to the CDN")
         
-        var error: Error? = nil
-        
-        let group = DispatchGroup()
-        group.enter()
-        self.user.serverProxy.upload(
+        try await self.user.serverProxy.upload(
             serverAsset: serverAsset,
             asset: asset,
             filterVersions: filterVersions
-        ) { result in
-            if case .failure(let err) = result {
-                error = err
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHUploadTimeoutInMilliseconds))
-        
-        guard dispatchResult == .success else {
-            throw SHBackgroundOperationError.timedOut
-        }
-        
-        if let error = error {
-            throw error
-        }
+        )
     }
 }

@@ -106,17 +106,24 @@ public extension UIImage {
             sizeKeepingRatio = CGSize(width: newSize.height * ratio, height: newSize.height)
         }
         
-        guard sizeKeepingRatio.width > 0, sizeKeepingRatio.height > 0 
-        else {
+        guard sizeKeepingRatio.width > 0, sizeKeepingRatio.height > 0 else {
             log.error("Invalid size when resizing image to \(String(describing: newSize)): \(String(describing: sizeKeepingRatio))")
             return nil
         }
         
-        UIGraphicsBeginImageContextWithOptions(sizeKeepingRatio, false, 0.0)
-        defer { UIGraphicsEndImageContext() }
+        // Use UIGraphicsImageRenderer for efficient image rendering
+        let renderer = UIGraphicsImageRenderer(size: sizeKeepingRatio)
+        let resizedImage = renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: sizeKeepingRatio))
+        }
         
-        self.draw(in: CGRect(origin: .zero, size: sizeKeepingRatio))
-        return UIGraphicsGetImageFromCurrentImageContext()
+        // Ensure the resized image is valid
+        guard let finalImage = resizedImage.cgImage else {
+            log.error("Failed to create resized image")
+            return nil
+        }
+        
+        return UIImage(cgImage: finalImage, scale: self.scale, orientation: self.imageOrientation)
     }
 }
 #endif

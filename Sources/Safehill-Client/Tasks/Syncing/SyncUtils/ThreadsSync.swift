@@ -160,7 +160,6 @@ extension SHInteractionsSyncOperation {
     internal func updateThreadsInteractions(
         using summaryByThreadId: [String: InteractionsThreadSummaryDTO]
     ) {
-        
         for (threadId, threadSummary) in summaryByThreadId {
             if let lastMessage = threadSummary.lastEncryptedMessage {
                 self.serverProxy.addLocalMessages(

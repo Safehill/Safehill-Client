@@ -378,7 +378,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
     }
     
-    private func recreateLocalAssetsAndQueueItems(
+    private func recreateLocalAssets(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys globalIdentifiersSharedBySelf: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
@@ -421,9 +421,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     switch localCreationResult {
                     case .success:
                         ///
-                        /// Re-create the successful upload and share queue items
+                        /// Notify the delegates about successful upload and share queue items
                         ///
-                        self.restoreAndRecreateQueueItems(
+                        self.restoreQueueItems(
                             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
                             qos: qos,
                             completionHandler: completionHandler
@@ -441,9 +441,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     }
     
     ///
-    /// For all the descriptors whose originator user is _this_ user:
-    /// - create the items in the queue
-    /// - notify the restoration delegate about the change
+    /// For all the descriptors whose originator user is _this_ user notify the restoration delegate about the change.
     /// Uploads and shares will be reported separately, according to the contract in the delegate.
     ///
     /// - Parameters:
@@ -451,7 +449,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///   - qos: the quality of service
     ///   - completionHandler: the callback method
     ///
-    private func restoreAndRecreateQueueItems(
+    private func restoreQueueItems(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
@@ -479,37 +477,15 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 let (
                     groupIdToUploadItems,
                     groupIdToShareItems
-                ) = self.createHistoryItems(
+                ) = self.historyItems(
                     from: Array(descriptorsByGlobalIdentifier.values),
                     usersDict: usersDict
                 )
-                    
-                for groupIdToUploadItem in groupIdToUploadItems.values {
-                    for (uploadItem, timestamp) in groupIdToUploadItem {
-                        if (try? uploadItem.insert(
-                            in: BackgroundOperationQueue.of(type: .successfulUpload),
-                            at: timestamp
-                        )) == nil {
-                            self.log.warning("[\(type(of: self))] unable to enqueue successful upload item groupId=\(uploadItem.groupId), localIdentifier=\(uploadItem.localIdentifier)")
-                        }
-                    }
-                }
-                
-                for groupIdToShareItem in groupIdToShareItems.values {
-                    for (shareItem, timestamp) in groupIdToShareItem {
-                        if (try? shareItem.insert(
-                            in: BackgroundOperationQueue.of(type: .successfulShare),
-                            at: timestamp
-                        )) == nil {
-                            self.log.warning("[\(type(of: self))] unable to enqueue successful share item groupId=\(shareItem.groupId), localIdentifier=\(shareItem.localIdentifier)")
-                        }
-                    }
-                }
 
                 let restorationDelegate = self.restorationDelegate
                 self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
-                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
+                    restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
+                    restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
                 }
                 
                 completionHandler(.success(()))
@@ -528,7 +504,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///   - descriptors: the descriptors to process
     ///   - usersDict: the users mentioned in the descriptors, keyed by identifier
     ///
-    internal func createHistoryItems(
+    internal func historyItems(
         from descriptors: [any SHAssetDescriptor],
         usersDict: [UserIdentifier: any SHServerUser]
     ) -> (
@@ -669,7 +645,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         var restorationError: Error? = nil
         group.enter()
-        self.recreateLocalAssetsAndQueueItems(
+        self.recreateLocalAssets(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
             filteringKeys: sharedBySelfGlobalIdentifiers,
             qos: qos
@@ -941,7 +917,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             }
             completionHandler(result)
             
-            if case .success(let tuples) = result {
+            if case .success = result {
                 Self.lastFetchDate = fetchStartedAt
             }
         }

@@ -19,7 +19,8 @@ protocol SHUploadStepBackgroundOperation {
         eventOriginator: SHServerUser,
         sharedWith: [SHServerUser],
         isPhotoMessage: Bool,
-        isBackground: Bool
+        isBackground: Bool,
+        error: Error
     )
 }
 
@@ -55,7 +56,8 @@ extension SHUploadStepBackgroundOperation {
         eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser],
         isPhotoMessage: Bool,
-        isBackground: Bool
+        isBackground: Bool,
+        error: Error
     ) {
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,
@@ -74,12 +76,7 @@ extension SHUploadStepBackgroundOperation {
             log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) to the UPLOAD FAILED queue")
             
             let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
-            
             try failedUploadQueueItem.enqueue(in: failedUploadQueue)
-            
-            /// Remove items in the `UploadHistoryQueue` for the same request identifier
-            let _ = try? successfulUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedUploadQueueItem.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to upload but will never be recorded as 'failed to upload' because enqueueing to UPLOAD FAILED queue failed: \(error.localizedDescription)")
@@ -101,11 +98,7 @@ extension SHUploadStepBackgroundOperation {
             
             do {
                 let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
-                let successfulShareQueue = try BackgroundOperationQueue.of(type: .successfulShare)
                 try failedShare.enqueue(in: failedShareQueue)
-                
-                /// Remove items in the `ShareHistoryQueue` for the same identifier
-                let _ = try? successfulShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedShare.identifier))
             }
             catch {
                 log.fault("asset \(localIdentifier) failed to encrypt, hence it couldn't be shared, but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")

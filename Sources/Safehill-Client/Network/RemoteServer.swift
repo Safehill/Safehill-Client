@@ -642,38 +642,46 @@ struct RemoteServer : SHServerAPI {
         if let versions = versions {
             parameters["versionNames"] = versions.map { $0.rawValue }
         }
+        
+        let manifest = ThreadSafeAssetsDict()
+        let errors = ThreadSafeS3Errors()
+        
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
-                let manifest = ThreadSafeAssetsDict()
-                let errors = ThreadSafeS3Errors()
                 
-                let group = DispatchGroup()
+                let dispatchGroup = DispatchGroup()
                 
                 for asset in assets {
                     for version in asset.versions {
-                        group.enter()
+                        dispatchGroup.enter()
                         log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
                         S3Proxy.retrieve(asset, version) { result in
-                            switch result {
-                            case .success(let encryptedAsset):
-                                manifest.add(encryptedAsset)
-                            case .failure(let err):
-                                errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
+                            Task {
+                                switch result {
+                                case .success(let encryptedAsset):
+                                    await manifest.add(encryptedAsset)
+                                case .failure(let err):
+                                    await errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
+                                }
+                                dispatchGroup.leave()
                             }
-                            group.leave()
                         }
                     }
                 }
                 
-                group.notify(queue: .global()) {
-                    let errorsDict = errors.toDict()
-                    guard errorsDict.count == 0 else {
-                        return completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
+                dispatchGroup.notify(queue: .global()) {
+                    Task {
+                        let errorsDict = await errors.dictionary
+                        
+                        if errorsDict.isEmpty {
+                            completionHandler(.success(await manifest.dictionary))
+                        } else {
+                            completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
+                        }
                     }
-                    completionHandler(.success(manifest.dictionary))
                 }
-                
+            
             case .failure(let error):
                 completionHandler(.failure(error))
             }
@@ -830,69 +838,94 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func upload(serverAsset: SHServerAsset,
-                asset: any SHEncryptedAsset,
-                filterVersions: [SHAssetQuality]?,
-                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
-        let writeQueue = DispatchQueue(label: "upload.\(asset.globalIdentifier)", attributes: .concurrent)
-        var results = [SHAssetQuality: Swift.Result<Void, Error>]()
+    func upload(
+        serverAsset: SHServerAsset,
+        asset: any SHEncryptedAsset,
+        filterVersions: [SHAssetQuality]?
+    ) async throws {
         
         for encryptedAssetVersion in asset.encryptedVersions.values {
             guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
                 continue
             }
             
-            log.info("uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            log.info("[S3] uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
             
             let serverAssetVersion = serverAsset.versions.first { sav in
                 sav.versionName == encryptedAssetVersion.quality.rawValue
             }
             guard let serverAssetVersion = serverAssetVersion else {
-                results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ClientError.badRequest("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)"))
-                break
+                throw SHHTTPError.ClientError.badRequest("[S3] invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
             }
             
             guard let url = URL(string: serverAssetVersion.presignedURL) else {
-                results[encryptedAssetVersion.quality] = .failure(SHHTTPError.ServerError.unexpectedResponse("presigned URL is invalid"))
-                break
+                throw SHHTTPError.ServerError.unexpectedResponse("[S3] presigned URL is invalid")
             }
             
-            S3Proxy.saveInBackground(
-                encryptedAssetVersion.encryptedData,
-                usingPresignedURL: url,
-                sessionIdentifier: [
-                    self.requestor.identifier,
-                    serverAsset.globalIdentifier,
-                    serverAssetVersion.versionName
-                ].joined(separator: "::")
-            ) {
-                result in
-                switch result {
-                case .success:
-                    self.markAsset(with: asset.globalIdentifier,
-                                   quality: encryptedAssetVersion.quality,
-                                   as: .completed) { _ in
+            if encryptedAssetVersion.quality == .lowResolution {
+                try await withUnsafeThrowingContinuation { continuation in
+                    S3Proxy.save(
+                        encryptedAssetVersion.encryptedData,
+                        usingPresignedURL: url
+                    ) {
+                        result in
+                        switch result {
+                            
+                        case .success:
+                            log.debug("[S3] asset \(serverAsset.globalIdentifier) version \(serverAssetVersion.versionName) upload succeeded to \(url)")
+                            self.markAsset(
+                                with: asset.globalIdentifier,
+                                quality: encryptedAssetVersion.quality,
+                                as: .completed
+                            ) { markResult in
+                                switch markResult {
+                                case .success:
+                                    continuation.resume()
+                                case .failure(let error):
+                                    continuation.resume(throwing: error)
+                                }
+                            }
+                        
+                        case .failure(let error):
+                            log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
+                            continuation.resume(throwing: error)
+                        }
                     }
-                
-                case .failure(let error):
-                    log.critical("error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
+                }
+            } else {
+                S3Proxy.saveInBackground(
+                    encryptedAssetVersion.encryptedData,
+                    usingPresignedURL: url,
+                    sessionIdentifier: [
+                        self.requestor.identifier,
+                        serverAsset.globalIdentifier,
+                        serverAssetVersion.versionName
+                    ].joined(separator: "::")
+                ) {
+                    result in
+                    
+                    /// This is the callback that will get executed when the upload in background finishes
+                    
+                    switch result {
+                    case .success:
+                        self.markAsset(
+                            with: asset.globalIdentifier,
+                            quality: encryptedAssetVersion.quality,
+                            as: .completed
+                        ) { markResult in
+                            switch markResult {
+                            case .success:
+                                log.debug("[S3] asset \(serverAsset.globalIdentifier) version \(serverAssetVersion.versionName) upload succeeded to \(url)")
+                            case .failure(let error):
+                                log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
+                            }
+                        }
+                    
+                    case .failure(let error):
+                        log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
+                    }
                 }
             }
-            
-            results[encryptedAssetVersion.quality] = .success(())
-        }
-        
-        writeQueue.sync {
-            for (version, result) in results {
-                switch result {
-                case .failure(_):
-                    log.error("Could not upload asset=\(asset.globalIdentifier) version=\(version.rawValue)")
-                    return completionHandler(result)
-                default:
-                    continue
-                }
-            }
-            completionHandler(.success(()))
         }
     }
 
