@@ -766,7 +766,7 @@ struct LocalServer : SHServerAPI {
                 }
             }
             
-            usleep(useconds_t(10 * 1000)) // sleep 10ms
+            usleep(useconds_t(10 * 1_000)) // sleep 10ms
         }
         
         group.notify(queue: .global()) {
@@ -1085,28 +1085,32 @@ struct LocalServer : SHServerAPI {
         writeBatch.write(completionHandler: completionHandler)
     }
     
-    func upload(serverAsset: SHServerAsset,
-                asset: any SHEncryptedAsset,
-                filterVersions: [SHAssetQuality]?,
-                completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let group = DispatchGroup()
+    func upload(
+        serverAsset: SHServerAsset,
+        asset: any SHEncryptedAsset,
+        filterVersions: [SHAssetQuality]?
+    ) async throws {
+        
         for encryptedAssetVersion in asset.encryptedVersions.values {
             guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
                 continue
             }
             
-            group.enter()
-            self.markAsset(with: asset.globalIdentifier,
-                           quality: encryptedAssetVersion.quality,
-                           as: .completed) { _ in
-                group.leave()
-            }
+            try await withUnsafeThrowingContinuation { continuation in
+                self.markAsset(
+                    with: asset.globalIdentifier,
+                    quality: encryptedAssetVersion.quality,
+                    as: .completed
+                ) { result in
+                    switch result {
+                    case .success:
+                        continuation.resume()
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }   
         }
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * asset.encryptedVersions.count))
-        guard dispatchResult == .success else {
-            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
-        }
-        completionHandler(.success(()))
     }
     
     func markAsset(with assetGlobalIdentifier: GlobalIdentifier,

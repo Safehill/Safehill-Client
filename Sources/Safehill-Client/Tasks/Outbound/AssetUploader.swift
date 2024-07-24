@@ -295,40 +295,43 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     return
                 }
 #endif
-                let serverAsset: SHServerAsset
-                do {
-                    serverAsset = try SHAssetStoreController(user: self.user)
-                        .upload(
-                            asset: encryptedAsset,
-                            with: uploadRequest.groupId,
-                            filterVersions: versions,
-                            force: true
+                
+                Task(priority: qos.toTaskPriority()) {
+                    let serverAsset: SHServerAsset
+                    do {
+                        serverAsset = try await SHAssetStoreController(user: self.user)
+                            .upload(
+                                asset: encryptedAsset,
+                                with: uploadRequest.groupId,
+                                filterVersions: versions,
+                                force: true
+                            )
+                    } catch {
+                        let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
+                        handleError(error)
+                        return
+                    }
+                    
+                    guard globalIdentifier == serverAsset.globalIdentifier else {
+                        let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                        handleError(error)
+                        return
+                    }
+                    
+                    ///
+                    /// Upload is completed.
+                    /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                    ///
+                    do {
+                        try self.markAsSuccessful(
+                            item: item,
+                            uploadRequest: uploadRequest
                         )
-                } catch {
-                    let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
-                    handleError(error)
-                    return
-                }
-                
-                guard globalIdentifier == serverAsset.globalIdentifier else {
-                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
-                    handleError(error)
-                    return
-                }
-                
-                ///
-                /// Upload is completed.
-                /// Create an item in the history queue for this upload, and remove the one in the upload queue
-                ///
-                do {
-                    try self.markAsSuccessful(
-                        item: item,
-                        uploadRequest: uploadRequest
-                    )
-                    completionHandler(.success(()))
-                } catch {
-                    self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
-                    handleError(error)
+                        completionHandler(.success(()))
+                    } catch {
+                        self.log.critical("failed to mark UPLOAD as successful. This will likely cause infinite loops")
+                        handleError(error)
+                    }
                 }
             }
         }

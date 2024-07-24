@@ -6,12 +6,12 @@ public protocol GenericAssetIdentifiable: Hashable {
 }
 
 public extension GenericAssetIdentifiable {
-    public static func == (lhs: Self, rhs: Self) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.localIdentifier == rhs.localIdentifier
         && lhs.globalIdentifier == rhs.globalIdentifier
     }
     
-    public func hash(into hasher: inout Hasher) {
+    func hash(into hasher: inout Hasher) {
         hasher.combine(localIdentifier)
         hasher.combine(globalIdentifier)
     }
