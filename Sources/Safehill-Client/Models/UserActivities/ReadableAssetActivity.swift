@@ -1,6 +1,6 @@
 import Foundation
 
-protocol ReadableAssetActivity: Hashable, Equatable, Identifiable {
+public protocol ReadableAssetActivity: Hashable, Equatable, Identifiable {
     var assets: [Asset] { get }
     var groupId: String { get }
     var eventOriginator: any SHServerUser { get }
@@ -8,7 +8,7 @@ protocol ReadableAssetActivity: Hashable, Equatable, Identifiable {
 }
 
 
-extension ReadableAssetActivity {
+public extension ReadableAssetActivity {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.assets.map({ $0.identifier }).sorted() == rhs.assets.map({ $0.identifier }).sorted()
         && lhs.groupId == rhs.groupId
