@@ -3,9 +3,9 @@ import XCTest
 import os
 
 struct DummyRestorationDelegate: SHAssetActivityRestorationDelegate {
-    func restoreUploadQueueItems(from: [String : [(SHUploadHistoryItem, Date)]]) {}
+    func restoreUploadHistoryItems(from: [String : [(SHUploadHistoryItem, Date)]]) {}
     
-    func restoreShareQueueItems(from: [String : [(SHShareHistoryItem, Date)]]) {}
+    func restoreShareHistoryItems(from: [String : [(SHShareHistoryItem, Date)]]) {}
 }
 
 class DummyOperation: Operation, SHBackgroundOperationProtocol {

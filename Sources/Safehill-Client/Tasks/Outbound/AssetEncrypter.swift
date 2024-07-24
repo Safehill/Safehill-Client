@@ -200,6 +200,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
         globalIdentifier: String?,
+        error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let localIdentifier = request.localIdentifier
@@ -231,7 +232,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             eventOriginator: eventOriginator,
             sharedWith: users,
             isPhotoMessage: isPhotoMessage,
-            isBackground: request.isBackground
+            isBackground: request.isBackground,
+            error: error
         )
         
         if let globalIdentifier = globalIdentifier {
@@ -245,11 +247,11 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 /// Notify the delegates
                 for delegate in self.assetDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didFailEncryption(queueItemIdentifier: request.identifier)
+                        delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
-                            delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                            delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
                         }
                     }
                 }
@@ -316,7 +318,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         /// Notify the delegates
         for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetEncrypterDelegate {
-                delegate.didCompleteEncryption(queueItemIdentifier: uploadRequest.identifier)
+                delegate.didCompleteEncryption(ofAsset: localIdentifier, in: groupId)
             }
         }
     }
@@ -368,7 +370,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             self.markAsFailed(
                 item: item,
                 encryptionRequest: encryptionRequest,
-                globalIdentifier: globalIdentifier
+                globalIdentifier: globalIdentifier,
+                error: error
             ) { _ in
                 completionHandler(.failure(error))
             }
@@ -377,7 +380,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         if encryptionRequest.isBackground == false {
             for delegate in assetDelegates {
                 if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didStartEncryption(queueItemIdentifier: encryptionRequest.identifier)
+                    delegate.didStartEncryption(ofAsset: encryptionRequest.localIdentifier, in: encryptionRequest.groupId)  
                 }
             }
             

@@ -78,7 +78,8 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
     
     public func markAsFailed(
         fetchRequest request: SHLocalFetchRequestQueueItem,
-        queueItem: KBQueueItem
+        queueItem: KBQueueItem,
+        error: Error
     ) throws {
         let localIdentifier = request.localIdentifier
         let versions = request.versions
@@ -126,9 +127,9 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         for delegate in delegates {
             if let delegate = delegate as? SHAssetFetcherDelegate {
                 if request.shouldUpload == true {
-                    delegate.didFailFetchingForUpload(queueItemIdentifier: failedUploadQueueItem.identifier)
+                    delegate.didFailFetchingForUpload(ofAsset: localIdentifier, in: groupId, error: error)
                 } else {
-                    delegate.didFailFetchingForSharing(queueItemIdentifier: failedUploadQueueItem.identifier)
+                    delegate.didFailFetchingForSharing(ofAsset: localIdentifier, in: groupId, error: error)
                 }
             }
         }
@@ -182,9 +183,9 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetFetcherDelegate {
                         if request.shouldUpload == true {
-                            delegate.didCompleteFetchingForUpload(queueItemIdentifier: request.identifier)
+                            delegate.didCompleteFetchingForUpload(ofAsset: localIdentifier, in: groupId)
                         } else {
-                            delegate.didCompleteFetchingForSharing(queueItemIdentifier: request.identifier)
+                            delegate.didCompleteFetchingForSharing(ofAsset: localIdentifier, in: groupId)
                         }
                     }
                 }
@@ -249,8 +250,11 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let handleError = { (error: Error) in
             self.log.critical("Error in FETCH asset: \(error.localizedDescription)")
             do {
-                try self.markAsFailed(fetchRequest: fetchRequest,
-                                      queueItem: item)
+                try self.markAsFailed(
+                    fetchRequest: fetchRequest,
+                    queueItem: item,
+                    error: error
+                )
             } catch {
                 self.log.critical("failed to mark FETCH as failed. This will likely cause infinite loops. \(error.localizedDescription)")
                 // TODO: Handle
@@ -279,9 +283,9 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 for delegate in delegates {
                     if let delegate = delegate as? SHAssetFetcherDelegate {
                         if fetchRequest.shouldUpload == true {
-                            delegate.didStartFetchingForUpload(queueItemIdentifier: fetchRequest.identifier)
+                            delegate.didStartFetchingForUpload(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
                         } else {
-                            delegate.didStartFetchingForSharing(queueItemIdentifier: fetchRequest.identifier)
+                            delegate.didStartFetchingForSharing(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
                         }
                     }
                 }

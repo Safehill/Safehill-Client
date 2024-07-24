@@ -17,7 +17,7 @@ struct AssetDescriptorsDiff {
         let newUploadState: SHAssetDescriptorUploadState
     }
     
-    let assetsRemovedOnRemote: [SHRemoteAssetIdentifier]
+    let assetsRemovedOnRemote: [SHBackedUpAssetIdentifier]
     let stateDifferentOnRemote: [AssetVersionState]
     let userIdsAddedToTheShareOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
     let userIdsRemovedFromTheSharesOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
@@ -46,19 +46,19 @@ struct AssetDescriptorsDiff {
         /// Set(remote+local) - Set(local) = stale assets only present in the local server -> to remove
         var onlyLocalAssets = localDescriptors
             .map({
-                d in SHRemoteAssetIdentifier(globalIdentifier: d.globalIdentifier,
+                d in SHBackedUpAssetIdentifier(globalIdentifier: d.globalIdentifier,
                                              localIdentifier: d.localIdentifier)
             })
             .subtract(
                 remoteDescriptors.map({
-                    d in SHRemoteAssetIdentifier(globalIdentifier: d.globalIdentifier,
+                    d in SHBackedUpAssetIdentifier(globalIdentifier: d.globalIdentifier,
                                                  localIdentifier: d.localIdentifier)
                 })
             )
         
         if onlyLocalAssets.count > 0 {
             for localDescriptor in localDescriptors {
-                let assetRef = SHRemoteAssetIdentifier(globalIdentifier: localDescriptor.globalIdentifier,
+                let assetRef = SHBackedUpAssetIdentifier(globalIdentifier: localDescriptor.globalIdentifier,
                                                        localIdentifier: localDescriptor.localIdentifier)
                 if let index = onlyLocalAssets.firstIndex(of: assetRef) {
                     switch localDescriptor.uploadState {

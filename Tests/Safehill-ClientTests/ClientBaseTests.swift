@@ -117,8 +117,6 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         let _ = try BackgroundOperationQueue.of(type: .encryption)
         let _ = try BackgroundOperationQueue.of(type: .upload)
         let _ = try BackgroundOperationQueue.of(type: .share)
-        let _ = try BackgroundOperationQueue.of(type: .successfulUpload)
-        let _ = try BackgroundOperationQueue.of(type: .successfulShare)
         let _ = try BackgroundOperationQueue.of(type: .failedUpload)
         let _ = try BackgroundOperationQueue.of(type: .failedShare)
     }
@@ -398,14 +396,12 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         let sender = self.testUser.shUser
         let receiver = SHLocalCryptoUser()
         
-        let group = DispatchGroup()
-        var error: Error? = nil
+        let expectation1 = XCTestExpectation(description: "sender uploads")
         
         // Sender encrypts
         let encryptedAsset = try encrypt(data, from: sender, to: receiver)
         
         // Sender uploads
-        group.enter()
         self.testUser.serverProxy.remoteServer.create(
             assets: [encryptedAsset],
             groupId: "groupId",
@@ -415,30 +411,32 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
             switch result {
             case .success(let serverAssets):
                 guard let serverAsset = serverAssets.first else {
-                    error = SHBackgroundOperationError.fatalError("No asset created")
-                    group.leave()
+                    XCTFail("No asset created")
+                    expectation1.fulfill()
                     return
                 }
-                self.testUser.serverProxy.upload(serverAsset: serverAsset, asset: encryptedAsset) { result in
-                    if case .failure(let err) = result {
-                        error = err
+                Task {
+                    do {
+                        try await self.testUser.serverProxy.upload(
+                            serverAsset: serverAsset,
+                            asset: encryptedAsset
+                        )
+                    } catch {
+                        XCTFail(error.localizedDescription)
                     }
-                    group.leave()
+                    expectation1.fulfill()
                 }
-            case .failure(let err):
-                error = err
-                group.leave()
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+                expectation1.fulfill()
             }
         }
         
-        let _ = group.wait(timeout: .distantFuture)
-        guard error == nil else {
-            XCTFail(error!.localizedDescription)
-            return
-        }
+//        wait(for: [expectation1], timeout: 5.0)
+        
+        let expectation2 = XCTestExpectation(description: "receiver downloads")
         
         // Receiver downloads
-        group.enter()
         self.testUser.serverProxy.getAssets(
             withGlobalIdentifiers: [encryptedAsset.globalIdentifier],
             versions: [.lowResolution]
@@ -453,16 +451,12 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
                 XCTAssert(assetsDict.values.first?.encryptedVersions[.lowResolution]!.publicKeyData == encryptedAsset.encryptedVersions[.lowResolution]!.publicKeyData)
                 XCTAssert(assetsDict.values.first?.encryptedVersions[.lowResolution]!.publicSignatureData == encryptedAsset.encryptedVersions[.lowResolution]!.publicSignatureData)
             case .failure(let err):
-                error = err
+                XCTFail(err.localizedDescription)
             }
-            group.leave()
+            expectation2.fulfill()
         }
         
-        let _ = group.wait(timeout: .distantFuture)
-        guard error == nil else {
-            XCTFail(error!.localizedDescription)
-            return
-        }
+//        wait(for: [expectation2], timeout: 5.0)
         
         // Receiver decrypts
         let decryptedAsset = try decrypt(encryptedAsset, receiver: receiver, sender: sender)
