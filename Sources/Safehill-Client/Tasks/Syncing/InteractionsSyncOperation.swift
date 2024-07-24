@@ -132,8 +132,6 @@ public class SHInteractionsSyncOperation: Operation {
         self.delegatesQueue.async {
             
             switch message.type {
-            case .pong:
-                break
                 
             case .connectionAck:
                 guard let encoded = try? JSONDecoder().decode(WebSocketMessage.ConnectionAck.self, from: contentData) else {
