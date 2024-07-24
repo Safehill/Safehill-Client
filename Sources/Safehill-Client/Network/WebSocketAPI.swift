@@ -57,9 +57,11 @@ public actor WebSocketAPI {
         self.webSocketTask = WebSocketAPI.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
         
-        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: keepAliveIntervalInSeconds, repeats: true) { [weak self] _ in
-            do { try self?.sendKeepAliveMessage() }
-            catch { log.error("failed to send ping for keepAlive") }
+        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: keepAliveIntervalInSeconds, repeats: true) { _ in
+            Task { [weak self] in
+                do { try await self?.sendKeepAliveMessage() }
+                catch { log.error("failed to send ping for keepAlive") }
+            }
         }
         keepAliveTimer?.fire()
         RunLoop.current.run()
@@ -73,15 +75,13 @@ public actor WebSocketAPI {
 
 extension WebSocketAPI {
     
-    private func sendKeepAliveMessage() throws {
+    private func sendKeepAliveMessage() async throws {
         guard let webSocketTask = self.webSocketTask else {
             throw WebSocketConnectionError.closed
         }
         
-        Task {
-            let keepAliveMessage = URLSessionWebSocketTask.Message.string("ping")
-            try await webSocketTask.send(keepAliveMessage)
-        }
+        let keepAliveMessage = URLSessionWebSocketTask.Message.string("ping")
+        try await webSocketTask.send(keepAliveMessage)
     }
     
     public func send(_ wsMessage: WebSocketMessage) async throws {
