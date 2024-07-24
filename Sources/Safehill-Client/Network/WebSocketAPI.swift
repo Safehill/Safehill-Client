@@ -14,6 +14,7 @@ public actor WebSocketAPI {
     
     private let urlComponents: URLComponents
     private var webSocketTask: URLSessionWebSocketTask?
+    private var keepAliveTimer: Timer? = nil
     
     static let webSocketURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
@@ -36,7 +37,8 @@ public actor WebSocketAPI {
     public func connect(
         to endpoint: String,
         as authedUser: SHAuthenticatedLocalUser,
-        from deviceId: String
+        from deviceId: String,
+        keepAliveIntervalInSeconds: TimeInterval
     ) throws {
         guard webSocketTask == nil else {
             return
@@ -54,14 +56,33 @@ public actor WebSocketAPI {
         
         self.webSocketTask = WebSocketAPI.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
+        
+        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: keepAliveIntervalInSeconds, repeats: true) { [weak self] _ in
+            do { try self?.sendKeepAliveMessage() }
+            catch { log.error("failed to send ping for keepAlive") }
+        }
+        keepAliveTimer?.fire()
+        RunLoop.current.run()
     }
     
     public func disconnect() {
+        keepAliveTimer?.invalidate()
         self.webSocketTask?.cancel(with: .normalClosure, reason: nil)
     }
 }
 
 extension WebSocketAPI {
+    
+    private func sendKeepAliveMessage() throws {
+        guard let webSocketTask = self.webSocketTask else {
+            throw WebSocketConnectionError.closed
+        }
+        
+        Task {
+            let keepAliveMessage = URLSessionWebSocketTask.Message.string("ping")
+            try await webSocketTask.send(keepAliveMessage)
+        }
+    }
     
     public func send(_ wsMessage: WebSocketMessage) async throws {
         guard let webSocketTask = self.webSocketTask else {

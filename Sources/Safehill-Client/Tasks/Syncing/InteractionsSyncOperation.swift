@@ -62,7 +62,10 @@ public class SHInteractionsSyncOperation: Operation {
             return
         }
         
-        try await socket.connect(to: "ws/messages", as: self.user, from: self.deviceId)
+        try await socket.connect(to: "ws/messages", 
+                                 as: self.user,
+                                 from: self.deviceId,
+                                 keepAliveIntervalInSeconds: 5.0)
         
         do {
             for try await message in await socket.receive() {
