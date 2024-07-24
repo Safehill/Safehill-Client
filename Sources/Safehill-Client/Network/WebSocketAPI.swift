@@ -64,7 +64,6 @@ public actor WebSocketAPI {
             }
         }
         keepAliveTimer?.fire()
-        RunLoop.current.run()
     }
     
     public func disconnect() {
