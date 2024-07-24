@@ -1,6 +1,6 @@
 import Foundation
 
-public class GenericAssetActivity: ReadableAssetActivity {
+open class GenericAssetActivity: ReadableAssetActivity {
     
     /// The list of local asset identifiers in this request
     public let assets: [Asset]
