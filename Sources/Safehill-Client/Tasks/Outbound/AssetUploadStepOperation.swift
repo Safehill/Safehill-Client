@@ -19,7 +19,8 @@ protocol SHUploadStepBackgroundOperation {
         eventOriginator: SHServerUser,
         sharedWith: [SHServerUser],
         isPhotoMessage: Bool,
-        isBackground: Bool
+        isBackground: Bool,
+        error: Error
     )
 }
 
@@ -55,7 +56,8 @@ extension SHUploadStepBackgroundOperation {
         eventOriginator: SHServerUser,
         sharedWith users: [SHServerUser],
         isPhotoMessage: Bool,
-        isBackground: Bool
+        isBackground: Bool,
+        error: Error
     ) {
         let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
             localIdentifier: localIdentifier,

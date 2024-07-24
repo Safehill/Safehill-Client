@@ -83,7 +83,8 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             eventOriginator: eventOriginator,
             sharedWith: users,
             isPhotoMessage: isPhotoMessage,
-            isBackground: request.isBackground
+            isBackground: request.isBackground,
+            error: error
         )
         
         self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions) {
@@ -96,11 +97,11 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             /// Notify the delegates
             for delegate in self.delegates {
                 if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didFailUpload(queueItemIdentifier: request.identifier, error: error)
+                    delegate.didFailUpload(ofAsset: localIdentifier, in: groupId, error: error)
                 }
                 if users.count > 0 {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                        delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
                     }
                 }
             }
@@ -132,23 +133,12 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             log.warning("item \(item.identifier) was completed but dequeuing from UPLOAD queue failed. This task will be attempted again")
             throw error
         }
-
-        let succesfulUploadQueueItem = SHUploadHistoryItem(
-            localAssetId: localIdentifier,
-            globalAssetId: globalIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: [],
-            isPhotoMessage: isPhotoMessage,
-            isBackground: isBackground
-        )
         
         do {
             let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
             
             /// Remove items in the `FailedUploadQueue` for the same identifier
-            let _ = try failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: succesfulUploadQueueItem.identifier))
+            let _ = try failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: item.identifier))
             
         } catch {
             log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
@@ -159,7 +149,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             /// Notify the delegates
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didCompleteUpload(queueItemIdentifier: succesfulUploadQueueItem.identifier)
+                    delegate.didCompleteUpload(ofAsset: localIdentifier, in: groupId)
                 }
             }
         }
@@ -268,7 +258,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         if uploadRequest.isBackground == false {
             for delegate in delegates {
                 if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didStartUpload(queueItemIdentifier: uploadRequest.identifier)
+                    delegate.didStartUpload(ofAsset: uploadRequest.localIdentifier, in: uploadRequest.groupId)
                 }
             }
         }

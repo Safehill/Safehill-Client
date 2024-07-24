@@ -37,10 +37,15 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
         globalIdentifier: String?,
+        error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         do {
-            try self.markAsFailed(encryptionRequest: request, queueItem: item)
+            try self.markAsFailed(
+                encryptionRequest: request,
+                queueItem: item,
+                error: error
+            )
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
@@ -50,7 +55,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     
     public func markAsFailed(
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        queueItem: KBQueueItem
+        queueItem: KBQueueItem,
+        error: Error
     ) throws {
         let localIdentifier = request.localIdentifier
         let versions = request.versions
@@ -95,7 +101,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Notify the delegates
         for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didFailSharing(queueItemIdentifier: failedShare.identifier)
+                delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
             }
         }
     }
@@ -106,11 +112,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         globalIdentifier: String
     ) throws {
         let localIdentifier = request.localIdentifier
-        let versions = request.versions
         let groupId = request.groupId
-        let eventOriginator = request.eventOriginator
-        let users = request.sharedWith
-        let isPhotoMessage = request.isPhotoMessage
         
         /// Dequeque from ShareQueue
         log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
@@ -120,23 +122,12 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
         }
         
-        let successfulShare = SHShareHistoryItem(
-            localAssetId: localIdentifier,
-            globalAssetId: globalIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: users,
-            isPhotoMessage: isPhotoMessage,
-            isBackground: request.isBackground
-        )
-        
         do {
             /// Enquque to ShareHistoryQueue
             log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
             /// Remove items in the `FailedShareQueue` for the same identifier
-            let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: successfulShare.identifier))
+            let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: item.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
@@ -151,9 +142,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Notify the delegates
         for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didCompleteSharing(
-                    queueItemIdentifier: successfulShare.identifier
-                )
+                delegate.didCompleteSharing(ofAsset: localIdentifier, in: groupId)
             }
         }
     }
@@ -305,7 +294,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             do {
                 try self.markAsFailed(
                     encryptionRequest: shareRequest,
-                    queueItem: item
+                    queueItem: item,
+                    error: error
                 )
             } catch {
                 self.log.critical("failed to mark SHARE as failed. This will likely cause infinite loops")
@@ -324,7 +314,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         if shareRequest.isBackground == false {
             for delegate in assetDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didStartSharing(queueItemIdentifier: shareRequest.identifier)
+                    delegate.didStartSharing(ofAsset: shareRequest.localIdentifier, in: shareRequest.groupId)
                 }
             }
         }

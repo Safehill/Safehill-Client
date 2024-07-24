@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol SHAssetUploaderDelegate: SHOutboundAssetOperationDelegate {
-    func didStartUpload(queueItemIdentifier: String)
-    func didCompleteUpload(queueItemIdentifier: String)
-    func didFailUpload(queueItemIdentifier: String, error: Error)
+    func didStartUpload(ofAsset: LocalIdentifier, in groupId: String)
+    func didCompleteUpload(ofAsset: LocalIdentifier, in groupId: String)
+    func didFailUpload(ofAsset: LocalIdentifier, in groupId: String, error: Error)
 }
