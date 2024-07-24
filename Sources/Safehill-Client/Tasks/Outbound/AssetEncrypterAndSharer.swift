@@ -80,11 +80,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
 
         do {
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
-            let successfulShareQueue = try BackgroundOperationQueue.of(type: .successfulShare)
             try failedShare.enqueue(in: failedShareQueue)
-            
-            /// Remove items in the `ShareHistoryQueue` for the same identifier
-            let _ = try? successfulShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: failedShare.identifier))
         }
         catch {
             log.fault("asset \(localIdentifier) failed to share but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
@@ -139,27 +135,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             /// Enquque to ShareHistoryQueue
             log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
-            let successfulShareQueue = try BackgroundOperationQueue.of(type: .successfulShare)
-            
             /// Remove items in the `FailedShareQueue` for the same identifier
             let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: successfulShare.identifier))
-            
-            if request.isBackground == false {
-                /// Remove items in the `ShareHistoryQueue` for the same asset identifier and group identifier but different users
-                /// The contract with the client when adding users to an existing share is to ask to share with both new and old users.
-                /// Which, in turn, means that the old share history item can be safely removed once the new one is inserted,
-                /// as the new one will have both old and new users.
-                let _ = try successfulShareQueue.removeValues(
-                    forKeysMatching: KBGenericCondition(
-                        .beginsWith,
-                        value: [
-                            localIdentifier, groupId
-                        ].joined(separator: "+")
-                    )
-                )
-            }
-            
-            try successfulShare.enqueue(in: successfulShareQueue)
         }
         catch {
             log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
@@ -174,7 +151,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         /// Notify the delegates
         for delegate in assetDelegates {
             if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didCompleteSharing(queueItemIdentifier: successfulShare.identifier)
+                delegate.didCompleteSharing(
+                    queueItemIdentifier: successfulShare.identifier
+                )
             }
         }
     }

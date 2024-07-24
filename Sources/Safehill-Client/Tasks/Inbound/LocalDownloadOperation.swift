@@ -156,7 +156,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 let (
                     groupIdToUploadItems,
                     groupIdToShareItems
-                ) = self.createHistoryItems(
+                ) = self.historyItems(
                     from: descriptors,
                     usersDict: usersDict
                 )
@@ -301,7 +301,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         ///
         /// These assets are definitely in the local server (because the descriptors fetch by a `SHLocalDownloadOperation`
         /// contain only assets from the local server).
-        /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptors
+        /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptorsByGlobalIdentifier:filteringKeys:)
+        /// takes care of creating them
         ///
         self.restoreQueueItems(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,

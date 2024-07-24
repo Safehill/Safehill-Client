@@ -117,8 +117,6 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
         let _ = try BackgroundOperationQueue.of(type: .encryption)
         let _ = try BackgroundOperationQueue.of(type: .upload)
         let _ = try BackgroundOperationQueue.of(type: .share)
-        let _ = try BackgroundOperationQueue.of(type: .successfulUpload)
-        let _ = try BackgroundOperationQueue.of(type: .successfulShare)
         let _ = try BackgroundOperationQueue.of(type: .failedUpload)
         let _ = try BackgroundOperationQueue.of(type: .failedShare)
     }

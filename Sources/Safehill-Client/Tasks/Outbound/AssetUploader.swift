@@ -146,14 +146,9 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         
         do {
             let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-            let successfulUploadQueue = try BackgroundOperationQueue.of(type: .successfulUpload)
             
             /// Remove items in the `FailedUploadQueue` for the same identifier
             let _ = try failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: succesfulUploadQueueItem.identifier))
-            
-            /// Enqueue to success history
-            log.info("UPLOAD succeeded. Enqueueing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
-            try succesfulUploadQueueItem.enqueue(in: successfulUploadQueue)
             
         } catch {
             log.fault("asset \(localIdentifier) was upload but will never be recorded as uploaded because enqueueing to SUCCESS queue failed")
