@@ -1,13 +1,13 @@
 import Foundation
 
-class GenericAssetActivity: ReadableAssetActivity {
+public class GenericAssetActivity: ReadableAssetActivity {
     
     /// The list of local asset identifiers in this request
-    let assets: [Asset]
+    public let assets: [Asset]
     
-    var groupId: String
-    var eventOriginator: SHServerUser
-    var shareInfo: [(with: SHServerUser, at: Date)]
+    public var groupId: String
+    public var eventOriginator: SHServerUser
+    public var shareInfo: [(with: SHServerUser, at: Date)]
     
     init(
         assets: [Asset],
