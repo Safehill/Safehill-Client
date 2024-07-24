@@ -7,7 +7,7 @@ public protocol SHInboundAssetOperationDelegate {}
 public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [SHServerUser]])
     
-    func assetsWereDeleted(_ assets: [SHRemoteAssetIdentifier])
+    func assetsWereDeleted(_ assets: [SHBackedUpAssetIdentifier])
     func usersWereAddedToShare(
         of: GlobalIdentifier,
         groupIdByRecipientId: [UserIdentifier: String],
