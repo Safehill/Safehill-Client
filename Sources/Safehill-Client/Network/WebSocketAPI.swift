@@ -59,8 +59,12 @@ public actor WebSocketAPI {
         
         keepAliveTimer = Timer.scheduledTimer(withTimeInterval: keepAliveIntervalInSeconds, repeats: true) { _ in
             Task { [weak self] in
-                do { try await self?.sendKeepAliveMessage() }
-                catch { log.error("failed to send ping for keepAlive") }
+                do {
+                    log.debug("[ws] sending ping for keepAlive")
+                    try await self?.sendKeepAliveMessage()
+                } catch {
+                    log.error("[ws] failed to send ping for keepAlive")
+                }
             }
         }
         keepAliveTimer?.fire()
@@ -140,6 +144,7 @@ extension WebSocketAPI {
             switch message {
             case .string(let text):
                 if text == "pong" {
+                    log.debug("[ws] received pong")
                     return WebSocketMessage.init(type: .pong, content: "")
                 } else {
                     let parsed = try self.parseEncodedMessage(text)
