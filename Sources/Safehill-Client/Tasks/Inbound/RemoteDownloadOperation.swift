@@ -484,8 +484,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
 
                 let restorationDelegate = self.restorationDelegate
                 self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadQueueItems(from: groupIdToUploadItems)
-                    restorationDelegate.restoreShareQueueItems(from: groupIdToShareItems)
+                    restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
+                    restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
                 }
                 
                 completionHandler(.success(()))
