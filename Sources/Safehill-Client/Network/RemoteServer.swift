@@ -872,6 +872,7 @@ struct RemoteServer : SHServerAPI {
                         switch result {
                             
                         case .success:
+                            log.debug("[S3] asset \(serverAsset.globalIdentifier) version \(serverAssetVersion.versionName) upload succeeded to \(url)")
                             self.markAsset(
                                 with: asset.globalIdentifier,
                                 quality: encryptedAssetVersion.quality,
@@ -886,7 +887,7 @@ struct RemoteServer : SHServerAPI {
                             }
                         
                         case .failure(let error):
-                            log.critical("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
+                            log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
                             continuation.resume(throwing: error)
                         }
                     }
@@ -914,14 +915,14 @@ struct RemoteServer : SHServerAPI {
                         ) { markResult in
                             switch markResult {
                             case .success:
-                                log.debug("[S3] asset \(asset.globalIdentifier) version \(encryptedAssetVersion.quality.rawValue) succeeded")
+                                log.debug("[S3] asset \(serverAsset.globalIdentifier) version \(serverAssetVersion.versionName) upload succeeded to \(url)")
                             case .failure(let error):
-                                log.error("[S3] asset \(asset.globalIdentifier) version \(encryptedAssetVersion.quality.rawValue) failed. \(error.localizedDescription)")
+                                log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
                             }
                         }
                     
                     case .failure(let error):
-                        log.critical("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
+                        log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
                     }
                 }
             }
