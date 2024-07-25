@@ -129,7 +129,7 @@ extension WebSocketAPI {
         }
     }
     
-    private func receiveOneMessage() async throws -> WebSocketMessage? {
+    private func receiveOneMessage() async throws -> WebSocketMessage {
         guard let webSocketTask = self.webSocketTask else {
             throw WebSocketConnectionError.closed
         }

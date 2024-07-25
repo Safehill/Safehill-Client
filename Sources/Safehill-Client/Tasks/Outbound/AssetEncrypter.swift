@@ -262,11 +262,11 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             /// Notify the delegates
             for delegate in self.assetDelegates {
                 if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didFailEncryption(queueItemIdentifier: request.identifier)
+                    delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
                 }
                 if users.count > 0 {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didFailSharing(queueItemIdentifier: request.identifier)
+                        delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
                     }
                 }
             }
