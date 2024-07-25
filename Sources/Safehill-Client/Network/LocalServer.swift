@@ -488,222 +488,329 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        /// No need to pull all versions when constructing descriptor, pulling "low" version only.
-        /// This assumes that sharing information and other metadata are common across all versions (low and hi)
-        var condition = KBGenericCondition(value: false)
+        var descriptors = [SHGenericAssetDescriptor]()
         
-        for quality in SHAssetQuality.all {
-            condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
-        }
+        var senderInfoDict = [GlobalIdentifier: UserIdentifier]()
+        var groupInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetGroupInfo]]()
+        var sharedWithUsersInGroupByAssetGid = [GlobalIdentifier: [UserIdentifier: String]]()
         
-        assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Result) in
-            switch result {
-            case .success(let keyValues):
-                var versionUploadStateByIdentifierQuality = [String: [SHAssetQuality: SHAssetDescriptorUploadState]]()
-                var localInfoByGlobalIdentifier = [String: (phAssetId: String?, creationDate: Date?)]()
-                var descriptors = [SHGenericAssetDescriptor]()
+        ///
+        /// Retrieve all information from the asset store for all assets and `.lowResolution` versions.
+        /// **We can safely assume all versions are shared using the same group id, and will have same sender and receiver info*
+        ///
+        do {
+            let senderCondition = KBGenericCondition(
+                .beginsWith, value: "sender::"
+            ).and(KBGenericCondition(
+                .contains, value: "::low::"
+            ))
+            
+            let senderKeys = try assetStore.keys(matching: senderCondition)
+            
+            for senderKey in senderKeys {
+                let components = senderKey.components(separatedBy: "::")
+                /// Components:
+                /// 0) "sender"
+                /// 1) sender user identifier
+                /// 2) version quality
+                /// 3) asset identifier
                 
-                for (k, v) in keyValues {
-                    guard let value = v as? [String: Any],
-                          let phAssetIdentifier = value["applePhotosAssetIdentifier"] as? String?,
-                          let creationDate = value["creationDate"] as? Date? else {
-                        continue
-                    }
-                    
-                    let doProcessState = { (globalIdentifier: String, quality: SHAssetQuality) in
-                        if forAssetGlobalIdentifiers.count > 0, forAssetGlobalIdentifiers.contains(globalIdentifier) == false {
-                            return
-                        }
-                        
-                        let state: SHAssetDescriptorUploadState
-                        
-                        if let uploadStateStr = value["uploadState"] as? String,
-                           let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
-                            state = uploadState
-                        } else {
-                            state = .notStarted
-                        }
-                        
-                        if versionUploadStateByIdentifierQuality[globalIdentifier] == nil {
-                            versionUploadStateByIdentifierQuality[globalIdentifier] = [quality: state]
-                        } else {
-                            versionUploadStateByIdentifierQuality[globalIdentifier]![quality] = state
-                        }
-                    }
-                    
-                    let globalIdentifier: String
-                    if let range = k.range(of: "\(SHAssetQuality.lowResolution.rawValue)::") {
-                        globalIdentifier = "" + k[range.upperBound...]
-                        doProcessState(globalIdentifier, .lowResolution)
-                    } else if let range = k.range(of: "\(SHAssetQuality.midResolution.rawValue)::") {
-                        globalIdentifier = "" + k[range.upperBound...]
-                        doProcessState(globalIdentifier, .midResolution)
-                    } else if let range = k.range(of: "\(SHAssetQuality.hiResolution.rawValue)::") {
-                        globalIdentifier = "" + k[range.upperBound...]
-                        doProcessState(globalIdentifier, .hiResolution)
-                    } else {
-                        continue
-                    }
-                    
-                    if forAssetGlobalIdentifiers.count > 0, forAssetGlobalIdentifiers.contains(globalIdentifier) == false {
-                        continue
-                    }
-                    
-                    localInfoByGlobalIdentifier[globalIdentifier] = (
-                        phAssetId: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId ?? phAssetIdentifier,
-                        creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate ?? creationDate
-                    )
+                if components.count == 4 {
+                    let sharedByUserId = components[1]
+                    let globalIdentifier = components[3]
+                    senderInfoDict[globalIdentifier] = sharedByUserId
+                } else {
+                    log.error("invalid sender info key in DB: \(senderKey)")
+                }
+            }
+            
+            let receiverCondition = KBGenericCondition(
+                .beginsWith, value: "receiver::"
+            ).and(KBGenericCondition(
+                .contains, value: "::low::") // Can safely assume all versions are shared using the same group id
+            )
+            let receiverKeysAndValues = try assetStore.dictionaryRepresentation(forKeysMatching: receiverCondition)
+            for (key, value) in receiverKeysAndValues {
+                guard let value = value as? [String: String] else {
+                    log.error("invalid sharing information key found in DB: \(String(describing: value))")
+                    continue
                 }
                 
-                for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
-                    var sharedBy: String? = nil
-                    var err: Error? = nil
-                    
-                    do {
-                        let condition = KBGenericCondition(.beginsWith, value: "sender::").and(KBGenericCondition(.endsWith, value: globalIdentifier))
-                        let keys = try assetStore.keys(matching: condition)
-                        if keys.count > 0, let key = keys.first {
-                            let components = key.components(separatedBy: "::")
-                            if components.count == 4 {
-                                sharedBy = components[1]
-                            } else {
-                                log.error("failed to retrieve sender information for asset \(globalIdentifier)")
-                                err = KBError.fatalError("Invalid sender information for asset")
-                            }
+                let components = key.components(separatedBy: "::")
+                /// Components:
+                /// 0) "receiver"
+                /// 1) receiver user public identifier
+                /// 2) version quality
+                /// 3) asset identifier
+                
+                let assetGid: GlobalIdentifier
+                
+                if components.count == 4, let groupId = value["groupId"] {
+                    assetGid = components[3]
+                    if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
+                        let receiverUser = components[1]
+                        
+                        if sharedWithUsersInGroupByAssetGid[assetGid] == nil {
+                            sharedWithUsersInGroupByAssetGid[assetGid] = [receiverUser: groupId]
                         } else {
-                            log.error("failed to retrieve sender information for asset \(globalIdentifier)")
-                            err = KBError.fatalError("No sender information for asset")
+                            sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] = groupId
                         }
-                    } catch {
-                        log.error("failed to retrieve sender information for asset \(globalIdentifier): \(error)")
-                        err = error
                     }
-                    
-                    guard err == nil, let sharedBy = sharedBy else {
-                        completionHandler(.failure(err!))
+                } else {
+                    log.error("failed to retrieve sharing information. Invalid entry format: \(key) -> \(value)")
+                    continue
+                }
+                
+                if let groupId = value["groupId"] {
+                    let groupName = value["groupName"]
+                    let groupCreationDate = value["groupCreationDate"]
+                    if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
+                        let groupInfo = SHGenericAssetGroupInfo(
+                            name: groupName,
+                            createdAt: groupCreationDate?.iso8601withFractionalSeconds
+                        )
+                        groupInfoByIdByAssetGid[assetGid] = [groupId: groupInfo]
+                    }
+                }
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        
+        ///
+        /// Retrieve all information from the asset store for all assets and matching versions.
+        ///
+        
+        do {
+            var versionUploadStateByIdentifierQuality = [String: [SHAssetQuality: SHAssetDescriptorUploadState]]()
+            var localInfoByGlobalIdentifier = [String: (phAssetId: String?, creationDate: Date?)]()
+            
+            var condition = KBGenericCondition(value: false)
+            
+            for quality in SHAssetQuality.all {
+                condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
+            }
+            
+            let keyValues = try assetStore.dictionaryRepresentation(forKeysMatching: condition)
+            
+            for (k, v) in keyValues {
+                guard let value = v as? [String: Any],
+                      let phAssetIdentifier = value["applePhotosAssetIdentifier"] as? String?,
+                      let creationDate = value["creationDate"] as? Date? else {
+                    continue
+                }
+                
+                let doProcessState = { (globalIdentifier: String, quality: SHAssetQuality) in
+                    if forAssetGlobalIdentifiers.count > 0, forAssetGlobalIdentifiers.contains(globalIdentifier) == false {
                         return
                     }
                     
-                    var groupInfoById = [String: SHAssetGroupInfo]()
-                    var sharedWithUsersInGroup = [UserIdentifier: String]()
+                    let state: SHAssetDescriptorUploadState
                     
-                    do {
-                        let condition = KBGenericCondition(
-                            .beginsWith, value: "receiver::"
-                        ).and(KBGenericCondition(
-                            .endsWith, value: globalIdentifier)
-                        ).and(KBGenericCondition(
-                            .contains, value: "::low::") // Can safely assume all versions are shared using the same group id
-                        )
-
-                        let keysAndValues = try assetStore.dictionaryRepresentation(forKeysMatching: condition)
-                        if keysAndValues.count > 0 {
-                            for (key, value) in keysAndValues {
-                                guard let value = value as? [String: String] else {
-                                    log.error("failed to retrieve sharing information for asset \(globalIdentifier). Type is not a dictionary")
-                                    continue
-                                }
-                                let components = key.components(separatedBy: "::")
-                                /// Components:
-                                /// 0) "receiver"
-                                /// 1) receiver user public identifier
-                                /// 2) version quality
-                                /// 3) asset identifier
-                                
-                                if components.count == 4, let groupId = value["groupId"] {
-                                    if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
-                                        sharedWithUsersInGroup[components[1]] = groupId
-                                    }
-                                } else {
-                                    log.error("failed to retrieve sharing information for asset \(globalIdentifier). Invalid format")
-                                }
-                                
-                                if let groupId = value["groupId"] {
-                                    let groupCreationDate = value["groupCreationDate"]
-                                    if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
-                                        groupInfoById[groupId] = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate?.iso8601withFractionalSeconds)
-                                    }
-                                }
-                            }
-                        } else {
-                            log.error("failed to retrieve sharing information for asset \(globalIdentifier). No data")
-                        }
-                    } catch {
-                        log.error("failed to retrieve sharing information for asset \(globalIdentifier): \(error)")
+                    if let uploadStateStr = value["uploadState"] as? String,
+                       let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
+                        state = uploadState
+                    } else {
+                        state = .notStarted
                     }
                     
-                    if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
-                        log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
+                    if versionUploadStateByIdentifierQuality[globalIdentifier] == nil {
+                        versionUploadStateByIdentifierQuality[globalIdentifier] = [quality: state]
+                    } else {
+                        versionUploadStateByIdentifierQuality[globalIdentifier]![quality] = state
                     }
-                    
-                    if groupInfoById.isEmpty {
-                        /// 
-                        /// If there is no info about any group, don't add the descriptor
-                        /// Because the filtering on groups returned no results for this asset,
-                        /// the asset will not be included.
-                        /// 
-                        continue
-                    }
-                    
-                    let sharingInfo = SHGenericDescriptorSharingInfo(
-                        sharedByUserIdentifier: sharedBy,
-                        sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
-                        groupInfoById: groupInfoById
-                    )
-                    
-                    
-                    // MARK: Calculate combined upload state
-                    ///
-                    /// Before doing so, adjust upload state as follows:
-                    /// - if .mid is completed set .hi as completed
-                    /// - if .hi is completed set .mid as completed
-                    /// - if one between .mid or .hi are failed but the other one isn't, use the other one's state
-                    /// 
-                    /// Because .mid is a surrogate for .hi, if that is completed, the client can assume that the asset was completely uploaded.
-                    ///
-                    if versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] == .completed ||
-                        versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] == .completed {
-                        versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = .completed
-                        versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] = .completed
-                    }
-                    if versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] == .failed,
-                       versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] != .failed {
-                        versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution]
-                    }
-                    if versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] == .failed,
-                       versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] != .failed {
-                        versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution]
-                    }
-                    
-                    var combinedUploadState: SHAssetDescriptorUploadState = .notStarted
-                    if let uploadStates = versionUploadStateByIdentifierQuality[globalIdentifier] {
-                        if uploadStates.allSatisfy({ (_, value) in value == .completed }) {
-                            // ALL completed successfully
-                            combinedUploadState = .completed
-                        } else if uploadStates.allSatisfy({ (_, value) in value == .notStarted }) {
-                            // ALL didn't start
-                            combinedUploadState = .notStarted
-                        } else if uploadStates.contains(where: { (_, value) in value == .failed }) {
-                            // SOME failed
-                            combinedUploadState = .failed
-                        }
-                    }
-                    
-                    let descriptor = SHGenericAssetDescriptor(
-                        globalIdentifier: globalIdentifier,
-                        localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
-                        creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
-                        uploadState: combinedUploadState,
-                        sharingInfo: sharingInfo
-                    )
-                    descriptors.append(descriptor)
                 }
-                completionHandler(.success(descriptors))
                 
-            case .failure(let err):
-                completionHandler(.failure(err))
+                let globalIdentifier: String
+                if let range = k.range(of: "\(SHAssetQuality.lowResolution.rawValue)::") {
+                    globalIdentifier = "" + k[range.upperBound...]
+                    doProcessState(globalIdentifier, .lowResolution)
+                } else if let range = k.range(of: "\(SHAssetQuality.midResolution.rawValue)::") {
+                    globalIdentifier = "" + k[range.upperBound...]
+                    doProcessState(globalIdentifier, .midResolution)
+                } else if let range = k.range(of: "\(SHAssetQuality.hiResolution.rawValue)::") {
+                    globalIdentifier = "" + k[range.upperBound...]
+                    doProcessState(globalIdentifier, .hiResolution)
+                } else {
+                    continue
+                }
+                
+                if forAssetGlobalIdentifiers.count > 0, forAssetGlobalIdentifiers.contains(globalIdentifier) == false {
+                    continue
+                }
+                
+                localInfoByGlobalIdentifier[globalIdentifier] = (
+                    phAssetId: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId ?? phAssetIdentifier,
+                    creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate ?? creationDate
+                )
             }
+            
+            for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
+                guard let sharedBy = senderInfoDict[globalIdentifier]
+                else {
+                    log.error("failed to retrieve sender information for asset \(globalIdentifier)")
+                    continue
+                }
+                
+                guard let groupInfoById = groupInfoByIdByAssetGid[globalIdentifier],
+                      let sharedWithUsersInGroup = sharedWithUsersInGroupByAssetGid[globalIdentifier]
+                else {
+                    log.error("failed to retrieve group information for asset \(globalIdentifier)")
+                    continue
+                }
+                
+                if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+                    log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
+                }
+                
+                if groupInfoById.isEmpty {
+                    ///
+                    /// If there is no info about any group, don't add the descriptor
+                    /// Because the filtering on groups returned no results for this asset,
+                    /// the asset will not be included.
+                    ///
+                    continue
+                }
+                
+                let sharingInfo = SHGenericDescriptorSharingInfo(
+                    sharedByUserIdentifier: sharedBy,
+                    sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
+                    groupInfoById: groupInfoById
+                )
+                
+                
+                // MARK: Calculate combined upload state
+                ///
+                /// Before doing so, adjust upload state as follows:
+                /// - if .mid is completed set .hi as completed
+                /// - if .hi is completed set .mid as completed
+                /// - if one between .mid or .hi are failed but the other one isn't, use the other one's state
+                ///
+                /// Because .mid is a surrogate for .hi, if that is completed, the client can assume that the asset was completely uploaded.
+                ///
+                if versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] == .completed ||
+                    versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] == .completed {
+                    versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = .completed
+                    versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] = .completed
+                }
+                if versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] == .failed,
+                   versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] != .failed {
+                    versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution]
+                }
+                if versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] == .failed,
+                   versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution] != .failed {
+                    versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution]
+                }
+                
+                var combinedUploadState: SHAssetDescriptorUploadState = .notStarted
+                if let uploadStates = versionUploadStateByIdentifierQuality[globalIdentifier] {
+                    if uploadStates.allSatisfy({ (_, value) in value == .completed }) {
+                        // ALL completed successfully
+                        combinedUploadState = .completed
+                    } else if uploadStates.allSatisfy({ (_, value) in value == .notStarted }) {
+                        // ALL didn't start
+                        combinedUploadState = .notStarted
+                    } else if uploadStates.contains(where: { (_, value) in value == .failed }) {
+                        // SOME failed
+                        combinedUploadState = .failed
+                    }
+                }
+                
+                let descriptor = SHGenericAssetDescriptor(
+                    globalIdentifier: globalIdentifier,
+                    localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
+                    creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
+                    uploadState: combinedUploadState,
+                    sharingInfo: sharingInfo
+                )
+                descriptors.append(descriptor)
+            }
+        } catch {
+            completionHandler(.failure(error))
         }
+        
+        completionHandler(.success(descriptors))
+    }
+    
+    func updateGroupIds(_ groupInfoById: [String: SHAssetGroupInfo],
+                        completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        var keysToUpdate = [String: SHAssetGroupInfo]()
+        
+        do {
+            let versionsDetailsDict = try assetStore.dictionaryRepresentation(
+                forKeysMatching: KBGenericCondition(
+                    .beginsWith, value: "receiver::"
+                )
+            )
+            guard let versionsDetailsDict = versionsDetailsDict as? [String: [String: Any?]] else {
+                throw KBError.unexpectedData(versionsDetailsDict)
+            }
+            
+            for (key, versionDetails) in versionsDetailsDict {
+                guard let groupId = versionDetails["groupId"] as? String,
+                      let update = groupInfoById[groupId]
+                else {
+                    continue
+                }
+                      
+                keysToUpdate[key] = update
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let writeBatch = assetStore.writeBatch()
+        
+        for (key, update) in keysToUpdate {
+            writeBatch.set(value: update, for: key)
+        }
+        
+        writeBatch.write(completionHandler: completionHandler)
+    }
+    
+    func removeGroupIds(_ groupIds: [String],
+                        completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        var keysToRemove = [String]()
+        
+        do {
+            let versionsDetailsDict = try assetStore.dictionaryRepresentation(
+                forKeysMatching: KBGenericCondition(
+                    .beginsWith, value: "receiver::"
+                )
+            )
+            guard let versionsDetailsDict = versionsDetailsDict as? [String: [String: Any?]] else {
+                throw KBError.unexpectedData(versionsDetailsDict)
+            }
+            
+            for (key, versionDetails) in versionsDetailsDict {
+                guard let groupId = versionDetails["groupId"] as? String,
+                      groupIds.contains(groupId)
+                else {
+                    continue
+                }
+                      
+                keysToRemove.append(key)
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        assetStore.removeValues(for: keysToRemove, completionHandler: completionHandler)
     }
     
     func getAssets(withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
@@ -917,7 +1024,8 @@ struct LocalServer : SHServerAPI {
                     "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
                     "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
                     "groupId": senderUploadGroupId,
-                    "groupCreationDate": senderGroupCreatedAt?.iso8601withFractionalSeconds
+                    "groupName": senderGroupIdInfo?.name,
+                    "groupCreationDate": senderGroupIdInfo?.createdAt?.iso8601withFractionalSeconds
                 ]
                 writeBatch.set(
                     value: sharedVersionDetails,
@@ -928,6 +1036,7 @@ struct LocalServer : SHServerAPI {
                         asset.globalIdentifier
                     ].joined(separator: "::")
                 )
+                
                 for (recipientUserId, recipientGroupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                     if recipientUserId == descriptor.sharingInfo.sharedByUserIdentifier {
                         continue
@@ -943,7 +1052,8 @@ struct LocalServer : SHServerAPI {
                     writeBatch.set(
                         value: [
                             "groupId": recipientGroupId,
-                            "groupCreationDate": recipientShareDate?.iso8601withFractionalSeconds
+                            "groupName": recipientGroupInfo?.name,
+                            "groupCreationDate": recipientGroupInfo?.createdAt?.iso8601withFractionalSeconds
                         ],
                         for: [
                             "receiver",
@@ -1004,6 +1114,7 @@ struct LocalServer : SHServerAPI {
     func addAssetRecipients(basedOn userIdsToAddToAssetGids: [GlobalIdentifier: ShareSenderReceivers],
                             versions: [SHAssetQuality]? = nil,
                             completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -1030,6 +1141,7 @@ struct LocalServer : SHServerAPI {
                     writeBatch.set(
                         value: [
                             "groupId": groupId,
+                            "groupName": groupInfo.name,
                             "groupCreationDate": groupInfo.createdAt?.iso8601withFractionalSeconds
                         ],
                         for: [
@@ -1791,76 +1903,62 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        /// 
-        /// Get the thread from the identifier
-        ///
-        self.getThread(withId: threadId) { threadResult in
-            switch threadResult {
-            case .success(let serverThread):
-                if let serverThread {
-                    do {
-                        ///
-                        /// Get the photo messages in this thread,
-                        /// previously synced by the method `LocalServer::cache(_:in)`
-                        ///
-                        let photoMessages = try userStore
-                            .values(
-                                forKeysMatching: KBGenericCondition(
-                                    .beginsWith,
-                                    value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessages"
-                                )
-                            )
-                            .compactMap { (value: Any) -> ConversationThreadAssetDTO? in
-                                guard let data = value as? Data else {
-                                    log.critical("unexpected non-data photo message in thread \(threadId)")
-                                    return nil
-                                }
-                                guard let photoMessage = try? ConversationThreadAssetClass.fromData(data) else {
-                                    log.critical("failed to decode photo message in thread \(threadId)")
-                                    return nil
-                                }
-                                return photoMessage.toDTO()
-                            }
-                        
-                        ///
-                        /// Retrieve all assets shared with the people in this thread
-                        /// (regardless if they are photo messages)
-                        /// then filter out the photo messages
-                        ///
-                        let otherAssets = try userStore
-                            .values(
-                                forKeysMatching: KBGenericCondition(
-                                    .beginsWith,
-                                    value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessages"
-                                )
-                            )
-                            .compactMap { (value: Any) -> UsersGroupAssetDTO? in
-                                guard let data = value as? Data else {
-                                    log.critical("unexpected non-data non-photo-message in thread \(threadId)")
-                                    return nil
-                                }
-                                guard let otherAsset = try? UsersGroupAssetClass.fromData(data) else {
-                                    log.critical("failed to decode photo message in thread \(threadId)")
-                                    return nil
-                                }
-                                return otherAsset.toDTO()
-                            }
-                        
-                        let result = ConversationThreadAssetsDTO(
-                            photoMessages: photoMessages,
-                            otherAssets: otherAssets
-                        )
-                        completionHandler(.success(result))
-                        
-                    } catch {
-                        completionHandler(.failure(error))
+        do {
+            ///
+            /// Get the photo messages in this thread,
+            /// previously synced by the method `LocalServer::cache(_:in)`
+            ///
+            let photoMessages = try userStore
+                .values(
+                    forKeysMatching: KBGenericCondition(
+                        .beginsWith,
+                        value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessages"
+                    )
+                )
+                .compactMap { (value: Any) -> ConversationThreadAssetDTO? in
+                    guard let data = value as? Data else {
+                        log.critical("unexpected non-data photo message in thread \(threadId)")
+                        return nil
                     }
-                } else {
-                    completionHandler(.failure(SHHTTPError.ClientError.notFound))
+                    guard let photoMessage = try? ConversationThreadAssetClass.fromData(data) else {
+                        log.critical("failed to decode photo message in thread \(threadId)")
+                        return nil
+                    }
+                    return photoMessage.toDTO()
                 }
-            case .failure(let error):
-                completionHandler(.failure(error))
-            }
+            
+            ///
+            /// Retrieve all assets shared with the people in this thread
+            /// (regardless if they are photo messages)
+            /// then filter out the photo messages
+            ///
+            let otherAssets = try userStore
+                .values(
+                    forKeysMatching: KBGenericCondition(
+                        .beginsWith,
+                        value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessages"
+                    )
+                )
+                .compactMap { (value: Any) -> UsersGroupAssetDTO? in
+                    guard let data = value as? Data else {
+                        log.critical("unexpected non-data non-photo-message in thread \(threadId)")
+                        return nil
+                    }
+                    guard let otherAsset = try? UsersGroupAssetClass.fromData(data) else {
+                        log.critical("failed to decode photo message in thread \(threadId)")
+                        return nil
+                    }
+                    return otherAsset.toDTO()
+                }
+            
+            let result = ConversationThreadAssetsDTO(
+                photoMessages: photoMessages,
+                otherAssets: otherAssets
+            )
+            completionHandler(.success(result))
+            
+        } catch {
+            completionHandler(.failure(error))
         }
     }
     

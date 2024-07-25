@@ -19,6 +19,8 @@ struct AssetDescriptorsDiff {
     
     let assetsRemovedOnRemote: [SHBackedUpAssetIdentifier]
     let stateDifferentOnRemote: [AssetVersionState]
+    let groupInfoDifferentOnRemote: [String: SHAssetGroupInfo]
+    let groupInfoRemovedOnRemote: [String]
     let userIdsAddedToTheShareOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
     let userIdsRemovedFromTheSharesOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
     
@@ -46,20 +48,26 @@ struct AssetDescriptorsDiff {
         /// Set(remote+local) - Set(local) = stale assets only present in the local server -> to remove
         var onlyLocalAssets = localDescriptors
             .map({
-                d in SHBackedUpAssetIdentifier(globalIdentifier: d.globalIdentifier,
-                                             localIdentifier: d.localIdentifier)
+                d in SHBackedUpAssetIdentifier(
+                    globalIdentifier: d.globalIdentifier,
+                    localIdentifier: d.localIdentifier
+                )
             })
             .subtract(
                 remoteDescriptors.map({
-                    d in SHBackedUpAssetIdentifier(globalIdentifier: d.globalIdentifier,
-                                                 localIdentifier: d.localIdentifier)
+                    d in SHBackedUpAssetIdentifier(
+                        globalIdentifier: d.globalIdentifier,
+                        localIdentifier: d.localIdentifier
+                    )
                 })
             )
         
         if onlyLocalAssets.count > 0 {
             for localDescriptor in localDescriptors {
-                let assetRef = SHBackedUpAssetIdentifier(globalIdentifier: localDescriptor.globalIdentifier,
-                                                       localIdentifier: localDescriptor.localIdentifier)
+                let assetRef = SHBackedUpAssetIdentifier(
+                    globalIdentifier: localDescriptor.globalIdentifier,
+                    localIdentifier: localDescriptor.localIdentifier
+                )
                 if let index = onlyLocalAssets.firstIndex(of: assetRef) {
                     switch localDescriptor.uploadState {
                     case .notStarted, .partial:
@@ -91,6 +99,9 @@ struct AssetDescriptorsDiff {
         
         var userIdsToAddToSharesByAssetGid = [GlobalIdentifier: ShareSenderReceivers]()
         var userIdsToRemoveFromSharesByAssetGid = [GlobalIdentifier: ShareSenderReceivers]()
+        var groupInfoToUpdate = [String: SHAssetGroupInfo]()
+        var groupInfoToRemove = Set<String>()
+        
         for remoteDescriptor in remoteDescriptors {
             /// 
             /// If the descriptor exists on local, check if all users are listed in the share info
@@ -98,21 +109,22 @@ struct AssetDescriptorsDiff {
             /// a list of dictionaries `globalIdentifier` -> `(from:, groupIdByRecipientId:, groupInfoById:)`
             /// for all the missing `recipients`
             ///
-            guard let localDescriptor = localDescriptors.first(where: { $0.globalIdentifier == remoteDescriptor.globalIdentifier })
-            else {
+            guard let correspondingLocalDescriptor = localDescriptors.first(
+                where: { $0.globalIdentifier == remoteDescriptor.globalIdentifier }
+            ) else {
                 continue
             }
             
             for (userId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                if localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
-                    if userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] == nil 
+                if correspondingLocalDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
+                    if userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] == nil 
                     {
                         let remoteDescGroupInfo = remoteDescriptor.sharingInfo.groupInfoById[groupId]
                         if remoteDescGroupInfo == nil {
                             log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). sharedWithUserIdentifiersInGroup=\(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup)")
                         }
-                        userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
-                            from: localDescriptor.sharingInfo.sharedByUserIdentifier,
+                        userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] = (
+                            from: correspondingLocalDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: [userId: groupId],
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
                                 name: remoteDescGroupInfo?.name,
@@ -125,30 +137,45 @@ struct AssetDescriptorsDiff {
                             log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). sharedWithUserIdentifiersInGroup=\(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup)")
                         }
                         
-                        var newDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupIdByRecipientId
+                        var newDict = userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier]!.groupIdByRecipientId
                         newDict[userId] = groupId
                         
-                        var newGroupInfoDict = userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
+                        var newGroupInfoDict = userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
                             name: newGroupInfoDict[groupId]?.name ?? remoteDescGroupInfo?.name,
                             createdAt: newGroupInfoDict[groupId]?.createdAt ?? remoteDescGroupInfo?.createdAt
                         )
                         
-                        userIdsToAddToSharesByAssetGid[localDescriptor.globalIdentifier] = (
-                            from: localDescriptor.sharingInfo.sharedByUserIdentifier,
+                        userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] = (
+                            from: correspondingLocalDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: newDict,
                             groupInfoById: newGroupInfoDict
                         )
                     }
                 }
             }
+            
+            for (groupId, groupInfo) in remoteDescriptor.sharingInfo.groupInfoById {
+                if let localGroupInfo = correspondingLocalDescriptor.sharingInfo.groupInfoById[groupId] {
+                    if localGroupInfo.createdAt == groupInfo.createdAt,
+                       localGroupInfo.name == groupInfo.name {
+                        // They are the same
+                    } else {
+                        groupInfoToUpdate[groupId] = groupInfo
+                    }
+                } else {
+                    groupInfoToUpdate[groupId] = groupInfo
+                }
+            }
         }
         
         for localDescriptor in localDescriptors {
-            guard let remoteDescriptor = remoteDescriptors.first(where: { $0.globalIdentifier == localDescriptor.globalIdentifier })
-            else {
+            guard let remoteDescriptor = remoteDescriptors.first(
+                where: { $0.globalIdentifier == localDescriptor.globalIdentifier }
+            ) else {
                 continue
             }
+            
             for (userId, groupId) in localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 if remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
                     if userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] == nil 
@@ -179,6 +206,12 @@ struct AssetDescriptorsDiff {
                     }
                 }
             }
+            
+            for groupId in localDescriptor.sharingInfo.groupInfoById.keys {
+                if remoteDescriptor.sharingInfo.groupInfoById[groupId] == nil {
+                    groupInfoToRemove.insert(groupId)
+                }
+            }
         }
         
         // TODO: Handle missing cases
@@ -187,6 +220,8 @@ struct AssetDescriptorsDiff {
         return AssetDescriptorsDiff(
             assetsRemovedOnRemote: onlyLocalAssets,
             stateDifferentOnRemote: [],
+            groupInfoDifferentOnRemote: groupInfoToUpdate,
+            groupInfoRemovedOnRemote: Array(groupInfoToRemove),
             userIdsAddedToTheShareOfAssetGid: userIdsToAddToSharesByAssetGid,
             userIdsRemovedFromTheSharesOfAssetGid: userIdsToRemoveFromSharesByAssetGid
         )
