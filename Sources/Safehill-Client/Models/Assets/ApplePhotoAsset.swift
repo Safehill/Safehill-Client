@@ -170,12 +170,12 @@ extension SHApplePhotoAsset {
     static func getControlPixelColor(image: NSUIImage) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat)? {
         
         let controlPixelLocation = (x: 2, y: 3)
-        
+
+#if os(iOS)
         guard case .uiKit(let uiImage) = image else {
             return nil
         }
-
-#if os(iOS)
+        
         guard let cgImage = uiImage.cgImage else {
             return nil
         }
@@ -210,6 +210,8 @@ extension SHApplePhotoAsset {
         let a = CGFloat(pixelData[pixelIndex + 3]) / 255.0
 
         return (r: r, g: g, b: b, a: a)
+#else
+        return nil
 #endif
     }
     
