@@ -647,15 +647,14 @@ struct LocalServer : SHServerAPI {
                 guard let sharedBy = senderInfoDict[globalIdentifier]
                 else {
                     log.error("failed to retrieve sender information for asset \(globalIdentifier)")
-                    completionHandler(.failure(SHAssetStoreError.inconsistency))
-                    return
+                    continue
                 }
                 
                 guard let groupInfoById = groupInfoByIdByAssetGid[globalIdentifier],
                       let sharedWithUsersInGroup = sharedWithUsersInGroupByAssetGid[globalIdentifier]
                 else {
                     log.error("failed to retrieve group information for asset \(globalIdentifier)")
-                    return
+                    continue
                 }
                 
                 if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {

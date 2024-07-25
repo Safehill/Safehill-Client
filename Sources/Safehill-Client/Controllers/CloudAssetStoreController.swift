@@ -8,7 +8,6 @@ public enum SHAssetStoreError: Error, LocalizedError {
     case noEntries
     case failedToCreateRemoteAsset
     case invalidRequest(String)
-    case inconsistency
     
     public var errorDescription: String? {
         switch self {
@@ -20,8 +19,6 @@ public enum SHAssetStoreError: Error, LocalizedError {
             return "Failed to create remote asset"
         case .invalidRequest(let reason):
             return "Invalid request: \(reason)"
-        case .inconsistency:
-            return "Information corrupted. Inconsistency detected. Please re-sync the local DB with the server"
         }
     }
 }
