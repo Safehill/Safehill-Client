@@ -297,35 +297,37 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         self.retrieveAsset(fetchRequest: fetchRequest) { result in
             switch result {
             case .success(let photoAsset):
-                do {
-                    if let gid = fetchRequest.globalIdentifier {
-                        ///
-                        /// Some `SHLocalFetchRequestQueueItem` have a global identifier set
-                        /// for instance when these items are enqueued from an `SHUploadOperation`,
-                        /// or when it's a share for an asset that is already on the server
-                        ///
-                        try photoAsset.setGlobalIdentifier(gid)
-                    } else {
-                        ///
-                        /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
-                        /// along with the queue item being enqueued in `markAsSuccessful`
-                        ///
-                        let _ = try photoAsset.retrieveOrGenerateGlobalIdentifier()
-                    }
-                    
+                Task(priority: qos.toTaskPriority()) {
                     do {
-                        try self.markAsSuccessful(
-                            photoAsset: photoAsset,
-                            fetchRequest: fetchRequest,
-                            queueItem: item
-                        )
-                        completionHandler(.success(()))
+                        if let gid = fetchRequest.globalIdentifier {
+                            ///
+                            /// Some `SHLocalFetchRequestQueueItem` have a global identifier set
+                            /// for instance when these items are enqueued from an `SHUploadOperation`,
+                            /// or when it's a share for an asset that is already on the server
+                            ///
+                            try photoAsset.setGlobalIdentifier(gid)
+                        } else {
+                            ///
+                            /// Calculate the global identifier so it can be serialized and stored in the `SHApplePhotoAsset`
+                            /// along with the queue item being enqueued in `markAsSuccessful`
+                            ///
+                            let _ = await photoAsset.generateGlobalIdentifier()
+                        }
+                        
+                        do {
+                            try self.markAsSuccessful(
+                                photoAsset: photoAsset,
+                                fetchRequest: fetchRequest,
+                                queueItem: item
+                            )
+                            completionHandler(.success(()))
+                        } catch {
+                            self.log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
+                            handleError(error)
+                        }
                     } catch {
-                        self.log.critical("failed to mark FETCH as successful. This will likely cause infinite loops")
                         handleError(error)
                     }
-                } catch {
-                    handleError(error)
                 }
             case .failure(let failure):
                 handleError(failure)
