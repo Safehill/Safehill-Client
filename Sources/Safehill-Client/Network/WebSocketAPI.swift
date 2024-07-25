@@ -14,7 +14,6 @@ public actor WebSocketAPI {
     
     private let urlComponents: URLComponents
     private var webSocketTask: URLSessionWebSocketTask?
-    private var keepAliveTimer: Timer? = nil
     
     static let webSocketURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
@@ -57,31 +56,30 @@ public actor WebSocketAPI {
         self.webSocketTask = WebSocketAPI.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
         
-        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: keepAliveIntervalInSeconds, repeats: true) { _ in
-            Task { [weak self] in
-                do { try await self?.sendKeepAliveMessage() }
-                catch { log.error("failed to send ping for keepAlive") }
-            }
-        }
-        keepAliveTimer?.fire()
-        RunLoop.current.run()
+        self.keepAlive()
     }
     
     public func disconnect() {
-        keepAliveTimer?.invalidate()
         self.webSocketTask?.cancel(with: .normalClosure, reason: nil)
     }
 }
 
 extension WebSocketAPI {
     
-    private func sendKeepAliveMessage() async throws {
-        guard let webSocketTask = self.webSocketTask else {
-            throw WebSocketConnectionError.closed
+    private func keepAlive() {
+        log.debug("[ws] sending ping for keepAlive")
+        self.webSocketTask!.sendPing { [weak self] error in
+            guard let self = self else { return }
+            
+            if let error {
+                log.error("[ws] failed to send ping for keepAlive: \(error)")
+            } else {
+                Task { [weak self] in
+                    try await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+                    await self?.keepAlive()
+                }
+            }
         }
-        
-        let keepAliveMessage = URLSessionWebSocketTask.Message.string("ping")
-        try await webSocketTask.send(keepAliveMessage)
     }
     
     public func send(_ wsMessage: WebSocketMessage) async throws {
