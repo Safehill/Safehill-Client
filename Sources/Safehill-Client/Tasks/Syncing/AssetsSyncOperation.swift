@@ -38,7 +38,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         remoteAndLocalDescriptors: [any SHAssetDescriptor],
         localDescriptors: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         ///
         /// Generate a diff of assets and users (latter organized by group)
@@ -50,7 +50,9 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         ///     -> It will be created locally, created in the ShareHistory or UploadHistory queue item by any DownloadOperation. Nothing to do here.
         /// 3. The descriptor exists locally but not on the server
         ///     -> remove it as long as it's not case 1
-        /// 4. The local upload state doesn't match the remote state
+        /// 4. The group information is missing or different on remote
+        ///     -> Remove or update the local DB
+        /// 5. The local upload state doesn't match the remote state
         ///     -> inefficient solution is to verify the asset is in S3. Efficient is to trust the value from the server
         ///
         
@@ -60,11 +62,14 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             for: self.user
         )
         
+        let dispatchGroup = DispatchGroup()
+        
         ///
         /// Remove assets that are no longer returned by the remote server
         ///
-        if diff.assetsRemovedOnRemote.count > 0 {
+        if diff.assetsRemovedOnRemote.isEmpty == false {
             let globalIdentifiers = diff.assetsRemovedOnRemote.compactMap { $0.globalIdentifier }
+            dispatchGroup.enter()
             self.serverProxy.localServer.deleteAssets(
                 withGlobalIdentifiers: globalIdentifiers
             ) { result in
@@ -90,6 +95,8 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                         })
                     }
                 }
+                
+                dispatchGroup.leave()
             }
         }
         
@@ -97,110 +104,121 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         /// Change the upload state of the assets that are not in sync with server states
         ///
         for stateChangeDiff in diff.stateDifferentOnRemote {
+            dispatchGroup.enter()
             self.serverProxy.localServer.markAsset(with: stateChangeDiff.globalIdentifier,
                                                    quality: stateChangeDiff.quality,
                                                    as: stateChangeDiff.newUploadState) { result in
                 if case .failure(let error) = result {
                     self.log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
+                
+                dispatchGroup.leave()
             }
         }
         
-        guard diff.userIdsAddedToTheShareOfAssetGid.count > 0 else {
-            completionHandler(.success(()))
-            return
+        ///
+        /// Remove groupIds from the asset store that no longer exist
+        ///
+        if diff.groupInfoRemovedOnRemote.isEmpty == false {
+            dispatchGroup.enter()
+            self.serverProxy.localServer.removeGroupIds(
+                diff.groupInfoRemovedOnRemote
+            ) { result in
+                
+                if case .success = result {
+                    let assetsDelegates = self.assetsDelegates
+                    self.delegatesQueue.async {
+                        assetsDelegates.forEach {
+                            $0.groupIdsWereRemoved(diff.groupInfoRemovedOnRemote)
+                        }
+                    }
+                }
+                
+                dispatchGroup.leave()
+            }
         }
         
-        let dispatchGroup = DispatchGroup()
-        var error: Error? = nil
-        
         ///
-        /// Add users to the shares in the graph and notify the delegates
+        /// Update groupIds in the asset store that are different on server
         ///
-        dispatchGroup.enter()
-        self.serverProxy.localServer.addAssetRecipients(
-            basedOn: diff.userIdsAddedToTheShareOfAssetGid
-        ) { result in
-            switch result {
-            case .success():
+        if diff.groupInfoDifferentOnRemote.isEmpty == false {
+            dispatchGroup.enter()
+            self.serverProxy.localServer.updateGroupIds(
+                diff.groupInfoDifferentOnRemote
+            ) { result in
                 
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                // TODO: Add recipients to the queue items (add a method in UserSync)
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                /// ** !!!!!!!!!! **
-                
-                let assetsDelegates = self.assetsDelegates
-                self.delegatesQueue.async {
-                    for (globalIdentifier, shareDiff) in diff.userIdsAddedToTheShareOfAssetGid {
+                if case .success = result {
+                    let assetsDelegates = self.assetsDelegates
+                    self.delegatesQueue.async {
                         assetsDelegates.forEach {
-                            $0.usersWereAddedToShare(
-                                of: globalIdentifier,
-                                groupIdByRecipientId: shareDiff.groupIdByRecipientId,
-                                groupInfoById: shareDiff.groupInfoById
+                            $0.groupIdsWereUpdated(
+                                Array(diff.groupInfoDifferentOnRemote.keys)
                             )
                         }
                     }
                 }
-            case .failure(let err):
-                error = err
+                
+                dispatchGroup.leave()
             }
-            dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard error == nil else {
-                self.log.error("[sync] failed to add recipients to some shares: \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
+        ///
+        /// Add users to the shares in the local server, in the graph
+        /// and notify the delegates so that the UI gets updated
+        ///
+        if diff.userIdsAddedToTheShareOfAssetGid.isEmpty == false {
+            dispatchGroup.enter()
+            self.serverProxy.localServer.addAssetRecipients(
+                basedOn: diff.userIdsAddedToTheShareOfAssetGid
+            ) { result in
+                switch result {
+                case .success:
+                    let assetsDelegates = self.assetsDelegates
+                    self.delegatesQueue.async {
+                        for (globalIdentifier, shareDiff) in diff.userIdsAddedToTheShareOfAssetGid {
+                            assetsDelegates.forEach {
+                                $0.usersWereAddedToShare(
+                                    of: globalIdentifier,
+                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId,
+                                    groupInfoById: shareDiff.groupInfoById
+                                )
+                            }
+                        }
+                    }
+                case .failure(let error):
+                    self.log.error("some users were added to a share on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                }
+                dispatchGroup.leave()
             }
-            
-            guard diff.userIdsRemovedFromTheSharesOfAssetGid.count > 0 else {
-                completionHandler(.success(()))
-                return
-            }
-            
-            var error: Error? = nil
-            
+        }
+        
+        if diff.userIdsRemovedFromTheSharesOfAssetGid.isEmpty == false {
             dispatchGroup.enter()
             self.serverProxy.localServer.removeAssetRecipients(
                 basedOn: diff.userIdsRemovedFromTheSharesOfAssetGid
             ) { result in
                 switch result {
                 case .success:
-                    
-                    /// ** !!!!!!!!!! **
-                    /// ** !!!!!!!!!! **
-                    /// ** !!!!!!!!!! **
-                    // TODO: Remove recipients to the queue items (adapt `UserSync::removeUsersFromShareHistoryQueueItems`)
-                    /// ** !!!!!!!!!! **
-                    /// ** !!!!!!!!!! **
-                    /// ** !!!!!!!!!! **
-                    
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         for (globalIdentifier, shareDiff) in diff.userIdsRemovedFromTheSharesOfAssetGid {
                             assetsDelegates.forEach {
-                                $0.usersWereRemovedFromShare(of: globalIdentifier,
-                                                             groupIdByRecipientId: shareDiff.groupIdByRecipientId)
+                                $0.usersWereRemovedFromShare(
+                                    of: globalIdentifier,
+                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId
+                                )
                             }
                         }
                     }
-                case .failure(let err):
-                    error = err
+                case .failure(let error):
+                    self.log.error("some users were removed from a share on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
                 dispatchGroup.leave()
             }
-            
-            dispatchGroup.notify(queue: .global(qos: qos)) {
-                if let error {
-                    self.log.error("[sync] failed to remove recipients from some shares: \(error)")
-                }
-                
-                completionHandler(.success(()))
-            }
+        }
+        
+        dispatchGroup.notify(queue: .global(qos: qos)) {
+            completionHandler(.success(()))
         }
     }
     

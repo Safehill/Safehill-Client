@@ -562,9 +562,13 @@ struct LocalServer : SHServerAPI {
                 }
                 
                 if let groupId = value["groupId"] {
+                    let groupName = value["groupName"]
                     let groupCreationDate = value["groupCreationDate"]
                     if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
-                        let groupInfo = SHGenericAssetGroupInfo(name: nil, createdAt: groupCreationDate?.iso8601withFractionalSeconds)
+                        let groupInfo = SHGenericAssetGroupInfo(
+                            name: groupName,
+                            createdAt: groupCreationDate?.iso8601withFractionalSeconds
+                        )
                         groupInfoByIdByAssetGid[assetGid] = [groupId: groupInfo]
                     }
                 }
@@ -728,6 +732,85 @@ struct LocalServer : SHServerAPI {
         }
         
         completionHandler(.success(descriptors))
+    }
+    
+    func updateGroupIds(_ groupInfoById: [String: SHAssetGroupInfo],
+                        completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        var keysToUpdate = [String: SHAssetGroupInfo]()
+        
+        do {
+            let versionsDetailsDict = try assetStore.dictionaryRepresentation(
+                forKeysMatching: KBGenericCondition(
+                    .beginsWith, value: "receiver::"
+                )
+            )
+            guard let versionsDetailsDict = versionsDetailsDict as? [String: [String: Any?]] else {
+                throw KBError.unexpectedData(versionsDetailsDict)
+            }
+            
+            for (key, versionDetails) in versionsDetailsDict {
+                guard let groupId = versionDetails["groupId"] as? String,
+                      let update = groupInfoById[groupId]
+                else {
+                    continue
+                }
+                      
+                keysToUpdate[key] = update
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        let writeBatch = assetStore.writeBatch()
+        
+        for (key, update) in keysToUpdate {
+            writeBatch.set(value: update, for: key)
+        }
+        
+        writeBatch.write(completionHandler: completionHandler)
+    }
+    
+    func removeGroupIds(_ groupIds: [String],
+                        completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        var keysToRemove = [String]()
+        
+        do {
+            let versionsDetailsDict = try assetStore.dictionaryRepresentation(
+                forKeysMatching: KBGenericCondition(
+                    .beginsWith, value: "receiver::"
+                )
+            )
+            guard let versionsDetailsDict = versionsDetailsDict as? [String: [String: Any?]] else {
+                throw KBError.unexpectedData(versionsDetailsDict)
+            }
+            
+            for (key, versionDetails) in versionsDetailsDict {
+                guard let groupId = versionDetails["groupId"] as? String,
+                      groupIds.contains(groupId)
+                else {
+                    continue
+                }
+                      
+                keysToRemove.append(key)
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        assetStore.removeValues(for: keysToRemove, completionHandler: completionHandler)
     }
     
     func getAssets(withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
@@ -941,7 +1024,8 @@ struct LocalServer : SHServerAPI {
                     "ephemeralPublicKey": encryptedVersion.publicKeyData.base64EncodedString(),
                     "publicSignature": encryptedVersion.publicSignatureData.base64EncodedString(),
                     "groupId": senderUploadGroupId,
-                    "groupCreationDate": senderGroupCreatedAt?.iso8601withFractionalSeconds
+                    "groupName": senderGroupIdInfo?.name,
+                    "groupCreationDate": senderGroupIdInfo?.createdAt?.iso8601withFractionalSeconds
                 ]
                 writeBatch.set(
                     value: sharedVersionDetails,
@@ -952,6 +1036,7 @@ struct LocalServer : SHServerAPI {
                         asset.globalIdentifier
                     ].joined(separator: "::")
                 )
+                
                 for (recipientUserId, recipientGroupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                     if recipientUserId == descriptor.sharingInfo.sharedByUserIdentifier {
                         continue
@@ -967,7 +1052,8 @@ struct LocalServer : SHServerAPI {
                     writeBatch.set(
                         value: [
                             "groupId": recipientGroupId,
-                            "groupCreationDate": recipientShareDate?.iso8601withFractionalSeconds
+                            "groupName": recipientGroupInfo?.name,
+                            "groupCreationDate": recipientGroupInfo?.createdAt?.iso8601withFractionalSeconds
                         ],
                         for: [
                             "receiver",
@@ -1028,6 +1114,7 @@ struct LocalServer : SHServerAPI {
     func addAssetRecipients(basedOn userIdsToAddToAssetGids: [GlobalIdentifier: ShareSenderReceivers],
                             versions: [SHAssetQuality]? = nil,
                             completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -1054,6 +1141,7 @@ struct LocalServer : SHServerAPI {
                     writeBatch.set(
                         value: [
                             "groupId": groupId,
+                            "groupName": groupInfo.name,
                             "groupCreationDate": groupInfo.createdAt?.iso8601withFractionalSeconds
                         ],
                         for: [
