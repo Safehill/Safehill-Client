@@ -495,17 +495,29 @@ struct LocalServer : SHServerAPI {
         var sharedWithUsersInGroupByAssetGid = [GlobalIdentifier: [UserIdentifier: String]]()
         
         ///
-        /// Retrieve all information from the asset store for all assets and matching versions.
+        /// Retrieve all information from the asset store for all assets and `.lowResolution` versions.
+        /// **We can safely assume all versions are shared using the same group id, and will have same sender and receiver info*
         ///
         do {
-            let senderCondition = KBGenericCondition(.beginsWith, value: "sender::")
+            let senderCondition = KBGenericCondition(
+                .beginsWith, value: "sender::"
+            ).and(KBGenericCondition(
+                .contains, value: "::low::"
+            ))
+            
             let senderKeys = try assetStore.keys(matching: senderCondition)
             
             for senderKey in senderKeys {
                 let components = senderKey.components(separatedBy: "::")
+                /// Components:
+                /// 0) "sender"
+                /// 1) sender user identifier
+                /// 2) version quality
+                /// 3) asset identifier
+                
                 if components.count == 4 {
                     let sharedByUserId = components[1]
-                    let globalIdentifier = components[1]
+                    let globalIdentifier = components[3]
                     senderInfoDict[globalIdentifier] = sharedByUserId
                 } else {
                     log.error("invalid sender info key in DB: \(senderKey)")
