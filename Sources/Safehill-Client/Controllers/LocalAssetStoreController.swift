@@ -77,10 +77,9 @@ public struct SHLocalAssetStoreController {
         
         let group = DispatchGroup()
         group.enter()
-        self.serverProxy.getLocalAssets(
+        self.serverProxy.getAssets(
             withGlobalIdentifiers: globalIdentifiers,
-            versions: versions ?? SHAssetQuality.all,
-            cacheHiResolution: cacheHiResolution
+            versions: versions ?? SHAssetQuality.all
         ) { result in
             switch result {
             case .success(let dict):
