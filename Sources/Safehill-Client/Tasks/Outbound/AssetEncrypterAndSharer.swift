@@ -319,16 +319,13 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             }
         }
         
-        let globalIdentifier: GlobalIdentifier
-
-        do {
+        let globalIdentifier = shareRequest.asset.globalIdentifier
+        guard let globalIdentifier else {
             ///
             /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
             /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
             ///
-            globalIdentifier = try shareRequest.asset.retrieveOrGenerateGlobalIdentifier()
-        } catch {
-            handleError(error)
+            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
             return
         }
         
