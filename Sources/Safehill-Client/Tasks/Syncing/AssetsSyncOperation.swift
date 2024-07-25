@@ -105,9 +105,11 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         ///
         for stateChangeDiff in diff.stateDifferentOnRemote {
             dispatchGroup.enter()
-            self.serverProxy.localServer.markAsset(with: stateChangeDiff.globalIdentifier,
-                                                   quality: stateChangeDiff.quality,
-                                                   as: stateChangeDiff.newUploadState) { result in
+            self.serverProxy.localServer.markAsset(
+                with: stateChangeDiff.globalIdentifier,
+                quality: stateChangeDiff.quality,
+                as: stateChangeDiff.newUploadState
+            ) { result in
                 if case .failure(let error) = result {
                     self.log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
