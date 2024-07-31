@@ -20,6 +20,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     /// - Parameter keyValues: the keys and values retrieved from DB
     /// - Returns: the `SHEncryptedAsset` objects, organized by assetIdentifier
     public static func fromDicts(_ keyValues: [String: [String: Any]]) throws -> [String: any SHEncryptedAsset] {
+        
         var encryptedAssetById = [String: any SHEncryptedAsset]()
         
         ///
@@ -51,12 +52,38 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 continue
             }
                 
-            if let identifier = value["assetIdentifier"] as? String,
-               let data = value["encryptedData"] as? Data {
-                if assetDataByGlobalIdentifierAndQuality[identifier] == nil {
-                    assetDataByGlobalIdentifierAndQuality[identifier] = [quality: data]
-                } else {
-                    assetDataByGlobalIdentifierAndQuality[identifier]![quality] = data
+            if let identifier = value["assetIdentifier"] as? String {
+                if let data = value["encryptedData"] as? Data {
+                    if assetDataByGlobalIdentifierAndQuality[identifier] == nil {
+                        assetDataByGlobalIdentifierAndQuality[identifier] = [quality: data]
+                    } else {
+                        assetDataByGlobalIdentifierAndQuality[identifier]![quality] = data
+                    }
+                } else if let filePath = value["encryptedDataPath"] as? String,
+                          let fileURL = URL(string: filePath) {
+                    guard FileManager.default.fileExists(atPath: fileURL.relativePath) else {
+                        log.error("no data for asset \(identifier) \(quality.rawValue). File at url \(filePath) does not exist")
+                        continue
+                    }
+                    
+                    do {
+                        let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+                        
+                        if assetDataByGlobalIdentifierAndQuality[identifier] == nil {
+                            assetDataByGlobalIdentifierAndQuality[identifier] = [quality: data]
+                        } else {
+                            assetDataByGlobalIdentifierAndQuality[identifier]![quality] = data
+                        }
+                    } catch {
+                        log.error("no data for asset \(identifier) \(quality.rawValue). Error reading from file at \(filePath)")
+                    }
+                }
+                else if value.keys.contains("quality") == false {
+                    /// Since Snoog 1.1.4, there are two type key-value pairs: data and metadata
+                    /// If it's metadata there will be a "quality" key.
+                    /// Otherwise we can assume it's a data key, and if the value dictionary doesn't contain data in
+                    /// either `encryptedData` or `encryptedDataPath`, then we log this error
+                    log.error("failed to read data for asset \(identifier). Invalid dictionary keys=\(Array(value.keys))")
                 }
             }
         }
@@ -74,19 +101,19 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
             }
             
             guard let quality = SHAssetQuality(rawValue: keyComponents.first ?? "") else {
-                log.critical("failed to retrieve `quality` from key value object in the local asset store. Skipping")
+                log.error("failed to retrieve `quality` from key value object in the local asset store. Skipping")
                 continue
             }
             
             guard let assetIdentifier = dict["assetIdentifier"] as? String else {
-                log.critical("could not deserialize local asset from dictionary=\(dict). Couldn't find assetIdentifier key")
-                throw SHBackgroundOperationError.unexpectedData(dict)
+                log.error("could not deserialize local asset from dictionary=\(dict). Couldn't find assetIdentifier key")
+                continue
             }
             
             guard let data = assetDataByGlobalIdentifierAndQuality[assetIdentifier]?[quality],
                   let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: data) else {
-                log.critical("could not deserialize asset version information from dictionary=\(dict)")
-                throw SHBackgroundOperationError.unexpectedData(dict)
+                log.error("could not deserialize asset version information from dictionary=\(dict)")
+                continue
             }
             
             if let existing = encryptedAssetById[assetIdentifier] {
@@ -112,8 +139,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 )
                 encryptedAssetById[assetIdentifier] = encryptedAsset
             } else {
-                log.critical("could not deserialize asset information from dictionary=\(dict)")
-                throw SHBackgroundOperationError.unexpectedData(dict)
+                log.error("could not deserialize asset information from dictionary=\(dict)")
+                continue
             }
         }
         

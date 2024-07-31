@@ -112,25 +112,37 @@ extension SHLocalUserProtocol {
 }
 
 extension SHLocalUserProtocol {
-    func decrypt(_ asset: any SHEncryptedAsset, quality: SHAssetQuality, receivedFrom user: SHServerUser) throws -> any SHDecryptedAsset {
-        guard let version = asset.encryptedVersions[quality] else {
-            throw SHBackgroundOperationError.fatalError("No such version \(quality.rawValue) for asset=\(asset.globalIdentifier)")
+    func decrypt(
+        _ asset: any SHEncryptedAsset,
+        versions: [SHAssetQuality],
+        receivedFrom user: SHServerUser
+    ) throws -> any SHDecryptedAsset {
+        
+        var decryptedVersions = [SHAssetQuality: Data]()
+        
+        for version in versions {
+            guard let encryptedVersion = asset.encryptedVersions[version] else {
+                throw SHBackgroundOperationError.fatalError("No such version \(version.rawValue) for asset=\(asset.globalIdentifier)")
+            }
+            
+            let sharedSecret = SHShareablePayload(
+                ephemeralPublicKeyData: encryptedVersion.publicKeyData,
+                cyphertext: encryptedVersion.encryptedSecret,
+                signature: encryptedVersion.publicSignatureData
+            )
+            let decryptedData = try self.decrypt(
+                data: encryptedVersion.encryptedData,
+                encryptedSecret: sharedSecret,
+                receivedFrom: user
+            )
+            
+            decryptedVersions[version] = decryptedData
         }
         
-        let sharedSecret = SHShareablePayload(
-            ephemeralPublicKeyData: version.publicKeyData,
-            cyphertext: version.encryptedSecret,
-            signature: version.publicSignatureData
-        )
-        let decryptedData = try self.decrypt(
-            data: version.encryptedData,
-            encryptedSecret: sharedSecret,
-            receivedFrom: user
-        )
         return SHGenericDecryptedAsset(
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
-            decryptedVersions: [quality: decryptedData],
+            decryptedVersions: decryptedVersions,
             creationDate: asset.creationDate
         )
     }

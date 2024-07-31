@@ -8,4 +8,6 @@ public protocol SHAssetDescriptor: SHBackedUpAssetIdentifiable {
     var creationDate: Date? { get }
     var uploadState: SHAssetDescriptorUploadState { get }
     var sharingInfo: SHDescriptorSharingInfo { get }
+    
+    func serialized() -> SHGenericAssetDescriptorClass
 }

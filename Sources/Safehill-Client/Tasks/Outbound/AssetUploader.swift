@@ -271,7 +271,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         self.localAssetStoreController.encryptedAsset(
             with: globalIdentifier,
             versions: versions,
-            cacheHiResolution: false,
+            synchronousFetch: true,
             qos: .default
         ) { result in
             

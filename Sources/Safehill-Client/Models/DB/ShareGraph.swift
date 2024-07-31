@@ -263,7 +263,6 @@ public struct SHKGQuery {
         }
     }
     
-    /*
     internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
         let userIdentifiers = Array(Set(userIdentifiers))
      
@@ -285,7 +284,6 @@ public struct SHKGQuery {
             }
         }
     }
-    */
     
     internal static func deepClean() throws {
         try readWriteGraphQueue.sync(flags: .barrier) {

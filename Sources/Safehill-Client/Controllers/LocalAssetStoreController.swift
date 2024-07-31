@@ -16,40 +16,17 @@ public struct SHLocalAssetStoreController {
         self.user.serverProxy
     }
     
-    public func globalIdentifiers() -> [GlobalIdentifier] {
-        var identifiersInCache = [String]()
-        
-        let group = DispatchGroup()
-        group.enter()
-        
-        self.serverProxy.getLocalAssetDescriptors { result in
-            switch result {
-            case .success(let descriptors):
-                identifiersInCache = descriptors.map { $0.globalIdentifier }
-            case .failure(let err):
-                log.error("failed to get local asset descriptors: \(err.localizedDescription)")
-            }
-            group.leave()
-        }
-        
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        if dispatchResult == .timedOut {
-            log.error("the background download operation timed out")
-        }
-        return identifiersInCache
-    }
-    
     public func encryptedAsset(
         with globalIdentifier: GlobalIdentifier,
         versions: [SHAssetQuality]? = nil,
-        cacheHiResolution: Bool,
+        synchronousFetch: Bool,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<any SHEncryptedAsset, Error>) -> Void
     ) {
         self.encryptedAssets(
             with: [globalIdentifier],
             versions: versions,
-            cacheHiResolution: cacheHiResolution,
+            synchronousFetch: synchronousFetch,
             qos: qos
         ) { result in
             switch result {
@@ -68,46 +45,31 @@ public struct SHLocalAssetStoreController {
     public func encryptedAssets(
         with globalIdentifiers: [GlobalIdentifier],
         versions: [SHAssetQuality]? = nil,
-        cacheHiResolution: Bool,
+        synchronousFetch: Bool,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> Void
     ) {
-        var assets = [GlobalIdentifier: any SHEncryptedAsset]()
-        var error: Error? = nil
-        
-        let group = DispatchGroup()
-        group.enter()
         self.serverProxy.getAssets(
             withGlobalIdentifiers: globalIdentifiers,
-            versions: versions ?? SHAssetQuality.all
-        ) { result in
-            switch result {
-            case .success(let dict):
-                assets = dict
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        group.notify(queue: .global(qos: qos)) {
-            if let error {
-                completionHandler(.failure(error))
-            } else {
-                completionHandler(.success(assets))
-            }
-        }
+            versions: versions ?? SHAssetQuality.all,
+            synchronousFetch: synchronousFetch,
+            completionHandler: completionHandler
+        )
     }
     
-    private func decryptedAsssetInternal(
+    private func decryptedAssetInternal(
         encryptedAsset: any SHEncryptedAsset,
-        quality: SHAssetQuality,
+        versions: [SHAssetQuality],
         descriptor: any SHAssetDescriptor,
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
         if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
             do {
-                let decryptedAsset = try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: self.user)
+                let decryptedAsset = try self.user.decrypt(
+                    encryptedAsset,
+                    versions: versions,
+                    receivedFrom: self.user
+                )
                 completionHandler(.success(decryptedAsset))
             } catch {
                 completionHandler(.failure(error))
@@ -128,7 +90,11 @@ public struct SHLocalAssetStoreController {
                     }
                     
                     do {
-                        let decryptedAsset = try self.user.decrypt(encryptedAsset, quality: quality, receivedFrom: serverUser)
+                        let decryptedAsset = try self.user.decrypt(
+                            encryptedAsset,
+                            versions: versions,
+                            receivedFrom: serverUser
+                        )
                         completionHandler(.success(decryptedAsset))
                     } catch {
                         completionHandler(.failure(error))
@@ -159,24 +125,27 @@ public struct SHLocalAssetStoreController {
     /// - Parameters:
     ///   - encryptedAsset: the encrypted asset
     ///   - descriptor: the asset descriptor. If none is provided, it's fetched from the local server
-    ///   - quality: the version
+    ///   - versions: the versions requested
     /// - Returns: the decrypted asset
     ///
     public func decryptedAsset(
         encryptedAsset: any SHEncryptedAsset,
-        quality: SHAssetQuality,
+        versions: [SHAssetQuality],
         descriptor: (any SHAssetDescriptor)? = nil,
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
         if let descriptor {
-            self.decryptedAsssetInternal(
+            self.decryptedAssetInternal(
                 encryptedAsset: encryptedAsset,
-                quality: quality,
+                versions: versions,
                 descriptor: descriptor,
                 completionHandler: completionHandler
             )
         } else {
-            self.serverProxy.getLocalAssetDescriptors { result in
+            self.serverProxy.getLocalAssetDescriptors(
+                for: [encryptedAsset.globalIdentifier],
+                useCache: true
+            ) { result in
                 switch result {
                 
                 case .success(let descriptors):
@@ -186,9 +155,9 @@ public struct SHLocalAssetStoreController {
                         completionHandler(.failure(SHBackgroundOperationError.missingAssetInLocalServer(encryptedAsset.globalIdentifier)))
                         return
                     }
-                    self.decryptedAsssetInternal(
+                    self.decryptedAssetInternal(
                         encryptedAsset: encryptedAsset,
-                        quality: quality,
+                        versions: versions,
                         descriptor: foundDescriptor,
                         completionHandler: completionHandler
                     )
@@ -210,7 +179,8 @@ public struct SHLocalAssetStoreController {
         var availableVersions = [SHAssetQuality]()
         let semaphore = DispatchSemaphore(value: 0)
         
-        self.serverProxy.getLocalAssetDescriptors { descResult in
+        // TODO: Make this more efficient
+        self.serverProxy.getLocalAssetDescriptors(after: nil) { descResult in
             if case .success(let descs) = descResult {
                 if let descriptor = descs.first(where: {
                     descriptor in descriptor.localIdentifier == localIdentifier
@@ -234,7 +204,7 @@ public struct SHLocalAssetStoreController {
     /// for the asset having localIdentifier the identifier passed in.
     /// - Parameter localIdentifier: the asset local identifier
     /// - Returns: the list of versions (quality)
-    public func locallyEncryptedVersions(
+    internal func locallyEncryptedVersions(
         forGlobalIdentifiers globalIdentifiers: [String]
     ) -> [String: [SHAssetQuality]] {
         var availableVersions = [String: [SHAssetQuality]]()
@@ -242,8 +212,7 @@ public struct SHLocalAssetStoreController {
         
         self.serverProxy.getLocalAssets(
             withGlobalIdentifiers: globalIdentifiers,
-            versions: SHAssetQuality.all,
-            cacheHiResolution: false
+            versions: SHAssetQuality.all
         ) { assetResult in
             switch assetResult {
             case .success(let dict):
@@ -286,12 +255,13 @@ extension SHLocalAssetStoreController {
             return
         }
         
-        let quality = SHAssetQuality.lowResolution // Common encryption key (private secret) is constant across all versions. Any SHAssetQuality will return the same value
+        /// Common encryption key (private secret) is constant across all versions. Any SHAssetQuality will return the same value
+        let quality = SHAssetQuality.lowResolution
         
         self.encryptedAsset(
             with: globalIdentifier,
             versions: [quality],
-            cacheHiResolution: false,
+            synchronousFetch: true,
             qos: .default
         ) { result in
             switch result {

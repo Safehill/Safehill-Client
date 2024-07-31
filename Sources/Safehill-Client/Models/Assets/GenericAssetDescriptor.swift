@@ -51,5 +51,29 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         self.uploadState = uploadState
         self.sharingInfo = sharingInfo
     }
+    
+    public func serialized() -> SHGenericAssetDescriptorClass {
+        SHGenericAssetDescriptorClass(
+            globalIdentifier: self.globalIdentifier,
+            localIdentifier: self.localIdentifier,
+            creationDate: self.creationDate,
+            uploadState: self.uploadState,
+            sharingInfo: SHGenericDescriptorSharingInfo(
+                sharedByUserIdentifier: self.sharingInfo.sharedByUserIdentifier,
+                sharedWithUserIdentifiersInGroup: self.sharingInfo.sharedWithUserIdentifiersInGroup,
+                groupInfoById: self.sharingInfo.groupInfoById
+            )
+        )
+    }
+    
+    internal static func from(_ cls: SHGenericAssetDescriptorClass) -> SHGenericAssetDescriptor {
+        SHGenericAssetDescriptor(
+            globalIdentifier: cls.globalIdentifier,
+            localIdentifier: cls.localIdentifier,
+            creationDate: cls.creationDate,
+            uploadState: cls.uploadState,
+            sharingInfo: cls.sharingInfo
+        )
+    }
 }
 

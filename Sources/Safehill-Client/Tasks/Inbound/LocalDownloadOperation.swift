@@ -198,7 +198,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         localAssetsStore.encryptedAssets(
             with: Array(descriptorsByGlobalIdentifier.keys),
             versions: [.lowResolution],
-            cacheHiResolution: false,
+            synchronousFetch: true,
             qos: qos
         ) {
             result in
@@ -235,7 +235,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     dispatchGroup.enter()
                     localAssetsStore.decryptedAsset(
                         encryptedAsset: encryptedAsset,
-                        quality: .lowResolution,
+                        versions: [.lowResolution],
                         descriptor: descriptor
                     ) { result in
                         switch result {

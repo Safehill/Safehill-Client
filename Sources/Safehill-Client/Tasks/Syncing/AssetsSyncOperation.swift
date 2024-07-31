@@ -72,10 +72,16 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             dispatchGroup.enter()
             self.serverProxy.localServer.deleteAssets(
                 withGlobalIdentifiers: globalIdentifiers
-            ) { result in
+            ) { [weak self] result in
+                
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+                
                 switch result {
                 case .failure(let error):
-                    self.log.error("some assets were deleted on server but couldn't be deleted from local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    self.log.error("[sync] some assets were deleted on server but couldn't be deleted from local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 case .success:
                     ///
                     /// Remove items in the UPLOAD and SHARE queues that no longer exist
@@ -109,9 +115,15 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                 with: stateChangeDiff.globalIdentifier,
                 quality: stateChangeDiff.quality,
                 as: stateChangeDiff.newUploadState
-            ) { result in
+            ) { [weak self] result in
+                
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+                
                 if case .failure(let error) = result {
-                    self.log.error("some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    self.log.error("[sync] some assets were marked as \(stateChangeDiff.newUploadState.rawValue) on server but not in the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
                 
                 dispatchGroup.leave()
@@ -125,15 +137,24 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             dispatchGroup.enter()
             self.serverProxy.localServer.removeGroupIds(
                 diff.groupInfoRemovedOnRemote
-            ) { result in
+            ) { [weak self] result in
                 
-                if case .success = result {
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+                
+                switch result {
+                case .success:
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         assetsDelegates.forEach {
                             $0.groupIdsWereRemoved(diff.groupInfoRemovedOnRemote)
                         }
                     }
+                    
+                case .failure(let error):
+                    self.log.error("[sync] failed to remove group ids removed on remote. \(error.localizedDescription)")
                 }
                 
                 dispatchGroup.leave()
@@ -147,9 +168,15 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             dispatchGroup.enter()
             self.serverProxy.localServer.updateGroupIds(
                 diff.groupInfoDifferentOnRemote
-            ) { result in
+            ) { [weak self] result in
                 
-                if case .success = result {
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+                
+                switch result {
+                case .success:
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         assetsDelegates.forEach {
@@ -158,6 +185,9 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                             )
                         }
                     }
+                    
+                case .failure(let error):
+                    self.log.error("[sync] failed to update group ids from remote. \(error.localizedDescription)")
                 }
                 
                 dispatchGroup.leave()
@@ -172,7 +202,13 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             dispatchGroup.enter()
             self.serverProxy.localServer.addAssetRecipients(
                 basedOn: diff.userIdsAddedToTheShareOfAssetGid
-            ) { result in
+            ) { [weak self] result in
+                
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+                
                 switch result {
                 case .success:
                     let assetsDelegates = self.assetsDelegates
@@ -188,7 +224,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                         }
                     }
                 case .failure(let error):
-                    self.log.error("some users were added to a share on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    self.log.error("[sync] some users were added to a share on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
                 dispatchGroup.leave()
             }
@@ -198,7 +234,11 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             dispatchGroup.enter()
             self.serverProxy.localServer.removeAssetRecipients(
                 basedOn: diff.userIdsRemovedFromTheSharesOfAssetGid
-            ) { result in
+            ) { [weak self] result in
+                guard let self = self else {
+                    return
+                }
+                
                 switch result {
                 case .success:
                     let assetsDelegates = self.assetsDelegates
@@ -213,7 +253,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                         }
                     }
                 case .failure(let error):
-                    self.log.error("some users were removed from a share on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                    self.log.error("[sync] some users were removed from a share on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
                 }
                 dispatchGroup.leave()
             }
@@ -231,16 +271,20 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         self.serverProxy.getLocalAssetDescriptors(after: nil) { localResult in
             switch localResult {
             case .success(let localDescriptors):
+                let localDescriptorsGids = localDescriptors.map({ $0.globalIdentifier })
                 ///
                 /// Get the corresponding descriptors from the server
                 ///
-                self.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
+                self.serverProxy.getRemoteAssetDescriptors(
+                    for: localDescriptorsGids,
+                    after: nil
+                ) { remoteResult in
                     switch remoteResult {
-                    case .success(let remoteDescriptors):
+                    case .success(let remoteAndLocalDescriptors):
                         ///
                         /// Start the sync process
                         ///
-                        self.sync(remoteAndLocalDescriptors: remoteDescriptors,
+                        self.sync(remoteAndLocalDescriptors: remoteAndLocalDescriptors,
                                   localDescriptors: localDescriptors,
                                   qos: qos,
                                   completionHandler: completionHandler)

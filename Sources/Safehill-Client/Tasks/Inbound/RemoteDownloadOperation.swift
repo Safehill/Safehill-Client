@@ -77,7 +77,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 /// The ones that changed (to be UPDATED) will be changed by the sync operation
                 ///
                 self.serverProxy.getLocalAssetDescriptors(
-                    for: remoteDescriptors.map { $0.globalIdentifier }
+                    for: remoteDescriptors.map { $0.globalIdentifier },
+                    useCache: false
                 ) { localResult in
                     switch localResult {
                     case .success(let localDescriptors):
@@ -411,7 +412,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             switch fetchResult {
             case .success(let assetsDict):
                 ///
-                /// Create the `SHEncryptedAsset` in the local server
+                /// Create the `SHEncryptedAsset` in the local server.
+                /// **Remember:** saving a `.lowResolution` version only
+                /// will remove the `.midResolution` and the `.hiResolution`
+                /// in the cache.
                 ///
                 self.serverProxy.localServer.create(
                     assets: Array(assetsDict.values),
