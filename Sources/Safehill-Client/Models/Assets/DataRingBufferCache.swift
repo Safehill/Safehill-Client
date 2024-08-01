@@ -5,8 +5,8 @@ public final actor DataRingBufferCache {
     private var keys: [String?]
     fileprivate var index = 0
       
-    init(count: Int) {
-        keys = [String?](repeating: nil, count: count)
+    public init(size: Int) {
+        keys = [String?](repeating: nil, count: size)
     }
     
     public func add(_ data: Data, forAssetId key: String) {
