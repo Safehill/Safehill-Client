@@ -12,19 +12,17 @@ import AppKit
 
 
 extension SHApplePhotoAsset {
-    func data(for versions: [SHAssetQuality]) -> [SHAssetQuality: Result<Data, Error>] {
-        var dict = [SHAssetQuality: Result<Data, Error>]()
+    func data(for versions: [SHAssetQuality]) async throws -> [SHAssetQuality: Data] {
+        var dict = [SHAssetQuality: Data]()
         
         for version in versions {
             let size = kSHSizeForQuality(quality: version)
-            self.phAsset.data(
+            dict[version] = try await self.phAsset.data(
                 forSize: size,
                 usingImageManager: self.imageManager,
                 synchronousFetch: true,
                 deliveryMode: .highQualityFormat
-            ) { result in
-                dict[version] = result
-            }
+            )
         }
 
         return dict
@@ -150,8 +148,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         usingPrivateSecret privateSecret: Data,
         recipients: [SHServerUser],
         request: SHEncryptionRequestQueueItem
-    ) throws -> any SHEncryptedAsset
-    {
+    ) async throws -> any SHEncryptedAsset {
         let versions = request.versions
         
         let localIdentifier = asset.phAsset.localIdentifier
@@ -159,15 +156,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         
         let fetchStart = CFAbsoluteTimeGetCurrent()
         do {
-            let dataResults = asset.data(for: versions)
-            payloads = try dataResults.mapValues({
-                switch $0 {
-                case .success(let data):
-                    return data
-                case .failure(let err):
-                    throw err
-                }
-            })
+            payloads = try await asset.data(for: versions)
         } catch {
             log.error("failed to retrieve data for localIdentifier \(localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
             throw SHBackgroundOperationError.fatalError("failed to retrieve data for localIdentifier \(localIdentifier)")
@@ -456,46 +445,48 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 return
             }
             
-            let encryptedAsset: any SHEncryptedAsset
-            
-            do {
-                encryptedAsset = try self.generateEncryptedAsset(
-                    for: asset,
-                    with: globalIdentifier,
-                    usingPrivateSecret: privateSecret.rawRepresentation,
-                    recipients: [self.user],
-                    request: encryptionRequest
-                )
-            } catch {
-                handleError(error)
-                return
-            }
-            
-            self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
-            
-            self.serverProxy.localServer.create(
-                assets: [encryptedAsset],
-                groupId: encryptionRequest.groupId,
-                filterVersions: nil
-            ) { result in
-                switch result {
-                case .failure(let error):
+            Task(priority: qos.toTaskPriority()) {
+                let encryptedAsset: any SHEncryptedAsset
+                
+                do {
+                    encryptedAsset = try await self.generateEncryptedAsset(
+                        for: asset,
+                        with: globalIdentifier,
+                        usingPrivateSecret: privateSecret.rawRepresentation,
+                        recipients: [self.user],
+                        request: encryptionRequest
+                    )
+                } catch {
                     handleError(error)
-                case .success(_):
-                    ///
-                    /// Encryption is completed.
-                    /// Create an item in the history queue for this upload, and remove the one in the upload queue
-                    ///
-                    do {
-                        try self.markAsSuccessful(
-                            item: item,
-                            encryptionRequest: encryptionRequest,
-                            globalIdentifier: encryptedAsset.globalIdentifier
-                        )
-                        completionHandler(.success(()))
-                    } catch {
-                        self.log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
+                    return
+                }
+                
+                self.log.info("storing asset \(encryptedAsset.globalIdentifier) and encryption secrets for SELF user in local server proxy")
+                
+                self.serverProxy.localServer.create(
+                    assets: [encryptedAsset],
+                    groupId: encryptionRequest.groupId,
+                    filterVersions: nil
+                ) { result in
+                    switch result {
+                    case .failure(let error):
                         handleError(error)
+                    case .success(_):
+                        ///
+                        /// Encryption is completed.
+                        /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                        ///
+                        do {
+                            try self.markAsSuccessful(
+                                item: item,
+                                encryptionRequest: encryptionRequest,
+                                globalIdentifier: encryptedAsset.globalIdentifier
+                            )
+                            completionHandler(.success(()))
+                        } catch {
+                            self.log.critical("failed to mark ENCRYPT as successful. This will likely cause infinite loops")
+                            handleError(error)
+                        }
                     }
                 }
             }

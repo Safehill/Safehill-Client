@@ -147,11 +147,10 @@ public extension PHAsset {
               deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
               resizeMode: PHImageRequestOptionsResizeMode = .fast,
               shouldCache: Bool = false,
-              exactSize: Bool = false,
-              completionHandler: @escaping (Swift.Result<Data, Error>) -> ()) {
-        if let data = SHLocalPHAssetHighQualityDataCache.data(forAssetId: self.localIdentifier) {
-            completionHandler(.success(data))
-            return
+              exactSize: Bool = false
+    ) async throws -> Data {
+        if let data = await LocalPHAssetHighQualityDataCache.data(forAssetId: self.localIdentifier) {
+            return data
         }
         
         switch self.mediaType {
@@ -167,78 +166,66 @@ public extension PHAsset {
 //                }
 //            }
         default:
-            completionHandler(.failure(SHPhotoAssetError.unsupportedMediaType))
+            throw SHPhotoAssetError.unsupportedMediaType
         }
         
-        self.image(forSize: size,
-                   usingImageManager: imageManager,
-                   synchronousFetch: synchronousFetch,
-                   deliveryMode: deliveryMode,
-                   resizeMode: resizeMode
-        ) { (result: Result<NSUIImage, Error>) in
-            switch result {
-            case .success(let nsuiimage):
+        let nsuiimage = try await self.image(
+            forSize: size,
+            usingImageManager: imageManager,
+            synchronousFetch: synchronousFetch,
+            deliveryMode: deliveryMode,
+            resizeMode: resizeMode
+        )
+        
 #if os(iOS)
-                guard case .uiKit(var image) = nsuiimage else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nsuiimage)))
-                    return
-                }
-                
-                if let size = size, // A size was specified
-                   (image.size.width > size.width || image.size.height > size.height), // the retrieved size doesn't match the requested size
-                   exactSize // the exact size was requested
-                {
-                    if let newSizeImage = image.resized(to: size) { // resizing was possible
-                        image = newSizeImage
-                    } else {
-                        completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to fetch exact size")))
-                        return
-                    }
-                }
-                
-                if let data = image.pngData() {
-                    completionHandler(.success(data))
-                    if shouldCache {
-                        SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
-                    }
-                    return
-                } else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
-                    return
-                }
-#else
-                guard case .appKit(var image) = nsuiimage else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nsuiimage)))
-                    return
-                }
-                
-                if let size = size, // A size was specified
-                   image.size != size, // the retrieved size doesn't match the requested size
-                   exactSize // the exact size was requested
-                {
-                    if let newSizeImage = image.resized(to: size) { // resizing was possible
-                        image = newSizeImage
-                    } else {
-                        completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to fetch exact size")))
-                        return
-                    }
-                }
-
-                if let data = image.png {
-                    completionHandler(.success(data))
-                    if shouldCache {
-                        SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
-                    }
-                    return
-                } else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
-                    return
-                }
-#endif
-            case .failure(let error):
-                completionHandler(.failure(error))
+        guard case .uiKit(var image) = nsuiimage else {
+            throw SHBackgroundOperationError.unexpectedData(nsuiimage)
+        }
+        
+        if let size = size, // A size was specified
+           (image.size.width > size.width || image.size.height > size.height), // the retrieved size doesn't match the requested size
+           exactSize // the exact size was requested
+        {
+            if let newSizeImage = image.resized(to: size) { // resizing was possible
+                image = newSizeImage
+            } else {
+                throw SHBackgroundOperationError.fatalError("failed to fetch exact size")
             }
         }
+        
+        if let data = image.pngData() {
+            if shouldCache {
+                await LocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
+            }
+            return data
+        } else {
+            throw SHBackgroundOperationError.unexpectedData(image)
+        }
+#else
+        guard case .appKit(var image) = nsuiimage else {
+            throw SHBackgroundOperationError.unexpectedData(nsuiimage)
+        }
+        
+        if let size = size, // A size was specified
+           image.size != size, // the retrieved size doesn't match the requested size
+           exactSize // the exact size was requested
+        {
+            if let newSizeImage = image.resized(to: size) { // resizing was possible
+                image = newSizeImage
+            } else {
+                throw SHBackgroundOperationError.fatalError("failed to fetch exact size")
+            }
+        }
+
+        if let data = image.png {
+            if shouldCache {
+                await LocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
+            }
+            return data
+        } else {
+            throw SHBackgroundOperationError.unexpectedData(image)
+        }
+#endif
     }
     
     func image(forSize size: CGSize? = nil,
@@ -247,12 +234,11 @@ public extension PHAsset {
                deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
                resizeMode: PHImageRequestOptionsResizeMode = .fast,
                // TODO: Implement iCloud progress handler when downloading the image
-               progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
-               completionHandler: @escaping (Swift.Result<NSUIImage, Error>) -> ()) {
+               progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil
+    ) async throws -> NSUIImage {
         
         guard self.mediaType == .image else {
-            completionHandler(.failure(SHPhotoAssetError.unsupportedMediaType))
-            return
+            throw SHPhotoAssetError.unsupportedMediaType
         }
         
         let options = PHImageRequestOptions()
@@ -267,37 +253,37 @@ public extension PHAsset {
             height: min(size?.height ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight))
         )
 
-        imageManager.requestImage(
-            for: self,
-            targetSize: targetSize,
-            contentMode: PHImageContentMode.default,
-            options: options
-        ) {
-            image, _ in
-            if let image = image {
-                
-                var exactSizeImage = image
-                if resizeMode == .exact,
-                   image.size.width != targetSize.width || image.size.height != targetSize.height {
-                    log.warning("Although a resize=exact was requested, Photos returned an asset whose size (\(image.size.width)x\(image.size.height)) is not the one requested (\(targetSize.width)x\(targetSize.height))")
-                    if let resized = image.resized(to: targetSize) {
-                        exactSizeImage = resized
-                    } else {
-                        completionHandler(.failure(SHPhotoAssetError.applePhotosAssetRetrievalError("")))
-                        return
+        return try await withUnsafeThrowingContinuation { continuation in
+            
+            imageManager.requestImage(
+                for: self,
+                targetSize: targetSize,
+                contentMode: PHImageContentMode.default,
+                options: options
+            ) {
+                image, _ in
+                if let image = image {
+                    
+                    var exactSizeImage = image
+                    if resizeMode == .exact,
+                       image.size.width != targetSize.width || image.size.height != targetSize.height {
+                        log.warning("Although a resize=exact was requested, Photos returned an asset whose size (\(image.size.width)x\(image.size.height)) is not the one requested (\(targetSize.width)x\(targetSize.height))")
+                        if let resized = image.resized(to: targetSize) {
+                            exactSizeImage = resized
+                        } else {
+                            continuation.resume(throwing: SHPhotoAssetError.applePhotosAssetRetrievalError(""))
+                            return
+                        }
                     }
-                }
-                
+                    
 #if os(iOS)
-                completionHandler(.success(NSUIImage.uiKit(exactSizeImage)))
+                    continuation.resume(returning: NSUIImage.uiKit(exactSizeImage))
 #else
-                completionHandler(.success(NSUIImage.appKit(exactSizeImage)))
+                    continuation.resume(returning: NSUIImage.appKit(exactSizeImage))
 #endif
-                return
-
-            } else {
-                completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
-                return
+                } else {
+                    continuation.resume(throwing: SHBackgroundOperationError.unexpectedData(image))
+                }
             }
         }
     }
