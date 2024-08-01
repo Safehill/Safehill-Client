@@ -17,10 +17,9 @@ extension SHApplePhotoAsset {
         
         for version in versions {
             let size = kSHSizeForQuality(quality: version)
-            dict[version] = try await self.phAsset.data(
+            dict[version] = try await self.phAsset.dataSynchronous(
                 forSize: size,
                 usingImageManager: self.imageManager,
-                synchronousFetch: true,
                 deliveryMode: .highQualityFormat
             )
         }
