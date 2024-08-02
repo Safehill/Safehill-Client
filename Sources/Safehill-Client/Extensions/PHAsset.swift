@@ -151,23 +151,10 @@ public extension PHAsset {
     }
     
     private func data(
-        for nsuiImage: NSUIImage,
-        targetSize size: CGSize?,
-        exactSize: Bool
+        for nsuiImage: NSUIImage
     ) throws -> Data {
         
         var image = nsuiImage.platformImage
-        
-        if let size = size, // A size was specified
-           (image.size.width > size.width || image.size.height > size.height), // the retrieved size doesn't match the requested size
-           exactSize // the exact size was requested
-        {
-            if let newSizeImage = image.resized(to: size) { // resizing was possible
-                image = newSizeImage
-            } else {
-                throw SHBackgroundOperationError.fatalError("failed to fetch exact size")
-            }
-        }
         
 #if os(iOS)
         let data = image.pngData()
@@ -207,11 +194,7 @@ public extension PHAsset {
             resizeMode: resizeMode
         )
         
-        return try self.data(
-            for: nsuiimage,
-            targetSize: size,
-            exactSize: exactSize
-        )
+        return try self.data(for: nsuiimage)
     }
     
     func dataAsynchronous(
@@ -219,7 +202,6 @@ public extension PHAsset {
         usingImageManager imageManager: PHImageManager,
         deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
         resizeMode: PHImageRequestOptionsResizeMode = .fast,
-        exactSize: Bool = false,
         completionHandler: @escaping (Swift.Result<Data, Error>) -> ()
     ) {
         do { try self.mediaTypeCheck() }
@@ -237,11 +219,7 @@ public extension PHAsset {
             switch result {
             case .success(let nsuiimage):
                 do {
-                    let data = try self.data(
-                        for: nsuiimage,
-                        targetSize: size,
-                        exactSize: exactSize
-                    )
+                    let data = try self.data(for: nsuiimage)
                     completionHandler(.success(data))
                 } catch {
                     completionHandler(.failure(error))
