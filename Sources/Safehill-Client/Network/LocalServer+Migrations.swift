@@ -60,16 +60,39 @@ extension LocalServer {
                 continue
             }
             
+            let components = key.components(separatedBy: "::")
+            guard components.count == 2 else {
+                continue
+            }
+            let qualityStr = components[0]
+            guard let quality = SHAssetQuality(rawValue: qualityStr) else {
+                continue
+            }
+            let globalIdentifier = components[1]
+            
             ///
             /// More than 2 keys, encrypted data key present -> it's a pre 1.4 release
             /// If there's no new format `data::<quality>::<globalId>` then migrate to 1.4+ format
             ///
-            if value.keys.count > 2 && value["encryptedData"] != nil {
+            if value.keys.count > 2,
+               let encryptedData = value["encryptedData"] as? Data {
                 var metadataValue = value
                 metadataValue.removeValue(forKey: "encryptedData")
+                
+                let assetVersionURL: URL
+                do {
+                    assetVersionURL = try self.createAssetDataFile(
+                        globalIdentifier: globalIdentifier,
+                        quality: quality,
+                        content: encryptedData
+                    )
+                } catch {
+                    continue
+                }
+                
                 let dataValue = [
                     "assetIdentifier": value["assetIdentifier"],
-                    "encryptedData": value["encryptedData"]
+                    "encryptedDataPath": assetVersionURL.absoluteString
                 ]
                 writeBatch.set(value: dataValue, for: "data::" + key)
                 writeBatch.set(value: metadataValue, for: key)
@@ -236,10 +259,11 @@ extension LocalServer {
     }
     
     ///
-    /// Photo messages in threads used to be cached under the `user-thread::<thread_id>::assets`
-    /// and now are cached under `user-thread::<thread_id>::assets::photoMessages`,
-    /// alongside `user-thread::<thread_id>::assets::nonPhotoMessages`.
-    /// Simply remove the old keys
+    /// Photo messages in threads used to be cached under the following keys
+    /// `user-thread::<thread_id>::assets`, `user-thread::<thread_id>::photoMessages` and `user-thread::<thread_id>::nonPhotoMessages`
+    /// In recent versions they are cached under keys `user-thread::<thread_id>::assets::photoMessage`,
+    /// alongside `user-thread::<thread_id>::assets::nonPhotoMessage`.
+    /// Simply remove the old cache under the old keys.
     ///
     func runAssetThreadsMigration(
         currentBuild: Int?,
@@ -254,10 +278,18 @@ extension LocalServer {
         let condition = KBGenericCondition(
             .beginsWith,
             value: SHInteractionAnchor.thread.rawValue + "::"
-        ).and(KBGenericCondition(
-            .endsWith,
-            value: "::assets"
-        ))
+        ).and(
+            KBGenericCondition(
+                .endsWith,
+                value: "::assets"
+            ).or(KBGenericCondition(
+                .endsWith,
+                value: "::photoMessages"
+            )).or(KBGenericCondition(
+                .endsWith,
+                value: "::nonPhotoMessages"
+            ))
+        )
         
         userStore.removeValues(forKeysMatching: condition) { result in
             switch result {
