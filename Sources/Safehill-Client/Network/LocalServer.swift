@@ -2204,7 +2204,7 @@ struct LocalServer : SHServerAPI {
                 .values(
                     forKeysMatching: KBGenericCondition(
                         .beginsWith,
-                        value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::photoMessage"
+                        value: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::assets::nonPhotoMessage"
                     )
                 )
                 .compactMap { (value: Any) -> UsersGroupAssetDTO? in
@@ -2213,7 +2213,7 @@ struct LocalServer : SHServerAPI {
                         return nil
                     }
                     guard let otherAsset = try? UsersGroupAssetClass.fromData(data) else {
-                        log.critical("failed to decode photo message in thread \(threadId)")
+                        log.critical("failed to decode non-photo-message in thread \(threadId)")
                         return nil
                     }
                     return otherAsset.toDTO()
