@@ -41,26 +41,15 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         }
     }
     
-    @available(*, unavailable)
     public override init(
         user: SHLocalUserProtocol,
         downloaderDelegates: [SHAssetDownloaderDelegate],
-        restorationDelegate: SHAssetActivityRestorationDelegate,
-        photoIndexer: SHPhotosIndexer,
-        limitPerRun limit: Int? = nil
-    ) {
-        fatalError("Not supported")
-    }
-    
-    public init(
-        user: SHLocalUserProtocol,
-        delegates: [SHAssetDownloaderDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         photoIndexer: SHPhotosIndexer
     ) {
         super.init(
             user: user,
-            downloaderDelegates: delegates,
+            downloaderDelegates: downloaderDelegates,
             restorationDelegate: restorationDelegate,
             photoIndexer: photoIndexer
         )
@@ -254,11 +243,8 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         case .success(let decryptedAsset):
                             self.delegatesQueue.async {
                                 downloaderDelegates.forEach({
-                                    $0.didFetchLowResolutionAsset(decryptedAsset)
-                                })
-                                downloaderDelegates.forEach({
-                                    $0.didCompleteDownloadOfAsset(
-                                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                                    $0.didCompleteDownload(
+                                        of: decryptedAsset,
                                         in: groupId
                                     )
                                 })
@@ -374,8 +360,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         ///
                         /// The `didReceiveLocalAssetDescriptors(_:referencing:)` delegate method is called
                         /// with the descriptors.
-                        /// *NOTE: no assets not referenced in the call to
-                        /// `didReceiveAssetLocalDescriptors(_:referencing:)` should be referenced in `didStartDownloadOfAsset`, `didCompleteDownloadOfAsset` or `didFailDownloadOfAsset`.*
+                        ///
+                        /// NOTE: no assets not referenced in the call to
+                        /// ```didReceiveLocalAssetDescriptors(_:referencing:)```
+                        /// should be referenced in `didStartDownloadOfAsset`, `didCompleteDownload` or `didFailDownloadOfAsset`.
                         ///
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptors.count). delta=\(delta)")

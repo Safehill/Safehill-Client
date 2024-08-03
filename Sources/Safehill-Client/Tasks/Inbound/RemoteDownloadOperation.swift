@@ -33,7 +33,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.download.delegates")
     
-    public let limit: Int?
     let user: SHLocalUserProtocol
     
     let downloaderDelegates: [SHAssetDownloaderDelegate]
@@ -44,10 +43,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     public init(user: SHLocalUserProtocol,
                 downloaderDelegates: [SHAssetDownloaderDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
-                photoIndexer: SHPhotosIndexer,
-                limitPerRun limit: Int? = nil) {
+                photoIndexer: SHPhotosIndexer) {
         self.user = user
-        self.limit = limit
         self.downloaderDelegates = downloaderDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer
@@ -117,8 +114,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     /// - the ones where any of the users referenced can't be retrieved
     /// - the ones for which the upload hasn't started
     ///
-    /// Call the delegate with the full manifest of assets shared by OTHER users, regardless of the limit on the task config) for the assets.
-    /// Returns the full set of descriptors fetched from the server, keyed by global identifier, limiting the result based on the task config.
+    /// Call the delegate with the full manifest of assets shared by OTHER users.
+    /// Returns the full set of descriptors fetched from the server, keyed by global identifier.
     ///
     /// - Parameters:
     ///   - descriptors: the descriptors to process
@@ -225,15 +222,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         }
                     }
                     
-                    var descriptorsByGlobalIdentifier = [String: any SHAssetDescriptor]()
-                    for descriptor in filteredDescriptorsFromRetrievableUsers {
-                        descriptorsByGlobalIdentifier[descriptor.globalIdentifier] = descriptor
-                        ///
-                        /// Limit based on the task configuration
-                        ///
-                        if let limit = self.limit, descriptorsByGlobalIdentifier.count > limit {
-                            break
-                        }
+                    let descriptorsByGlobalIdentifier = filteredDescriptorsFromRetrievableUsers.reduce(
+                        [String: any SHAssetDescriptor]()
+                    ) { partialResult, descriptor in
+                        var result = partialResult
+                        result[descriptor.globalIdentifier] = descriptor
+                        return result
                     }
                     completionHandler(.success(descriptorsByGlobalIdentifier))
                 }
@@ -784,12 +778,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     let downloaderDelegates = self.downloaderDelegates
                     self.delegatesQueue.async {
                         downloaderDelegates.forEach({
-                            $0.didFetchLowResolutionAsset(decryptedAsset)
-                        })
-                        
-                        downloaderDelegates.forEach({
-                            $0.didCompleteDownloadOfAsset(
-                                withGlobalIdentifier: decryptedAsset.globalIdentifier,
+                            $0.didCompleteDownload(
+                                of: decryptedAsset,
                                 in: groupId
                             )
                         })
