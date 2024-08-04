@@ -51,32 +51,73 @@ extension LocalServer {
         let writeBatch = assetStore.writeBatch()
         
         for (key, value) in dictionary {
-            guard key.prefix(6) != "data::"
-            else {
-                /// Skip irrelevant keys (or already migrated)
-                continue
-            }
+            
             guard let value = value as? [String: Any] else {
                 /// Skip the unreadable values
                 continue
             }
             
             let components = key.components(separatedBy: "::")
-            guard components.count == 2 else {
-                continue
-            }
-            let qualityStr = components[0]
-            guard let quality = SHAssetQuality(rawValue: qualityStr) else {
-                continue
-            }
-            let globalIdentifier = components[1]
             
-            ///
-            /// More than 2 keys, encrypted data key present -> it's a pre 1.4 release
-            /// If there's no new format `data::<quality>::<globalId>` then migrate to 1.4+ format
-            ///
-            if value.keys.count > 2,
-               let encryptedData = value["encryptedData"] as? Data {
+            if key.prefix(6) == "data::" {
+                ///
+                /// Migrate data stored in DB to file
+                ///
+                guard let encryptedData = value["encryptedData"] as? Data else {
+                    continue
+                }
+                
+                guard components.count == 3 else {
+                    continue
+                }
+                let qualityStr = components[1]
+                guard let quality = SHAssetQuality(rawValue: qualityStr) else {
+                    continue
+                }
+                let globalIdentifier = components[2]
+                    
+                let assetVersionURL: URL
+                do {
+                    assetVersionURL = try self.createAssetDataFile(
+                        globalIdentifier: globalIdentifier,
+                        quality: quality,
+                        content: encryptedData
+                    )
+                } catch {
+                    continue
+                }
+                
+                let dataValue = [
+                    "assetIdentifier": value["assetIdentifier"],
+                    "encryptedDataPath": assetVersionURL.absoluteString
+                ]
+                writeBatch.set(value: dataValue, for: "data::" + key)
+            }
+            else {
+                ///
+                /// Migrate data+metadata under same key, so that:
+                /// - data and metadata are split
+                /// - data references a file path, not storing data it in DB
+                ///
+                guard components.count == 2 else {
+                    continue
+                }
+                let qualityStr = components[0]
+                guard let quality = SHAssetQuality(rawValue: qualityStr) else {
+                    continue
+                }
+                let globalIdentifier = components[1]
+                
+                ///
+                /// More than 2 keys, encrypted data key present -> it's a pre 1.4 release
+                /// If there's no new format `data::<quality>::<globalId>` then migrate to 1.4+ format
+                ///
+                guard value.keys.count > 2,
+                      let encryptedData = value["encryptedData"] as? Data
+                else {
+                    continue
+                }
+                
                 var metadataValue = value
                 metadataValue.removeValue(forKey: "encryptedData")
                 
