@@ -42,7 +42,7 @@ public extension Array {
 
 extension LocalServer {
     
-    func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws -> Bool {
+    func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             throw KBError.databaseNotReady
         }
@@ -143,19 +143,20 @@ extension LocalServer {
             }
         }
         
-        guard pre_1_4_keys.count > 0 else {
-            return false
-        }
-        
         try writeBatch.write()
         
-        var condition = KBGenericCondition(value: false)
-        for key in pre_1_4_keys {
-            condition = condition.or(KBGenericCondition(.equal, value: key))
+        guard pre_1_4_keys.isEmpty == false else {
+            return
         }
-        let removed = try assetStore.removeValues(forKeysMatching: condition)
-        log.info("Migrated \(removed.count) keys")
-        return removed.count > 0
+        
+        for pre_1_4_keys_chunk in pre_1_4_keys.chunked(into: 20) {
+            var condition = KBGenericCondition(value: false)
+            for key in pre_1_4_keys_chunk {
+                condition = condition.or(KBGenericCondition(.equal, value: key))
+            }
+            let removed = try assetStore.removeValues(forKeysMatching: condition)
+            log.info("Migrated \(removed.count) keys")
+        }
     }
     
     public func syncLocalGraphWithServer(
@@ -263,7 +264,7 @@ extension LocalServer {
                     }
                 }
                 do {
-                    let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                    try self.moveDataToNewKeyFormat(for: keyValues)
                 } catch {
                     log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
                     completionHandler(.failure(error))
@@ -292,7 +293,7 @@ extension LocalServer {
                         }
                         do {
                             if relevantKeyValues.count > 0 {
-                                let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                                try self.moveDataToNewKeyFormat(for: keyValues)
                             }
                         } catch {
                             log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
