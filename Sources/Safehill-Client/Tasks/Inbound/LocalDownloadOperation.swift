@@ -254,9 +254,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     } else {
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
-                                $0.didFailRepeatedlyDownloadOfAsset(
+                                $0.didFailDownloadOfAsset(
                                     withGlobalIdentifier: globalAssetId,
-                                    in: groupId
+                                    in: groupId,
+                                    with: SHAssetStoreError.failedToCreateRemoteAsset
                                 )
                             })
                         }
@@ -377,9 +378,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         self.processAssetsInDescriptors(
                             descriptorsByGlobalIdentifier: filteredDescriptors,
                             qos: qos
-                        ) { secondResult in
+                        ) { processedAssetsResult in
                             
-                            switch secondResult {
+                            switch processedAssetsResult {
                             case .success(let descriptorsToDecrypt):
 #if DEBUG
                                 let delta1 = Set(filteredDescriptors.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
@@ -411,10 +412,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                         }
                                     }
                                     
-                                    completionHandler(thirdResult)
+                                    completionHandler(decryptionResult)
                                     
-                                    if case .success(let tuples) = thirdResult, tuples.count > 0 {
-                                        Self.markAsAlreadyProcessed(tuples.map({ $0.1.globalIdentifier }))
+                                    if case .success(let decryptedAssetsAndDescriptors) = decryptionResult,
+                                        decryptedAssetsAndDescriptors.count > 0 {
+                                        Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.1.globalIdentifier }))
                                     }
                                 }
                                 

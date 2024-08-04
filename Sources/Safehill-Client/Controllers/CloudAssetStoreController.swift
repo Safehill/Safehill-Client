@@ -7,6 +7,7 @@ public enum SHAssetStoreError: Error, LocalizedError {
     case notImplemented
     case noEntries
     case failedToCreateRemoteAsset
+    case failedToRetrieveLocalAsset
     case invalidRequest(String)
     
     public var errorDescription: String? {
@@ -17,6 +18,8 @@ public enum SHAssetStoreError: Error, LocalizedError {
             return "Could not find an entry for the requested asset(s)"
         case .failedToCreateRemoteAsset:
             return "Failed to create remote asset"
+        case .failedToRetrieveLocalAsset:
+            return "Failed to retrieve asset from cache"
         case .invalidRequest(let reason):
             return "Invalid request: \(reason)"
         }
