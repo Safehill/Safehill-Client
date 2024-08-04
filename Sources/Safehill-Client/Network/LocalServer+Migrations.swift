@@ -51,8 +51,9 @@ extension LocalServer {
         let writeBatch = assetStore.writeBatch()
         
         for (key, value) in dictionary {
-            guard key.prefix(6) != "data::" else {
-                /// Skip the new formats
+            guard key.prefix(6) != "data::"
+            else {
+                /// Skip irrelevant keys (or already migrated)
                 continue
             }
             guard let value = value as? [String: Any] else {
@@ -203,7 +204,13 @@ extension LocalServer {
         var assetIdentifiers = Set<String>()
         
         /// Low Res migrations
-        var condition = KBGenericCondition(.beginsWith, value: "low::")
+        var condition = KBGenericCondition(
+            .contains, value: "low::"
+        ).and(KBGenericCondition(
+            .beginsWith, value: "sender::", negated: true
+        )).and(KBGenericCondition(
+            .beginsWith, value: "receiver::", negated: true
+        ))
         
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
@@ -223,7 +230,13 @@ extension LocalServer {
                 }
                 
                 /// Hi Res migrations
-                condition = KBGenericCondition(.beginsWith, value: "hi::")
+                condition = KBGenericCondition(
+                    .contains, value: "hi::"
+                ).and(KBGenericCondition(
+                    .beginsWith, value: "sender::", negated: true
+                )).and(KBGenericCondition(
+                    .beginsWith, value: "receiver::", negated: true
+                ))
                 
                 assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
                     switch result {
