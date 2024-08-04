@@ -962,7 +962,7 @@ struct LocalServer : SHServerAPI {
         
         self.getAssetsChunks(
             from: assetStore,
-            assetIdentifiersChunks: assetIdentifiers.chunked(into: 10),
+            assetIdentifiersChunks: assetIdentifiers.chunked(into: 20),
             versions: versions,
             initialValue: [:],
             completionHandler: completionHandler
