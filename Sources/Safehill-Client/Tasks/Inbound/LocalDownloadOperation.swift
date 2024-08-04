@@ -199,13 +199,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
                 let dispatchGroup = DispatchGroup()
                 
-                for (globalAssetId, encryptedAsset) in encryptedAssets {
-                    guard let descriptor = descriptorsByGlobalIdentifier[globalAssetId] else {
-                        self.log.critical("[\(type(of: self))] malformed descriptorsByGlobalIdentifier")
-                        completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptorsByGlobalIdentifier")))
-                        return
-                    }
-                    
+                for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
                     guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
                         self.log.critical("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
                         completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
@@ -213,47 +207,59 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     }
                     
                     let downloaderDelegates = self.downloaderDelegates
-                    self.delegatesQueue.async {
-                        downloaderDelegates.forEach({
-                            $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                                       descriptor: descriptor,
-                                                       in: groupId)
-                        })
-                    }
                     
-                    dispatchGroup.enter()
-                    localAssetsStore.decryptedAsset(
-                        encryptedAsset: encryptedAsset,
-                        versions: [.lowResolution],
-                        descriptor: descriptor
-                    ) { result in
-                        switch result {
-                        case .failure(let error):
-                            self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
-                            
-                            self.delegatesQueue.async {
-                                downloaderDelegates.forEach({
-                                    $0.didFailDownloadOfAsset(
-                                        withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                                        in: groupId,
-                                        with: error
-                                    )
-                                })
-                            }
-                        case .success(let decryptedAsset):
-                            self.delegatesQueue.async {
-                                downloaderDelegates.forEach({
-                                    $0.didCompleteDownload(
-                                        of: decryptedAsset,
-                                        in: groupId
-                                    )
-                                })
-                            }
-                            
-                            successfullyDecrypted.append((decryptedAsset, descriptor))
+                    if let encryptedAsset = encryptedAssets[globalAssetId] {
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
+                                                           descriptor: descriptor,
+                                                           in: groupId)
+                            })
                         }
                         
-                        dispatchGroup.leave()
+                        dispatchGroup.enter()
+                        localAssetsStore.decryptedAsset(
+                            encryptedAsset: encryptedAsset,
+                            versions: [.lowResolution],
+                            descriptor: descriptor
+                        ) { result in
+                            switch result {
+                            case .failure(let error):
+                                self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                                
+                                self.delegatesQueue.async {
+                                    downloaderDelegates.forEach({
+                                        $0.didFailDownloadOfAsset(
+                                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
+                                            in: groupId,
+                                            with: error
+                                        )
+                                    })
+                                }
+                            case .success(let decryptedAsset):
+                                self.delegatesQueue.async {
+                                    downloaderDelegates.forEach({
+                                        $0.didCompleteDownload(
+                                            of: decryptedAsset,
+                                            in: groupId
+                                        )
+                                    })
+                                }
+                                
+                                successfullyDecrypted.append((decryptedAsset, descriptor))
+                            }
+                            
+                            dispatchGroup.leave()
+                        }
+                    } else {
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didFailRepeatedlyDownloadOfAsset(
+                                    withGlobalIdentifier: globalAssetId,
+                                    in: groupId
+                                )
+                            })
+                        }
                     }
                 }
                 
@@ -385,20 +391,21 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier }),
                                     qos: qos
                                 ) {
-                                    thirdResult in
+                                    decryptionResult in
                                     
                                     let downloaderDelegates = self.downloaderDelegates
                                     self.delegatesQueue.async {
-                                        switch thirdResult {
+                                        switch decryptionResult {
+                                            
                                         case .failure(let error):
                                             downloaderDelegates.forEach({
                                                 $0.didFailDownloadCycle(with: error)
                                             })
                                             
-                                        case .success(let tuples):
+                                        case .success(let decryptedAssetsAndDescriptors):
                                             downloaderDelegates.forEach({
                                                 $0.didCompleteDownloadCycle(
-                                                    localAssetsAndDescriptors: tuples
+                                                    localAssetsAndDescriptors: decryptedAssetsAndDescriptors
                                                 )
                                             })
                                         }
