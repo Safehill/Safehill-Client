@@ -61,7 +61,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                     }
                 } else if let filePath = value["encryptedDataPath"] as? String,
                           let fileURL = URL(string: filePath) {
-                    guard FileManager.default.fileExists(atPath: fileURL.relativePath) else {
+                    guard FileManager.default.fileExists(atPath: fileURL.path) else {
                         log.error("no data for asset \(identifier) \(quality.rawValue). File at url \(filePath) does not exist")
                         continue
                     }
