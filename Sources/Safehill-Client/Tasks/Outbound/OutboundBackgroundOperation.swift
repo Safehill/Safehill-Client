@@ -75,6 +75,28 @@ extension SHOutboundBackgroundOperation {
         }
     }
     
+    private func runSequentially(
+        item index: Int,
+        of queueItems: [KBQueueItem],
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard queueItems.count > index else {
+            completionHandler(.success(()))
+            return
+        }
+        
+        let queueItem = queueItems[index]
+        self.runOnce(for: queueItem, qos: qos) { _ in
+            self.runSequentially(
+                item: index+1,
+                of: queueItems,
+                qos: qos,
+                completionHandler: completionHandler
+            )
+        }
+    }
+    
     func run(
         forQueueItemIdentifiers queueItemIdentifiers: [String],
         qos: DispatchQoS.QoSClass,
@@ -90,40 +112,20 @@ extension SHOutboundBackgroundOperation {
             return
         }
         
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
         queue.retrieveItems(withIdentifiers: queueItemIdentifiers) {
             result in
             switch result {
             case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
+                self.runSequentially(
+                    item: 0,
+                    of: items,
+                    qos: qos,
+                    completionHandler: completionHandler
+                )
+            case .failure(let error):
+                self.log.critical("failed to retrieve items from \(self.operationType.identifier) queue. \(error.localizedDescription)")
+                completionHandler(.failure(error))
             }
-            group.leave()
-        }
-        
-        group.notify(queue: .global(qos: qos)) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from \(self.operationType.identifier) queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            let semaphore = DispatchSemaphore(value: 0)
-            
-            for item in queueItems {
-                group.enter()
-                self.runOnce(for: item, qos: qos) { _ in
-                    semaphore.signal()
-                }
-                
-                semaphore.wait()
-            }
-            
-            completionHandler(.success(()))
         }
     }
     
@@ -140,11 +142,6 @@ extension SHOutboundBackgroundOperation {
             return
         }
         
-        var queueItems = [KBQueueItem]()
-        var error: Error? = nil
-        let group = DispatchGroup()
-        group.enter()
-        
         let interval = DateInterval(start: Date.distantPast, end: Date())
         queue.peekItems(
             createdWithin: interval,
@@ -152,41 +149,17 @@ extension SHOutboundBackgroundOperation {
         ) { result in
             switch result {
             case .success(let items):
-                queueItems = items
-            case .failure(let err):
-                error = err
-            }
-            group.leave()
-        }
-        
-        guard queueItems.isEmpty == false else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        group.notify(queue: .global(qos: qos)) {
-            guard error == nil else {
-                self.log.critical("failed to retrieve items from FETCH queue. \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
+                self.runSequentially(
+                    item: 0,
+                    of: items,
+                    qos: qos,
+                    completionHandler: completionHandler
+                )
+            case .failure(let error):
+                self.log.critical("failed to retrieve items from queue \(self.operationType.identifier). \(error.localizedDescription)")
+                completionHandler(.failure(error))
                 return
             }
-            
-            var count = 0
-            
-            let semaphore = DispatchSemaphore(value: 0)
-            
-            for item in queueItems {
-                count += 1
-                self.runOnce(for: item, qos: qos) { _ in
-                    semaphore.signal()
-                }
-                
-                semaphore.wait()
-            }
-            
-            completionHandler(.success(()))
-            
-            self.log.info("started \(count) \(self.operationType.identifier) operations")
         }
     }
     

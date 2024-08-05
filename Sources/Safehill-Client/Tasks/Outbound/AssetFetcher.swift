@@ -71,7 +71,27 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     for: phAsset,
                     usingCachingImageManager: self.photoIndexer.imageManager
                 )
-                completionHandler(.success(photoAsset))
+                
+                photoAsset.getOriginalUrl { [weak self] url in
+                    guard let self = self else { return }
+                    if let url {
+                        self.log.debug("[file-size] original image is at \(url), size is \(phAsset.pixelWidth)x\(phAsset.pixelHeight)")
+                        do {
+                            let attr = try FileManager.default.attributesOfItem(atPath: url.path)
+                            let fileSize = attr[FileAttributeKey.size] as! UInt64
+                            
+                            let bcf = ByteCountFormatter()
+                            bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
+                            bcf.countStyle = .file
+                            let inMegabytes = bcf.string(fromByteCount: Int64(fileSize))
+                            self.log.debug("[file-size] original image size is \(inMegabytes)")
+                        } catch {
+                            self.log.debug("[file-size] failed to get original image size: \(error.localizedDescription)")
+                        }
+                    }
+                    
+                    completionHandler(.success(photoAsset))
+                }
             }
         }
     }

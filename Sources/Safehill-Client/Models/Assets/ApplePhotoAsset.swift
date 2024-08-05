@@ -114,6 +114,21 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
 
 extension SHApplePhotoAsset {
     
+    func getOriginalUrl(
+        completion: @escaping (_ url: URL?) -> Void
+    ) {
+        self.phAsset.requestContentEditingInput(
+            with: PHContentEditingInputRequestOptions()
+        ) { (contentEditingInput, dictInfo) in
+            
+            if let url = contentEditingInput!.fullSizeImageURL {
+                completion(url)
+            } else {
+                completion(nil)
+            }
+        }
+    }
+    
     func getExifData() async -> (aperture: Float, shutterSpeed: Float, iso: Int)? {
         return await withUnsafeContinuation { continuation in
             self.phAsset.requestContentEditingInput(with: nil) { (input, _) in

@@ -20,8 +20,11 @@ extension SHApplePhotoAsset {
             dict[version] = try await self.phAsset.dataSynchronous(
                 forSize: size,
                 usingImageManager: self.imageManager,
-                deliveryMode: .highQualityFormat
+                deliveryMode: .highQualityFormat,
+                resizeMode: .exact
             )
+            
+            log.debug("[file-size] \(version.rawValue): data size \(dict[version]?.count ?? 0)")
         }
 
         return dict

@@ -16,8 +16,6 @@ public extension NSImage {
 }
 #endif
 
-let imageSizeForGlobalIdCalculation = CGSize(width: 240.0, height: 240.0)
-
 
 public enum NSUIImage {
 #if os(iOS)
@@ -39,6 +37,46 @@ public enum NSUIImage {
         return nsImage
     }
 #endif
+    
+    func data() throws -> Data {
+#if os(iOS)
+        let data = self.platformImage.pngData()
+#else
+        let data = self.platformImage.png
+#endif
+        if let data {
+            if let dataWithoutMetadata = Self.stripMetadata(from: data) {
+                return dataWithoutMetadata
+            } else {
+                return data
+            }
+        } else {
+            throw SHBackgroundOperationError.unexpectedData(self.platformImage)
+        }
+    }
+    
+    private static func stripMetadata(from imageData: Data) -> Data? {
+        guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let uti = CGImageSourceGetType(imageSource) else {
+            return nil
+        }
+        
+        let options: [NSString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: 1.0
+        ]
+        
+        let outputData = NSMutableData()
+        guard let imageDestination = CGImageDestinationCreateWithData(outputData, uti, 1, nil) else {
+            return nil
+        }
+        
+        CGImageDestinationAddImageFromSource(imageDestination, imageSource, 0, options as CFDictionary)
+        if CGImageDestinationFinalize(imageDestination) {
+            return outputData as Data
+        }
+        
+        return nil
+    }
 }
 
 #if os(macOS)
@@ -150,24 +188,6 @@ public extension PHAsset {
         }
     }
     
-    private func data(
-        for nsuiImage: NSUIImage
-    ) throws -> Data {
-        
-        var image = nsuiImage.platformImage
-        
-#if os(iOS)
-        let data = image.pngData()
-#else
-        let data = image.png
-#endif
-        if let data {
-            return data
-        } else {
-            throw SHBackgroundOperationError.unexpectedData(image)
-        }
-    }
-    
     /// Get the asset data from a lazy-loaded PHAsset object
     /// - Parameters:
     ///   - asset: the PHAsset object
@@ -175,14 +195,12 @@ public extension PHAsset {
     ///   - imageManager: the image manager to use (useful in case of a PHCachedImage manager)
     ///   - synchronousFetch: determines how many times the completionHandler is called. Asynchronous fetching may call the completion handler multiple times with lower resolution version of the requested asset as soon as it's ready
     ///   - deliveryMode: the `PHImageRequestOptionsDeliveryMode`
-    ///   - exactSize: whether or not the image should be resized to the requested size (in case a higher resolution is available)
     ///   - completionHandler: the completion handler
     func dataSynchronous(
         forSize size: CGSize? = nil,
         usingImageManager imageManager: PHImageManager,
         deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
-        resizeMode: PHImageRequestOptionsResizeMode = .fast,
-        exactSize: Bool = false
+        resizeMode: PHImageRequestOptionsResizeMode = .fast
     ) async throws -> Data {
         
         try self.mediaTypeCheck()
@@ -194,7 +212,7 @@ public extension PHAsset {
             resizeMode: resizeMode
         )
         
-        return try self.data(for: nsuiimage)
+        return try nsuiimage.data()
     }
     
     func dataAsynchronous(
@@ -219,7 +237,7 @@ public extension PHAsset {
             switch result {
             case .success(let nsuiimage):
                 do {
-                    let data = try self.data(for: nsuiimage)
+                    let data = try nsuiimage.data()
                     completionHandler(.success(data))
                 } catch {
                     completionHandler(.failure(error))
@@ -265,23 +283,11 @@ public extension PHAsset {
             ) {
                 image, _ in
                 if let image = image {
-                    
-                    var exactSizeImage = image
-                    if resizeMode == .exact,
-                       image.size.width != targetSize.width || image.size.height != targetSize.height {
-                        log.warning("Although a resize=exact was requested, Photos returned an asset whose size (\(image.size.width)x\(image.size.height)) is not the one requested (\(targetSize.width)x\(targetSize.height))")
-                        if let resized = image.resized(to: targetSize) {
-                            exactSizeImage = resized
-                        } else {
-                            continuation.resume(throwing: SHPhotoAssetError.photoResizingError)
-                            return
-                        }
-                    }
-                    
+                    log.debug("[file-size] requested \(targetSize.width)x\(targetSize.height), retrieved \(image.size.width)x\(image.size.height)")
 #if os(iOS)
-                    continuation.resume(returning: NSUIImage.uiKit(exactSizeImage))
+                    continuation.resume(returning: NSUIImage.uiKit(image))
 #else
-                    continuation.resume(returning: NSUIImage.appKit(exactSizeImage))
+                    continuation.resume(returning: NSUIImage.appKit(image))
 #endif
                 } else {
                     continuation.resume(throwing: SHBackgroundOperationError.unexpectedData(image))
@@ -325,23 +331,10 @@ public extension PHAsset {
         ) {
             image, _ in
             if let image = image {
-                
-                var exactSizeImage = image
-                if resizeMode == .exact,
-                   image.size.width != targetSize.width || image.size.height != targetSize.height {
-                    log.warning("Although a resize=exact was requested, Photos returned an asset whose size (\(image.size.width)x\(image.size.height)) is not the one requested (\(targetSize.width)x\(targetSize.height))")
-                    if let resized = image.resized(to: targetSize) {
-                        exactSizeImage = resized
-                    } else {
-                        completionHandler(.failure(SHPhotoAssetError.photoResizingError))
-                        return
-                    }
-                }
-                
 #if os(iOS)
-                completionHandler(.success(NSUIImage.uiKit(exactSizeImage)))
+                completionHandler(.success(NSUIImage.uiKit(image)))
 #else
-                completionHandler(.success(NSUIImage.appKit(exactSizeImage)))
+                completionHandler(.success(NSUIImage.appKit(image)))
 #endif
                 return
 
