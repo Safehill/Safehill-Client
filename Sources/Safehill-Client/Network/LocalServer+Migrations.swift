@@ -42,7 +42,7 @@ public extension Array {
 
 extension LocalServer {
     
-    func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws -> Bool {
+    func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             throw KBError.databaseNotReady
         }
@@ -51,25 +51,90 @@ extension LocalServer {
         let writeBatch = assetStore.writeBatch()
         
         for (key, value) in dictionary {
-            guard key.prefix(6) != "data::" else {
-                /// Skip the new formats
-                continue
-            }
+            
             guard let value = value as? [String: Any] else {
                 /// Skip the unreadable values
                 continue
             }
             
-            ///
-            /// More than 2 keys, encrypted data key present -> it's a pre 1.4 release
-            /// If there's no new format `data::<quality>::<globalId>` then migrate to 1.4+ format
-            ///
-            if value.keys.count > 2 && value["encryptedData"] != nil {
-                var metadataValue = value
-                metadataValue.removeValue(forKey: "encryptedData")
+            let components = key.components(separatedBy: "::")
+            
+            if key.prefix(6) == "data::" {
+                ///
+                /// Migrate data stored in DB to file
+                ///
+                guard let encryptedData = value["encryptedData"] as? Data else {
+                    continue
+                }
+                
+                guard components.count == 3 else {
+                    continue
+                }
+                let qualityStr = components[1]
+                guard let quality = SHAssetQuality(rawValue: qualityStr) else {
+                    continue
+                }
+                let globalIdentifier = components[2]
+                    
+                let assetVersionURL: URL
+                do {
+                    assetVersionURL = try self.createAssetDataFile(
+                        globalIdentifier: globalIdentifier,
+                        quality: quality,
+                        content: encryptedData
+                    )
+                } catch {
+                    continue
+                }
+                
                 let dataValue = [
                     "assetIdentifier": value["assetIdentifier"],
-                    "encryptedData": value["encryptedData"]
+                    "encryptedDataPath": assetVersionURL.absoluteString
+                ]
+                writeBatch.set(value: dataValue, for: "data::" + key)
+            }
+            else {
+                ///
+                /// Migrate data+metadata under same key, so that:
+                /// - data and metadata are split
+                /// - data references a file path, not storing data it in DB
+                ///
+                guard components.count == 2 else {
+                    continue
+                }
+                let qualityStr = components[0]
+                guard let quality = SHAssetQuality(rawValue: qualityStr) else {
+                    continue
+                }
+                let globalIdentifier = components[1]
+                
+                ///
+                /// More than 2 keys, encrypted data key present -> it's a pre 1.4 release
+                /// If there's no new format `data::<quality>::<globalId>` then migrate to 1.4+ format
+                ///
+                guard value.keys.count > 2,
+                      let encryptedData = value["encryptedData"] as? Data
+                else {
+                    continue
+                }
+                
+                var metadataValue = value
+                metadataValue.removeValue(forKey: "encryptedData")
+                
+                let assetVersionURL: URL
+                do {
+                    assetVersionURL = try self.createAssetDataFile(
+                        globalIdentifier: globalIdentifier,
+                        quality: quality,
+                        content: encryptedData
+                    )
+                } catch {
+                    continue
+                }
+                
+                let dataValue = [
+                    "assetIdentifier": value["assetIdentifier"],
+                    "encryptedDataPath": assetVersionURL.absoluteString
                 ]
                 writeBatch.set(value: dataValue, for: "data::" + key)
                 writeBatch.set(value: metadataValue, for: key)
@@ -78,19 +143,20 @@ extension LocalServer {
             }
         }
         
-        guard pre_1_4_keys.count > 0 else {
-            return false
-        }
-        
         try writeBatch.write()
         
-        var condition = KBGenericCondition(value: false)
-        for key in pre_1_4_keys {
-            condition = condition.or(KBGenericCondition(.equal, value: key))
+        guard pre_1_4_keys.isEmpty == false else {
+            return
         }
-        let removed = try assetStore.removeValues(forKeysMatching: condition)
-        log.info("Migrated \(removed.count) keys")
-        return removed.count > 0
+        
+        for pre_1_4_keys_chunk in pre_1_4_keys.chunked(into: 20) {
+            var condition = KBGenericCondition(value: false)
+            for key in pre_1_4_keys_chunk {
+                condition = condition.or(KBGenericCondition(.equal, value: key))
+            }
+            let removed = try assetStore.removeValues(forKeysMatching: condition)
+            log.info("Migrated \(removed.count) keys")
+        }
     }
     
     public func syncLocalGraphWithServer(
@@ -180,7 +246,13 @@ extension LocalServer {
         var assetIdentifiers = Set<String>()
         
         /// Low Res migrations
-        var condition = KBGenericCondition(.beginsWith, value: "low::")
+        var condition = KBGenericCondition(
+            .contains, value: "low::"
+        ).and(KBGenericCondition(
+            .beginsWith, value: "sender::", negated: true
+        )).and(KBGenericCondition(
+            .beginsWith, value: "receiver::", negated: true
+        ))
         
         assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
             switch result {
@@ -192,7 +264,7 @@ extension LocalServer {
                     }
                 }
                 do {
-                    let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                    try self.moveDataToNewKeyFormat(for: keyValues)
                 } catch {
                     log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
                     completionHandler(.failure(error))
@@ -200,7 +272,13 @@ extension LocalServer {
                 }
                 
                 /// Hi Res migrations
-                condition = KBGenericCondition(.beginsWith, value: "hi::")
+                condition = KBGenericCondition(
+                    .contains, value: "hi::"
+                ).and(KBGenericCondition(
+                    .beginsWith, value: "sender::", negated: true
+                )).and(KBGenericCondition(
+                    .beginsWith, value: "receiver::", negated: true
+                ))
                 
                 assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
                     switch result {
@@ -215,7 +293,7 @@ extension LocalServer {
                         }
                         do {
                             if relevantKeyValues.count > 0 {
-                                let _ = try self.moveDataToNewKeyFormat(for: keyValues)
+                                try self.moveDataToNewKeyFormat(for: keyValues)
                             }
                         } catch {
                             log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
@@ -236,10 +314,11 @@ extension LocalServer {
     }
     
     ///
-    /// Photo messages in threads used to be cached under the `user-thread::<thread_id>::assets`
-    /// and now are cached under `user-thread::<thread_id>::assets::photoMessages`,
-    /// alongside `user-thread::<thread_id>::assets::nonPhotoMessages`.
-    /// Simply remove the old keys
+    /// Photo messages in threads used to be cached under the following keys
+    /// `user-thread::<thread_id>::assets`, `user-thread::<thread_id>::photoMessages` and `user-thread::<thread_id>::nonPhotoMessages`
+    /// In recent versions they are cached under keys `user-thread::<thread_id>::assets::photoMessage`,
+    /// alongside `user-thread::<thread_id>::assets::nonPhotoMessage`.
+    /// Simply remove the old cache under the old keys.
     ///
     func runAssetThreadsMigration(
         currentBuild: Int?,
@@ -254,10 +333,18 @@ extension LocalServer {
         let condition = KBGenericCondition(
             .beginsWith,
             value: SHInteractionAnchor.thread.rawValue + "::"
-        ).and(KBGenericCondition(
-            .endsWith,
-            value: "::assets"
-        ))
+        ).and(
+            KBGenericCondition(
+                .endsWith,
+                value: "::assets"
+            ).or(KBGenericCondition(
+                .endsWith,
+                value: "::photoMessages"
+            )).or(KBGenericCondition(
+                .endsWith,
+                value: "::nonPhotoMessages"
+            ))
+        )
         
         userStore.removeValues(forKeysMatching: condition) { result in
             switch result {

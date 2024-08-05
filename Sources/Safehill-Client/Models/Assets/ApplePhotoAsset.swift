@@ -149,22 +149,12 @@ extension SHApplePhotoAsset {
     }
     
     func getControlPixelColor() async throws -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat)? {
-        return try await withUnsafeThrowingContinuation { continuation in
-            self.phAsset.image(
-                forSize: kSHSizeForQuality(quality: SHAssetQuality.lowResolution),
-                usingImageManager: self.imageManager,
-                synchronousFetch: false,
-                resizeMode: .exact
-            )
-            { result in
-                switch result {
-                case .success(let nsUIimage):
-                    continuation.resume(returning: Self.getControlPixelColor(image: nsUIimage))
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
+        let nsUIimage = try await self.phAsset.imageSynchronous(
+            forSize: kSHSizeForQuality(quality: SHAssetQuality.lowResolution),
+            usingImageManager: self.imageManager,
+            resizeMode: .exact
+        )
+        return Self.getControlPixelColor(image: nsUIimage)
     }
     
     static func getControlPixelColor(image: NSUIImage) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat)? {

@@ -2,64 +2,6 @@ import Foundation
 
 public typealias UserIdentifier = String
 
-internal class ServerUserCache {
-    
-    private let writeQueue = DispatchQueue(label: "ServerUserCache.write", attributes: .concurrent)
-    
-    static var shared = ServerUserCache()
-    
-    private var cache = NSCache<NSString, SHRemoteUserClass>()
-//    private var evictors = [String: Timer]()
-    
-    private init() {}
-    
-    func user(with identifier: String) -> (any SHServerUser)? {
-        if let cacheObj = cache.object(forKey: NSString(string: identifier)) {
-            return SHRemoteUser(
-                identifier: cacheObj.identifier,
-                name: cacheObj.name,
-                publicKeyData: cacheObj.publicKeyData,
-                publicSignatureData: cacheObj.publicSignatureData
-            )
-        }
-        return nil
-    }
-    
-    func cache(users: [any SHServerUser]) {
-        writeQueue.sync(flags: .barrier) {
-            for user in users {
-                let cacheObject = SHRemoteUserClass(identifier: user.identifier, name: user.name, publicKeyData: user.publicKeyData, publicSignatureData: user.publicSignatureData)
-                self.cache.setObject(cacheObject, forKey: NSString(string: user.identifier))
-//                self.evictors[user.identifier]?.invalidate()
-//                self.evictors.removeValue(forKey: user.identifier)
-            }
-            
-//            DispatchQueue.main.async {
-//                for (i, user) in users.enumerated() {
-//                    // Cache retention policy: TTL = 2 minutes
-//                    self.evictors[user.identifier] = Timer.scheduledTimer(withTimeInterval: TimeInterval(60 * 2 + (i/100)),
-//                                                                          repeats: false,
-//                                                                          block: { (timer) in
-//                        self.writeQueue.sync(flags: .barrier) {
-//                            self.cache.removeObject(forKey: NSString(string: user.identifier))
-//                            timer.invalidate()
-//                        }
-//                    })
-//                }
-//            }
-        }
-    }
-    
-    func evict(usersWithIdentifiers userIdentifiers: [String]) {
-        writeQueue.sync(flags: .barrier) {
-            for userIdentifier in userIdentifiers {
-                self.cache.removeObject(forKey: NSString(string: userIdentifier))
-//                self.evictors[userIdentifier]?.invalidate()
-            }
-        }
-    }
-}
-
 public class SHUsersController {
     
     public let localUser: SHLocalUserProtocol
@@ -202,8 +144,7 @@ public class SHUsersController {
         }
     }
     
-    /*
-    internal func deleteUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws {
+    private func deleteUsers(withIdentifiers userIdentifiers: [UserIdentifier]) throws {
         var error: Error? = nil
         let group = DispatchGroup()
         
@@ -233,5 +174,4 @@ public class SHUsersController {
             throw error!
         }
     }
-     */
 }

@@ -42,15 +42,15 @@ public class UsersGroupAssetClass: NSObject, NSSecureCoding {
         let addedAt = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.addedAt.rawValue)
         
         guard let globalIdentifier = globalIdentifier as? String else {
-            log.error("unexpected value for globalIdentifier when decoding ConversationThreadAssetClass object")
+            log.error("unexpected value for globalIdentifier when decoding UsersGroupAssetClass object")
             return nil
         }
         guard let addedByUserIdentifier = addedByUserIdentifier as? String else {
-            log.error("unexpected value for addedByUserIdentifier when decoding ConversationThreadAssetClass object")
+            log.error("unexpected value for addedByUserIdentifier when decoding UsersGroupAssetClass object")
             return nil
         }
         guard let addedAt = addedAt as? String else {
-            log.error("unexpected value for addedAt when decoding ConversationThreadAssetClass object")
+            log.error("unexpected value for addedAt when decoding UsersGroupAssetClass object")
             return nil
         }
         

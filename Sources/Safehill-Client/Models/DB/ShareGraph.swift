@@ -54,9 +54,13 @@ public struct SHKGQuery {
             let writeBatch = userStore.writeBatch()
             
             for photoMessage in conversationThreadAssets.photoMessages {
+                let data = try NSKeyedArchiver.archivedData(
+                    withRootObject: ConversationThreadAssetClass.fromDTO(photoMessage),
+                    requiringSecureCoding: true
+                )
                 writeBatch.set(
-                    value: ConversationThreadAssetClass.fromDTO(photoMessage),
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::photoMessages",
+                    value: data,
+                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::photoMessage",
                     timestamp: photoMessage.addedAt.iso8601withFractionalSeconds ?? Date()
                 )
                 
@@ -69,9 +73,13 @@ public struct SHKGQuery {
             }
             
             for otherAsset in conversationThreadAssets.otherAssets {
+                let data = try NSKeyedArchiver.archivedData(
+                    withRootObject: UsersGroupAssetClass.fromDTO(otherAsset),
+                    requiringSecureCoding: true
+                )
                 writeBatch.set(
-                    value: UsersGroupAssetClass.fromDTO(otherAsset),
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::nonPhotoMessages",
+                    value: data,
+                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::nonPhotoMessage",
                     timestamp: otherAsset.addedAt.iso8601withFractionalSeconds ?? Date()
                 )
                 try self.ingestShare(
@@ -263,7 +271,6 @@ public struct SHKGQuery {
         }
     }
     
-    /*
     internal static func removeUsers(with userIdentifiers: [UserIdentifier]) throws {
         let userIdentifiers = Array(Set(userIdentifiers))
      
@@ -285,7 +292,6 @@ public struct SHKGQuery {
             }
         }
     }
-    */
     
     internal static func deepClean() throws {
         try readWriteGraphQueue.sync(flags: .barrier) {

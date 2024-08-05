@@ -20,31 +20,36 @@ public struct SHAssetsDownloadManager {
     
     private func fetchAsset(
         withGlobalIdentifier globalIdentifier: GlobalIdentifier,
-        quality: SHAssetQuality,
         descriptor: any SHAssetDescriptor,
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
         let start = CFAbsoluteTimeGetCurrent()
         
-        log.info("downloading assets with identifier \(globalIdentifier) version \(quality.rawValue)")
+        /// Get only the low resolution. Mid or hi resolution are on-request (when an image is shown larger on screen)
+        let versions: [SHAssetQuality] = [.lowResolution]
+        
         user.serverProxy.getAssets(
             withGlobalIdentifiers: [globalIdentifier],
-            versions: [quality]
+            versions: versions,
+            synchronousFetch: true
         )
         { result in
             switch result {
             case .success(let assetsDict):
                 guard assetsDict.count > 0,
                       let encryptedAsset = assetsDict[globalIdentifier] else {
+                    log.error("[downloadManager] failed to retrieve asset \(globalIdentifier) version \(versions)")
                     completionHandler(.failure(SHHTTPError.ClientError.notFound))
                     return
                 }
                 let localAssetStore = SHLocalAssetStoreController(
                     user: self.user
                 )
+                
+                log.info("[downloadManager] retrieved asset with identifier \(globalIdentifier). Decrypting")
                 localAssetStore.decryptedAsset(
                     encryptedAsset: encryptedAsset,
-                    quality: quality,
+                    versions: versions,
                     descriptor: descriptor
                 ) { result in
                     switch result {
@@ -55,11 +60,11 @@ public struct SHAssetsDownloadManager {
                     }
                 }
             case .failure(let err):
-                log.critical("unable to download assets \(globalIdentifier) version \(quality.rawValue) from server: \(err)")
+                log.critical("[downloadManager] unable to download assets \(globalIdentifier) version \(versions) from server: \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
             let end = CFAbsoluteTimeGetCurrent()
-            log.debug("[PERF] \(CFAbsoluteTime(end - start)) for version \(quality.rawValue)")
+            log.debug("[PERF] \(CFAbsoluteTime(end - start)) for version \(versions)")
         }
     }
     
@@ -81,14 +86,13 @@ public struct SHAssetsDownloadManager {
             // MARK: Start
             
             guard await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: descriptor.globalIdentifier) == false else {
-                
                 do {
                     try SHKGQuery.removeAssets(with: [globalIdentifier])
+                    completionHandler(.failure(SHAssetDownloadError.assetIsBlacklisted(globalIdentifier)))
                 } catch {
-                    log.warning("[downloadManager] Attempt to remove asset \(globalIdentifier) the knowledgeGraph because it's blacklisted FAILED. \(error.localizedDescription)")
+                    log.error("[downloadManager] attempt to remove asset \(globalIdentifier) the knowledgeGraph because it's blacklisted FAILED. \(error.localizedDescription)")
+                    completionHandler(.failure(error))
                 }
-                
-                completionHandler(.failure(SHAssetDownloadError.assetIsBlacklisted(globalIdentifier)))
                 return
             }
             
@@ -96,7 +100,6 @@ public struct SHAssetsDownloadManager {
             
             self.fetchAsset(
                 withGlobalIdentifier: globalIdentifier,
-                quality: .lowResolution,
                 descriptor: descriptor
             ) { result in
                 

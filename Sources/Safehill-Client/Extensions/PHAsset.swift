@@ -131,28 +131,7 @@ public extension UIImage {
 
 public extension PHAsset {
     
-    /// Get the asset data from a lazy-loaded PHAsset object
-    /// - Parameters:
-    ///   - asset: the PHAsset object
-    ///   - size: the size of the asset. If nil, gets the original asset size (high quality), and also saves it to the `localPHAssetHighQualityDataCache`
-    ///   - imageManager: the image manager to use (useful in case of a PHCachedImage manager)
-    ///   - synchronousFetch: determines how many times the completionHandler is called. Asynchronous fetching may call the completion handler multiple times with lower resolution version of the requested asset as soon as it's ready
-    ///   - deliveryMode: the `PHImageRequestOptionsDeliveryMode`
-    ///   - shouldCache: whether or not should cache it in `SHLocalPHAssetHighQualityDataCache`
-    ///   - exactSize: whether or not the image should be resized to the requested size (in case a higher resolution is available)
-    ///   - completionHandler: the completion handler
-    func data(forSize size: CGSize? = nil,
-              usingImageManager imageManager: PHImageManager,
-              synchronousFetch: Bool,
-              deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
-              resizeMode: PHImageRequestOptionsResizeMode = .fast,
-              shouldCache: Bool = false,
-              exactSize: Bool = false,
-              completionHandler: @escaping (Swift.Result<Data, Error>) -> ()) {
-        if let data = SHLocalPHAssetHighQualityDataCache.data(forAssetId: self.localIdentifier) {
-            completionHandler(.success(data))
-            return
-        }
+    private func mediaTypeCheck() throws {
         
         switch self.mediaType {
         case .image:
@@ -167,88 +146,159 @@ public extension PHAsset {
 //                }
 //            }
         default:
-            completionHandler(.failure(SHPhotoAssetError.unsupportedMediaType))
+            throw SHPhotoAssetError.unsupportedMediaType
+        }
+    }
+    
+    private func data(
+        for nsuiImage: NSUIImage
+    ) throws -> Data {
+        
+        var image = nsuiImage.platformImage
+        
+#if os(iOS)
+        let data = image.pngData()
+#else
+        let data = image.png
+#endif
+        if let data {
+            return data
+        } else {
+            throw SHBackgroundOperationError.unexpectedData(image)
+        }
+    }
+    
+    /// Get the asset data from a lazy-loaded PHAsset object
+    /// - Parameters:
+    ///   - asset: the PHAsset object
+    ///   - size: the size of the asset. If nil, gets the original asset size (high quality), and also saves it to the `localPHAssetHighQualityDataCache`
+    ///   - imageManager: the image manager to use (useful in case of a PHCachedImage manager)
+    ///   - synchronousFetch: determines how many times the completionHandler is called. Asynchronous fetching may call the completion handler multiple times with lower resolution version of the requested asset as soon as it's ready
+    ///   - deliveryMode: the `PHImageRequestOptionsDeliveryMode`
+    ///   - exactSize: whether or not the image should be resized to the requested size (in case a higher resolution is available)
+    ///   - completionHandler: the completion handler
+    func dataSynchronous(
+        forSize size: CGSize? = nil,
+        usingImageManager imageManager: PHImageManager,
+        deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
+        resizeMode: PHImageRequestOptionsResizeMode = .fast,
+        exactSize: Bool = false
+    ) async throws -> Data {
+        
+        try self.mediaTypeCheck()
+        
+        let nsuiimage = try await self.imageSynchronous(
+            forSize: size,
+            usingImageManager: imageManager,
+            deliveryMode: deliveryMode,
+            resizeMode: resizeMode
+        )
+        
+        return try self.data(for: nsuiimage)
+    }
+    
+    func dataAsynchronous(
+        forSize size: CGSize? = nil,
+        usingImageManager imageManager: PHImageManager,
+        deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
+        resizeMode: PHImageRequestOptionsResizeMode = .fast,
+        completionHandler: @escaping (Swift.Result<Data, Error>) -> ()
+    ) {
+        do { try self.mediaTypeCheck() }
+        catch {
+            completionHandler(.failure(error))
+            return
         }
         
-        self.image(forSize: size,
-                   usingImageManager: imageManager,
-                   synchronousFetch: synchronousFetch,
-                   deliveryMode: deliveryMode,
-                   resizeMode: resizeMode
+        self.imageAsynchronous(
+            forSize: size,
+            usingImageManager: imageManager,
+            deliveryMode: deliveryMode,
+            resizeMode: resizeMode
         ) { (result: Result<NSUIImage, Error>) in
             switch result {
             case .success(let nsuiimage):
-#if os(iOS)
-                guard case .uiKit(var image) = nsuiimage else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nsuiimage)))
-                    return
-                }
-                
-                if let size = size, // A size was specified
-                   (image.size.width > size.width || image.size.height > size.height), // the retrieved size doesn't match the requested size
-                   exactSize // the exact size was requested
-                {
-                    if let newSizeImage = image.resized(to: size) { // resizing was possible
-                        image = newSizeImage
-                    } else {
-                        completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to fetch exact size")))
-                        return
-                    }
-                }
-                
-                if let data = image.pngData() {
+                do {
+                    let data = try self.data(for: nsuiimage)
                     completionHandler(.success(data))
-                    if shouldCache {
-                        SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
-                    }
-                    return
-                } else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
-                    return
+                } catch {
+                    completionHandler(.failure(error))
                 }
-#else
-                guard case .appKit(var image) = nsuiimage else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nsuiimage)))
-                    return
-                }
-                
-                if let size = size, // A size was specified
-                   image.size != size, // the retrieved size doesn't match the requested size
-                   exactSize // the exact size was requested
-                {
-                    if let newSizeImage = image.resized(to: size) { // resizing was possible
-                        image = newSizeImage
-                    } else {
-                        completionHandler(.failure(SHBackgroundOperationError.fatalError("failed to fetch exact size")))
-                        return
-                    }
-                }
-
-                if let data = image.png {
-                    completionHandler(.success(data))
-                    if shouldCache {
-                        SHLocalPHAssetHighQualityDataCache.add(data, forAssetId: self.localIdentifier)
-                    }
-                    return
-                } else {
-                    completionHandler(.failure(SHBackgroundOperationError.unexpectedData(image)))
-                    return
-                }
-#endif
             case .failure(let error):
                 completionHandler(.failure(error))
             }
         }
     }
     
-    func image(forSize size: CGSize? = nil,
-               usingImageManager imageManager: PHImageManager,
-               synchronousFetch: Bool,
-               deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
-               resizeMode: PHImageRequestOptionsResizeMode = .fast,
-               // TODO: Implement iCloud progress handler when downloading the image
-               progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
-               completionHandler: @escaping (Swift.Result<NSUIImage, Error>) -> ()) {
+    func imageSynchronous(
+        forSize size: CGSize? = nil,
+        usingImageManager imageManager: PHImageManager,
+        deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
+        resizeMode: PHImageRequestOptionsResizeMode = .fast,
+        // TODO: Implement iCloud progress handler when downloading the image
+        progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil
+    ) async throws -> NSUIImage {
+        
+        guard self.mediaType == .image else {
+            throw SHPhotoAssetError.unsupportedMediaType
+        }
+        
+        let options = PHImageRequestOptions()
+        options.isSynchronous = true
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = deliveryMode
+        options.progressHandler = progressHandler
+        options.resizeMode = resizeMode
+
+        let targetSize = CGSize(
+            width: min(size?.width ?? CGFloat(self.pixelWidth), CGFloat(self.pixelWidth)),
+            height: min(size?.height ?? CGFloat(self.pixelHeight), CGFloat(self.pixelHeight))
+        )
+
+        return try await withUnsafeThrowingContinuation { continuation in
+            
+            imageManager.requestImage(
+                for: self,
+                targetSize: targetSize,
+                contentMode: PHImageContentMode.default,
+                options: options
+            ) {
+                image, _ in
+                if let image = image {
+                    
+                    var exactSizeImage = image
+                    if resizeMode == .exact,
+                       image.size.width != targetSize.width || image.size.height != targetSize.height {
+                        log.warning("Although a resize=exact was requested, Photos returned an asset whose size (\(image.size.width)x\(image.size.height)) is not the one requested (\(targetSize.width)x\(targetSize.height))")
+                        if let resized = image.resized(to: targetSize) {
+                            exactSizeImage = resized
+                        } else {
+                            continuation.resume(throwing: SHPhotoAssetError.photoResizingError)
+                            return
+                        }
+                    }
+                    
+#if os(iOS)
+                    continuation.resume(returning: NSUIImage.uiKit(exactSizeImage))
+#else
+                    continuation.resume(returning: NSUIImage.appKit(exactSizeImage))
+#endif
+                } else {
+                    continuation.resume(throwing: SHBackgroundOperationError.unexpectedData(image))
+                }
+            }
+        }
+    }
+    
+    func imageAsynchronous(
+        forSize size: CGSize? = nil,
+        usingImageManager imageManager: PHImageManager,
+        deliveryMode: PHImageRequestOptionsDeliveryMode = .opportunistic,
+        resizeMode: PHImageRequestOptionsResizeMode = .fast,
+        // TODO: Implement iCloud progress handler when downloading the image
+        progressHandler: ((Double, Error?, UnsafeMutablePointer<ObjCBool>, [AnyHashable : Any]?) -> Void)? = nil,
+        completionHandler: @escaping (Swift.Result<NSUIImage, Error>) -> ()
+    ) {
         
         guard self.mediaType == .image else {
             completionHandler(.failure(SHPhotoAssetError.unsupportedMediaType))
@@ -256,7 +306,7 @@ public extension PHAsset {
         }
         
         let options = PHImageRequestOptions()
-        options.isSynchronous = synchronousFetch
+        options.isSynchronous = false
         options.isNetworkAccessAllowed = true
         options.deliveryMode = deliveryMode
         options.progressHandler = progressHandler
@@ -283,7 +333,7 @@ public extension PHAsset {
                     if let resized = image.resized(to: targetSize) {
                         exactSizeImage = resized
                     } else {
-                        completionHandler(.failure(SHPhotoAssetError.applePhotosAssetRetrievalError("")))
+                        completionHandler(.failure(SHPhotoAssetError.photoResizingError))
                         return
                     }
                 }
