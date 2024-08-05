@@ -44,7 +44,7 @@ struct LocalServer : SHServerAPI {
         }
         
         let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: encryptedDataURL.relativePath) {
+        if !fileManager.fileExists(atPath: encryptedDataURL.path) {
             do {
                 try fileManager.createDirectory(
                     at: encryptedDataURL,
@@ -376,23 +376,21 @@ struct LocalServer : SHServerAPI {
             group.leave()
         }
         
-        let dispatchResult = group.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 2))
-        guard dispatchResult == .success else {
-            return completionHandler(.failure(SHHTTPError.TransportError.timedOut))
+        group.notify(queue: .global()) {
+            guard userRemovalError == nil else {
+                return completionHandler(.failure(userRemovalError!))
+            }
+            guard assetsRemovalError == nil else {
+                return completionHandler(.failure(assetsRemovalError!))
+            }
+            guard reactionsRemovalError == nil else {
+                return completionHandler(.failure(reactionsRemovalError!))
+            }
+            guard messagesRemovalError == nil else {
+                return completionHandler(.failure(messagesRemovalError!))
+            }
+            completionHandler(.success(()))
         }
-        guard userRemovalError == nil else {
-            return completionHandler(.failure(userRemovalError!))
-        }
-        guard assetsRemovalError == nil else {
-            return completionHandler(.failure(assetsRemovalError!))
-        }
-        guard reactionsRemovalError == nil else {
-            return completionHandler(.failure(reactionsRemovalError!))
-        }
-        guard messagesRemovalError == nil else {
-            return completionHandler(.failure(messagesRemovalError!))
-        }
-        completionHandler(.success(()))
     }
     
     public func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
@@ -1108,24 +1106,24 @@ struct LocalServer : SHServerAPI {
         
         let fileManager = FileManager.default
         
-        if fileManager.fileExists(atPath: versionDataURL.relativePath) {
-            log.warning("a file exists at \(versionDataURL.absoluteString). Overriding")
+        if fileManager.fileExists(atPath: versionDataURL.path) {
+            log.warning("a file exists at \(versionDataURL.path). Overriding")
             try? fileManager.removeItem(at: versionDataURL)
         }
         
         do {
             try fileManager.createDirectory(at: assetFolderURL, withIntermediateDirectories: true)
         } catch {
-            log.error("failed to create directory at \(assetFolderURL.absoluteString). \(error.localizedDescription)")
+            log.error("failed to create directory at \(assetFolderURL.path). \(error.localizedDescription)")
             throw error
         }
         
         let created = fileManager.createFile(
-            atPath: versionDataURL.relativePath,
+            atPath: versionDataURL.path,
             contents: encryptedData
         )
         guard created else {
-            log.error("failed to create file at \(versionDataURL.absoluteString)")
+            log.error("failed to create file at \(versionDataURL.path)")
             throw SHLocalServerError.failedToCreateFile
         }
         
@@ -1246,6 +1244,7 @@ struct LocalServer : SHServerAPI {
                         quality: encryptedVersion.quality,
                         content: encryptedVersion.encryptedData
                     )
+                    log.debug("saved asset data to path \(versionDataURL.path)")
                 } catch {
                     continue
                 }

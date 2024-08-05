@@ -93,7 +93,7 @@ struct S3Proxy {
         bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
         bcf.countStyle = .file
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
-        log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
+        log.debug("[file-size] uploading \(data.count) bytes (\(inMegabytes))")
         
         self.backgroundUpload(
             data: data,
@@ -115,7 +115,7 @@ struct S3Proxy {
         bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
         bcf.countStyle = .file
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
-        log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
+        log.debug("[file-size] uploading \(data.count) bytes (\(inMegabytes))")
 
         RemoteServer.makeRequest(
             request: request,
@@ -162,7 +162,7 @@ struct S3Proxy {
         bcf.allowedUnits = [.useMB] // optional: restricts the units to MB only
         bcf.countStyle = .file
         let inMegabytes = bcf.string(fromByteCount: Int64(data.count))
-        log.debug("Uploading \(data.count) bytes (\(inMegabytes))")
+        log.debug("[file-size] uploading \(data.count) bytes (\(inMegabytes))")
         
         RemoteServer.makeRequest(
             request: request,
