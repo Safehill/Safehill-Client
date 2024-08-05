@@ -9,15 +9,8 @@ public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
 public let SafehillServerURLComponents: URLComponents = {
     var components = URLComponents()
     
-#if targetEnvironment(simulator)
-    components.scheme = "http"
-    components.host = "127.0.0.1"
-    components.port = 8080
-    /// If using ngrok locally, comment the lines above, uncomment the ones below and change the hostname
-//    components.scheme = "https"
-//    components.host = "bc5f-2600-6c4e-2200-3f73-7964-edc9-ddd9-b376.ngrok-free.app"
-//    components.port = 443
-#elseif DEBUG
+
+#if DEBUG
     components.scheme = "https"
     components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
