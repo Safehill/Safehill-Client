@@ -149,7 +149,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         assetsDelegates.forEach {
-                            $0.groupIdsWereRemoved(diff.groupInfoRemovedOnRemote)
+                            $0.groupsWereRemoved(withIds: diff.groupInfoRemovedOnRemote)
                         }
                     }
                     
@@ -180,8 +180,8 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         assetsDelegates.forEach {
-                            $0.groupIdsWereUpdated(
-                                Array(diff.groupInfoDifferentOnRemote.keys)
+                            $0.groupsWereUpdated(
+                                withIds: Array(diff.groupInfoDifferentOnRemote.keys)
                             )
                         }
                     }
