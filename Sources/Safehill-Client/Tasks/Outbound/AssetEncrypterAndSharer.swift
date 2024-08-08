@@ -350,7 +350,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 guard ErrorSimulator.percentageShareFailures == 0
                         || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
                     self.log.debug("simulating SHARE failure")
-                    let error = SHBackgroundOperationError.fatalError("share failed")
+                    let error = SHBackgroundOperationError.fatalError("simulated share failed")
                     handleError(error)
                     return
                 }

@@ -290,7 +290,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 guard ErrorSimulator.percentageUploadFailures == 0
                       || arc4random() % (100 / ErrorSimulator.percentageUploadFailures) != 0 else {
                     self.log.debug("simulating CREATE ASSET failure")
-                    let error = SHBackgroundOperationError.fatalError("failed to create server asset")
+                    let error = SHBackgroundOperationError.fatalError("simulated create asset failure")
                     handleError(error)
                     return
                 }
