@@ -9,6 +9,7 @@ public enum SHAssetStoreError: Error, LocalizedError {
     case failedToCreateRemoteAsset
     case failedToRetrieveLocalAsset
     case invalidRequest(String)
+    case failedToUnshareSomeAssets
     
     public var errorDescription: String? {
         switch self {
@@ -22,6 +23,8 @@ public enum SHAssetStoreError: Error, LocalizedError {
             return "Failed to retrieve asset from cache"
         case .invalidRequest(let reason):
             return "Invalid request: \(reason)"
+        case .failedToUnshareSomeAssets:
+            return "Some shares could not be reverted"
         }
     }
 }

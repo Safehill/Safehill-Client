@@ -1583,30 +1583,46 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func unshare(assetId: GlobalIdentifier,
-                 with userPublicIdentifier: UserIdentifier,
-                 completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func unshare(
+        assetIdsWithUsers: [GlobalIdentifier: [UserIdentifier]],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        var condition = KBGenericCondition(value: false)
-        for quality in SHAssetQuality.all {
-            condition = condition.or(KBGenericCondition(.equal, value: [
-                "receiver",
-                userPublicIdentifier,
-                quality.rawValue,
-                assetId
-               ].joined(separator: "::")))
+        let dispatchGroup = DispatchGroup()
+        var errors = [GlobalIdentifier: Error]()
+        
+        for (assetId, userPublicIdentifiers) in assetIdsWithUsers {
+            var condition = KBGenericCondition(value: false)
+            for userPublicIdentifier in userPublicIdentifiers {
+                for quality in SHAssetQuality.all {
+                    condition = condition.or(KBGenericCondition(.equal, value: [
+                        "receiver",
+                        userPublicIdentifier,
+                        quality.rawValue,
+                        assetId
+                    ].joined(separator: "::")))
+                }
+            }
+            
+            assetStore.removeValues(forKeysMatching: condition) { result in
+                switch result {
+                case .success: break
+                case .failure(let err):
+                    errors[assetId] = err
+                }
+            }
         }
         
-        assetStore.removeValues(forKeysMatching: condition) { result in
-            switch result {
-            case .success(_):
+        dispatchGroup.notify(queue: .global()) {
+            if errors.isEmpty {
                 completionHandler(.success(()))
-            case .failure(let err):
-                completionHandler(.failure(err))
+            } else {
+                log.error("some errors unsharing: \(errors)")
+                completionHandler(.failure(SHAssetStoreError.failedToUnshareSomeAssets))
             }
         }
     }

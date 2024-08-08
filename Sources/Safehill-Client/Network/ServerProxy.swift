@@ -810,6 +810,32 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+    
+    public func unshare(
+        assetIdsWithUsers: [GlobalIdentifier: [UserIdentifier]],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let userIdsReferenced = Set(assetIdsWithUsers.values.flatMap({ $0 }))
+        guard userIdsReferenced.contains(self.remoteServer.requestor.identifier) == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("unshare should not be used for the requestor user, aka the owner of the asset. Use delete instead")))
+            return
+        }
+        
+        self.remoteServer.unshare(assetIdsWithUsers: assetIdsWithUsers) {
+            remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.unshare(assetIdsWithUsers: assetIdsWithUsers) { localResult in
+                    if case .failure(let failure) = localResult {
+                        log.warning("failed to unshare locally after successfully sharing remotely \(assetIdsWithUsers): \(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(()))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 }
 
 
