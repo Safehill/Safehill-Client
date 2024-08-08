@@ -202,7 +202,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                         eventOriginator: request.eventOriginator,
                         sharedWith: request.sharedWith,
                         shouldUpload: true,
-                        isPhotoMessage: false,
+                        isPhotoMessage: request.isPhotoMessage,
                         isBackground: true
                     )
                     try hiResFetchQueueItem.enqueue(in: fetchQueue)
