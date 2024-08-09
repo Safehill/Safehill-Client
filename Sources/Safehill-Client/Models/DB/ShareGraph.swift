@@ -21,7 +21,7 @@ public struct SHKGQuery {
         // TODO: We need support for writebatch (transaction) in KGGraph. DB writes in a for loop is never a good idea
         for descriptor in descriptors {
             do {
-                var allReceivers = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                var allReceivers = Set(descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys)
                 allReceivers.insert(receiverUserId)
                 try self.ingestShare(
                     of: descriptor.globalIdentifier,
