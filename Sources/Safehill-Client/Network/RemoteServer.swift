@@ -802,7 +802,7 @@ struct RemoteServer : SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         let parameters: [String: Any?] = [
-            "assetIdsWithUsers": assetIdsWithUsers
+            "userIdentifiersByAssetIdentifier": assetIdsWithUsers
         ]
         
         self.post("assets/unshare", parameters: parameters) {
