@@ -59,9 +59,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// happen against the local server (instead of the remote server)
     /// - Returns: the list of descriptors
     internal func fetchDescriptorsForItemsToRestore(
+        after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        serverProxy.getLocalAssetDescriptors(after: nil) { result in
+        serverProxy.getLocalAssetDescriptors(after: date) { result in
             switch result {
             case .success(let descs):
                 let unprocessed = descs.filter({
@@ -362,6 +363,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// - Parameter completionHandler: the callback method
     internal override func runOnce(
         qos: DispatchQoS.QoSClass,
+        startingFrom date: Date?,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
         let handleFailure = { (error: Error) in
@@ -374,7 +376,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             completionHandler(.failure(error))
         }
         
-        self.fetchDescriptorsForItemsToRestore {
+        self.fetchDescriptorsForItemsToRestore(after: date) {
             result in
             switch result {
             case .failure(let error):
