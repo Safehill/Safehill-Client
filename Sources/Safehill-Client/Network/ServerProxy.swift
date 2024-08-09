@@ -242,7 +242,7 @@ extension SHServerProxy {
         var userIdsSet = Set<String>()
         for descriptor in descriptors {
             userIdsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsSet.insert($0) })
+            descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys.forEach({ userIdsSet.insert($0) })
         }
         userIdsSet.remove(self.remoteServer.requestor.identifier)
         let userIds = Array(userIdsSet)

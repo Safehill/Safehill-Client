@@ -129,7 +129,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         
         var allUserIdsInDescriptors = Set<UserIdentifier>()
         for descriptor in descriptors {
-            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+            for recipientId in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys {
                 allUserIdsInDescriptors.insert(recipientId)
             }
         }
@@ -204,10 +204,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 let dispatchGroup = DispatchGroup()
                 
                 for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
-                    guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                    guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                         self.log.critical("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
                         completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
-                        return
+                        continue
+                    }
+                    
+                    guard let groupId = groupIds.first else {
+                        continue
                     }
                     
                     let downloaderDelegates = self.downloaderDelegates
@@ -215,9 +219,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     if let encryptedAsset = encryptedAssets[globalAssetId] {
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
-                                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                                           descriptor: descriptor,
-                                                           in: groupId)
+                                $0.didStartDownloadOfAsset(
+                                    withGlobalIdentifier: globalAssetId,
+                                    descriptor: descriptor,
+                                    in: groupId
+                                )
                             })
                         }
                         

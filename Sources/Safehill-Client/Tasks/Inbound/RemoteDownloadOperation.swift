@@ -174,7 +174,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             /// Fetch from server users information (`SHServerUser` objects)
             /// for all user identifiers found in all descriptors shared by OTHER known users
             ///
-            var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.groupIdsByRecipientUserIdentifier.keys })
             userIdentifiers.formUnion(filteredDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier })
             
             self.getUsers(withIdentifiers: Array(userIdentifiers)) { result in
@@ -190,7 +190,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
                             return false
                         }
-                        for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                        for sharedWithUserId in desc.sharingInfo.groupIdsByRecipientUserIdentifier.keys {
                             if usersDict[sharedWithUserId] == nil {
                                 return false
                             }
@@ -459,7 +459,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         var allUserIdsInDescriptors = Set<UserIdentifier>()
         for descriptor in descriptorsByGlobalIdentifier.values {
-            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+            for recipientId in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys {
                 allUserIdsInDescriptors.insert(recipientId)
             }
         }
@@ -522,7 +522,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             
             var otherUserIdsSharedWith = [String: [(with: any SHServerUser, at: Date)]]()
             
-            for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+            for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                
+                guard let groupId = groupIds.first else {
+                    continue
+                }
                 
                 guard let groupCreationDate = descriptor.sharingInfo.groupInfoById[groupId]?.createdAt else {
                     self.log.critical("[\(type(of: self))] no group info in descriptor for id \(groupId)")
@@ -723,10 +727,14 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         for descriptor in descriptors {
             
-            guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+            guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                 log.critical("[\(type(of: self))] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
                 return
+            }
+            
+            guard let groupId = groupIds.first else {
+                continue
             }
             
             let downloaderDelegates = self.downloaderDelegates

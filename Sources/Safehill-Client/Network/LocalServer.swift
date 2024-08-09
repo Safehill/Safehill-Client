@@ -567,7 +567,7 @@ struct LocalServer : SHServerAPI {
         
         var senderInfoDict = [GlobalIdentifier: UserIdentifier]()
         var groupInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetGroupInfo]]()
-        var sharedWithUsersInGroupByAssetGid = [GlobalIdentifier: [UserIdentifier: String]]()
+        var sharedWithUsersInGroupsByAssetGid = [GlobalIdentifier: [UserIdentifier: [String]]]()
         
         ///
         /// Retrieve all information from the asset store for all assets and `.lowResolution` versions.
@@ -638,10 +638,10 @@ struct LocalServer : SHServerAPI {
                     if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
                         let receiverUser = components[1]
                         
-                        if sharedWithUsersInGroupByAssetGid[assetGid] == nil {
-                            sharedWithUsersInGroupByAssetGid[assetGid] = [receiverUser: groupId]
+                        if sharedWithUsersInGroupsByAssetGid[assetGid] == nil {
+                            sharedWithUsersInGroupsByAssetGid[assetGid] = [receiverUser: [groupId]]
                         } else {
-                            sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] = groupId
+                            sharedWithUsersInGroupsByAssetGid[assetGid]![receiverUser] = [groupId]
                         }
                     }
                 } else {
@@ -652,10 +652,12 @@ struct LocalServer : SHServerAPI {
                 if let groupId = value["groupId"] {
                     let groupName = value["groupName"]
                     let groupCreationDate = value["groupCreationDate"]
+                    let isPhotoMessageGroup = value["isPhotoMessageGroup"]
                     if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
                         let groupInfo = SHGenericAssetGroupInfo(
                             name: groupName,
-                            createdAt: groupCreationDate?.iso8601withFractionalSeconds
+                            createdAt: groupCreationDate?.iso8601withFractionalSeconds,
+                            isPhotoMessageGroup: isPhotoMessageGroup != nil
                         )
                         
                         if groupInfoByIdByAssetGid[assetGid] == nil {
@@ -763,14 +765,14 @@ struct LocalServer : SHServerAPI {
                 }
                 
                 guard let groupInfoById = groupInfoByIdByAssetGid[globalIdentifier],
-                      let sharedWithUsersInGroup = sharedWithUsersInGroupByAssetGid[globalIdentifier]
+                      let sharedWithUsersInGroups = sharedWithUsersInGroupsByAssetGid[globalIdentifier]
                 else {
                     log.error("failed to retrieve group information for asset \(globalIdentifier)")
                     invalidGlobalIdentifiersInDB.insert(globalIdentifier)
                     continue
                 }
                 
-                if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+                if Set(sharedWithUsersInGroups.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
                     log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
                 }
                 
@@ -785,7 +787,7 @@ struct LocalServer : SHServerAPI {
                 
                 let sharingInfo = SHGenericDescriptorSharingInfo(
                     sharedByUserIdentifier: sharedBy,
-                    sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
+                    groupIdsByRecipientUserIdentifier: sharedWithUsersInGroups,
                     groupInfoById: groupInfoById
                 )
                 
@@ -892,6 +894,9 @@ struct LocalServer : SHServerAPI {
                 var updatedValue = versionDetails
                 updatedValue["groupName"] = update.name
                 updatedValue["groupCreationDate"] = update.createdAt?.iso8601withFractionalSeconds
+                if update.isPhotoMessageGroup {
+                    updatedValue["isPhotoMessageGroup"] = "1"
+                }
                 
                 keysToUpdate[key] = updatedValue
             }
@@ -1066,9 +1071,13 @@ struct LocalServer : SHServerAPI {
                 uploadState: .notStarted,
                 sharingInfo: SHGenericDescriptorSharingInfo(
                     sharedByUserIdentifier: self.requestor.identifier,
-                    sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
+                    groupIdsByRecipientUserIdentifier: [self.requestor.identifier: [groupId]],
                     groupInfoById: [
-                        groupId: SHGenericAssetGroupInfo(name: nil, createdAt: Date())
+                        groupId: SHGenericAssetGroupInfo(
+                            name: nil,
+                            createdAt: Date(),
+                            isPhotoMessageGroup: false
+                        )
                     ]
                 )
             )
@@ -1151,10 +1160,15 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            guard let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier] else {
-                log.error("No groupId specified in descriptor for asset to create for sender user: userId=\(descriptor.sharingInfo.sharedByUserIdentifier)")
+            guard let senderUploadGroupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[descriptor.sharingInfo.sharedByUserIdentifier] else {
+                log.error("No groupIds specified in descriptor for asset to create for sender user: userId=\(descriptor.sharingInfo.sharedByUserIdentifier)")
                 continue
             }
+            
+            guard let senderUploadGroupId = senderUploadGroupIds.first else {
+                continue
+            }
+            
             let senderGroupIdInfo = descriptor.sharingInfo.groupInfoById[senderUploadGroupId]
             let senderGroupCreatedAt = senderGroupIdInfo?.createdAt
             
@@ -1183,7 +1197,7 @@ struct LocalServer : SHServerAPI {
                             asset.globalIdentifier
                         ].joined(separator: "::"))
                         
-                        for (recipientUserId, _) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                        for (recipientUserId, _) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
                             writeBatch.set(value: nil, for: [
                                 "receiver",
                                 recipientUserId,
@@ -1215,7 +1229,7 @@ struct LocalServer : SHServerAPI {
                         asset.globalIdentifier
                        ].joined(separator: "::"))
                     
-                    for (recipientUserId, _) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    for (recipientUserId, _) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
                         writeBatch.set(value: nil, for: [
                             "receiver",
                             recipientUserId,
@@ -1277,6 +1291,9 @@ struct LocalServer : SHServerAPI {
                 if let groupCreationDate = senderGroupIdInfo?.createdAt?.iso8601withFractionalSeconds {
                     sharedVersionDetails["groupCreationDate"] = groupCreationDate
                 }
+                if senderGroupIdInfo?.isPhotoMessageGroup ?? false {
+                    sharedVersionDetails["isPhotoMessageGroup"] = "1"
+                }
                 
                 writeBatch.set(
                     value: sharedVersionDetails,
@@ -1288,8 +1305,12 @@ struct LocalServer : SHServerAPI {
                     ].joined(separator: "::")
                 )
                 
-                for (recipientUserId, recipientGroupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                for (recipientUserId, recipientGroupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
                     if recipientUserId == descriptor.sharingInfo.sharedByUserIdentifier {
+                        continue
+                    }
+                    
+                    guard let recipientGroupId = recipientGroupIds.first else {
                         continue
                     }
                     
@@ -1308,6 +1329,9 @@ struct LocalServer : SHServerAPI {
                     }
                     if let groupCreationDate = recipientGroupInfo?.createdAt?.iso8601withFractionalSeconds {
                         receiverDetails["groupCreationDate"] = groupCreationDate
+                    }
+                    if recipientGroupInfo?.isPhotoMessageGroup ?? false {
+                        receiverDetails["isPhotoMessageGroup"] = "1"
                     }
                     
                     writeBatch.set(
@@ -1338,7 +1362,15 @@ struct LocalServer : SHServerAPI {
                 var serverAssets = [SHServerAsset]()
                 for asset in assets {
                     let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier]!
-                    let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier]!
+                    
+                    guard let senderUploadGroupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[descriptor.sharingInfo.sharedByUserIdentifier] else {
+                        continue
+                    }
+                    
+                    guard let senderUploadGroupId = senderUploadGroupIds.first else {
+                        continue
+                    }
+                    
                     var serverAssetVersions = [SHServerAssetVersion]()
                     for encryptedVersion in asset.encryptedVersions.values {
                         serverAssetVersions.append(
@@ -1399,13 +1431,17 @@ struct LocalServer : SHServerAPI {
                     log.critical("group information missing for group \(groupId) when calling addAssetRecipients(basedOn:versions:completionHandler:)")
                     continue
                 }
+                var value = [
+                    "groupId": groupId,
+                    "groupName": groupInfo.name,
+                    "groupCreationDate": groupInfo.createdAt?.iso8601withFractionalSeconds
+                ]
+                if groupInfo.isPhotoMessageGroup {
+                    value["isPhotoMessageGroup"] = "1"
+                }
                 for version in versions {
                     writeBatch.set(
-                        value: [
-                            "groupId": groupId,
-                            "groupName": groupInfo.name,
-                            "groupCreationDate": groupInfo.createdAt?.iso8601withFractionalSeconds
-                        ],
+                        value: value,
                         for: [
                             "receiver",
                             recipientUserId,
@@ -1535,13 +1571,16 @@ struct LocalServer : SHServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         for sharedVersion in asset.sharedVersions {
-            let sharedVersionDetails: [String: String] = [
+            var sharedVersionDetails: [String: String] = [
                 "senderEncryptedSecret": sharedVersion.encryptedSecret.base64EncodedString(),
                 "ephemeralPublicKey": sharedVersion.ephemeralPublicKey.base64EncodedString(),
                 "publicSignature": sharedVersion.publicSignature.base64EncodedString(),
                 "groupId": asset.groupId,
                 "groupCreationDate": Date().iso8601withFractionalSeconds
             ]
+            if isPhotoMessage {
+                sharedVersionDetails["isPhotoMessageGroup"] = "1"
+            }
             writeBatch.set(value: sharedVersionDetails,
                            for: [
                             "receiver",
@@ -2127,24 +2166,6 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.success(nil))
             }
         }
-    }
-    
-    private func getGroupId(for userIdentifiers: [UserIdentifier], in descriptor: any SHAssetDescriptor) -> String? {
-        var groupId: String? = nil
-        for userIdentifier in userIdentifiers {
-            if let groupForUser = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userIdentifier] {
-                if groupId == nil {
-                    groupId = groupForUser
-                } else if groupId != groupForUser {
-                    ///
-                    /// This asset should not be displayed in this thread
-                    /// cause it was shared with the thread's users via a different group id.
-                    ///
-                    return nil
-                }
-            }
-        }
-        return groupId
     }
     
     internal func cache(

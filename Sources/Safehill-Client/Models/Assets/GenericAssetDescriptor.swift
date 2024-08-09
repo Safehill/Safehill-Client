@@ -60,7 +60,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
             uploadState: self.uploadState,
             sharingInfo: SHGenericDescriptorSharingInfo(
                 sharedByUserIdentifier: self.sharingInfo.sharedByUserIdentifier,
-                sharedWithUserIdentifiersInGroup: self.sharingInfo.sharedWithUserIdentifiersInGroup,
+                groupIdsByRecipientUserIdentifier: self.sharingInfo.groupIdsByRecipientUserIdentifier,
                 groupInfoById: self.sharingInfo.groupInfoById
             )
         )

@@ -42,7 +42,10 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         self.receiverUserIdentifier = receiverUserIdentifier
         
         /// The relevant group id is the group id used to share this asset with the receiver
-        for (userId, groupId) in self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+        for (userId, groupIds) in self.assetDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+            guard let groupId = groupIds.first else {
+                continue
+            }
             if userId == receiverUserIdentifier {
                 self.groupId = groupId
                 return

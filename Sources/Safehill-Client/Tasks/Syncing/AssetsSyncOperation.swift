@@ -29,7 +29,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         var userIdsDescriptorsSet = Set<UserIdentifier>()
         for descriptor in descriptors {
             userIdsDescriptorsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsDescriptorsSet.insert($0) })
+            descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys.forEach({ userIdsDescriptorsSet.insert($0) })
         }
         return userIdsDescriptorsSet
     }

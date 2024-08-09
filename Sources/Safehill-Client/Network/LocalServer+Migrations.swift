@@ -189,7 +189,7 @@ extension LocalServer {
                             let assetGid = remoteDescriptor.globalIdentifier
                             
                             if assetToUsers[assetGid] == nil {
-                                let recipients = Array(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                                let recipients = Array(remoteDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys)
                                 log.info("[graph-sync] missing triples from <asset:\(assetGid)> <from:\(sender)> <to:\(recipients)>")
                                 if dryRun == false {
                                     try SHKGQuery.ingestShare(
