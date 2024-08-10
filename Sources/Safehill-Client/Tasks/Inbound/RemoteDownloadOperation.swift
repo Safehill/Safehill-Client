@@ -510,14 +510,17 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         [String: [(SHUploadHistoryItem, Date)]],
         [String: [(SHShareHistoryItem, Date)]]
     ) {
-        let myUser = self.user
-        
         var groupIdToUploadItems = [String: [(SHUploadHistoryItem, Date)]]()
         var groupIdToShareItems = [String: [(SHShareHistoryItem, Date)]]()
         
         for descriptor in descriptors {
             
             guard let localIdentifier = descriptor.localIdentifier else {
+                continue
+            }
+            
+            guard let senderUser = usersDict[descriptor.sharingInfo.sharedByUserIdentifier] else {
+                self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(descriptor.sharingInfo.sharedByUserIdentifier)")
                 continue
             }
             
@@ -530,14 +533,13 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     continue
                 }
                 
-                if recipientUserId == myUser.identifier {
-                    
+                if recipientUserId == self.user.identifier {
                     let item = SHUploadHistoryItem(
                         localAssetId: localIdentifier,
                         globalAssetId: descriptor.globalIdentifier,
                         versions: [.lowResolution, .hiResolution],
                         groupId: groupId,
-                        eventOriginator: myUser,
+                        eventOriginator: senderUser,
                         sharedWith: [],
                         isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                         isBackground: false
@@ -551,7 +553,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     
                 } else {
                     guard let recipient = usersDict[recipientUserId] else {
-                        self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server")
+                        self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(recipientUserId)")
                         continue
                     }
                     if otherUserIdsSharedWith[groupId] == nil {
@@ -571,7 +573,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     globalAssetId: descriptor.globalIdentifier,
                     versions: [.lowResolution, .hiResolution],
                     groupId: groupId,
-                    eventOriginator: myUser,
+                    eventOriginator: senderUser,
                     sharedWith: shareInfo.map({ $0.with }),
                     isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                     isBackground: false
