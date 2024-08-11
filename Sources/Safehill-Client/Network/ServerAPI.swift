@@ -166,9 +166,10 @@ public protocol SHServerAPI {
     ///   - assetId: the identifier of asset previously shared
     ///   - with: the public identifier of the user it was previously shared with
     ///   - completionHandler: the callback method
-    func unshare(assetId: GlobalIdentifier,
-                 with userPublicIdentifier: String,
-                 completionHandler: @escaping (Result<Void, Error>) -> ())
+    func unshare(
+        assetIdsWithUsers: [GlobalIdentifier: [UserIdentifier]],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
     
     // MARK: Assets Uploading
     

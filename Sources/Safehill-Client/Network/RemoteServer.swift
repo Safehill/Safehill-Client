@@ -797,8 +797,23 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func unshare(assetId: GlobalIdentifier, with userPublicIdentifier: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    func unshare(
+        assetIdsWithUsers: [GlobalIdentifier: [UserIdentifier]],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "userIdentifiersByAssetIdentifier": assetIdsWithUsers
+        ]
+        
+        self.post("assets/unshare", parameters: parameters) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func markAsset(with assetGlobalIdentifier: String,

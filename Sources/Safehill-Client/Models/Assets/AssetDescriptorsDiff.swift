@@ -103,7 +103,11 @@ struct AssetDescriptorsDiff {
         var groupInfoToRemove = Set<String>()
         
         for remoteDescriptor in remoteDescriptors {
-            /// 
+            guard remoteDescriptor.uploadState == .completed else {
+                continue
+            }
+            
+            ///
             /// If the descriptor exists on local, check if all users are listed in the share info
             /// If any user is missing add to the `userIdsToAddToSharesByAssetGid` portion of the diff
             /// a list of dictionaries `globalIdentifier` -> `(from:, groupIdByRecipientId:, groupInfoById:)`
@@ -170,6 +174,10 @@ struct AssetDescriptorsDiff {
         }
         
         for localDescriptor in localDescriptors {
+            guard localDescriptor.uploadState == .completed else {
+                continue
+            }
+            
             guard let remoteDescriptor = remoteDescriptors.first(
                 where: { $0.globalIdentifier == localDescriptor.globalIdentifier }
             ) else {

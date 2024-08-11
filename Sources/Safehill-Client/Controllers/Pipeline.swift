@@ -80,7 +80,6 @@ public struct SHUploadPipeline {
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
-    ///   - forceUpload: whether or not it's a force-retry (and should re-upload)
     ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread, and it should show as a message
     public static func enqueueShare(
         localIdentifier: String,
@@ -88,7 +87,6 @@ public struct SHUploadPipeline {
         groupId: String,
         sender: SHAuthenticatedLocalUser,
         recipients: [SHServerUser],
-        forceUpload: Bool,
         isPhotoMessage: Bool
     ) throws {
         ///
@@ -117,7 +115,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
-                shouldUpload: forceUpload,
+                shouldUpload: false,
                 isPhotoMessage: isPhotoMessage
             )
             try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
