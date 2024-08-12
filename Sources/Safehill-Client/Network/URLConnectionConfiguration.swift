@@ -21,7 +21,7 @@ public let SafehillServerURLComponents: URLComponents = {
 //    components.scheme = "https"
 //    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
 //    components.port = 443
-//#else
+#else
     components.scheme = "https"
     components.host = "app.safehill.io"
     components.port = 443
