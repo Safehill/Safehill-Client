@@ -63,35 +63,36 @@ extension LocalServer {
                 ///
                 /// Migrate data stored in DB to file
                 ///
-                guard let encryptedData = value["encryptedData"] as? Data else {
-                    continue
-                }
-                
-                guard components.count == 3 else {
-                    continue
-                }
-                let qualityStr = components[1]
-                guard let quality = SHAssetQuality(rawValue: qualityStr) else {
-                    continue
-                }
-                let globalIdentifier = components[2]
-                    
-                let assetVersionURL: URL
-                do {
-                    assetVersionURL = try self.createAssetDataFile(
-                        globalIdentifier: globalIdentifier,
-                        quality: quality,
-                        content: encryptedData
-                    )
-                } catch {
-                    continue
-                }
-                
-                let dataValue = [
-                    "assetIdentifier": value["assetIdentifier"],
-                    "encryptedDataPath": assetVersionURL.absoluteString
-                ]
-                writeBatch.set(value: dataValue, for: "data::" + key)
+//                guard let encryptedData = value["encryptedData"] as? Data else {
+//                    continue
+//                }
+//                
+//                guard components.count == 3 else {
+//                    continue
+//                }
+//                let qualityStr = components[1]
+//                guard let quality = SHAssetQuality(rawValue: qualityStr) else {
+//                    continue
+//                }
+//                let globalIdentifier = components[2]
+//                    
+//                let assetVersionURL: URL
+//                do {
+//                    assetVersionURL = try self.createAssetDataFile(
+//                        globalIdentifier: globalIdentifier,
+//                        quality: quality,
+//                        content: encryptedData
+//                    )
+//                } catch {
+//                    continue
+//                }
+//                
+//                let dataValue = [
+//                    "assetIdentifier": value["assetIdentifier"],
+//                    "encryptedDataPath": assetVersionURL.absoluteString
+//                ]
+//                writeBatch.set(value: dataValue, for: "data::" + key)
+                continue
             }
             else {
                 ///
