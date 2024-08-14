@@ -55,6 +55,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     internal func fetchDescriptorsForItemsToDownload(
         filteringAssets globalIdentifiers: [GlobalIdentifier]? = nil,
         filteringGroups groupIds: [String]? = nil,
+        after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
         ///
@@ -64,7 +65,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         self.serverProxy.getRemoteAssetDescriptors(
             for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
             filteringGroups: groupIds,
-            after: Self.lastFetchDate
+            after: date ?? Self.lastFetchDate
         ) { remoteResult in
             switch remoteResult {
             case .success(let remoteDescriptors):
@@ -509,14 +510,17 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         [String: [(SHUploadHistoryItem, Date)]],
         [String: [(SHShareHistoryItem, Date)]]
     ) {
-        let myUser = self.user
-        
         var groupIdToUploadItems = [String: [(SHUploadHistoryItem, Date)]]()
         var groupIdToShareItems = [String: [(SHShareHistoryItem, Date)]]()
         
         for descriptor in descriptors {
             
             guard let localIdentifier = descriptor.localIdentifier else {
+                continue
+            }
+            
+            guard let senderUser = usersDict[descriptor.sharingInfo.sharedByUserIdentifier] else {
+                self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(descriptor.sharingInfo.sharedByUserIdentifier)")
                 continue
             }
             
@@ -533,14 +537,13 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     continue
                 }
                 
-                if recipientUserId == myUser.identifier {
-                    
+                if recipientUserId == self.user.identifier {
                     let item = SHUploadHistoryItem(
                         localAssetId: localIdentifier,
                         globalAssetId: descriptor.globalIdentifier,
                         versions: [.lowResolution, .hiResolution],
                         groupId: groupId,
-                        eventOriginator: myUser,
+                        eventOriginator: senderUser,
                         sharedWith: [],
                         isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                         isBackground: false
@@ -554,7 +557,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     
                 } else {
                     guard let recipient = usersDict[recipientUserId] else {
-                        self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server")
+                        self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(recipientUserId)")
                         continue
                     }
                     if otherUserIdsSharedWith[groupId] == nil {
@@ -574,7 +577,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     globalAssetId: descriptor.globalIdentifier,
                     versions: [.lowResolution, .hiResolution],
                     groupId: groupId,
-                    eventOriginator: myUser,
+                    eventOriginator: senderUser,
                     sharedWith: shareInfo.map({ $0.with }),
                     isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                     isBackground: false
@@ -621,7 +624,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         /// FOR THE ASSETS SHARED BY THIS USER
         /// Because assets that are already in the local server are filtered out by the time this method 
-        /// is called (by `fetchDescriptorsForItemsToDownload(filteringAssets:filteringGroups:)`,
+        /// is called (by `fetchDescriptorsForItemsToDownload(filteringAssets:filteringGroups:after:)`,
         /// we only deal with assets that:
         /// - are shared by THIS user
         /// - are not in the local server
@@ -895,6 +898,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     public func run(
         for assetGlobalIdentifiers: [GlobalIdentifier]?,
         filteringGroups groupIds: [String]?,
+        startingFrom date: Date?,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
@@ -932,7 +936,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         DispatchQueue.global(qos: qos).async {
             self.fetchDescriptorsForItemsToDownload(
                 filteringAssets: assetGlobalIdentifiers,
-                filteringGroups: groupIds
+                filteringGroups: groupIds,
+                after: date
             ) {
                 (result: Result<([any SHAssetDescriptor]), Error>) in
                 switch result {
@@ -951,22 +956,31 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     internal func runOnce(
         qos: DispatchQoS.QoSClass,
+        startingFrom date: Date?,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
-        self.run(for: nil, filteringGroups: nil, qos: qos, completionHandler: completionHandler)
+        self.run(for: nil, filteringGroups: nil, startingFrom: date, qos: qos, completionHandler: completionHandler)
     }
     
     public func run(
+        startingFrom date: Date?,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        self.runOnce(qos: qos) { result in
+        self.runOnce(qos: qos, startingFrom: date) { result in
             if case .failure(let failure) = result {
                 completionHandler(.failure(failure))
             } else {
                 completionHandler(.success(()))
             }
         }
+    }
+    
+    public func run(
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.run(startingFrom: nil, qos: qos, completionHandler: completionHandler)
     }
 }
 
