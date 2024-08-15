@@ -119,26 +119,30 @@ struct AssetDescriptorsDiff {
                 continue
             }
             
-            for (userId, groupId) in remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                if correspondingLocalDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
-                    if userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] == nil 
+            for (userId, groupIds) in remoteDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                guard let groupId = groupIds.first else {
+                    continue
+                }
+                if correspondingLocalDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier[userId] == nil {
+                    if userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] == nil
                     {
                         let remoteDescGroupInfo = remoteDescriptor.sharingInfo.groupInfoById[groupId]
                         if remoteDescGroupInfo == nil {
-                            log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). sharedWithUserIdentifiersInGroup=\(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup)")
+                            log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). groupIdsByRecipientUserIdentifier=\(remoteDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier)")
                         }
                         userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] = (
                             from: correspondingLocalDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: [userId: groupId],
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
                                 name: remoteDescGroupInfo?.name,
-                                createdAt: remoteDescGroupInfo?.createdAt
+                                createdAt: remoteDescGroupInfo?.createdAt,
+                                isPhotoMessageGroup: remoteDescGroupInfo?.isPhotoMessageGroup ?? false
                             )]
                         )
                     } else {
                         let remoteDescGroupInfo = remoteDescriptor.sharingInfo.groupInfoById[groupId]
                         if remoteDescGroupInfo == nil {
-                            log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). sharedWithUserIdentifiersInGroup=\(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup)")
+                            log.warning("group info missing for group \(groupId) in descriptor of \(remoteDescriptor.globalIdentifier). groupIdsByRecipientUserIdentifier=\(remoteDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier)")
                         }
                         
                         var newDict = userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier]!.groupIdByRecipientId
@@ -147,7 +151,8 @@ struct AssetDescriptorsDiff {
                         var newGroupInfoDict = userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
                             name: newGroupInfoDict[groupId]?.name ?? remoteDescGroupInfo?.name,
-                            createdAt: newGroupInfoDict[groupId]?.createdAt ?? remoteDescGroupInfo?.createdAt
+                            createdAt: newGroupInfoDict[groupId]?.createdAt ?? remoteDescGroupInfo?.createdAt,
+                            isPhotoMessageGroup: newGroupInfoDict[groupId]?.isPhotoMessageGroup ?? remoteDescGroupInfo?.isPhotoMessageGroup ?? false
                         )
                         
                         userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier] = (
@@ -184,16 +189,21 @@ struct AssetDescriptorsDiff {
                 continue
             }
             
-            for (userId, groupId) in localDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                if remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userId] == nil {
-                    if userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] == nil 
+            for (userId, groupIds) in localDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                guard let groupId = groupIds.first else {
+                    continue
+                }
+                
+                if remoteDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier[userId] == nil {
+                    if userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] == nil
                     {
                         userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] = (
                             from: localDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: [userId: groupId],
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
                                 name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
-                                createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt
+                                createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
+                                isPhotoMessageGroup: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.isPhotoMessageGroup ?? false
                             )]
                         )
                     } else {
@@ -203,7 +213,8 @@ struct AssetDescriptorsDiff {
                         var newGroupInfoDict = userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
                             name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
-                            createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt
+                            createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
+                            isPhotoMessageGroup: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.isPhotoMessageGroup ?? false
                         )
                         
                         userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier] = (

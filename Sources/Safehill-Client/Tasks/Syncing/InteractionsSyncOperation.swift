@@ -297,6 +297,33 @@ public class SHInteractionsSyncOperation: Operation {
                         $0.didReceivePhotos(threadAssets, in: threadId)
                     }
                 })
+                
+            case .threadUserConverted:
+                
+                guard let threadIds = try? JSONDecoder().decode([String].self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                guard let threadId = threadIds.first else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                // TODO: React to this
+                /// - Clients that already knew about the thread will refresh the list of members and phone numbers
+                /// - Clients that didn't know about the thread (like the new user) will create it
+                
+                
+            case .userConversionManifest:
+                
+                guard let fullManifest = try? JSONDecoder().decode([WebSocketMessage.UserConversionManifest].self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                // TODO: React to this
+                /// Invoke the logic used by background push notifications to encrypt thread and asset/group encryption details for the new users invited by this user
             }
         }
     }
