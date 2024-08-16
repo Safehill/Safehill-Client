@@ -6,6 +6,7 @@ public let SHUploadTimeoutInMilliseconds = 300000 // 5 minutes
 public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
 
 
+
 public let SafehillServerURLComponents: URLComponents = {
     var components = URLComponents()
     
@@ -37,10 +38,10 @@ public let SafehillServerURLComponentsForWebsockets: URLComponents = {
     components.scheme = "ws"
     components.host = "127.0.0.1"
     components.port = 8080
-#elseif DEBUG
-    components.scheme = "wss"
-    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
-    components.port = 443
+//#elseif DEBUG
+//    components.scheme = "wss"
+//    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
+//    components.port = 443
 #else
     components.scheme = "wss"
     components.host = "app.safehill.io"
