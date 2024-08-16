@@ -12,9 +12,22 @@ actor ThreadSafeS3Errors {
 
 actor ThreadSafeAssetsDict {
     
-    var dictionary = [String: any SHEncryptedAsset]()
+    var dictionary = [GlobalIdentifier: any SHEncryptedAsset]()
     
     func add(_ encryptedAsset: any SHEncryptedAsset) {
-        dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
+        if dictionary[encryptedAsset.globalIdentifier] == nil {
+            dictionary[encryptedAsset.globalIdentifier] = encryptedAsset
+        } else {
+            for encryptedVersion in encryptedAsset.encryptedVersions {
+                var newEncryptedVersions = dictionary[encryptedAsset.globalIdentifier]!.encryptedVersions
+                newEncryptedVersions[encryptedVersion.key] = encryptedVersion.value
+                dictionary[encryptedAsset.globalIdentifier] = SHGenericEncryptedAsset(
+                    globalIdentifier: dictionary[encryptedAsset.globalIdentifier]!.globalIdentifier,
+                    localIdentifier: dictionary[encryptedAsset.globalIdentifier]!.localIdentifier,
+                    creationDate: dictionary[encryptedAsset.globalIdentifier]!.creationDate,
+                    encryptedVersions: newEncryptedVersions
+                )
+            }
+        }
     }
 }

@@ -952,20 +952,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
     }
     
-    internal func runOnce(
-        qos: DispatchQoS.QoSClass,
-        startingFrom date: Date?,
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
-    ) {
-        self.run(for: nil, filteringGroups: nil, startingFrom: date, qos: qos, completionHandler: completionHandler)
-    }
-    
     public func run(
         startingFrom date: Date?,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        self.runOnce(qos: qos, startingFrom: date) { result in
+        self.run(for: nil, filteringGroups: nil, startingFrom: date, qos: qos) { result in
             if case .failure(let failure) = result {
                 completionHandler(.failure(failure))
             } else {

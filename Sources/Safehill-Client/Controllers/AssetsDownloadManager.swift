@@ -2,11 +2,6 @@ import Foundation
 import KnowledgeBase
 import Safehill_Crypto
 
-public struct SHAssetDownloadAuthorizationResponse {
-    public let descriptors: [any SHAssetDescriptor]
-    public let users: [UserIdentifier: any SHServerUser]
-}
-
 public enum SHAssetDownloadError: Error {
     case assetIsBlacklisted(GlobalIdentifier)
 }
