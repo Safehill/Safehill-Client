@@ -56,7 +56,10 @@ public actor WebSocketAPI {
         self.webSocketTask = WebSocketAPI.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
         
-        self.keepAlive()
+        Task { [weak self] in
+            try await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+            await self?.keepAlive()
+        }
     }
     
     public func disconnect() {
