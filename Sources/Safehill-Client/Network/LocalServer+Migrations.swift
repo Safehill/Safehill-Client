@@ -42,7 +42,10 @@ public extension Array {
 
 extension LocalServer {
     
-    func moveDataToNewKeyFormat(for dictionary: [String: Any]) throws {
+    func moveDataToNewKeyFormat(
+        for dictionary: [String: Any],
+        andMoveToFiles shouldMoveToFiles: Bool
+    ) throws {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             throw KBError.databaseNotReady
         }
@@ -60,6 +63,10 @@ extension LocalServer {
             let components = key.components(separatedBy: "::")
             
             if key.prefix(6) == "data::" {
+                guard shouldMoveToFiles else {
+                    continue
+                }
+                
                 ///
                 /// Migrate data stored in DB to file
                 ///
@@ -264,7 +271,7 @@ extension LocalServer {
                     }
                 }
                 do {
-                    try self.moveDataToNewKeyFormat(for: keyValues)
+                    try self.moveDataToNewKeyFormat(for: keyValues, andMoveToFiles: false)
                 } catch {
                     log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")
                     completionHandler(.failure(error))
@@ -282,8 +289,8 @@ extension LocalServer {
                 
                 assetStore.dictionaryRepresentation(forKeysMatching: condition) { (result: Swift.Result) in
                     switch result {
-                    case .success(let keyValues):
-                        let relevantKeyValues = keyValues.filter {
+                    case .success(var keyValues):
+                        keyValues = keyValues.filter {
                             for assetIdentifier in assetIdentifiers {
                                 if $0.key.hasSuffix("::\(assetIdentifier)") {
                                     return true
@@ -291,9 +298,10 @@ extension LocalServer {
                             }
                             return false
                         }
+                        
                         do {
-                            if relevantKeyValues.count > 0 {
-                                try self.moveDataToNewKeyFormat(for: keyValues)
+                            if keyValues.count > 0 {
+                                try self.moveDataToNewKeyFormat(for: keyValues, andMoveToFiles: false)
                             }
                         } catch {
                             log.warning("Failed to migrate data format for asset keys \(keyValues.keys)")

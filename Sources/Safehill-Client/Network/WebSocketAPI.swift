@@ -15,10 +15,15 @@ public actor WebSocketAPI {
     private let urlComponents: URLComponents
     private var webSocketTask: URLSessionWebSocketTask?
     
-    static let webSocketURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
+    let webSocketURLSession: URLSession
     
     init() {
         self.urlComponents = SafehillServerURLComponentsForWebsockets
+        self.webSocketURLSession = URLSession(
+            configuration: SafehillServerDefaultURLSessionConfiguration,
+            delegate: WebSocketAPIDelegate(),
+            delegateQueue: nil
+        )
     }
     
     init(url: String) throws {
@@ -26,6 +31,11 @@ public actor WebSocketAPI {
             throw WebSocketConnectionError.transportError
         }
         self.urlComponents = components
+        self.webSocketURLSession = URLSession(
+            configuration: SafehillServerDefaultURLSessionConfiguration,
+            delegate: WebSocketAPIDelegate(),
+            delegateQueue: nil
+        )
     }
     
     deinit {
@@ -53,10 +63,13 @@ public actor WebSocketAPI {
         var request = URLRequest(url: url.appendingPathComponent(endpoint))
         request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
         
-        self.webSocketTask = WebSocketAPI.webSocketURLSession.webSocketTask(with: request)
+        self.webSocketTask = self.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
         
-        self.keepAlive()
+        Task { [weak self] in
+            try await Task.sleep(nanoseconds: UInt64(keepAliveIntervalInSeconds) * 1_000_000_000)
+            await self?.keepAlive(keepAliveIntervalInSeconds)
+        }
     }
     
     public func disconnect() {
@@ -66,7 +79,7 @@ public actor WebSocketAPI {
 
 extension WebSocketAPI {
     
-    private func keepAlive() {
+    private func keepAlive(_ keepAliveIntervalInSeconds: TimeInterval) {
         log.debug("[ws] sending ping for keepAlive")
         self.webSocketTask!.sendPing { [weak self] error in
             guard let self = self else { return }
@@ -75,8 +88,8 @@ extension WebSocketAPI {
                 log.error("[ws] failed to send ping for keepAlive: \(error)")
             } else {
                 Task { [weak self] in
-                    try await Task.sleep(nanoseconds: 5 * 1_000_000_000)
-                    await self?.keepAlive()
+                    try await Task.sleep(nanoseconds: UInt64(keepAliveIntervalInSeconds) * 1_000_000_000)
+                    await self?.keepAlive(keepAliveIntervalInSeconds)
                 }
             }
         }
@@ -171,5 +184,16 @@ extension WebSocketAPI {
             log.error("[ws] unable to parse WebSocketMessage \(encodedMessage): \(error.localizedDescription)")
             throw WebSocketConnectionError.decodingError
         }
+    }
+}
+
+class WebSocketAPIDelegate: NSObject, URLSessionWebSocketDelegate {
+    
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        log.info("[ws] task OPEN with protocol=\(`protocol` ?? "")")
+    }
+    
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        log.info("[ws] task CLOSED with code=\(closeCode.rawValue) reason=\(reason != nil ? String(data: reason!, encoding: .utf8) ?? "nil" : "")")
     }
 }

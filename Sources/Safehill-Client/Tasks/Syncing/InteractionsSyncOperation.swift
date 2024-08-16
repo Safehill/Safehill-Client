@@ -317,7 +317,7 @@ public class SHInteractionsSyncOperation: Operation {
             }
         }
         
-        Task {
+        Task(priority: .high) {
             do {
                 log.debug("[SHInteractionsSyncOperation] starting websocket")
                 

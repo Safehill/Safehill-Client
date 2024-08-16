@@ -596,11 +596,15 @@ struct RemoteServer : SHServerAPI {
             parameters["after"] = after.iso8601withFractionalSeconds
         }
         
+        log.debug("[rest-api] retrieving all asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
+        
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
+                log.debug("[rest-api] retrieved \(descriptors.count) asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
                 completionHandler(.success(descriptors))
             case .failure(let error):
+                log.error("[rest-api] error retrieving asset descriptors. \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -623,6 +627,7 @@ struct RemoteServer : SHServerAPI {
                 log.debug("[rest-api] retrieved \(descriptors.count) asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
                 completionHandler(.success(descriptors))
             case .failure(let error):
+                log.error("[rest-api] error retrieving asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil"). \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
