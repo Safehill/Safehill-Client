@@ -58,6 +58,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
+        self.log.debug("[\(type(of: self))] fetchDescriptorsForItemsToDownload for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? Self.lastFetchDate?.iso8601withFractionalSeconds ?? "nil")")
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
@@ -820,6 +821,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// This processing takes care of the **CREATES**, namely the new assets on the server not present locally
         /// Given the descriptors that are only on REMOTE, determine what needs to be downloaded after filtering
         ///
+        
+        guard descriptorsForItemsToDownload.isEmpty == false else {
+            completionHandler(.success([]))
+            return
+        }
         
         self.log.debug("[\(type(of: self))] original descriptors: \(descriptorsForItemsToDownload.count)")
         
