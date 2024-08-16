@@ -274,7 +274,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         /// will ignore it.
                         ///
                         unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
-                        dispatchGroup.leave()
                     }
                 }
                 
