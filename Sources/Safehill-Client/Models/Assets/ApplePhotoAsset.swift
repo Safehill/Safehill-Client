@@ -121,7 +121,7 @@ extension SHApplePhotoAsset {
             with: PHContentEditingInputRequestOptions()
         ) { (contentEditingInput, dictInfo) in
             
-            if let url = contentEditingInput!.fullSizeImageURL {
+            if let url = contentEditingInput?.fullSizeImageURL {
                 completion(url)
             } else {
                 completion(nil)

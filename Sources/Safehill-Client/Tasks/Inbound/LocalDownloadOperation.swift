@@ -206,9 +206,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 
                 for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
                     guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
-                        self.log.critical("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
-                        completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
-                        return
+                        unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
+                        dispatchGroup.leave()
+                        continue
                     }
                     
                     let downloaderDelegates = self.downloaderDelegates
@@ -361,10 +361,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     /// ** Higher resolutions are meant to be lazy loaded by the delegate.**
     ///
     /// - Parameter completionHandler: the callback method
-    internal override func runOnce(
-        qos: DispatchQoS.QoSClass,
+    public override func run(
         startingFrom date: Date?,
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+        qos: DispatchQoS.QoSClass,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let handleFailure = { (error: Error) in
             let downloaderDelegates = self.downloaderDelegates
