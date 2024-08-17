@@ -440,7 +440,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                         }
                                     }
                                     
-                                    completionHandler(.success(()))
+                                    completionHandler(decryptionResult)
                                     
                                     if case .success(let decryptedAssetsAndDescriptors) = decryptionResult,
                                         decryptedAssetsAndDescriptors.count > 0 {
