@@ -164,7 +164,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     log.debug("[\(type(of: self))] filtering out blacklisted gids \(blacklisted.map({ $0.globalIdentifier }))")
                 }
                 let incomplete = descriptors.filter {
-                    $0.uploadState != .notStarted || $0.uploadState == .failed
+                    $0.uploadState == .notStarted || $0.uploadState == .failed
                 }
                 if incomplete.isEmpty == false {
                     log.debug("[\(type(of: self))] filtering out incomplete gids \(incomplete.map({ $0.globalIdentifier }))")
