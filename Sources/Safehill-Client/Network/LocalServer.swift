@@ -718,7 +718,7 @@ struct LocalServer : SHServerAPI {
                        let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) {
                         state = uploadState
                     } else {
-                        state = .partial
+                        state = .started
                     }
                     
                     if versionUploadStateByIdentifierQuality[globalIdentifier] == nil {
@@ -813,7 +813,7 @@ struct LocalServer : SHServerAPI {
                     versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution]
                 }
                 
-                var combinedUploadState: SHAssetDescriptorUploadState = .partial
+                var combinedUploadState: SHAssetDescriptorUploadState = .started
                 if let uploadStates = versionUploadStateByIdentifierQuality[globalIdentifier] {
                     if uploadStates.allSatisfy({ (_, value) in value == .completed }) {
                         // ALL completed successfully
@@ -1063,7 +1063,7 @@ struct LocalServer : SHServerAPI {
                 globalIdentifier: encryptedAsset.globalIdentifier,
                 localIdentifier: encryptedAsset.localIdentifier,
                 creationDate: encryptedAsset.creationDate,
-                uploadState: .partial,
+                uploadState: .started,
                 sharingInfo: SHGenericDescriptorSharingInfo(
                     sharedByUserIdentifier: self.requestor.identifier,
                     sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
@@ -1081,7 +1081,7 @@ struct LocalServer : SHServerAPI {
         
         self.create(assets: assets,
                     descriptorsByGlobalIdentifier: descriptorsByGlobalId,
-                    uploadState: .partial,
+                    uploadState: .started,
                     completionHandler: completionHandler)
     }
     
