@@ -307,14 +307,14 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
     }
 }
 
-final class Safehill_ClientIntegrationTests { // : XCTestCase {
+final class Safehill_ClientIntegrationTests : XCTestCase {
     
     let username = "testUser"
     let password = "abc"
     
     let testUser = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.testUser")
     
-    func setUpWithError() throws {
+    override func setUpWithError() throws {
         // Create sender on the server
         var error: Error? = nil
         let group = DispatchGroup()
@@ -356,7 +356,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         }
     }
     
-    func tearDownWithError() throws {
+    override func tearDownWithError() throws {
         try self.destroyUser()
     }
     
@@ -396,7 +396,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
         let sender = self.testUser.shUser
         let receiver = SHLocalCryptoUser()
         
-        let expectation1 = XCTestExpectation(description: "sender uploads")
+        let expectation1 = expectation(description: "sender uploads")
         
         // Sender encrypts
         let encryptedAsset = try encrypt(data, from: sender, to: receiver)
@@ -415,26 +415,24 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
                     expectation1.fulfill()
                     return
                 }
-                Task {
-                    do {
-                        try await self.testUser.serverProxy.upload(
-                            serverAsset: serverAsset,
-                            asset: encryptedAsset
-                        )
-                    } catch {
-                        XCTFail(error.localizedDescription)
-                    }
-                    expectation1.fulfill()
+                do {
+                    try self.testUser.serverProxy.upload(
+                        serverAsset: serverAsset,
+                        asset: encryptedAsset
+                    )
+                } catch {
+                    XCTFail(error.localizedDescription)
                 }
             case .failure(let error):
                 XCTFail(error.localizedDescription)
-                expectation1.fulfill()
             }
+            
+            expectation1.fulfill()
         }
         
-//        wait(for: [expectation1], timeout: 5.0)
+        wait(for: [expectation1], timeout: 5.0)
         
-        let expectation2 = XCTestExpectation(description: "receiver downloads")
+        let expectation2 = expectation(description: "receiver downloads")
         
         // Receiver downloads
         self.testUser.serverProxy.getAssets(
@@ -456,7 +454,7 @@ final class Safehill_ClientIntegrationTests { // : XCTestCase {
             expectation2.fulfill()
         }
         
-//        wait(for: [expectation2], timeout: 5.0)
+        wait(for: [expectation2], timeout: 5.0)
         
         // Receiver decrypts
         let decryptedAsset = try decrypt(encryptedAsset, receiver: receiver, sender: sender)
