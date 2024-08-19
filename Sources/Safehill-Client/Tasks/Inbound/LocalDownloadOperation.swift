@@ -62,9 +62,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
+        self.log.debug("[\(type(of: self))] fetchDescriptorsForItemsToRestore after \(date?.iso8601withFractionalSeconds ?? "nil")")
+        
         serverProxy.getLocalAssetDescriptors(after: date) { result in
             switch result {
             case .success(let descs):
+                
+                self.log.debug("[\(type(of: self))] fetched descriptors for gids \(descs.map({ $0.globalIdentifier }))")
+                
                 let unprocessed = descs.filter({
                     Self.alreadyProcessed.contains($0.globalIdentifier) == false
                 })
