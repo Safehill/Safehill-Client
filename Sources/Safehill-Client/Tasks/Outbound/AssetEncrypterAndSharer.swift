@@ -36,7 +36,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func markAsFailed(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String?,
+        globalIdentifier: GlobalIdentifier?,
         error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
