@@ -152,7 +152,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             
             let filteredDescriptors = descriptors.filter {
                 (blacklistedAssets[$0.globalIdentifier] ?? false) == false
-                && $0.uploadState == .completed || $0.uploadState == .partial
+                && $0.uploadState != .failed
+                && $0.uploadState == .notStarted
             }
             
 #if DEBUG
