@@ -14,7 +14,9 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
     let limit: Int
     let user: SHAuthenticatedLocalUser
     let localAssetStoreController: SHLocalAssetStoreController
-    let delegates: [SHOutboundAssetOperationDelegate]
+    let assetsDelegates: [SHOutboundAssetOperationDelegate]
+    
+    let delegatesQueue = DispatchQueue(label: "com.safehill.upload.delegates")
     
     var serverProxy: SHServerProxy {
         return self.user.serverProxy
@@ -22,12 +24,12 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
     
     public init(user: SHAuthenticatedLocalUser,
                 localAssetStoreController: SHLocalAssetStoreController,
-                delegates: [SHOutboundAssetOperationDelegate],
+                assetsDelegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int) {
         self.user = user
         self.localAssetStoreController = localAssetStoreController
         self.limit = limit
-        self.delegates = delegates
+        self.assetsDelegates = assetsDelegates
     }
     
     public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
@@ -95,13 +97,16 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             }
             
             /// Notify the delegates
-            for delegate in self.delegates {
-                if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didFailUpload(ofAsset: localIdentifier, in: groupId, error: error)
-                }
-                if users.count > 0 {
-                    if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+            let assetsDelegates = self.assetsDelegates
+            self.delegatesQueue.async {
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetUploaderDelegate {
+                        delegate.didFailUpload(ofAsset: localIdentifier, in: groupId, error: error)
+                    }
+                    if users.count > 0 {
+                        if let delegate = delegate as? SHAssetSharerDelegate {
+                            delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                        }
                     }
                 }
             }
@@ -146,10 +151,13 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         }
         
         if isBackground == false {
-            /// Notify the delegates
-            for delegate in delegates {
-                if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didCompleteUpload(ofAsset: localIdentifier, in: groupId)
+            let assetsDelegates = self.assetsDelegates
+            self.delegatesQueue.async {
+                /// Notify the delegates
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetUploaderDelegate {
+                        delegate.didCompleteUpload(ofAsset: localIdentifier, in: groupId)
+                    }
                 }
             }
         }
@@ -256,9 +264,12 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         }
         
         if uploadRequest.isBackground == false {
-            for delegate in delegates {
-                if let delegate = delegate as? SHAssetUploaderDelegate {
-                    delegate.didStartUpload(ofAsset: uploadRequest.localIdentifier, in: uploadRequest.groupId)
+            let assetsDelegates = self.assetsDelegates
+            self.delegatesQueue.async {
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetUploaderDelegate {
+                        delegate.didStartUpload(ofAsset: uploadRequest.localIdentifier, in: uploadRequest.groupId)
+                    }
                 }
             }
         }

@@ -15,14 +15,16 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
     }
     
     public let limit: Int
-    public var delegates: [SHOutboundAssetOperationDelegate]
+    public var assetsDelegates: [SHOutboundAssetOperationDelegate]
     let photoIndexer: SHPhotosIndexer
     
-    public init(delegates: [SHOutboundAssetOperationDelegate],
+    let delegatesQueue = DispatchQueue(label: "com.safehill.fetch.delegates")
+    
+    public init(assetsDelegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int,
                 photoIndexer: SHPhotosIndexer) {
         self.limit = limit
-        self.delegates = delegates
+        self.assetsDelegates = assetsDelegates
         self.photoIndexer = photoIndexer
     }
     
@@ -143,13 +145,16 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
             log.fault("asset \(localIdentifier) failed to fetch but will never be recorded as failed because enqueueing to FAILED queue failed: \(error.localizedDescription)")
         }
         
-        /// Notify the delegates
-        for delegate in delegates {
-            if let delegate = delegate as? SHAssetFetcherDelegate {
-                if request.shouldUpload == true {
-                    delegate.didFailFetchingForUpload(ofAsset: localIdentifier, in: groupId, error: error)
-                } else {
-                    delegate.didFailFetchingForSharing(ofAsset: localIdentifier, in: groupId, error: error)
+        let assetsDelegates = self.assetsDelegates
+        self.delegatesQueue.async {
+            /// Notify the delegates
+            for delegate in assetsDelegates {
+                if let delegate = delegate as? SHAssetFetcherDelegate {
+                    if request.shouldUpload == true {
+                        delegate.didFailFetchingForUpload(ofAsset: localIdentifier, in: groupId, error: error)
+                    } else {
+                        delegate.didFailFetchingForSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                    }
                 }
             }
         }
@@ -199,13 +204,16 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
             }
             
             if request.isBackground == false {
-                /// Notify the delegates
-                for delegate in delegates {
-                    if let delegate = delegate as? SHAssetFetcherDelegate {
-                        if request.shouldUpload == true {
-                            delegate.didCompleteFetchingForUpload(ofAsset: localIdentifier, in: groupId)
-                        } else {
-                            delegate.didCompleteFetchingForSharing(ofAsset: localIdentifier, in: groupId)
+                let assetsDelegates = self.assetsDelegates
+                self.delegatesQueue.async {
+                    /// Notify the delegates
+                    for delegate in assetsDelegates {
+                        if let delegate = delegate as? SHAssetFetcherDelegate {
+                            if request.shouldUpload == true {
+                                delegate.didCompleteFetchingForUpload(ofAsset: localIdentifier, in: groupId)
+                            } else {
+                                delegate.didCompleteFetchingForSharing(ofAsset: localIdentifier, in: groupId)
+                            }
                         }
                     }
                 }
@@ -297,15 +305,18 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 let _ = try? failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: fetchRequest.localIdentifier)))
                 let _ = try? failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: fetchRequest.identifier))
                 
-                ///
-                /// Notify the delegates the upload or sharing operation was kicked off
-                ///
-                for delegate in delegates {
-                    if let delegate = delegate as? SHAssetFetcherDelegate {
-                        if fetchRequest.shouldUpload == true {
-                            delegate.didStartFetchingForUpload(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
-                        } else {
-                            delegate.didStartFetchingForSharing(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
+                let assetsDelegates = self.assetsDelegates
+                self.delegatesQueue.async {
+                    ///
+                    /// Notify the delegates the upload or sharing operation was kicked off
+                    ///
+                    for delegate in assetsDelegates {
+                        if let delegate = delegate as? SHAssetFetcherDelegate {
+                            if fetchRequest.shouldUpload == true {
+                                delegate.didStartFetchingForUpload(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
+                            } else {
+                                delegate.didStartFetchingForSharing(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
+                            }
                         }
                     }
                 }

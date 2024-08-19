@@ -1,6 +1,7 @@
 import Foundation
 import os
 import KnowledgeBase
+import Photos
 
 
 internal class SHEncryptAndShareOperation: SHEncryptionOperation {
@@ -12,7 +13,28 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
     }
     
-    let delegatesQueue = DispatchQueue(label: "com.safehill.encryptAndShare.delegates")
+    public var threadsDelegates: [SHInteractionsSyncingDelegate]
+    
+    @available(*, deprecated, renamed: "init(user:assetsDelegates:threadsDelegates:limitPerRun:imageManager:)", message: "Needs to be initialized with threads delegates")
+    override init(
+        user: SHAuthenticatedLocalUser,
+        assetsDelegates: [SHOutboundAssetOperationDelegate],
+        limitPerRun limit: Int,
+        imageManager: PHCachingImageManager? = nil
+    ) {
+        fatalError("Unsupported initializer")
+    }
+    
+    init(
+        user: SHAuthenticatedLocalUser,
+        assetsDelegates: [SHOutboundAssetOperationDelegate],
+        threadsDelegates: [SHInteractionsSyncingDelegate],
+        limitPerRun limit: Int,
+        imageManager: PHCachingImageManager? = nil
+    ) {
+        self.threadsDelegates = threadsDelegates
+        super.init(user: user, assetsDelegates: assetsDelegates, limitPerRun: limit, imageManager: imageManager)
+    }
     
     public override func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
@@ -98,10 +120,13 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             return
         }
         
-        /// Notify the delegates
-        for delegate in assetDelegates {
-            if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+        let assetsDelegates = self.assetsDelegates
+        delegatesQueue.async {
+            /// Notify the delegates
+            for delegate in assetsDelegates {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                }
             }
         }
     }
@@ -139,10 +164,13 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             return
         }
         
-        /// Notify the delegates
-        for delegate in assetDelegates {
-            if let delegate = delegate as? SHAssetSharerDelegate {
-                delegate.didCompleteSharing(ofAsset: localIdentifier, in: groupId)
+        let assetsDelegates = self.assetsDelegates
+        delegatesQueue.async {
+            /// Notify the delegates
+            for delegate in assetsDelegates {
+                if let delegate = delegate as? SHAssetSharerDelegate {
+                    delegate.didCompleteSharing(ofAsset: localIdentifier, in: groupId)
+                }
             }
         }
     }
@@ -182,8 +210,13 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             ) {
                 setupThreadResult in
                 switch setupThreadResult {
-                case .success:
-                    break
+                case .success(let conversationThread):
+                    let threadsDelegates = self.threadsDelegates
+                    self.delegatesQueue.async {
+                        for delegate in threadsDelegates {
+                            delegate.didAddThread(conversationThread)
+                        }
+                    }
                 case .failure(let error):
                     errorInitializingThread = error
                 }
@@ -286,9 +319,12 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
         
         if shareRequest.isBackground == false {
-            for delegate in assetDelegates {
-                if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didStartSharing(ofAsset: shareRequest.localIdentifier, in: shareRequest.groupId)
+            let assetDelegates = self.assetsDelegates
+            self.delegatesQueue.async {
+                for delegate in assetDelegates {
+                    if let delegate = delegate as? SHAssetSharerDelegate {
+                        delegate.didStartSharing(ofAsset: shareRequest.localIdentifier, in: shareRequest.groupId)
+                    }
                 }
             }
         }

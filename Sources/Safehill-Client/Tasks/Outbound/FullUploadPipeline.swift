@@ -15,16 +15,19 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     
     public let user: SHAuthenticatedLocalUser
     public var assetsDelegates: [SHOutboundAssetOperationDelegate]
+    public var threadsDelegates: [SHInteractionsSyncingDelegate]
     var photoIndexer: SHPhotosIndexer
     
     let parallelization: ParallelizationOption
     
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
+                threadsDelegates: [SHInteractionsSyncingDelegate],
                 parallelization: ParallelizationOption = .conservative,
                 photoIndexer: SHPhotosIndexer) {
         self.user = user
         self.assetsDelegates = assetsDelegates
+        self.threadsDelegates = threadsDelegates
         self.parallelization = parallelization
         self.photoIndexer = photoIndexer
     }
@@ -54,7 +57,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         })
         
         let fetchOperation = SHLocalFetchOperation(
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: 0,
             photoIndexer: self.photoIndexer
         )
@@ -68,13 +71,14 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let uploadOperation = SHUploadOperation(
             user: self.user,
             localAssetStoreController: SHLocalAssetStoreController(user: self.user),
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: 0
         )
         
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
+            threadsDelegates: threadsDelegates,
             limitPerRun: 0
         )
         
@@ -195,7 +199,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         }
         
         let fetchOperation = SHLocalFetchOperation(
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: limit ?? 0,
             photoIndexer: photoIndexer
         )
@@ -245,7 +249,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let uploadOperation = SHUploadOperation(
             user: self.user,
             localAssetStoreController: SHLocalAssetStoreController(user: self.user),
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: 0
         )
         log.debug("Running UPLOAD step")

@@ -44,7 +44,9 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
     
     public let limit: Int
     public let user: SHAuthenticatedLocalUser
-    public var assetDelegates: [SHOutboundAssetOperationDelegate]
+    public var assetsDelegates: [SHOutboundAssetOperationDelegate]
+    
+    let delegatesQueue = DispatchQueue(label: "com.safehill.encrypt.delegates")
     
     internal var interactionsController: SHUserInteractionController {
         SHUserInteractionController(user: self.user)
@@ -58,7 +60,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 imageManager: PHCachingImageManager? = nil) {
         self.user = user
         self.limit = limit
-        self.assetDelegates = assetsDelegates
+        self.assetsDelegates = assetsDelegates
         self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
@@ -235,14 +237,17 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     return
                 }
                 
-                /// Notify the delegates
-                for delegate in self.assetDelegates {
-                    if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
-                    }
-                    if users.count > 0 {
-                        if let delegate = delegate as? SHAssetSharerDelegate {
-                            delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                let assetsDelegates = self.assetsDelegates
+                self.delegatesQueue.async {
+                    /// Notify the delegates
+                    for delegate in assetsDelegates {
+                        if let delegate = delegate as? SHAssetEncrypterDelegate {
+                            delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
+                        }
+                        if users.count > 0 {
+                            if let delegate = delegate as? SHAssetSharerDelegate {
+                                delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                            }
                         }
                     }
                 }
@@ -250,14 +255,17 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 completionHandler(.success(()))
             }
         } else {
-            /// Notify the delegates
-            for delegate in self.assetDelegates {
-                if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
-                }
-                if users.count > 0 {
-                    if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+            let assetsDelegates = self.assetsDelegates
+            self.delegatesQueue.async {
+                /// Notify the delegates
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetEncrypterDelegate {
+                        delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
+                    }
+                    if users.count > 0 {
+                        if let delegate = delegate as? SHAssetSharerDelegate {
+                            delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                        }
                     }
                 }
             }
@@ -318,10 +326,14 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
             return
         }
-        /// Notify the delegates
-        for delegate in assetDelegates {
-            if let delegate = delegate as? SHAssetEncrypterDelegate {
-                delegate.didCompleteEncryption(ofAsset: localIdentifier, in: groupId)
+        
+        let assetsDelegates = self.assetsDelegates
+        self.delegatesQueue.async {
+            /// Notify the delegates
+            for delegate in assetsDelegates {
+                if let delegate = delegate as? SHAssetEncrypterDelegate {
+                    delegate.didCompleteEncryption(ofAsset: localIdentifier, in: groupId)
+                }
             }
         }
     }
@@ -379,9 +391,12 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         }
         
         if encryptionRequest.isBackground == false {
-            for delegate in assetDelegates {
-                if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didStartEncryption(ofAsset: encryptionRequest.localIdentifier, in: encryptionRequest.groupId)  
+            let assetsDelegates = self.assetsDelegates
+            self.delegatesQueue.async {
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetEncrypterDelegate {
+                        delegate.didStartEncryption(ofAsset: encryptionRequest.localIdentifier, in: encryptionRequest.groupId)
+                    }
                 }
             }
             
