@@ -155,6 +155,23 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 && $0.uploadState == .completed || $0.uploadState == .partial
             }
             
+#if DEBUG
+            if filteredDescriptors.count != descriptors.count {
+                let blacklisted = descriptors.filter {
+                    (blacklistedAssets[$0.globalIdentifier] ?? false) == false
+                }
+                if blacklisted.isEmpty == false {
+                    log.debug("[\(type(of: self))] filtering out blacklisted gids \(blacklisted.map({ $0.globalIdentifier }))")
+                }
+                let incomplete = descriptors.filter {
+                    $0.uploadState == .completed || $0.uploadState == .partial
+                }
+                if incomplete.isEmpty == false {
+                    log.debug("[\(type(of: self))] filtering out incomplete gids \(incomplete.map({ $0.globalIdentifier }))")
+                }
+            }
+#endif
+            
             guard filteredDescriptors.count > 0 else {
                 let downloaderDelegates = self.downloaderDelegates
                 self.delegatesQueue.async {
@@ -199,6 +216,18 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         }
                         return true
                     }
+                    
+#if DEBUG
+                    if filteredDescriptorsFromRetrievableUsers.count != filteredDescriptors.count {
+                        let filtered = filteredDescriptorsFromRetrievableUsers.map({ $0.globalIdentifier })
+                        let unfiltered = filteredDescriptors
+                            .map({ $0.globalIdentifier })
+                            .filter {
+                                filtered.contains($0) == false
+                            }
+                        self.log.debug("[\(type(of: self))] filtering out gids with unretrievable users \(unfiltered)")
+                    }
+#endif
                     
                     ///
                     /// Call the delegate with the full manifest of whitelisted assets.
