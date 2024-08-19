@@ -1459,31 +1459,35 @@ struct LocalServer : SHServerAPI {
         writeBatch.write(completionHandler: completionHandler)
     }
     
-    func upload(
-        serverAsset: SHServerAsset,
-        asset: any SHEncryptedAsset,
-        filterVersions: [SHAssetQuality]?
-    ) async throws {
+    func uploadAsset(
+        with globalIdentifier: GlobalIdentifier,
+        versionsDataManifest: [SHAssetQuality: (URL, Data)],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        var errors = [Error]()
+        let dispatchGroup = DispatchGroup()
         
-        for encryptedAssetVersion in asset.encryptedVersions.values {
-            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
-                continue
-            }
+        for quality in versionsDataManifest.keys {
             
-            try await withUnsafeThrowingContinuation { continuation in
-                self.markAsset(
-                    with: asset.globalIdentifier,
-                    quality: encryptedAssetVersion.quality,
-                    as: .completed
-                ) { result in
-                    switch result {
-                    case .success:
-                        continuation.resume()
-                    case .failure(let error):
-                        continuation.resume(throwing: error)
-                    }
+            dispatchGroup.enter()
+            self.markAsset(
+                with: globalIdentifier,
+                quality: quality,
+                as: .completed
+            ) { result in
+                if case .failure(let error) = result {
+                    errors.append(error)
                 }
-            }   
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            if errors.isEmpty {
+                completionHandler(.success(()))
+            } else {
+                completionHandler(.failure(errors.first!))
+            }
         }
     }
     

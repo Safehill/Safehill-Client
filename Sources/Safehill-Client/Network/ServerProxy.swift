@@ -752,9 +752,61 @@ extension SHServerProxy {
         serverAsset: SHServerAsset,
         asset: any SHEncryptedAsset,
         filterVersions: [SHAssetQuality]? = nil
-    ) async throws {
-        try await self.remoteServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions)
-        try await self.localServer.upload(serverAsset: serverAsset, asset: asset, filterVersions: filterVersions)
+    ) throws {
+        
+        let manifest = try self.serverAssetVersionsURLDataManifest(
+            serverAsset,
+            asset: asset,
+            filterVersions: filterVersions
+        )
+        
+        self.remoteServer.uploadAsset(
+            with: serverAsset.globalIdentifier,
+            versionsDataManifest: manifest
+        ) {
+            result in
+            if case .success = result {
+                self.localServer.uploadAsset(
+                    with: serverAsset.globalIdentifier,
+                    versionsDataManifest: manifest
+                ) { result in
+                    if case .failure(let localError) = result {
+                        log.warning("asset was uploaded on remote server, but local asset wasn't marked as completed. This inconsistency will be resolved by assets sync. \(localError.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+    
+    private func serverAssetVersionsURLDataManifest(
+        _ serverAsset: SHServerAsset,
+        asset: any SHEncryptedAsset,
+        filterVersions: [SHAssetQuality]?
+    ) throws -> [SHAssetQuality: (URL, Data)] {
+        var manifest = [SHAssetQuality: (URL, Data)]()
+        
+        for encryptedAssetVersion in asset.encryptedVersions.values {
+            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
+                continue
+            }
+            
+            log.info("[S3] uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            
+            let serverAssetVersion = serverAsset.versions.first { sav in
+                sav.versionName == encryptedAssetVersion.quality.rawValue
+            }
+            guard let serverAssetVersion = serverAssetVersion else {
+                throw SHHTTPError.ClientError.badRequest("[S3] invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
+            }
+            
+            guard let url = URL(string: serverAssetVersion.presignedURL) else {
+                throw SHHTTPError.ServerError.unexpectedResponse("[S3] presigned URL is invalid")
+            }
+            
+            manifest[encryptedAssetVersion.quality] = (url, encryptedAssetVersion.encryptedData)
+        }
+        
+        return manifest
     }
     
     public func deleteAssets(withGlobalIdentifiers globalIdentifiers: [GlobalIdentifier],

@@ -858,93 +858,62 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func upload(
-        serverAsset: SHServerAsset,
-        asset: any SHEncryptedAsset,
-        filterVersions: [SHAssetQuality]?
-    ) async throws {
+    func uploadAsset(
+        with globalIdentifier: GlobalIdentifier,
+        versionsDataManifest: [SHAssetQuality: (URL, Data)],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        var errors = [Error]()
+        let dispatchGroup = DispatchGroup()
         
-        for encryptedAssetVersion in asset.encryptedVersions.values {
-            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
-                continue
-            }
+        for (quality, tuple) in versionsDataManifest {
+            let versionName = quality.rawValue
+            let url = tuple.0
+            let data = tuple.1
             
-            log.info("[S3] uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            dispatchGroup.enter()
             
-            let serverAssetVersion = serverAsset.versions.first { sav in
-                sav.versionName == encryptedAssetVersion.quality.rawValue
-            }
-            guard let serverAssetVersion = serverAssetVersion else {
-                throw SHHTTPError.ClientError.badRequest("[S3] invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
-            }
-            
-            guard let url = URL(string: serverAssetVersion.presignedURL) else {
-                throw SHHTTPError.ServerError.unexpectedResponse("[S3] presigned URL is invalid")
-            }
-            
-            if encryptedAssetVersion.quality == .lowResolution {
-                try await withUnsafeThrowingContinuation { continuation in
-                    S3Proxy.save(
-                        encryptedAssetVersion.encryptedData,
-                        usingPresignedURL: url
-                    ) {
-                        result in
-                        switch result {
-                            
+            S3Proxy.saveInBackground(
+                data,
+                usingPresignedURL: url,
+                sessionIdentifier: [
+                    self.requestor.identifier,
+                    globalIdentifier,
+                    versionName
+                ].joined(separator: "::")
+            ) {
+                result in
+                
+                switch result {
+                case .success:
+                    self.markAsset(
+                        with: globalIdentifier,
+                        quality: quality,
+                        as: .completed
+                    ) { markResult in
+                        switch markResult {
                         case .success:
-                            log.debug("[S3] asset \(serverAsset.globalIdentifier) version \(serverAssetVersion.versionName) upload succeeded to \(url)")
-                            self.markAsset(
-                                with: asset.globalIdentifier,
-                                quality: encryptedAssetVersion.quality,
-                                as: .completed
-                            ) { markResult in
-                                switch markResult {
-                                case .success:
-                                    continuation.resume()
-                                case .failure(let error):
-                                    continuation.resume(throwing: error)
-                                }
-                            }
-                        
+                            log.debug("[S3] asset \(globalIdentifier) version \(versionName) upload succeeded to \(url)")
                         case .failure(let error):
-                            log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
-                            continuation.resume(throwing: error)
+                            log.error("[S3] error uploading \(versionName) asset \(globalIdentifier) to \(url): \(error.localizedDescription)")
                         }
                     }
+                    
+                case .failure(let error):
+                    log.error("[S3] error uploading \(versionName) asset \(globalIdentifier) to \(url): \(error.localizedDescription)")
+                    
+                    errors.append(error)
                 }
+                
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            if errors.isEmpty {
+                completionHandler(.success(()))
             } else {
-                S3Proxy.saveInBackground(
-                    encryptedAssetVersion.encryptedData,
-                    usingPresignedURL: url,
-                    sessionIdentifier: [
-                        self.requestor.identifier,
-                        serverAsset.globalIdentifier,
-                        serverAssetVersion.versionName
-                    ].joined(separator: "::")
-                ) {
-                    result in
-                    
-                    /// This is the callback that will get executed when the upload in background finishes
-                    
-                    switch result {
-                    case .success:
-                        self.markAsset(
-                            with: asset.globalIdentifier,
-                            quality: encryptedAssetVersion.quality,
-                            as: .completed
-                        ) { markResult in
-                            switch markResult {
-                            case .success:
-                                log.debug("[S3] asset \(serverAsset.globalIdentifier) version \(serverAssetVersion.versionName) upload succeeded to \(url)")
-                            case .failure(let error):
-                                log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
-                            }
-                        }
-                    
-                    case .failure(let error):
-                        log.error("[S3] error uploading \(serverAssetVersion.versionName) asset \(serverAsset.globalIdentifier) to \(url): \(error.localizedDescription)")
-                    }
-                }
+                completionHandler(.failure(errors.first!))
             }
         }
     }

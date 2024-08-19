@@ -174,11 +174,11 @@ public protocol SHServerAPI {
     // MARK: Assets Uploading
     
     /// Upload encrypted asset versions data to the CDN.
-    func upload(
-        serverAsset: SHServerAsset,
-        asset: any SHEncryptedAsset,
-        filterVersions: [SHAssetQuality]?
-    ) async throws
+    func uploadAsset(
+        with globalIdentifier: GlobalIdentifier,
+        versionsDataManifest: [SHAssetQuality: (URL, Data)],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
     
     /// Mark encrypted asset versions data as uploaded to the CDN.
     /// - Parameters:
