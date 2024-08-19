@@ -136,7 +136,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
-        /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
+        /// - haven't started upload
         ///
         Task(priority: qos.toTaskPriority()) {
             guard !self.isCancelled else {
