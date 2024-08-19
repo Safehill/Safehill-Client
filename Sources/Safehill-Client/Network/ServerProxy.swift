@@ -845,12 +845,6 @@ extension SHServerProxy {
         }
     }
     
-    func getLocalSharingInfo(forAssetIdentifier globalIdentifier: String,
-                             for users: [any SHServerUser],
-                             completionHandler: @escaping (Result<SHShareableEncryptedAsset?, Error>) -> ()) {
-        self.localServer.getSharingInfo(forAssetIdentifier: globalIdentifier, for: users, completionHandler: completionHandler)
-    }
-    
     func share(_ asset: SHShareableEncryptedAsset,
                isPhotoMessage: Bool,
                suppressNotification: Bool = false,

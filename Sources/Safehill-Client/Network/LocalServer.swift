@@ -1540,9 +1540,6 @@ struct LocalServer : SHServerAPI {
         
         for sharedVersion in asset.sharedVersions {
             let sharedVersionDetails: [String: String] = [
-                "senderEncryptedSecret": sharedVersion.encryptedSecret.base64EncodedString(),
-                "ephemeralPublicKey": sharedVersion.ephemeralPublicKey.base64EncodedString(),
-                "publicSignature": sharedVersion.publicSignature.base64EncodedString(),
                 "groupId": asset.groupId,
                 "groupCreationDate": Date().iso8601withFractionalSeconds
             ]
@@ -1627,107 +1624,6 @@ struct LocalServer : SHServerAPI {
             } else {
                 log.error("some errors unsharing: \(errors)")
                 completionHandler(.failure(SHAssetStoreError.failedToUnshareSomeAssets))
-            }
-        }
-    }
-    
-    public func getSharingInfo(forAssetIdentifier globalIdentifier: GlobalIdentifier,
-                               for users: [SHServerUser],
-                               completionHandler: @escaping (Result<SHShareableEncryptedAsset?, Error>) -> ()) {
-        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        var condition = KBGenericCondition(value: true)
-        for user in users {
-            let start = KBGenericCondition(.beginsWith, value: [
-                "receiver",
-                user.identifier
-            ].joined(separator: "::"))
-            let end = KBGenericCondition(.endsWith, value: globalIdentifier)
-            condition = condition.or(start.and(end))
-        }
-        
-        assetStore.dictionaryRepresentation(forKeysMatching: condition) { result in
-            switch result {
-            case .success(let keyValues):
-                var shareableVersions = [SHShareableEncryptedAssetVersion]()
-                
-                guard keyValues.count > 0 else {
-                    completionHandler(.success(nil))
-                    return
-                }
-                
-                var groupId: String? = nil
-                
-                for (k, v) in keyValues {
-                    guard let value = v as? [String: Any?] else {
-                        completionHandler(.failure(KBError.unexpectedData(v)))
-                        return
-                    }
-                    guard let range = k.range(of: "receiver::") else {
-                        completionHandler(.failure(KBError.unexpectedData(k)))
-                        return
-                    }
-                    
-                    let userAssetIds = ("" + k[range.upperBound...]).components(separatedBy: "::")
-                    guard userAssetIds.count == 3 else {
-                        completionHandler(.failure(KBError.unexpectedData(k)))
-                        return
-                    }
-                    
-                    let (userPublicId, qualityRaw) = (userAssetIds[0], userAssetIds[1])
-                    
-                    guard let quality = SHAssetQuality(rawValue: qualityRaw) else {
-                        completionHandler(.failure(KBError.unexpectedData(qualityRaw)))
-                        return
-                    }
-                    guard let versionEncryptedSecretBase64 = value["senderEncryptedSecret"] as? String,
-                          let encryptedSecret = Data(base64Encoded: versionEncryptedSecretBase64) else {
-                        completionHandler(.failure(KBError.unexpectedData(value)))
-                        return
-                    }
-                    guard let ephemeralPublicKeyBase64 = value["ephemeralPublicKey"] as? String,
-                          let ephemeralPublicKey = Data(base64Encoded: ephemeralPublicKeyBase64) else {
-                        completionHandler(.failure(KBError.unexpectedData(value)))
-                        return
-                    }
-                    guard let publicSignatureBase64 = value["publicSignature"] as? String,
-                          let publicSignature = Data(base64Encoded: publicSignatureBase64) else {
-                        completionHandler(.failure(KBError.unexpectedData(value)))
-                        return
-                    }
-                    guard let gid = value["groupId"] as? String else {
-                        completionHandler(.failure(KBError.unexpectedData(value)))
-                        return
-                    }
-                    /// Although groupId is stored as a property of version, it is safe to coalesce,
-                    /// as all versions should have the same groupId
-                    groupId = gid
-                    
-                    let shareableVersion = SHGenericShareableEncryptedAssetVersion(
-                        quality: quality,
-                        userPublicIdentifier: userPublicId,
-                        encryptedSecret: encryptedSecret,
-                        ephemeralPublicKey: ephemeralPublicKey,
-                        publicSignature: publicSignature
-                    )
-                    shareableVersions.append(shareableVersion)
-                }
-                
-                guard let groupId = groupId else {
-                    completionHandler(.failure(KBError.unexpectedData(groupId)))
-                    return
-                }
-                
-                completionHandler(.success(SHGenericShareableEncryptedAsset(
-                    globalIdentifier: globalIdentifier,
-                    sharedVersions: shareableVersions,
-                    groupId: groupId
-                )))
-            case .failure(let err):
-                completionHandler(.failure(err))
             }
         }
     }
