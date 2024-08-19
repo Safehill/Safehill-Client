@@ -73,6 +73,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 let unprocessed = descs.filter({
                     Self.alreadyProcessed.contains($0.globalIdentifier) == false
                 })
+                
+                self.log.debug("[\(type(of: self))] unprocessed gids \(unprocessed.map({ $0.globalIdentifier }))")
+                
                 completionHandler(.success(unprocessed))
             case .failure(let err):
                 completionHandler(.failure(err))
