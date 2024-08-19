@@ -158,13 +158,13 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
 #if DEBUG
             if filteredDescriptors.count != descriptors.count {
                 let blacklisted = descriptors.filter {
-                    (blacklistedAssets[$0.globalIdentifier] ?? false) == false
+                    (blacklistedAssets[$0.globalIdentifier] ?? false) == true
                 }
                 if blacklisted.isEmpty == false {
                     log.debug("[\(type(of: self))] filtering out blacklisted gids \(blacklisted.map({ $0.globalIdentifier }))")
                 }
                 let incomplete = descriptors.filter {
-                    $0.uploadState == .completed || $0.uploadState == .partial
+                    $0.uploadState != .notStarted || $0.uploadState == .failed
                 }
                 if incomplete.isEmpty == false {
                     log.debug("[\(type(of: self))] filtering out incomplete gids \(incomplete.map({ $0.globalIdentifier }))")
