@@ -1088,6 +1088,7 @@ struct RemoteServer : SHServerAPI {
     ) {
         let parameters = [
             "byUsersPublicIdentifiers": users.map({ $0.identifier }),
+            "byInvitedPhoneNumbers": []
         ] as [String: Any]
         
         self.post("threads/retrieve", parameters: parameters, requiresAuthentication: true) {
