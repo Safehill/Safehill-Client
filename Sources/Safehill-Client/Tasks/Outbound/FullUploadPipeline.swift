@@ -54,7 +54,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         })
         
         let fetchOperation = SHLocalFetchOperation(
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: 0,
             photoIndexer: self.photoIndexer
         )
@@ -68,7 +68,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let uploadOperation = SHUploadOperation(
             user: self.user,
             localAssetStoreController: SHLocalAssetStoreController(user: self.user),
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: 0
         )
         
@@ -195,7 +195,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         }
         
         let fetchOperation = SHLocalFetchOperation(
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: limit ?? 0,
             photoIndexer: photoIndexer
         )
@@ -245,7 +245,7 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let uploadOperation = SHUploadOperation(
             user: self.user,
             localAssetStoreController: SHLocalAssetStoreController(user: self.user),
-            delegates: assetsDelegates,
+            assetsDelegates: assetsDelegates,
             limitPerRun: 0
         )
         log.debug("Running UPLOAD step")

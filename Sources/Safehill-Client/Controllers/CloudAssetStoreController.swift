@@ -38,8 +38,8 @@ struct SHAssetStoreController {
         with groupId: String,
         filterVersions: [SHAssetQuality]? = nil,
         force: Bool
-    ) async throws -> SHServerAsset
-    {
+    ) throws -> SHServerAsset {
+        
         let serverAsset = try self.createRemoteAsset(
             encryptedAsset,
             groupId: groupId,
@@ -48,7 +48,7 @@ struct SHAssetStoreController {
         )
         
         do {
-            try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
+            try self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
         } catch {
             try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
             throw error
@@ -135,10 +135,10 @@ extension SHAssetStoreController {
         serverAsset: SHServerAsset,
         asset: any SHEncryptedAsset,
         filterVersions: [SHAssetQuality]?
-    ) async throws {
+    ) throws {
         log.info("uploading asset \(asset.globalIdentifier) to the CDN")
         
-        try await self.user.serverProxy.upload(
+        try self.user.serverProxy.upload(
             serverAsset: serverAsset,
             asset: asset,
             filterVersions: filterVersions

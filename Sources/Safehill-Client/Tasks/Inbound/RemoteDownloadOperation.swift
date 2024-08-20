@@ -136,7 +136,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// Filter out the ones:
         /// - whose assets were blacklisted
         /// - whose users were blacklisted
-        /// - haven't started upload (`.notStarted` is only relevant for the `SHLocalActivityRestoreOperation`)
+        /// - haven't started upload
         ///
         Task(priority: qos.toTaskPriority()) {
             guard !self.isCancelled else {
@@ -152,8 +152,26 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             
             let filteredDescriptors = descriptors.filter {
                 (blacklistedAssets[$0.globalIdentifier] ?? false) == false
-                && $0.uploadState == .completed || $0.uploadState == .partial
+                && $0.uploadState != .failed
+                && $0.uploadState != .notStarted
             }
+            
+#if DEBUG
+            if filteredDescriptors.count != descriptors.count {
+                let blacklisted = descriptors.filter {
+                    (blacklistedAssets[$0.globalIdentifier] ?? false) == true
+                }
+                if blacklisted.isEmpty == false {
+                    log.debug("[\(type(of: self))] filtering out blacklisted gids \(blacklisted.map({ $0.globalIdentifier }))")
+                }
+                let incomplete = descriptors.filter {
+                    $0.uploadState == .notStarted || $0.uploadState == .failed
+                }
+                if incomplete.isEmpty == false {
+                    log.debug("[\(type(of: self))] filtering out incomplete gids \(incomplete.map({ $0.globalIdentifier }))")
+                }
+            }
+#endif
             
             guard filteredDescriptors.count > 0 else {
                 let downloaderDelegates = self.downloaderDelegates
@@ -199,6 +217,18 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         }
                         return true
                     }
+                    
+#if DEBUG
+                    if filteredDescriptorsFromRetrievableUsers.count != filteredDescriptors.count {
+                        let filtered = filteredDescriptorsFromRetrievableUsers.map({ $0.globalIdentifier })
+                        let unfiltered = filteredDescriptors
+                            .map({ $0.globalIdentifier })
+                            .filter {
+                                filtered.contains($0) == false
+                            }
+                        self.log.debug("[\(type(of: self))] filtering out gids with unretrievable users \(unfiltered)")
+                    }
+#endif
                     
                     ///
                     /// Call the delegate with the full manifest of whitelisted assets.
@@ -638,7 +668,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         /// (2) is handled by downloading them as regular downloads from other users
         ///
-        /// For (1), identification `didIdentify(globalToLocalAssets:)` happens in `mergeDescriptorsWithApplePhotosAssets(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server, add items to the success queue (upload and share) and call the restoration delegate.
+        /// For (1), identification `didIdentify(globalToLocalAssets:)` happens in `filterOutMatchesInPhotoLibrary(descriptorsByGlobalIdentifier:filteringKeys:completionHandler:)`, so we only need to take care of adding the asset to the local server, add items to the success queue (upload and share) and call the restoration delegate.
         ///
         
         /// 
