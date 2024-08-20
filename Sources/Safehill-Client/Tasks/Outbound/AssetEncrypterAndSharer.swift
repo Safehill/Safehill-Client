@@ -13,29 +13,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
     }
     
-    public var threadsDelegates: [SHInteractionsSyncingDelegate]
-    
-    @available(*, deprecated, renamed: "init(user:assetsDelegates:threadsDelegates:limitPerRun:imageManager:)", message: "Needs to be initialized with threads delegates")
-    override init(
-        user: SHAuthenticatedLocalUser,
-        assetsDelegates: [SHOutboundAssetOperationDelegate],
-        limitPerRun limit: Int,
-        imageManager: PHCachingImageManager? = nil
-    ) {
-        fatalError("Unsupported initializer")
-    }
-    
-    init(
-        user: SHAuthenticatedLocalUser,
-        assetsDelegates: [SHOutboundAssetOperationDelegate],
-        threadsDelegates: [SHInteractionsSyncingDelegate],
-        limitPerRun limit: Int,
-        imageManager: PHCachingImageManager? = nil
-    ) {
-        self.threadsDelegates = threadsDelegates
-        super.init(user: user, assetsDelegates: assetsDelegates, limitPerRun: limit, imageManager: imageManager)
-    }
-    
     public override func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
         guard let data = item.content as? Data else {
             throw KBError.unexpectedData(item.content)
@@ -210,13 +187,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             ) {
                 setupThreadResult in
                 switch setupThreadResult {
-                case .success(let conversationThread):
-                    let threadsDelegates = self.threadsDelegates
-                    self.delegatesQueue.async {
-                        for delegate in threadsDelegates {
-                            delegate.didAddThread(conversationThread)
-                        }
-                    }
+                case .success:
+                    break
                 case .failure(let error):
                     errorInitializingThread = error
                 }

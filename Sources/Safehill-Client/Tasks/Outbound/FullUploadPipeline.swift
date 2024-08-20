@@ -15,19 +15,16 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     
     public let user: SHAuthenticatedLocalUser
     public var assetsDelegates: [SHOutboundAssetOperationDelegate]
-    public var threadsDelegates: [SHInteractionsSyncingDelegate]
     var photoIndexer: SHPhotosIndexer
     
     let parallelization: ParallelizationOption
     
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
-                threadsDelegates: [SHInteractionsSyncingDelegate],
                 parallelization: ParallelizationOption = .conservative,
                 photoIndexer: SHPhotosIndexer) {
         self.user = user
         self.assetsDelegates = assetsDelegates
-        self.threadsDelegates = threadsDelegates
         self.parallelization = parallelization
         self.photoIndexer = photoIndexer
     }
@@ -78,7 +75,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            threadsDelegates: threadsDelegates,
             limitPerRun: 0
         )
         
@@ -274,7 +270,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         let shareOperation = SHEncryptAndShareOperation(
             user: self.user,
             assetsDelegates: assetsDelegates,
-            threadsDelegates: threadsDelegates,
             limitPerRun: 0
         )
         log.debug("Running SHARE step")
