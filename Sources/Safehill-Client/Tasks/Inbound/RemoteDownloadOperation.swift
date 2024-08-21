@@ -431,7 +431,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         /// Get the `.lowResolution` assets data from the remote server
         ///
-        self.serverProxy.remoteServer.getAssets(
+        self.serverProxy.getRemoteAssets(
             withGlobalIdentifiers: globalIdentifiersSharedBySelf,
             versions: [.lowResolution]
         ) { fetchResult in
@@ -446,7 +446,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 self.serverProxy.localServer.create(
                     assets: Array(assetsDict.values),
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    uploadState: .completed
+                    uploadState: .completed,
+                    overwriteFileIfExists: true
                 ) { localCreationResult in
                     switch localCreationResult {
                     case .success:

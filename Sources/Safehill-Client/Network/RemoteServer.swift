@@ -640,7 +640,7 @@ struct RemoteServer : SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(withGlobalIdentifiers assetIdentifiers: [String],
                    versions: [SHAssetQuality]? = nil,
-                   completionHandler: @escaping (Swift.Result<[GlobalIdentifier: SHEncryptedAsset], Error>) -> ()) {
+                   completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()) {
         var parameters = [
             "globalIdentifiers": assetIdentifiers,
         ] as [String : Any]
@@ -682,7 +682,8 @@ struct RemoteServer : SHServerAPI {
                         if errorsDict.isEmpty {
                             completionHandler(.success(await manifest.dictionary))
                         } else {
-                            completionHandler(.failure(SHHTTPError.ServerError.generic("Error downloading from S3 asset identifiers \(errorsDict)")))
+                            log.critical("error S3 downloading assets identifiers \(errorsDict.keys)")
+                            completionHandler(.success(await manifest.dictionary))
                         }
                     }
                 }

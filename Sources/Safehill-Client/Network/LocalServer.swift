@@ -1056,10 +1056,19 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    @available(*, deprecated, message: "force create only makes sense for Remote server")
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
-                force: Bool = true,
+                force: Bool,
+                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func create(assets: [any SHEncryptedAsset],
+                groupId: String,
+                filterVersions: [SHAssetQuality]?,
+                overwriteFileIfExists: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         
         var assets = assets
@@ -1105,13 +1114,15 @@ struct LocalServer : SHServerAPI {
         self.create(assets: assets,
                     descriptorsByGlobalIdentifier: descriptorsByGlobalId,
                     uploadState: .started,
+                    overwriteFileIfExists: overwriteFileIfExists,
                     completionHandler: completionHandler)
     }
     
-    internal func createAssetDataFile(
+    private func createAssetDataFile(
         globalIdentifier: GlobalIdentifier,
         quality: SHAssetQuality,
-        content encryptedData: Data
+        content encryptedData: Data,
+        overwriteIfExists: Bool
     ) throws -> URL {
         let assetFolderURL: URL, versionDataURL: URL
         
@@ -1130,8 +1141,13 @@ struct LocalServer : SHServerAPI {
         let fileManager = FileManager.default
         
         if fileManager.fileExists(atPath: versionDataURL.path) {
-            log.warning("a file exists at \(versionDataURL.path). overwriting it")
-            try? fileManager.removeItem(at: versionDataURL)
+            if overwriteIfExists {
+                log.warning("a file exists at \(versionDataURL.path). overwriting it")
+                try? fileManager.removeItem(at: versionDataURL)
+            } else {
+                log.warning("a file exists at \(versionDataURL.path). returning it")
+                return versionDataURL
+            }
         }
         
         do {
@@ -1156,6 +1172,7 @@ struct LocalServer : SHServerAPI {
     func create(assets: [any SHEncryptedAsset],
                 descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
                 uploadState: SHAssetDescriptorUploadState,
+                overwriteFileIfExists: Bool = false,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.isEmpty == false else {
             return completionHandler(.success([]))
@@ -1304,7 +1321,8 @@ struct LocalServer : SHServerAPI {
                     versionDataURL = try self.createAssetDataFile(
                         globalIdentifier: asset.globalIdentifier,
                         quality: encryptedVersion.quality,
-                        content: encryptedVersion.encryptedData
+                        content: encryptedVersion.encryptedData,
+                        overwriteIfExists: overwriteFileIfExists
                     )
                     log.debug("saved asset data to path \(versionDataURL.path)")
                 } catch {

@@ -669,7 +669,7 @@ extension SHServerProxy {
                 for (assetId, versionsToFetchRemotely) in assetVersionsToFetch {
                     
                     dispatchGroup.enter()
-                    self.remoteServer.getAssets(
+                    self.getRemoteAssets(
                         withGlobalIdentifiers: [assetId],
                         versions: versionsToFetchRemotely
                     ) { result in
@@ -737,7 +737,8 @@ extension SHServerProxy {
                     self.localServer.create(
                         assets: Array(encryptedAssetsToCreate),
                         descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                        uploadState: .completed
+                        uploadState: .completed,
+                        overwriteFileIfExists: false
                     ) { result in
                         if case .failure(let err) = result {
                             log.warning("could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
@@ -746,6 +747,18 @@ extension SHServerProxy {
                 }
             }
         }
+    }
+    
+    func getRemoteAssets(
+        withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
+        versions requestedVersions: [SHAssetQuality],
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()
+    ) {
+        self.remoteServer.getAssets(
+            withGlobalIdentifiers: assetIdentifiers,
+            versions: requestedVersions,
+            completionHandler: completionHandler
+        )
     }
     
     func upload(
