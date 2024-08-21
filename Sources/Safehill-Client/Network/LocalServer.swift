@@ -1023,16 +1023,15 @@ struct LocalServer : SHServerAPI {
             assetCondition = c
         }
         
-        var newResult = partialResult
-        
         assetStore.dictionaryRepresentation(forKeysMatching: prefixCondition.and(assetCondition)) {
             (result: Result) in
             switch result {
             case .success(let keyValues):
                 do {
+                    var newResult = partialResult
                     newResult.merge(
                         try SHGenericEncryptedAsset.fromDicts(keyValues),
-                        uniquingKeysWith: { (_, b) in return b }
+                        uniquingKeysWith: { (_, newValue) in return newValue }
                     )
                     
                     self.getAssetsChunks(
