@@ -610,7 +610,7 @@ struct LocalServer : SHServerAPI {
                 recipientDetailsDict = try assetStore
                     .dictionaryRepresentation(forKeysMatching: receiverCondition)
                     .toRecipientSharingDetails()
-            } catch KBError.serializationError {
+            } catch {
                 log.critical("Serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten")
                 do {
                     let _ = try assetStore.removeValues(forKeysMatching: receiverCondition)
@@ -618,9 +618,6 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to remove keys matching \(receiverCondition) from DB. \(error.localizedDescription)")
                 }
                 recipientDetailsDict = [:]
-            } catch {
-                log.critical("Serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten. \(error.localizedDescription)")
-                throw error
             }
             
             for (key, value) in recipientDetailsDict {
@@ -689,7 +686,7 @@ struct LocalServer : SHServerAPI {
                 keyValues = try assetStore
                     .dictionaryRepresentation(forKeysMatching: condition)
                     .toVersionMetadata()
-            } catch KBError.serializationError {
+            } catch {
                 log.critical("Serialization error when reading from the assets DB. Descriptors will be fetched from server again and overwritten. Removing")
                 do {
                     let _ = try assetStore.removeValues(forKeysMatching: condition)
@@ -697,9 +694,6 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to remove keys matching \(condition) from DB. \(error.localizedDescription)")
                 }
                 keyValues = [:]
-            } catch {
-                log.critical("Serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten: \(error.localizedDescription)")
-                throw error
             }
             
             for v in keyValues.values {
