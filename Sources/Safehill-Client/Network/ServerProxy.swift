@@ -409,6 +409,50 @@ extension SHServerProxy {
         }
     }
     
+    func getAssetDescriptor(
+        for globalIdentifier: GlobalIdentifier,
+        filteringGroups: [String]? = nil,
+        completionHandler: @escaping (Result<(any SHAssetDescriptor)?, Error>) -> ()
+    ) {
+        self.getLocalAssetDescriptors(
+            for: [globalIdentifier],
+            after: nil,
+            filteringGroups: filteringGroups
+        ) { result in
+            switch result {
+            case .failure(let err):
+                log.warning("no local asset descriptor for asset \(globalIdentifier) in local server. Trying remote. \(err.localizedDescription)")
+                self.getRemoteAssetDescriptors(
+                    for: [globalIdentifier],
+                    after: nil
+                ) { remoteResult in
+                    switch remoteResult {
+                    case .success(let descriptors):
+                        completionHandler(.success(descriptors.first))
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+            case .success(let descriptors):
+                if let descriptor = descriptors.first {
+                    completionHandler(.success(descriptor))
+                } else {
+                    self.getRemoteAssetDescriptors(
+                        for: [globalIdentifier],
+                        after: nil
+                    ) { remoteResult in
+                        switch remoteResult {
+                        case .success(let descriptors):
+                            completionHandler(.success(descriptors.first))
+                        case .failure(let error):
+                            completionHandler(.failure(error))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     /// Retrieve asset descriptors from the local server
     ///
     /// - Parameters:
@@ -453,8 +497,8 @@ extension SHServerProxy {
     /// - Parameter completionHandler: the callback method
     func getRemoteAssetDescriptors(
         for globalIdentifiers: [GlobalIdentifier]? = nil,
-        filteringGroups: [String]? = nil,
         after: Date?,
+        filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         let handleServerResult = { (serverResult: Result<[any SHAssetDescriptor], Error>) in

@@ -142,17 +142,14 @@ public struct SHLocalAssetStoreController {
                 completionHandler: completionHandler
             )
         } else {
-            self.serverProxy.getLocalAssetDescriptors(
-                for: [encryptedAsset.globalIdentifier],
-                useCache: true
+            self.serverProxy.getAssetDescriptor(
+                for: encryptedAsset.globalIdentifier
             ) { result in
                 switch result {
                 
-                case .success(let descriptors):
-                    guard let foundDescriptor = descriptors.first(
-                        where: { $0.globalIdentifier == encryptedAsset.globalIdentifier }
-                    ) else {
-                        completionHandler(.failure(SHBackgroundOperationError.missingAssetInLocalServer(encryptedAsset.globalIdentifier)))
+                case .success(let descriptor):
+                    guard let foundDescriptor = descriptor else {
+                        completionHandler(.failure(SHAssetStoreError.noEntries))
                         return
                     }
                     self.decryptedAssetInternal(

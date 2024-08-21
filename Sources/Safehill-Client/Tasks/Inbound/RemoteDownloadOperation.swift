@@ -65,8 +65,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         self.serverProxy.getRemoteAssetDescriptors(
             for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
-            filteringGroups: groupIds,
-            after: date ?? Self.lastFetchDate
+            after: date ?? Self.lastFetchDate,
+            filteringGroups: groupIds
         ) { remoteResult in
             switch remoteResult {
             case .success(let remoteDescriptors):
