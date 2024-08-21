@@ -1023,6 +1023,8 @@ struct LocalServer : SHServerAPI {
             assetCondition = c
         }
         
+        log.debug("feching local server asset versions \(versions.map({ $0.rawValue })) chunk \(index) \(String(describing: assetIdentifiersChunk[index]))")
+        
         assetStore.dictionaryRepresentation(forKeysMatching: prefixCondition.and(assetCondition)) {
             (result: Result) in
             switch result {
