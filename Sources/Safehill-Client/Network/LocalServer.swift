@@ -590,7 +590,7 @@ struct LocalServer : SHServerAPI {
                 /// 2) version quality
                 /// 3) asset identifier
                 
-                if components.count == 4 {
+                if components.count == 5 {
                     let sharedByUserId = components[1]
                     let globalIdentifier = components[3]
                     senderInfoDict[globalIdentifier] = sharedByUserId
@@ -632,7 +632,7 @@ struct LocalServer : SHServerAPI {
                 let groupId = value.groupId
                 let assetGid: GlobalIdentifier
                 
-                if components.count == 4 {
+                if components.count == 5 {
                     assetGid = components[3]
                     if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
                         let receiverUser = components[1]
