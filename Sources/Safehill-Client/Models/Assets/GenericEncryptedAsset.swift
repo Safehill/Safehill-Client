@@ -66,11 +66,16 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
             
             guard keyComponents.count == 2,
                   let quality = SHAssetQuality(rawValue: keyComponents[0]),
-                  let metadata = value as? DBSecureSerializableAssetVersionMetadata
+                  let rawMetadata = value as? Data
             else {
                 if keyComponents.first != "data" {
                     log.error("invalid asset data key or value format for key \(key)")
                 }
+                continue
+            }
+            
+            guard let metadata = try? DBSecureSerializableAssetVersionMetadata.from(rawMetadata) else {
+                log.error("failed to deserialize asset version metadata for key \(key)")
                 continue
             }
             

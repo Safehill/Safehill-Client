@@ -57,38 +57,38 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         let uploadStateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.uploadState.rawValue) as? String
         
         guard let globalIdentifier = globalIdentifier else {
-            log.error("unexpected value for globalIdentifier when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+            log.error("unexpected value for globalIdentifier when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
         
         guard let qualityStr,
               let quality = SHAssetQuality(rawValue: qualityStr) else {
-            log.error("unexpected value for quality when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+            log.error("unexpected value for quality when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
         
         guard let senderEncryptedSecretBase64,
               let senderEncryptedSecret = Data(base64Encoded: senderEncryptedSecretBase64) else {
-            log.error("unexpected value for senderEncryptedSecret when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+            log.error("unexpected value for senderEncryptedSecret when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
         
         guard let publicKeyBase64,
               let publicKey = Data(base64Encoded: publicKeyBase64) else {
-            log.error("unexpected value for publicKey when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+            log.error("unexpected value for publicKey when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
         
         guard let publicSignatureBase64,
               let publicSignature = Data(base64Encoded: publicSignatureBase64) else {
-            log.error("unexpected value for publicSignature when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+            log.error("unexpected value for publicSignature when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
         
         let creationDate: Date?
         if let creationDateStr {
             guard let date = creationDateStr.iso8601withFractionalSeconds else {
-                log.error("unexpected value for creationDate when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+                log.error("unexpected value for creationDate when decoding DBSecureSerializableAssetVersionMetadata object")
                 return nil
             }
             creationDate = date
@@ -98,7 +98,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         
         guard let uploadStateStr,
               let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) else {
-            log.error("unexpected value for uploadState when decoding DBSecureSerializableAssetRecipientSharingDetails object")
+            log.error("unexpected value for uploadState when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
         
@@ -124,31 +124,25 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         coder.encode(creationDate?.iso8601withFractionalSeconds, forKey: CodingKeys.creationDate.rawValue)
         coder.encode(uploadState.rawValue, forKey: CodingKeys.uploadState.rawValue)
     }
-}
 
-
-extension KBKVPairs {
-    func toVersionMetadata() throws -> [String: DBSecureSerializableAssetVersionMetadata] {
-        
-        return try self.mapValues { value in
-            guard let serialized = value as? Data else {
-                throw SHBackgroundOperationError.unexpectedData(value)
-            }
-            
-            let unarchiver: NSKeyedUnarchiver
-            if #available(macOS 10.13, *) {
-                unarchiver = try NSKeyedUnarchiver(forReadingFrom: serialized)
-            } else {
-                unarchiver = NSKeyedUnarchiver(forReadingWith: serialized)
-            }
-            guard let result = unarchiver.decodeObject(
-                of: DBSecureSerializableAssetVersionMetadata.self,
-                forKey: NSKeyedArchiveRootObjectKey
-            ) else {
-                throw SHBackgroundOperationError.unexpectedData(serialized)
-            }
-            
-            return result
+    static func from(_ any: Any) throws -> DBSecureSerializableAssetVersionMetadata {
+        guard let serialized = any as? Data else {
+            throw SHBackgroundOperationError.unexpectedData(any)
         }
+        
+        let unarchiver: NSKeyedUnarchiver
+        if #available(macOS 10.13, *) {
+            unarchiver = try NSKeyedUnarchiver(forReadingFrom: serialized)
+        } else {
+            unarchiver = NSKeyedUnarchiver(forReadingWith: serialized)
+        }
+        guard let result = unarchiver.decodeObject(
+            of: DBSecureSerializableAssetVersionMetadata.self,
+            forKey: NSKeyedArchiveRootObjectKey
+        ) else {
+            throw SHBackgroundOperationError.unexpectedData(serialized)
+        }
+        
+        return result
     }
 }

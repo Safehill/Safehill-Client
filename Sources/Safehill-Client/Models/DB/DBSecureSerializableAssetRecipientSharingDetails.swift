@@ -49,7 +49,7 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
         let senderEncryptedSecretBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderEncryptedSecret.rawValue) as? String
         let ephemeralPublicKeyBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.ephemeralPublicKey.rawValue) as? String
         let publicSignatureBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicSignature.rawValue)
-         as? String
+        as? String
         
         guard let groupId = groupId else {
             log.error("unexpected value for groupId when decoding DBSecureSerializableAssetRecipientSharingDetails object")
@@ -131,31 +131,25 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
         coder.encode(ephemeralPublicKey?.base64EncodedString(), forKey: CodingKeys.ephemeralPublicKey.rawValue)
         coder.encode(publicSignature?.base64EncodedString(), forKey: CodingKeys.publicSignature.rawValue)
     }
-}
-
-
-extension KBKVPairs {
-    func toRecipientSharingDetails() throws -> [String: DBSecureSerializableAssetRecipientSharingDetails] {
-        
-        return try self.mapValues { value in
-            guard let serialized = value as? Data else {
-                throw SHBackgroundOperationError.unexpectedData(value)
-            }
-            
-            let unarchiver: NSKeyedUnarchiver
-            if #available(macOS 10.13, *) {
-                unarchiver = try NSKeyedUnarchiver(forReadingFrom: serialized)
-            } else {
-                unarchiver = NSKeyedUnarchiver(forReadingWith: serialized)
-            }
-            guard let result = unarchiver.decodeObject(
-                of: DBSecureSerializableAssetRecipientSharingDetails.self,
-                forKey: NSKeyedArchiveRootObjectKey
-            ) else {
-                throw SHBackgroundOperationError.unexpectedData(serialized)
-            }
-            
-            return result
+    
+    static func from(_ any: Any) throws -> DBSecureSerializableAssetRecipientSharingDetails {
+        guard let serialized = any as? Data else {
+            throw SHBackgroundOperationError.unexpectedData(any)
         }
+        
+        let unarchiver: NSKeyedUnarchiver
+        if #available(macOS 10.13, *) {
+            unarchiver = try NSKeyedUnarchiver(forReadingFrom: serialized)
+        } else {
+            unarchiver = NSKeyedUnarchiver(forReadingWith: serialized)
+        }
+        guard let result = unarchiver.decodeObject(
+            of: DBSecureSerializableAssetRecipientSharingDetails.self,
+            forKey: NSKeyedArchiveRootObjectKey
+        ) else {
+            throw SHBackgroundOperationError.unexpectedData(serialized)
+        }
+        
+        return result
     }
 }
