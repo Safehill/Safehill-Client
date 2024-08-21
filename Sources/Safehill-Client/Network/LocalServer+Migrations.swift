@@ -125,6 +125,8 @@ extension LocalServer {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
+        
+        completionHandler(.success(()))
     }
     
     ///
