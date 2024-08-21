@@ -564,10 +564,12 @@ extension SHServerProxy {
     ///   - synchronousFetch: whether or not we want all assets versions to be available before calling the callback (set to `true`), or have the callback called multiple times as asset versions are available (set to `false`)
     ///   - completionHandler: the callback, returning the `SHEncryptedAsset` objects keyed by asset identifier. Note that the output object might not have the same number of assets requested, as some of them might be deleted on the server
     ///
-    func getAssets(withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
-                   versions requestedVersions: [SHAssetQuality],
-                   synchronousFetch: Bool = true,
-                   completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()) {
+    func getAssetsAndCache(
+        withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
+        versions requestedVersions: [SHAssetQuality],
+        synchronousFetch: Bool = true,
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()
+    ) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
             return

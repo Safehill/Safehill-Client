@@ -1056,6 +1056,65 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    private static func assetVersionDataFile(
+        for globalIdentifier: GlobalIdentifier,
+        quality: SHAssetQuality
+    ) -> URL {
+        let assetVersionFolderURL: URL
+        
+        if #available(iOS 16.0, macOS 13.0, *) {
+            assetVersionFolderURL = Self.dataFolderURL
+                .appending(path: globalIdentifier)
+                .appending(path: quality.rawValue)
+        } else {
+            assetVersionFolderURL = Self.dataFolderURL
+                .appendingPathComponent(globalIdentifier)
+                .appendingPathComponent(quality.rawValue)
+        }
+        
+        return assetVersionFolderURL
+    }
+    
+    private func createAssetDataFile(
+        globalIdentifier: GlobalIdentifier,
+        quality: SHAssetQuality,
+        content encryptedData: Data,
+        overwriteIfExists: Bool
+    ) throws -> URL {
+        let versionDataURL = Self.assetVersionDataFile(for: globalIdentifier, quality: quality)
+        let assetFolderURL = versionDataURL.deletingLastPathComponent()
+        
+        let fileManager = FileManager.default
+        
+        if fileManager.fileExists(atPath: versionDataURL.path) {
+            if overwriteIfExists {
+                log.warning("a file exists at \(versionDataURL.path). overwriting it")
+                try? fileManager.removeItem(at: versionDataURL)
+            } else {
+                log.warning("a file exists at \(versionDataURL.path). returning it")
+                return versionDataURL
+            }
+        }
+        
+        do {
+            try fileManager.createDirectory(at: assetFolderURL, withIntermediateDirectories: true)
+        } catch {
+            log.error("failed to create directory at \(assetFolderURL.path). \(error.localizedDescription)")
+            throw error
+        }
+        
+        let created = fileManager.createFile(
+            atPath: versionDataURL.path,
+            contents: encryptedData
+        )
+        guard created else {
+            log.error("failed to create file at \(versionDataURL.path)")
+            throw SHLocalServerError.failedToCreateFile
+        }
+        
+        return versionDataURL
+    }
+    
     @available(*, deprecated, message: "force create only makes sense for Remote server")
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
@@ -1116,57 +1175,6 @@ struct LocalServer : SHServerAPI {
                     uploadState: .started,
                     overwriteFileIfExists: overwriteFileIfExists,
                     completionHandler: completionHandler)
-    }
-    
-    private func createAssetDataFile(
-        globalIdentifier: GlobalIdentifier,
-        quality: SHAssetQuality,
-        content encryptedData: Data,
-        overwriteIfExists: Bool
-    ) throws -> URL {
-        let assetFolderURL: URL, versionDataURL: URL
-        
-        if #available(iOS 16.0, macOS 13.0, *) {
-            assetFolderURL = Self.dataFolderURL
-                .appending(path: globalIdentifier)
-            versionDataURL = assetFolderURL
-                .appending(path: quality.rawValue)
-        } else {
-            assetFolderURL = Self.dataFolderURL
-                .appendingPathComponent(globalIdentifier)
-            versionDataURL = assetFolderURL
-                .appendingPathComponent(quality.rawValue)
-        }
-        
-        let fileManager = FileManager.default
-        
-        if fileManager.fileExists(atPath: versionDataURL.path) {
-            if overwriteIfExists {
-                log.warning("a file exists at \(versionDataURL.path). overwriting it")
-                try? fileManager.removeItem(at: versionDataURL)
-            } else {
-                log.warning("a file exists at \(versionDataURL.path). returning it")
-                return versionDataURL
-            }
-        }
-        
-        do {
-            try fileManager.createDirectory(at: assetFolderURL, withIntermediateDirectories: true)
-        } catch {
-            log.error("failed to create directory at \(assetFolderURL.path). \(error.localizedDescription)")
-            throw error
-        }
-        
-        let created = fileManager.createFile(
-            atPath: versionDataURL.path,
-            contents: encryptedData
-        )
-        guard created else {
-            log.error("failed to create file at \(versionDataURL.path)")
-            throw SHLocalServerError.failedToCreateFile
-        }
-        
-        return versionDataURL
     }
     
     func create(assets: [any SHEncryptedAsset],
@@ -1245,6 +1253,12 @@ struct LocalServer : SHServerAPI {
                                 ].joined(separator: "::")
                             )
                         }
+                        
+                        let versionDataURL = Self.assetVersionDataFile(
+                            for: asset.globalIdentifier,
+                            quality: quality
+                        )
+                        try? FileManager.default.removeItem(at: versionDataURL)
                     }
                 }
                 else if encryptedVersion.quality == .midResolution,
@@ -1291,6 +1305,12 @@ struct LocalServer : SHServerAPI {
                            ].joined(separator: "::")
                         )
                     }
+                    
+                    let versionDataURL = Self.assetVersionDataFile(
+                        for: asset.globalIdentifier,
+                        quality: .midResolution
+                    )
+                    try? FileManager.default.removeItem(at: versionDataURL)
                 }
                 
                 let versionMetadata = DBSecureSerializableAssetVersionMetadata(

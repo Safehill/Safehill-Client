@@ -49,7 +49,7 @@ public struct SHLocalAssetStoreController {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> Void
     ) {
-        self.serverProxy.getAssets(
+        self.serverProxy.getAssetsAndCache(
             withGlobalIdentifiers: globalIdentifiers,
             versions: versions ?? SHAssetQuality.all,
             synchronousFetch: synchronousFetch,

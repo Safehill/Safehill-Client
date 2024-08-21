@@ -23,9 +23,10 @@ public struct SHAssetsDownloadManager {
         /// Get only the low resolution. Mid or hi resolution are on-request (when an image is shown larger on screen)
         let versions: [SHAssetQuality] = [.lowResolution]
         
-        user.serverProxy.getRemoteAssets(
+        user.serverProxy.getAssetsAndCache(
             withGlobalIdentifiers: [globalIdentifier],
-            versions: versions
+            versions: versions,
+            synchronousFetch: true
         )
         { result in
             switch result {

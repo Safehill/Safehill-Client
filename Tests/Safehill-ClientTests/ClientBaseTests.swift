@@ -435,7 +435,7 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         let expectation2 = expectation(description: "receiver downloads")
         
         // Receiver downloads
-        self.testUser.serverProxy.getAssets(
+        self.testUser.serverProxy.getAssetsAndCache(
             withGlobalIdentifiers: [encryptedAsset.globalIdentifier],
             versions: [.lowResolution]
         ) { result in

@@ -431,39 +431,25 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         /// Get the `.lowResolution` assets data from the remote server
         ///
-        self.serverProxy.getRemoteAssets(
+        self.serverProxy.getAssetsAndCache(
             withGlobalIdentifiers: globalIdentifiersSharedBySelf,
-            versions: [.lowResolution]
+            versions: [.lowResolution],
+            synchronousFetch: true
         ) { fetchResult in
             switch fetchResult {
-            case .success(let assetsDict):
+            case .success:
                 ///
-                /// Create the `SHEncryptedAsset` in the local server.
                 /// **Remember:** saving a `.lowResolution` version only
                 /// will remove the `.midResolution` and the `.hiResolution`
                 /// in the cache.
                 ///
-                self.serverProxy.localServer.create(
-                    assets: Array(assetsDict.values),
+                /// Notify the delegates about successful upload and share queue items
+                ///
+                self.restoreQueueItems(
                     descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    uploadState: .completed,
-                    overwriteFileIfExists: true
-                ) { localCreationResult in
-                    switch localCreationResult {
-                    case .success:
-                        ///
-                        /// Notify the delegates about successful upload and share queue items
-                        ///
-                        self.restoreQueueItems(
-                            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                            qos: qos,
-                            completionHandler: completionHandler
-                        )
-                    case .failure(let error):
-                        self.log.error("[\(type(of: self))] failed to create assets in local server. Assets in the local library but uploaded will not be marked as such. \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                    }
-                }
+                    qos: qos,
+                    completionHandler: completionHandler
+                )
             case .failure(let error):
                 self.log.error("[\(type(of: self))] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
                 completionHandler(.failure(error))
