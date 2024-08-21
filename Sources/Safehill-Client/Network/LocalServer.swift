@@ -618,6 +618,9 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to remove keys matching \(receiverCondition) from DB. \(error.localizedDescription)")
                 }
                 recipientDetailsDict = [:]
+            } catch {
+                log.critical("Serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten. \(error.localizedDescription)")
+                throw error
             }
             
             for (key, value) in recipientDetailsDict {
@@ -694,6 +697,9 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to remove keys matching \(condition) from DB. \(error.localizedDescription)")
                 }
                 keyValues = [:]
+            } catch {
+                log.critical("Serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten: \(error.localizedDescription)")
+                throw error
             }
             
             for v in keyValues.values {
