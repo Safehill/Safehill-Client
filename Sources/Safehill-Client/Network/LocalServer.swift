@@ -581,6 +581,7 @@ struct LocalServer : SHServerAPI {
             ))
             
             let senderKeys = try assetStore.keys(matching: senderCondition)
+            var invalidKeys = Set<String>()
             
             for senderKey in senderKeys {
                 let components = senderKey.components(separatedBy: "::")
@@ -597,6 +598,7 @@ struct LocalServer : SHServerAPI {
                     senderInfoDict[globalIdentifier] = sharedByUserId
                 } else {
                     log.error("invalid sender info key in DB: \(senderKey)")
+                    invalidKeys.insert(senderKey)
                 }
             }
             
@@ -612,7 +614,7 @@ struct LocalServer : SHServerAPI {
                     .dictionaryRepresentation(forKeysMatching: receiverCondition)
                     .toRecipientSharingDetails()
             } catch {
-                log.critical("Serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten")
+                log.error("serialization error when pulling asset recipient information from local DB. Descriptors will be fetched from server again and overwritten")
                 do {
                     let _ = try assetStore.removeValues(forKeysMatching: receiverCondition)
                 } catch {
@@ -647,6 +649,7 @@ struct LocalServer : SHServerAPI {
                     }
                 } else {
                     log.error("failed to retrieve sharing information. Invalid entry format: \(key) -> \(value)")
+                    invalidKeys.insert(key)
                     continue
                 }
                 
@@ -661,6 +664,14 @@ struct LocalServer : SHServerAPI {
                     } else {
                         groupInfoByIdByAssetGid[assetGid]![groupId] = groupInfo
                     }
+                }
+            }
+            
+            if invalidKeys.isEmpty == false {
+                do {
+                    let _ = try assetStore.removeValues(for: Array(invalidKeys))
+                } catch {
+                    log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
                 }
             }
         } catch {
