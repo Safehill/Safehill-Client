@@ -272,9 +272,16 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        var condition = KBGenericCondition(value: false)
-        for userIdentifier in identifiers {
-            condition = condition.or(KBGenericCondition(.equal, value: userIdentifier))
+        let condition: KBGenericCondition
+        if identifiers.isEmpty {
+            condition = KBGenericCondition(value: true)
+        }
+        else {
+            var c = KBGenericCondition(value: false)
+            for userIdentifier in identifiers {
+                c = c.or(KBGenericCondition(.equal, value: userIdentifier))
+            }
+            condition = c
         }
         
         userStore.removeValues(forKeysMatching: condition) { getResult in
@@ -694,7 +701,6 @@ struct LocalServer : SHServerAPI {
         var localInfoByGlobalIdentifier = [GlobalIdentifier: (phAssetId: LocalIdentifier?, creationDate: Date?)]()
         
         var condition = KBGenericCondition(value: false)
-        
         for quality in SHAssetQuality.all {
             condition = condition.or(KBGenericCondition(.beginsWith, value: "\(quality.rawValue)::"))
         }
@@ -923,6 +929,11 @@ struct LocalServer : SHServerAPI {
     
     func removeGroupIds(_ groupIds: [String],
                         completionHandler: @escaping (Result<Void, Error>) -> Void) {
+        guard groupIds.isEmpty == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("asked to remove groupIds but no groups provided")))
+            return
+        }
+        
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
@@ -986,18 +997,30 @@ struct LocalServer : SHServerAPI {
         
         let assetIdentifiersChunk = assetIdentifiersChunks[index]
         
-        var prefixCondition = KBGenericCondition(value: false)
+        let prefixCondition: KBGenericCondition
+        let assetCondition: KBGenericCondition
         
         let versions = versions ?? SHAssetQuality.all
-        for quality in versions {
-            prefixCondition = prefixCondition
-                .or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
-                .or(KBGenericCondition(.beginsWith, value: "data::" + quality.rawValue + "::"))
+        if versions.isEmpty {
+            prefixCondition = KBGenericCondition(value: true)
+        } else {
+            var c = KBGenericCondition(value: false)
+            for quality in versions {
+                c = c
+                    .or(KBGenericCondition(.beginsWith, value: quality.rawValue + "::"))
+                    .or(KBGenericCondition(.beginsWith, value: "data::" + quality.rawValue + "::"))
+            }
+            prefixCondition = c
         }
         
-        var assetCondition = KBGenericCondition(value: false)
-        for assetIdentifier in assetIdentifiersChunk {
-            assetCondition = assetCondition.or(KBGenericCondition(.contains, value: "::" + assetIdentifier))
+        if assetIdentifiersChunk.isEmpty {
+            assetCondition = KBGenericCondition(value: true)
+        } else {
+            var c = KBGenericCondition(value: false)
+            for assetIdentifier in assetIdentifiersChunk {
+                c = c.or(KBGenericCondition(.contains, value: "::" + assetIdentifier))
+            }
+            assetCondition = c
         }
         
         var newResult = partialResult
@@ -1106,7 +1129,7 @@ struct LocalServer : SHServerAPI {
         let fileManager = FileManager.default
         
         if fileManager.fileExists(atPath: versionDataURL.path) {
-            log.warning("a file exists at \(versionDataURL.path). Overriding")
+            log.warning("a file exists at \(versionDataURL.path). overwriting it")
             try? fileManager.removeItem(at: versionDataURL)
         }
         
@@ -1681,6 +1704,11 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        guard userIdentifiers.isEmpty == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("asked to unshare with users but no users provided")))
+            return
+        }
+        
         var condition = KBGenericCondition(value: false)
         for userIdentifier in userIdentifiers {
             condition = condition.or(KBGenericCondition(.beginsWith, value: [
@@ -1707,10 +1735,20 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        guard assetIdsWithUsers.isEmpty == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("asked to unshare assets with users but no assets and users provided")))
+            return
+        }
+        
         let dispatchGroup = DispatchGroup()
         var errors = [GlobalIdentifier: Error]()
         
         for (assetId, userPublicIdentifiers) in assetIdsWithUsers {
+            
+            guard userPublicIdentifiers.isEmpty == false else {
+                continue
+            }
+            
             var condition = KBGenericCondition(value: false)
             for userPublicIdentifier in userPublicIdentifiers {
                 for quality in SHAssetQuality.all {
@@ -1919,19 +1957,20 @@ struct LocalServer : SHServerAPI {
         }
         
         var condition: KBGenericCondition
-        if let withIdentifiers {
-            condition = KBGenericCondition(value: false)
+        if let withIdentifiers, withIdentifiers.isEmpty == false {
+            var c = KBGenericCondition(value: false)
             for identifier in withIdentifiers {
-                condition = condition.or(
+                c = c.or(
                     KBGenericCondition(
                         .beginsWith,
                         value: "\(SHInteractionAnchor.thread.rawValue)::\(identifier)"
                     )
                 )
             }
+            condition = c
         } else {
             condition = KBGenericCondition(
-                .beginsWith, 
+                .beginsWith,
                 value: "\(SHInteractionAnchor.thread.rawValue)::"
             )
         }
@@ -2685,18 +2724,22 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        let reactions = reactions.filter({
+            $0.senderPublicIdentifier == nil
+        })
+        
+        guard reactions.isEmpty == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("requested to add reactions but no reactions provided, or no sender information in the reactions provided")))
+        }
+        
         var deleteCondition = KBGenericCondition(value: false)
         for reaction in reactions {
-            guard let senderPublicIdentifier = reaction.senderPublicIdentifier else {
-                log.warning("[LocalServer] failed to remove reaction from \(anchorType.rawValue) \(anchorId): sender information is missing")
-                continue
-            }
-            
             deleteCondition = deleteCondition
                 .or(
-                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(senderPublicIdentifier)")
+                    KBGenericCondition(.beginsWith, value: "\(anchorType.rawValue)::\(anchorId)::\(reaction.senderPublicIdentifier!)")
                 )
         }
+        
         reactionStore.removeValues(forKeysMatching: deleteCondition) { result in
             if case .failure(let error) = result {
                 completionHandler(.failure(error))
