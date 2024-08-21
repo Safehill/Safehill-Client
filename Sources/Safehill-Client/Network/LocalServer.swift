@@ -2730,6 +2730,7 @@ struct LocalServer : SHServerAPI {
         
         guard reactions.isEmpty == false else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("requested to add reactions but no reactions provided, or no sender information in the reactions provided")))
+            return
         }
         
         var deleteCondition = KBGenericCondition(value: false)
