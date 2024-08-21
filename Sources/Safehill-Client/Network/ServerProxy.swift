@@ -643,7 +643,7 @@ extension SHServerProxy {
                 /// Remove the ones that don't have a server descriptor
                 ///
                 if assetVersionsToFetch.count != descriptorsByAssetGlobalId.count {
-                    log.warning("some assets requested could not be found in the server manifest, shared with you. Skipping those")
+                    log.warning("assets requested to be fetched have no descriptor on the server (yet). Skipping those. \(Set(assetVersionsToFetch.keys).subtracting(descriptorsByAssetGlobalId.keys))")
                     
                     for assetIdToFetch in assetVersionsToFetch.keys {
                         if descriptorsByAssetGlobalId[assetIdToFetch] == nil {

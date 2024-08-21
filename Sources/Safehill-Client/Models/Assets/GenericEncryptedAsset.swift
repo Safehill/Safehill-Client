@@ -22,6 +22,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     /// - Returns: the `SHEncryptedAsset` objects, organized by assetIdentifier
     public static func fromDicts(_ keyValues: KBKVPairs) throws -> [String: any SHEncryptedAsset] {
         
+        var invalidKeys = Set<String>()
+        
         var encryptedAssetById = [String: any SHEncryptedAsset]()
         var assetDataByGlobalIdentifierAndQuality = [String: [SHAssetQuality: Data]]()
         
@@ -35,6 +37,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
             else {
                 if keyComponents.first == "data" {
                     log.error("invalid asset data key or value format for key \(key)")
+                    invalidKeys.insert(key)
+                    invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
                 }
                 continue
             }
@@ -44,6 +48,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
             if let fileURL = URL(string: filePath) {
                 guard FileManager.default.fileExists(atPath: fileURL.path) else {
                     log.error("no data for asset \(identifier) \(quality.rawValue). File at url \(filePath) does not exist")
+                    invalidKeys.insert(key)
+                    invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
                     continue
                 }
                 
@@ -57,7 +63,13 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                     }
                 } catch {
                     log.error("no data for asset \(identifier) \(quality.rawValue). Error reading from file at \(filePath)")
+                    invalidKeys.insert(key)
+                    invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
                 }
+            } else {
+                log.error("invalid url for asset \(identifier): \(filePath)")
+                invalidKeys.insert(key)
+                invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
             }
         }
         
@@ -69,6 +81,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                   let rawMetadata = value as? Data
             else {
                 if keyComponents.first != "data" {
+                    invalidKeys.insert(key)
+                    invalidKeys.insert("data::\(key)")
                     log.error("invalid asset data key or value format for key \(key)")
                 }
                 continue
@@ -76,12 +90,16 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
             
             guard let metadata = try? DBSecureSerializableAssetVersionMetadata.from(rawMetadata) else {
                 log.error("failed to deserialize asset version metadata for key \(key)")
+                invalidKeys.insert(key)
+                invalidKeys.insert("data::\(key)")
                 continue
             }
             
             guard let data = assetDataByGlobalIdentifierAndQuality[metadata.globalIdentifier]?[quality]
             else {
                 log.error("mismatch between asset asset version data and metadata for key \(key)")
+                invalidKeys.insert(key)
+                invalidKeys.insert("data::\(key)")
                 continue
             }
             
@@ -112,6 +130,20 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 )
             }
         }
+        
+        ///
+        /// Remove keys that couldn't be deserialized
+        ///
+        if invalidKeys.isEmpty == false,
+           let assetStore = SHDBManager.sharedInstance.assetStore
+        {
+            do {
+                let _ = try assetStore.removeValues(for: Array(invalidKeys))
+            } catch {
+                log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
+            }
+        }
+        invalidKeys.removeAll()
         
         return encryptedAssetById
     }
