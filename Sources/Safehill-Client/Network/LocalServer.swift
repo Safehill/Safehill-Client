@@ -589,6 +589,7 @@ struct LocalServer : SHServerAPI {
                 /// 1) sender user identifier
                 /// 2) version quality
                 /// 3) asset identifier
+                /// 4) group identifier
                 
                 if components.count == 5 {
                     let sharedByUserId = components[1]
@@ -628,6 +629,7 @@ struct LocalServer : SHServerAPI {
                 /// 1) receiver user public identifier
                 /// 2) version quality
                 /// 3) asset identifier
+                /// 4) group identifier
                 
                 let groupId = value.groupId
                 let assetGid: GlobalIdentifier
@@ -1257,7 +1259,8 @@ struct LocalServer : SHServerAPI {
                         "sender",
                         descriptor.sharingInfo.sharedByUserIdentifier,
                         encryptedVersion.quality.rawValue,
-                        asset.globalIdentifier
+                        asset.globalIdentifier,
+                        senderUploadGroupId
                     ].joined(separator: "::")
                 )
                 
@@ -1664,7 +1667,7 @@ struct LocalServer : SHServerAPI {
             var condition = KBGenericCondition(value: false)
             for userPublicIdentifier in userPublicIdentifiers {
                 for quality in SHAssetQuality.all {
-                    condition = condition.or(KBGenericCondition(.equal, value: [
+                    condition = condition.or(KBGenericCondition(.beginsWith, value: [
                         "receiver",
                         userPublicIdentifier,
                         quality.rawValue,
