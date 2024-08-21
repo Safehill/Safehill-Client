@@ -33,7 +33,9 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                   let quality = SHAssetQuality(rawValue: keyComponents[1]),
                   let filePath = value as? String
             else {
-                log.critical("invalid asset data key or value format for key \(key)")
+                if keyComponents.first == "data" {
+                    log.error("invalid asset data key or value format for key \(key)")
+                }
                 continue
             }
             
@@ -66,7 +68,9 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                   let quality = SHAssetQuality(rawValue: keyComponents[0]),
                   let metadata = value as? DBSecureSerializableAssetVersionMetadata
             else {
-                log.critical("invalid asset data key or value format for key \(key)")
+                if keyComponents.first != "data" {
+                    log.error("invalid asset data key or value format for key \(key)")
+                }
                 continue
             }
             
