@@ -13,7 +13,6 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
     
     let limit: Int
     let user: SHAuthenticatedLocalUser
-    let localAssetStoreController: SHLocalAssetStoreController
     let assetsDelegates: [SHOutboundAssetOperationDelegate]
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.upload.delegates")
@@ -23,11 +22,9 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
     }
     
     public init(user: SHAuthenticatedLocalUser,
-                localAssetStoreController: SHLocalAssetStoreController,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
                 limitPerRun limit: Int) {
         self.user = user
-        self.localAssetStoreController = localAssetStoreController
         self.limit = limit
         self.assetsDelegates = assetsDelegates
     }
@@ -279,18 +276,22 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let versions = uploadRequest.versions
         
         log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
-        self.localAssetStoreController.encryptedAsset(
-            with: globalIdentifier,
-            versions: versions,
-            synchronousFetch: true,
-            qos: .default
+        self.serverProxy.getLocalAssets(
+            withGlobalIdentifiers: [globalIdentifier],
+            versions: versions
         ) { result in
             
             switch result {
             case .failure(let error):
                 self.log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
                 handleError(error)
-            case .success(let encryptedAsset):
+            case .success(let encryptedAssets):
+                guard let encryptedAsset = encryptedAssets[globalIdentifier] else {
+                    let error = SHBackgroundOperationError.missingAssetInLocalServer(globalIdentifier)
+                    handleError(error)
+                    return
+                }
+                
                 guard globalIdentifier == encryptedAsset.globalIdentifier else {
                     let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
                     handleError(error)

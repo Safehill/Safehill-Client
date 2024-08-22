@@ -67,7 +67,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         
         let uploadOperation = SHUploadOperation(
             user: self.user,
-            localAssetStoreController: SHLocalAssetStoreController(user: self.user),
             assetsDelegates: assetsDelegates,
             limitPerRun: 0
         )
@@ -244,7 +243,6 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
         
         let uploadOperation = SHUploadOperation(
             user: self.user,
-            localAssetStoreController: SHLocalAssetStoreController(user: self.user),
             assetsDelegates: assetsDelegates,
             limitPerRun: 0
         )
