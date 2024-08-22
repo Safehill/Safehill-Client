@@ -273,9 +273,13 @@ public class SHInteractionsSyncOperation: Operation {
                 self.log.debug("[ws] NEWTHREAD: thread id \(threadOutputDTO.threadId)")
                 
                 Task {
-                    await self.serverProxy.createThreadsLocally(
+                    let _ = await self.serverProxy.createThreadsLocally(
                         [threadOutputDTO]
                     )
+                }
+                
+                interactionsSyncDelegates.forEach {
+                    $0.didAddThread(threadOutputDTO)
                 }
                 
             case .threadAssetsShare, .groupAssetsShare:
