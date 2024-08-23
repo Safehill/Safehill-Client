@@ -237,18 +237,16 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             descriptor: descriptor
                         ) { result in
                             switch result {
+                                
                             case .failure(let error):
                                 self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                                ///
+                                /// Asset could not be decrypted, remove data and metadata from the local asset store.
+                                /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
+                                /// So make sure the metadata isn't present.
+                                ///
+                                unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
                                 
-                                self.delegatesQueue.async {
-                                    downloaderDelegates.forEach({
-                                        $0.didFailDownloadOfAsset(
-                                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                                            in: groupId,
-                                            with: error
-                                        )
-                                    })
-                                }
                             case .success(let decryptedAsset):
                                 self.delegatesQueue.async {
                                     downloaderDelegates.forEach({
@@ -265,21 +263,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             dispatchGroup.leave()
                         }
                     } else {
-                        self.delegatesQueue.async {
-                            downloaderDelegates.forEach({
-                                $0.didFailDownloadOfAsset(
-                                    withGlobalIdentifier: globalAssetId,
-                                    in: groupId,
-                                    with: SHAssetStoreError.failedToRetrieveLocalAsset
-                                )
-                            })
-                        }
-                        
+                        self.log.error("[\(type(of: self))] unable to find asset \(globalAssetId) locally")
                         ///
                         /// Asset encrypted data could not be retrieved, so remove the metadata too
                         /// so that the asset can be fetched from server again.
-                        /// As long as the metadata is present in the local asset store, the RemoteDownloadOperation
-                        /// will ignore it.
+                        /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
+                        /// So make sure the metadata isn't present.
                         ///
                         unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
                     }
@@ -404,9 +393,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         /// The `didReceiveLocalAssetDescriptors(_:referencing:)` delegate method is called
                         /// with the descriptors.
                         ///
-                        /// NOTE: no assets not referenced in the call to
+                        /// NOTE: all assets not referenced in the call to
                         /// ```didReceiveLocalAssetDescriptors(_:referencing:)```
-                        /// should be referenced in `didStartDownloadOfAsset`, `didCompleteDownload` or `didFailDownloadOfAsset`.
+                        /// should be referenced in `didStartDownloadOfAsset` and one of `didCompleteDownload` or `didBlacklistFailedToDownloadAsset`.
                         ///
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptors.count). delta=\(delta)")

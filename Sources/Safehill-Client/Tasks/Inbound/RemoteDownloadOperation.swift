@@ -772,22 +772,12 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     
                     downloadError = error
                     
-                    let downloaderDelegates = self.downloaderDelegates
-                    self.delegatesQueue.async {
-                        downloaderDelegates.forEach {
-                            $0.didFailDownloadOfAsset(
-                                withGlobalIdentifier: descriptor.globalIdentifier,
-                                in: groupId,
-                                with: error
-                            )
-                        }
-                    }
-                    
                     if case SHAssetDownloadError.assetIsBlacklisted(_) = error {
                         self.log.info("[\(type(of: self))] skipping item \(descriptor.globalIdentifier) because it was attempted too many times")
+                        let downloaderDelegates = self.downloaderDelegates
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
-                                $0.didFailRepeatedlyDownloadOfAsset(
+                                $0.didBlacklistFailedToDownloadAsset(
                                     withGlobalIdentifier: descriptor.globalIdentifier,
                                     in: groupId
                                 )
