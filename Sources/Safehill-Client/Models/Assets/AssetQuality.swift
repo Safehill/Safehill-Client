@@ -13,4 +13,34 @@ public enum SHAssetQuality: String {
             .hiResolution
         ]
     }
+    
+    public static func forSize(_ size: CGSize?) -> SHAssetQuality {
+        let maxLowSize = kSHSizeForQuality(quality: .lowResolution)
+        let maxMidSize = kSHSizeForQuality(quality: .midResolution)
+        
+        let requestedQuality: SHAssetQuality
+        
+        ///
+        /// If lower or equal `.lowResolution` size, `.lowResolution`
+        /// If lower or equal `.midResolution` size, `.midResolution`
+        /// Otherwise retrieve the `.hiResolution` size
+        ///
+        if let size = size {
+            if size.width <= maxLowSize.width,
+               size.height <= maxLowSize.height {
+                requestedQuality = .lowResolution
+            }
+            else if size.width <= maxMidSize.width,
+                    size.height <= maxMidSize.height {
+                requestedQuality = .midResolution
+            }
+            else {
+                requestedQuality = .hiResolution
+            }
+        } else {
+            requestedQuality = .hiResolution
+        }
+        
+        return requestedQuality
+    }
 }
