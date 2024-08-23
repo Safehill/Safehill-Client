@@ -163,39 +163,45 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     self.log.error("[\(type(of: self))] unable to fetch users from local server: \(error.localizedDescription)")
                     completionHandler(.failure(error))
                 case .success(let usersDict):
-                    ///
-                    /// Filter out the descriptor that reference any user that could not be retrieved
-                    ///
-                    let descriptorsFilteringUnretrievableUsers = descriptors.compactMap { 
-                        (desc: any SHAssetDescriptor) -> (any SHAssetDescriptor)? in
-                        if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
-                            return nil
-                        }
-                        
-                        var newSharedWith = desc.sharingInfo.sharedWithUserIdentifiersInGroup
-                        
-                        for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                            if usersDict[sharedWithUserId] != nil {
-                                newSharedWith.removeValue(forKey: sharedWithUserId)
+                    let filteredDecriptors: [any SHAssetDescriptor]
+                    
+                    if fromRemote {
+                        ///
+                        /// Filter out the descriptor that reference any user that could not be retrieved
+                        ///
+                        filteredDecriptors = descriptors.compactMap {
+                            (desc: any SHAssetDescriptor) -> (any SHAssetDescriptor)? in
+                            if usersDict[desc.sharingInfo.sharedByUserIdentifier] == nil {
+                                return nil
                             }
-                        }
-                        
-                        return SHGenericAssetDescriptor(
-                            globalIdentifier: desc.globalIdentifier,
-                            localIdentifier: desc.localIdentifier,
-                            creationDate: desc.creationDate,
-                            uploadState: desc.uploadState,
-                            sharingInfo: SHGenericDescriptorSharingInfo(
-                                sharedByUserIdentifier: desc.sharingInfo.sharedByUserIdentifier,
-                                sharedWithUserIdentifiersInGroup: newSharedWith,
-                                groupInfoById: desc.sharingInfo.groupInfoById
+                            
+                            var newSharedWith = desc.sharingInfo.sharedWithUserIdentifiersInGroup
+                            
+                            for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                                if usersDict[sharedWithUserId] != nil {
+                                    newSharedWith.removeValue(forKey: sharedWithUserId)
+                                }
+                            }
+                            
+                            return SHGenericAssetDescriptor(
+                                globalIdentifier: desc.globalIdentifier,
+                                localIdentifier: desc.localIdentifier,
+                                creationDate: desc.creationDate,
+                                uploadState: desc.uploadState,
+                                sharingInfo: SHGenericDescriptorSharingInfo(
+                                    sharedByUserIdentifier: desc.sharingInfo.sharedByUserIdentifier,
+                                    sharedWithUserIdentifiersInGroup: newSharedWith,
+                                    groupInfoById: desc.sharingInfo.groupInfoById
+                                )
                             )
-                        )
+                        }
+                    } else {
+                        filteredDecriptors = descriptors
                     }
                     
 #if DEBUG
-                    if descriptorsFilteringUnretrievableUsers.count != descriptors.count {
-                        let filtered = descriptorsFilteringUnretrievableUsers.map({ $0.globalIdentifier })
+                    if filteredDecriptors.count != descriptors.count {
+                        let filtered = filteredDecriptors.map({ $0.globalIdentifier })
                         let unfiltered = descriptors
                             .map({ $0.globalIdentifier })
                             .filter {
@@ -215,21 +221,21 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         if fromRemote {
                             downloaderDelegates.forEach({
                                 $0.didReceiveRemoteAssetDescriptors(
-                                    descriptorsFilteringUnretrievableUsers,
+                                    filteredDecriptors,
                                     referencing: userDictsImmutable
                                 )
                             })
                         } else {
                             downloaderDelegates.forEach({
                                 $0.didReceiveLocalAssetDescriptors(
-                                    descriptorsFilteringUnretrievableUsers,
+                                    filteredDecriptors,
                                     referencing: userDictsImmutable
                                 )
                             })
                         }
                     }
                     
-                    let descriptorsByGlobalIdentifier = descriptorsFilteringUnretrievableUsers.reduce(
+                    let descriptorsByGlobalIdentifier = filteredDecriptors.reduce(
                         [String: any SHAssetDescriptor]()
                     ) { partialResult, descriptor in
                         var result = partialResult
