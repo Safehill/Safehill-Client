@@ -41,19 +41,12 @@ extension SHLocalDownloadOperation {
             return
         }
         
-        var allUserIdsInDescriptors = Set<UserIdentifier>()
-        for descriptor in descriptors {
-            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                allUserIdsInDescriptors.insert(recipientId)
-            }
-        }
-        
-        let userIdsToFetch = Array(allUserIdsInDescriptors)
+        let userIdsToFetch = descriptors.allReferencedUserIds()
         
         Task {
             do {
                 let usersDict = try await SHUsersController(localUser: self.user).getUsersOrCached(
-                    with: userIdsToFetch
+                    with: Array(userIdsToFetch)
                 )
                 
                 let (

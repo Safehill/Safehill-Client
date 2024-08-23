@@ -11,3 +11,14 @@ public protocol SHAssetDescriptor: SHBackedUpAssetIdentifiable {
     
     func serialized() -> SHGenericAssetDescriptorClass
 }
+
+extension Array<SHAssetDescriptor> {
+    func allReferencedUserIds() -> Set<UserIdentifier> {
+        var userIdsDescriptorsSet = Set<UserIdentifier>()
+        for descriptor in self {
+            userIdsDescriptorsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
+            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsDescriptorsSet.insert($0) })
+        }
+        return userIdsDescriptorsSet
+    }
+}

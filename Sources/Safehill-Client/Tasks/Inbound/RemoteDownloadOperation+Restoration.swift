@@ -73,15 +73,9 @@ extension SHRemoteDownloadOperation {
             return
         }
         
-        var allUserIdsInDescriptors = Set<UserIdentifier>()
-        for descriptor in descriptorsByGlobalIdentifier.values {
-            allUserIdsInDescriptors.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                allUserIdsInDescriptors.insert(recipientId)
-            }
-        }
+        let userIdsToFetch = Array(descriptorsByGlobalIdentifier.values).allReferencedUserIds()
         
-        self.getUsers(withIdentifiers: Array(allUserIdsInDescriptors)) { getUsersResult in
+        self.getUsers(withIdentifiers: Array(userIdsToFetch)) { getUsersResult in
             switch getUsersResult {
                 
             case .failure(let error):
