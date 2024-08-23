@@ -75,6 +75,7 @@ extension SHRemoteDownloadOperation {
         
         var allUserIdsInDescriptors = Set<UserIdentifier>()
         for descriptor in descriptorsByGlobalIdentifier.values {
+            allUserIdsInDescriptors.insert(descriptor.sharingInfo.sharedByUserIdentifier)
             for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
                 allUserIdsInDescriptors.insert(recipientId)
             }
