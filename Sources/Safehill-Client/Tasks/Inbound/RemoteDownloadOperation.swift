@@ -178,7 +178,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                             var newSharedWith = desc.sharingInfo.sharedWithUserIdentifiersInGroup
                             
                             for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                                if usersDict[sharedWithUserId] != nil {
+                                if usersDict[sharedWithUserId] == nil {
                                     newSharedWith.removeValue(forKey: sharedWithUserId)
                                 }
                             }
