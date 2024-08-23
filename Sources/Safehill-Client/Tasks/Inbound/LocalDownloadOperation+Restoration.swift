@@ -48,13 +48,13 @@ extension SHLocalDownloadOperation {
             }
         }
         
-        self.getUsers(withIdentifiers: Array(allUserIdsInDescriptors)) { getUsersResult in
-            switch getUsersResult {
-                
-            case .failure(let error):
-                completionHandler(.failure(error))
-            
-            case .success(let usersDict):
+        let userIdsToFetch = Array(allUserIdsInDescriptors)
+        
+        Task {
+            do {
+                let usersDict = try await SHUsersController(localUser: self.user).getUsersOrCached(
+                    with: userIdsToFetch
+                )
                 
                 let (
                     groupIdToUploadItems,
@@ -71,6 +71,8 @@ extension SHLocalDownloadOperation {
                 }
                 
                 completionHandler(.success(()))
+            } catch {
+                completionHandler(.failure(error))
             }
         }
     }
