@@ -17,13 +17,47 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func didReceiveRemoteAssetDescriptors(_ descriptors: [any SHAssetDescriptor],
                                           referencing users: [UserIdentifier: any SHServerUser])
     
+    /// Notifies about the start of a network download of a an asset from the CDN
+    /// - Parameter downloadRequest: the request
+    func didStartDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
+                                 descriptor: any SHAssetDescriptor,
+                                 in groupId: String)
+    
+    /// Notify about a failed attempt to download some assets
+    /// - Parameters:
+    ///   - globalIdentifier: the global identifier for the asset
+    ///   - groupId: the group id of the request it belongs to
+    ///   - error: the error
+    func didFailDownloadOfAsset(withGlobalIdentifier: GlobalIdentifier,
+                                in groupId: String,
+                                with error: Error)
+    
     /// Notifies about assets in the local library that are linked to one on the server (backed up)
     /// - Parameters:
     ///   - localToGlobal: The global identifier of the remote asset to the corresponding local `PHAsset` from the Apple Photos Library
     func didIdentify(globalToLocalAssets: [GlobalIdentifier: PHAsset])
     
+    /// Notifies about the successful download operation for a specific asset.
+    /// - Parameter decryptedAsset: the decrypted asset
+    /// - Parameter groupId: the group id of the request it belongs to
+    func didCompleteDownload(
+        of decryptedAsset: any SHDecryptedAsset,
+        in groupId: String
+    )
+    
+    /// One cycle of downloads has finished from local server
+    /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
+    func didCompleteDownloadCycle(
+        localAssetsAndDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+    )
+    
+    /// One cycle of downloads has finished from remote server
+    /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
+    func didCompleteDownloadCycle(
+        remoteAssetsAndDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+    )
+    
     /// The download cycle failed
     /// - Parameter with: the error
     func didFailDownloadCycle(with: Error)
-    
 }
