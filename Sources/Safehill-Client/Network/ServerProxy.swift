@@ -630,9 +630,12 @@ extension SHServerProxy {
             /// If all could be found locally return success
             /// 
             guard assetVersionsToFetch.isEmpty == false else {
+                log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
                 completionHandler(.success(localDictionary))
                 return
             }
+            
+            log.debug("[asset-data] \(Array(assetVersionsToFetch)) DB CACHE MISS")
             
             ///
             /// For asynchronous fetch, return the intermediate result from local
