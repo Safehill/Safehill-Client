@@ -62,7 +62,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? Self.lastFetchDate?.iso8601withFractionalSeconds ?? "nil")")
+        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? "nil")")
         
         serverProxy.getLocalAssetDescriptors(after: date) { result in
             switch result {
