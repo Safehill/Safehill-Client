@@ -153,7 +153,12 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     if request.shouldUpload == true {
                         delegate.didFailFetchingForUpload(ofAsset: localIdentifier, in: groupId, error: error)
                     } else {
-                        delegate.didFailFetchingForSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                        delegate.didFailFetchingForSharing(
+                            ofAsset: localIdentifier,
+                            sharingWith: users,
+                            in: groupId,
+                            error: error
+                        )
                     }
                 }
             }
@@ -212,7 +217,11 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                             if request.shouldUpload == true {
                                 delegate.didCompleteFetchingForUpload(ofAsset: localIdentifier, in: groupId)
                             } else {
-                                delegate.didCompleteFetchingForSharing(ofAsset: localIdentifier, in: groupId)
+                                delegate.didCompleteFetchingForSharing(
+                                    ofAsset: localIdentifier,
+                                    sharingWith: users,
+                                    in: groupId
+                                )
                             }
                         }
                     }
@@ -315,7 +324,11 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                             if fetchRequest.shouldUpload == true {
                                 delegate.didStartFetchingForUpload(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
                             } else {
-                                delegate.didStartFetchingForSharing(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
+                                delegate.didStartFetchingForSharing(
+                                    ofAsset: fetchRequest.localIdentifier,
+                                    sharingWith: fetchRequest.sharedWith,
+                                    in: fetchRequest.groupId
+                                )
                             }
                         }
                     }
