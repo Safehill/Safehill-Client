@@ -18,6 +18,8 @@ import Photos
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
     
+    internal static var lastFetchDate: Date? = nil
+    
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.download.delegates")
@@ -47,14 +49,14 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? "nil")")
+        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? Self.lastFetchDate?.iso8601withFractionalSeconds ?? "nil")")
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
         self.serverProxy.getRemoteAssetDescriptors(
             for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
-            after: date,
+            after: date ?? Self.lastFetchDate,
             filteringGroups: groupIds
         ) { remoteResult in
             switch remoteResult {
@@ -619,6 +621,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
     ) {
+        let fetchStartedAt = Date()
+        
         let handleResult = { (result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) in
             let downloaderDelegates = self.downloaderDelegates
             
@@ -632,6 +636,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 }
                 
             case .success(let tuples):
+                Self.lastFetchDate = fetchStartedAt
                 self.delegatesQueue.async {
                     downloaderDelegates.forEach({
                         $0.didCompleteDownloadCycle(
