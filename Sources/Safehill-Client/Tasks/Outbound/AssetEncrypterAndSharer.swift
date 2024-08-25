@@ -102,7 +102,12 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                    delegate.didFailSharing(
+                        ofAsset: localIdentifier,
+                        with: users,
+                        in: groupId,
+                        error: error
+                    )
                 }
             }
         }
@@ -146,7 +151,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didCompleteSharing(ofAsset: localIdentifier, in: groupId)
+                    delegate.didCompleteSharing(ofAsset: localIdentifier, with: request.sharedWith, in: groupId)
                 }
             }
         }
@@ -295,7 +300,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             self.delegatesQueue.async {
                 for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(ofAsset: shareRequest.localIdentifier, in: shareRequest.groupId)
+                        delegate.didStartSharing(ofAsset: shareRequest.localIdentifier,
+                                                 with: shareRequest.sharedWith,
+                                                 in: shareRequest.groupId)
                     }
                 }
             }

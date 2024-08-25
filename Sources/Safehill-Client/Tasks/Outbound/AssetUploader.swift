@@ -102,7 +102,10 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
-                            delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                            delegate.didFailSharing(ofAsset: localIdentifier,
+                                                    with: users,
+                                                    in: groupId,
+                                                    error: error)
                         }
                     }
                 }
@@ -315,7 +318,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                             asset: encryptedAsset,
                             with: uploadRequest.groupId,
                             filterVersions: versions,
-                            force: true
+                            force: false
                         )
                 } catch {
                     let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
