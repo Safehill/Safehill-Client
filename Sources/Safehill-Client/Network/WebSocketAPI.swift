@@ -74,6 +74,7 @@ public actor WebSocketAPI {
     
     public func disconnect() {
         self.webSocketTask?.cancel(with: .normalClosure, reason: nil)
+        self.webSocketTask = nil
     }
 }
 
@@ -81,7 +82,7 @@ extension WebSocketAPI {
     
     private func keepAlive(_ keepAliveIntervalInSeconds: TimeInterval) {
         log.debug("[ws] sending ping for keepAlive")
-        self.webSocketTask!.sendPing { [weak self] error in
+        self.webSocketTask?.sendPing { [weak self] error in
             guard let self = self else { return }
             
             if let error {
