@@ -89,7 +89,7 @@ public class SHInteractionsSyncOperation: Operation {
         } catch let error {
             if let error = error as? WebSocketConnectionError {
                 switch error {
-                case .disconnected, .closed, .connectionError, .transportError:
+                case .disconnected, .connectionError, .transportError:
                     log.info("[ws] websocket connection error: \(error.localizedDescription)")
                     
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
