@@ -1,4 +1,5 @@
 import Foundation
+import KnowledgeBase
 
 public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let globalIdentifier: String
@@ -19,130 +20,130 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     /// Deserialize key-values coming from DB into `SHEncryptedAsset` objects
     /// - Parameter keyValues: the keys and values retrieved from DB
     /// - Returns: the `SHEncryptedAsset` objects, organized by assetIdentifier
-    public static func fromDicts(_ keyValues: [String: [String: Any]]) throws -> [String: any SHEncryptedAsset] {
+    public static func fromDicts(_ keyValues: KBKVPairs) throws -> [String: any SHEncryptedAsset] {
+        
+        var invalidKeys = Set<String>()
         
         var encryptedAssetById = [String: any SHEncryptedAsset]()
-        
-        ///
-        /// Snoog 1.1.3 and earlier store the data along with the metadata.
-        /// More precisely, the value under key '<quality>::<assetIdentifier>' stores both the `encryptedData` and metadata associated with it.
-        /// Since Snoog 1.1.4, data metadata are stored under two different keys:
-        /// 1. '<quality>::<assetIdentifier>' for the metadata
-        /// 2. 'data::<quality>::<assetIdentifier>' for the data
-        ///
-        /// The `dicts` param will then have either `N * quality` values (for 1.1.3), or `N * quality * 2` values (for 1.1.4 and later)
-        ///
-        /// `assetDataByGlobalIdentifierAndQuality` is version-agnostic, and retrieves the data for each asset identifier and quality.
-        ///
         var assetDataByGlobalIdentifierAndQuality = [String: [SHAssetQuality: Data]]()
+        
         for (key, value) in keyValues {
             let keyComponents = key.components(separatedBy: "::")
-            var quality: SHAssetQuality? = nil
             
-            if keyComponents.count == 3, keyComponents.first == "data" {
-                /// Snoog 1.1.4 and later
-                quality = SHAssetQuality(rawValue: keyComponents[1])
-            } else if keyComponents.count == 2 {
-                /// Snoog 1.1.3 and earlier
-                quality = SHAssetQuality(rawValue: keyComponents[0])
-            }
-                
-            guard let quality = quality else {
-                log.critical("failed to retrieve `quality` from key value object in the local asset store. Skipping")
+            guard keyComponents.count == 3,
+                    keyComponents.first == "data",
+                  let quality = SHAssetQuality(rawValue: keyComponents[1]),
+                  let filePath = value as? String
+            else {
+                if keyComponents.first == "data" {
+                    log.error("invalid asset data key or value format for key \(key)")
+                    invalidKeys.insert(key)
+                    invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
+                }
                 continue
             }
+            
+            let identifier = keyComponents[2]
+            
+            if let fileURL = URL(string: filePath) {
+                guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                    log.error("no data for asset \(identifier) \(quality.rawValue). File at url \(filePath) does not exist")
+                    invalidKeys.insert(key)
+                    invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
+                    continue
+                }
                 
-            if let identifier = value["assetIdentifier"] as? String {
-                if let data = value["encryptedData"] as? Data {
+                do {
+                    let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+                    
                     if assetDataByGlobalIdentifierAndQuality[identifier] == nil {
                         assetDataByGlobalIdentifierAndQuality[identifier] = [quality: data]
                     } else {
                         assetDataByGlobalIdentifierAndQuality[identifier]![quality] = data
                     }
-                } else if let filePath = value["encryptedDataPath"] as? String,
-                          let fileURL = URL(string: filePath) {
-                    guard FileManager.default.fileExists(atPath: fileURL.path) else {
-                        log.error("no data for asset \(identifier) \(quality.rawValue). File at url \(filePath) does not exist")
-                        continue
-                    }
-                    
-                    do {
-                        let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
-                        
-                        if assetDataByGlobalIdentifierAndQuality[identifier] == nil {
-                            assetDataByGlobalIdentifierAndQuality[identifier] = [quality: data]
-                        } else {
-                            assetDataByGlobalIdentifierAndQuality[identifier]![quality] = data
-                        }
-                    } catch {
-                        log.error("no data for asset \(identifier) \(quality.rawValue). Error reading from file at \(filePath)")
-                    }
+                } catch {
+                    log.error("no data for asset \(identifier) \(quality.rawValue). Error reading from file at \(filePath)")
+                    invalidKeys.insert(key)
+                    invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
                 }
-                else if value.keys.contains("quality") == false {
-                    /// Since Snoog 1.1.4, there are two type key-value pairs: data and metadata
-                    /// If it's metadata there will be a "quality" key.
-                    /// Otherwise we can assume it's a data key, and if the value dictionary doesn't contain data in
-                    /// either `encryptedData` or `encryptedDataPath`, then we log this error
-                    log.error("failed to read data for asset \(identifier). Invalid dictionary keys=\(Array(value.keys))")
-                }
+            } else {
+                log.error("invalid url for asset \(identifier): \(filePath)")
+                invalidKeys.insert(key)
+                invalidKeys.insert(keyComponents[1..<keyComponents.count].joined(separator: "::"))
             }
         }
         
-        for (key, dict) in keyValues {
+        for (key, value) in keyValues {
             let keyComponents = key.components(separatedBy: "::")
-            guard keyComponents.count == 2, dict.keys.count > 2 else {
-                ///
-                /// Because both elements keyed by `data::<quality>::identifier` (data) and  `<quality>::identifier`
-                /// (data & metadata or just metadata for Snoog >= 1.4) are present in `dicts`, we can skip elements of `dicts` that
-                /// refer to the data (`data::<quality>::<identifier>` keys). Those were already retreived in the
-                /// `assetDataByGlobalIdentifierAndQuality` by the logic in the for statement above.
-                ///
+            
+            guard keyComponents.count == 2,
+                  let quality = SHAssetQuality(rawValue: keyComponents[0]),
+                  let rawMetadata = value as? Data
+            else {
+                if keyComponents.first != "data" {
+                    invalidKeys.insert(key)
+                    invalidKeys.insert("data::\(key)")
+                    log.error("invalid asset data key or value format for key \(key)")
+                }
                 continue
             }
             
-            guard let quality = SHAssetQuality(rawValue: keyComponents.first ?? "") else {
-                log.error("failed to retrieve `quality` from key value object in the local asset store. Skipping")
+            guard let metadata = try? DBSecureSerializableAssetVersionMetadata.from(rawMetadata) else {
+                log.error("failed to deserialize asset version metadata for key \(key)")
+                invalidKeys.insert(key)
+                invalidKeys.insert("data::\(key)")
                 continue
             }
             
-            guard let assetIdentifier = dict["assetIdentifier"] as? String else {
-                log.error("could not deserialize local asset from dictionary=\(dict). Couldn't find assetIdentifier key")
+            guard let data = assetDataByGlobalIdentifierAndQuality[metadata.globalIdentifier]?[quality]
+            else {
+                log.error("mismatch between asset asset version data and metadata for key \(key)")
+                invalidKeys.insert(key)
+                invalidKeys.insert("data::\(key)")
                 continue
             }
             
-            guard let data = assetDataByGlobalIdentifierAndQuality[assetIdentifier]?[quality],
-                  let version = SHGenericEncryptedAssetVersion.fromDict(dict, data: data) else {
-                log.error("could not deserialize asset version information from dictionary=\(dict)")
-                continue
-            }
+            let version = SHGenericEncryptedAssetVersion(
+                quality: metadata.quality,
+                encryptedData: data,
+                encryptedSecret: metadata.senderEncryptedSecret,
+                publicKeyData: metadata.publicKey,
+                publicSignatureData: metadata.publicSignature
+            )
             
-            if let existing = encryptedAssetById[assetIdentifier] {
+            if let existing = encryptedAssetById[metadata.globalIdentifier] {
                 var versions = existing.encryptedVersions
-                versions[version.quality] = version
+                versions[quality] = version
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: existing.globalIdentifier,
                     localIdentifier: existing.localIdentifier,
                     creationDate: existing.creationDate,
                     encryptedVersions: versions
                 )
-                encryptedAssetById[assetIdentifier] = encryptedAsset
-            }
-            else if let assetIdentifier = dict["assetIdentifier"] as? String,
-                    let phAssetIdentifier = dict["applePhotosAssetIdentifier"] as? String?,
-                    let creationDate = dict["creationDate"] as? Date?
-            {
-                let encryptedAsset = SHGenericEncryptedAsset(
-                    globalIdentifier: assetIdentifier,
-                    localIdentifier: phAssetIdentifier,
-                    creationDate: creationDate,
-                    encryptedVersions: [version.quality: version]
-                )
-                encryptedAssetById[assetIdentifier] = encryptedAsset
+                encryptedAssetById[metadata.globalIdentifier] = encryptedAsset
             } else {
-                log.error("could not deserialize asset information from dictionary=\(dict)")
-                continue
+                encryptedAssetById[metadata.globalIdentifier] = SHGenericEncryptedAsset(
+                    globalIdentifier: metadata.globalIdentifier,
+                    localIdentifier: metadata.localIdentifier,
+                    creationDate: metadata.creationDate,
+                    encryptedVersions: [quality: version]
+                )
             }
         }
+        
+        ///
+        /// Remove keys that couldn't be deserialized
+        ///
+        if invalidKeys.isEmpty == false,
+           let assetStore = SHDBManager.sharedInstance.assetStore
+        {
+            do {
+                let _ = try assetStore.removeValues(for: Array(invalidKeys))
+            } catch {
+                log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
+            }
+        }
+        invalidKeys.removeAll()
         
         return encryptedAssetById
     }

@@ -21,7 +21,7 @@ public enum SHQueueOperation {
     public static func removeUploadItems(
         correspondingTo assetLocalIdentifiers: [String]
     ) throws {
-        guard assetLocalIdentifiers.count > 0 else {
+        guard assetLocalIdentifiers.isEmpty == false else {
             return
         }
         
@@ -43,7 +43,7 @@ public enum SHQueueOperation {
         correspondingTo assetLocalIdentifiers: [String],
         groupId: String? = nil
     ) throws {
-        guard assetLocalIdentifiers.count > 0 else {
+        guard assetLocalIdentifiers.isEmpty == false else {
             return
         }
         

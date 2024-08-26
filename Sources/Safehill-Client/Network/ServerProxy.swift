@@ -409,6 +409,50 @@ extension SHServerProxy {
         }
     }
     
+    func getAssetDescriptor(
+        for globalIdentifier: GlobalIdentifier,
+        filteringGroups: [String]? = nil,
+        completionHandler: @escaping (Result<(any SHAssetDescriptor)?, Error>) -> ()
+    ) {
+        self.getLocalAssetDescriptors(
+            for: [globalIdentifier],
+            after: nil,
+            filteringGroups: filteringGroups
+        ) { result in
+            switch result {
+            case .failure(let err):
+                log.warning("no local asset descriptor for asset \(globalIdentifier) in local server. Trying remote. \(err.localizedDescription)")
+                self.getRemoteAssetDescriptors(
+                    for: [globalIdentifier],
+                    after: nil
+                ) { remoteResult in
+                    switch remoteResult {
+                    case .success(let descriptors):
+                        completionHandler(.success(descriptors.first))
+                    case .failure(let error):
+                        completionHandler(.failure(error))
+                    }
+                }
+            case .success(let descriptors):
+                if let descriptor = descriptors.first {
+                    completionHandler(.success(descriptor))
+                } else {
+                    self.getRemoteAssetDescriptors(
+                        for: [globalIdentifier],
+                        after: nil
+                    ) { remoteResult in
+                        switch remoteResult {
+                        case .success(let descriptors):
+                            completionHandler(.success(descriptors.first))
+                        case .failure(let error):
+                            completionHandler(.failure(error))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     /// Retrieve asset descriptors from the local server
     ///
     /// - Parameters:
@@ -453,8 +497,8 @@ extension SHServerProxy {
     /// - Parameter completionHandler: the callback method
     func getRemoteAssetDescriptors(
         for globalIdentifiers: [GlobalIdentifier]? = nil,
-        filteringGroups: [String]? = nil,
         after: Date?,
+        filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         let handleServerResult = { (serverResult: Result<[any SHAssetDescriptor], Error>) in
@@ -520,10 +564,12 @@ extension SHServerProxy {
     ///   - synchronousFetch: whether or not we want all assets versions to be available before calling the callback (set to `true`), or have the callback called multiple times as asset versions are available (set to `false`)
     ///   - completionHandler: the callback, returning the `SHEncryptedAsset` objects keyed by asset identifier. Note that the output object might not have the same number of assets requested, as some of them might be deleted on the server
     ///
-    func getAssets(withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
-                   versions requestedVersions: [SHAssetQuality],
-                   synchronousFetch: Bool = true,
-                   completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()) {
+    func getAssetsAndCache(
+        withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
+        versions requestedVersions: [SHAssetQuality],
+        synchronousFetch: Bool = true,
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()
+    ) {
         if assetIdentifiers.count == 0 {
             completionHandler(.success([:]))
             return
@@ -584,9 +630,12 @@ extension SHServerProxy {
             /// If all could be found locally return success
             /// 
             guard assetVersionsToFetch.isEmpty == false else {
+                log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
                 completionHandler(.success(localDictionary))
                 return
             }
+            
+            log.debug("[asset-data] \(Array(assetVersionsToFetch)) DB CACHE MISS")
             
             ///
             /// For asynchronous fetch, return the intermediate result from local
@@ -643,7 +692,7 @@ extension SHServerProxy {
                 /// Remove the ones that don't have a server descriptor
                 ///
                 if assetVersionsToFetch.count != descriptorsByAssetGlobalId.count {
-                    log.warning("some assets requested could not be found in the server manifest, shared with you. Skipping those")
+                    log.warning("assets requested to be fetched have no descriptor on the server (yet). Skipping those. \(Set(assetVersionsToFetch.keys).subtracting(descriptorsByAssetGlobalId.keys))")
                     
                     for assetIdToFetch in assetVersionsToFetch.keys {
                         if descriptorsByAssetGlobalId[assetIdToFetch] == nil {
@@ -669,7 +718,7 @@ extension SHServerProxy {
                 for (assetId, versionsToFetchRemotely) in assetVersionsToFetch {
                     
                     dispatchGroup.enter()
-                    self.remoteServer.getAssets(
+                    self.getRemoteAssets(
                         withGlobalIdentifiers: [assetId],
                         versions: versionsToFetchRemotely
                     ) { result in
@@ -737,7 +786,8 @@ extension SHServerProxy {
                     self.localServer.create(
                         assets: Array(encryptedAssetsToCreate),
                         descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                        uploadState: .completed
+                        uploadState: .completed,
+                        overwriteFileIfExists: false
                     ) { result in
                         if case .failure(let err) = result {
                             log.warning("could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
@@ -746,6 +796,18 @@ extension SHServerProxy {
                 }
             }
         }
+    }
+    
+    func getRemoteAssets(
+        withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
+        versions requestedVersions: [SHAssetQuality],
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()
+    ) {
+        self.remoteServer.getAssets(
+            withGlobalIdentifiers: assetIdentifiers,
+            versions: requestedVersions,
+            completionHandler: completionHandler
+        )
     }
     
     func upload(

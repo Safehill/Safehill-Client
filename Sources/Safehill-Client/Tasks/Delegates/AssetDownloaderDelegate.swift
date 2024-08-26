@@ -32,15 +32,6 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
                                 in groupId: String,
                                 with error: Error)
     
-    /// Notifies about an unrecoverable error (usually an asset that couldn't be downloaded after many attempts).
-    /// These assets global identifiers are blacklisted, to prevent the same failure to happen repeatedly.
-    /// It's the Client's responsibility to whitelist them as needed.
-    /// - Parameters:
-    ///   - globalIdentifier: the global identifier of the asset
-    ///   - groupId: the group id of the request it belongs to
-    func didFailRepeatedlyDownloadOfAsset(withGlobalIdentifier: GlobalIdentifier,
-                                          in groupId: String)
-    
     /// Notifies about assets in the local library that are linked to one on the server (backed up)
     /// - Parameters:
     ///   - localToGlobal: The global identifier of the remote asset to the corresponding local `PHAsset` from the Apple Photos Library
@@ -69,5 +60,4 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// The download cycle failed
     /// - Parameter with: the error
     func didFailDownloadCycle(with: Error)
-    
 }

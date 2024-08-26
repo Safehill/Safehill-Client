@@ -246,7 +246,12 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                         }
                         if users.count > 0 {
                             if let delegate = delegate as? SHAssetSharerDelegate {
-                                delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                                delegate.didFailSharing(
+                                    ofAsset: localIdentifier,
+                                    with: users,
+                                    in: groupId,
+                                    error: error
+                                )
                             }
                         }
                     }
@@ -264,7 +269,12 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
-                            delegate.didFailSharing(ofAsset: localIdentifier, in: groupId, error: error)
+                            delegate.didFailSharing(
+                                ofAsset: localIdentifier,
+                                with: users,
+                                in: groupId, 
+                                error: error
+                            )
                         }
                     }
                 }
@@ -483,7 +493,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 self.serverProxy.localServer.create(
                     assets: [encryptedAsset],
                     groupId: encryptionRequest.groupId,
-                    filterVersions: nil
+                    filterVersions: nil,
+                    overwriteFileIfExists: true
                 ) { result in
                     switch result {
                     case .failure(let error):

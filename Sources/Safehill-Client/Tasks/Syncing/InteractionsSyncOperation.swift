@@ -89,7 +89,7 @@ public class SHInteractionsSyncOperation: Operation {
         } catch let error {
             if let error = error as? WebSocketConnectionError {
                 switch error {
-                case .disconnected, .closed, .connectionError, .transportError:
+                case .disconnected, .connectionError, .transportError:
                     log.info("[ws] websocket connection error: \(error.localizedDescription)")
                     
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
@@ -273,29 +273,58 @@ public class SHInteractionsSyncOperation: Operation {
                 self.log.debug("[ws] NEWTHREAD: thread id \(threadOutputDTO.threadId)")
                 
                 Task {
-                    await self.serverProxy.createThreadsLocally(
+                    let _ = await self.serverProxy.createThreadsLocally(
                         [threadOutputDTO]
                     )
                 }
                 
+                interactionsSyncDelegates.forEach {
+                    $0.didAddThread(threadOutputDTO)
+                }
+                
             case .threadAssetsShare, .groupAssetsShare:
                 
-                guard let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) else {
+                if let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) {
+                    
+                    self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
+                    
+                    let threadId = threadAssetsWsMessage.threadId
+                    let threadAssets = threadAssetsWsMessage.assets
+                    
+                    interactionsSyncDelegates.forEach({
+                        if message.type == .threadAssetsShare {
+                            $0.didReceivePhotoMessages(threadAssets, in: threadId)
+                        } else {
+                            $0.didReceivePhotos(threadAssets)
+                        }
+                    })
+                    
+                    return
+                    
+                } else {
+                    /// 
+                    /// BACKWARD COMPATIBILITY:
+                    /// group-assets-share type messages were sent with `ThreadAssets` as content
+                    /// but since late August 2024 it's been sent as a `[ConversationThreadAssetDTO]`
+                    /// hence the fallthrough
+                    ///
+                    if message.type != .groupAssetsShare {
+                        self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    }
+                    fallthrough
+                }
+                
+            case .groupAssetsShare:
+                
+                guard let groupAssets = try? JSONDecoder().decode([ConversationThreadAssetDTO].self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
                 
-                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
-                
-                let threadId = threadAssetsWsMessage.threadId
-                let threadAssets = threadAssetsWsMessage.assets
+                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets in group \(groupAssets.map({ ($0.globalIdentifier, $0.groupId) }))")
                 
                 interactionsSyncDelegates.forEach({
-                    if message.type == .threadAssetsShare {
-                        $0.didReceivePhotoMessages(threadAssets, in: threadId)
-                    } else {
-                        $0.didReceivePhotos(threadAssets, in: threadId)
-                    }
+                    $0.didReceivePhotos(groupAssets)
                 })
             }
         }

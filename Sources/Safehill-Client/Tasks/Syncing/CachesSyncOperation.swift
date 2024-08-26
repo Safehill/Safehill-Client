@@ -23,15 +23,6 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
     
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
-    private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
-        var userIdsDescriptorsSet = Set<UserIdentifier>()
-        for descriptor in descriptors {
-            userIdsDescriptorsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsDescriptorsSet.insert($0) })
-        }
-        return userIdsDescriptorsSet
-    }
-    
     private func fetchDescriptors(
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<(
@@ -116,10 +107,10 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
         ///
         /// Get all users referenced in either local or remote descriptors (excluding THIS user)
         ///
-        var userIdsInLocalDescriptorsSet = self.uniqueUserIds(in: allLocalDescriptors)
+        var userIdsInLocalDescriptorsSet = allLocalDescriptors.allReferencedUserIds()
         userIdsInLocalDescriptorsSet.remove(self.user.identifier)
         
-        var userIdsInRemoteDescriptorsSet = self.uniqueUserIds(in: allRemoteDescriptors)
+        var userIdsInRemoteDescriptorsSet = allRemoteDescriptors.allReferencedUserIds()
         userIdsInRemoteDescriptorsSet.remove(self.user.identifier)
         let userIdsInRemoteDescriptors = Array(userIdsInRemoteDescriptorsSet)
         

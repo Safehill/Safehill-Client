@@ -25,15 +25,6 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         self.assetsDelegates = assetsDelegates
     }
     
-    private func uniqueUserIds(in descriptors: [any SHAssetDescriptor]) -> Set<UserIdentifier> {
-        var userIdsDescriptorsSet = Set<UserIdentifier>()
-        for descriptor in descriptors {
-            userIdsDescriptorsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsDescriptorsSet.insert($0) })
-        }
-        return userIdsDescriptorsSet
-    }
-    
     public func sync(
         remoteAndLocalDescriptors: [any SHAssetDescriptor],
         localDescriptors: [any SHAssetDescriptor],

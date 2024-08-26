@@ -23,7 +23,7 @@ public struct SHAssetsDownloadManager {
         /// Get only the low resolution. Mid or hi resolution are on-request (when an image is shown larger on screen)
         let versions: [SHAssetQuality] = [.lowResolution]
         
-        user.serverProxy.getAssets(
+        user.serverProxy.getAssetsAndCache(
             withGlobalIdentifiers: [globalIdentifier],
             versions: versions,
             synchronousFetch: true
@@ -59,7 +59,7 @@ public struct SHAssetsDownloadManager {
                 completionHandler(.failure(err))
             }
             let end = CFAbsoluteTimeGetCurrent()
-            log.debug("[PERF] \(CFAbsoluteTime(end - start)) for version \(versions)")
+            log.debug("[PERF] \(CFAbsoluteTime(end - start)) for versions \(versions)")
         }
     }
     
@@ -71,55 +71,19 @@ public struct SHAssetsDownloadManager {
         for descriptor: any SHAssetDescriptor,
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
-        Task {
+        DispatchQueue.global().async {
             
             log.info("[downloadManager] downloading assets with identifier \(descriptor.globalIdentifier)")
             
-            let start = CFAbsoluteTimeGetCurrent()
             let globalIdentifier = descriptor.globalIdentifier
-            
-            // MARK: Start
-            
-            guard await SHDownloadBlacklist.shared.isBlacklisted(assetGlobalIdentifier: descriptor.globalIdentifier) == false else {
-                do {
-                    try SHKGQuery.removeAssets(with: [globalIdentifier])
-                    completionHandler(.failure(SHAssetDownloadError.assetIsBlacklisted(globalIdentifier)))
-                } catch {
-                    log.error("[downloadManager] attempt to remove asset \(globalIdentifier) the knowledgeGraph because it's blacklisted FAILED. \(error.localizedDescription)")
-                    completionHandler(.failure(error))
-                }
-                return
-            }
             
             // MARK: Get Low Res asset
             
             self.fetchAsset(
                 withGlobalIdentifier: globalIdentifier,
-                descriptor: descriptor
-            ) { result in
-                
-                switch result {
-                case .success(let decryptedAsset):
-                    completionHandler(.success(decryptedAsset))
-                    
-                    Task(priority: .low) {
-                        await SHDownloadBlacklist.shared.removeFromBlacklist(assetGlobalIdentifier: globalIdentifier)
-                    }
-                case .failure(let error):
-                    completionHandler(.failure(error))
-                    
-                    Task(priority: .low) {
-                        if error is SHCypher.DecryptionError {
-                            await SHDownloadBlacklist.shared.blacklist(globalIdentifier: globalIdentifier)
-                        } else {
-                            await SHDownloadBlacklist.shared.recordFailedAttempt(globalIdentifier: globalIdentifier)
-                        }
-                    }
-                }
-                
-                let end = CFAbsoluteTimeGetCurrent()
-                log.debug("[PERF] it took \(CFAbsoluteTime(end - start)) to download asset \(globalIdentifier)")
-            }
+                descriptor: descriptor,
+                completionHandler: completionHandler
+            )
         }
     }
 }

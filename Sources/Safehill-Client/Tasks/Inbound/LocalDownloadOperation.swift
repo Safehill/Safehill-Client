@@ -12,7 +12,7 @@ import os
 ///
 ///
 /// The steps are:
-/// 1. `fetchDescriptorsForItemsToRestore()` : the descriptors are fetched from the local server
+/// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)`: the descriptors are fetched from the local server
 /// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered our if
 ///     - the referenced asset is blacklisted (attemtped to download too many times),
 ///     - any user referenced in the descriptor is not "retrievabile", or
@@ -20,16 +20,12 @@ import os
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
 ///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
 ///     - the assets shared by from _other_ users are returned so they can be decrypted
-/// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted asset to the delegates
+/// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted low resolution asset to the delegates
 ///
-/// Usually in the lifecycle of the application, the decryption happens only once.
-/// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if disposed of.
+/// Ideally in the lifecycle of the application, the decryption of the low resolution happens only once.
+/// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if they are disposed.
+///
 /// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
-///
-/// The pipeline sequence is:
-/// ```
-/// 1 -->   2 -->    3 -->    4
-/// ```
 ///
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
     
@@ -55,14 +51,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         )
     }
     
-    /// This method overrides the behavior of the `SHDownloadOperation` to make the descriptor fetch
-    /// happen against the local server (instead of the remote server)
+    /// This method overrides the behavior of the `SHRemoteDownloadOperation` 
+    /// to make the descriptor fetch happen against the local server (instead of the remote server)
+    ///
     /// - Returns: the list of descriptors
-    internal func fetchDescriptorsForItemsToRestore(
+    ///
+    override internal func fetchDescriptors(
+        filteringAssets globalIdentifiers: [GlobalIdentifier]? = nil,
+        filteringGroups groupIds: [String]? = nil,
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        self.log.debug("[\(type(of: self))] fetchDescriptorsForItemsToRestore after \(date?.iso8601withFractionalSeconds ?? "nil")")
+        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? "nil")")
         
         serverProxy.getLocalAssetDescriptors(after: date) { result in
             switch result {
@@ -97,79 +97,44 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         }
     }
     
-    ///
-    /// For all the descriptors whose originator user is _this_ user, notify the restoration delegate
-    /// about all groups that need to be restored.
-    /// Uploads and shares will be reported separately, according to the contract in the delegate.
-    /// Because these assets exist in the local server, the assumption is that they will also be present in the
-    /// upload and history queues, so they don't need to be re-created.
-    /// The recreation only happens in the sister method:
-    /// `SHRemoteDownloadOperation::restoreQueueItems(descriptorsByGlobalIdentifier:qos:completionHandler:)`
-    ///
-    /// - Parameters:
-    ///   - descriptorsByGlobalIdentifier: all the descriptors keyed by asset global identifier
-    ///   - globalIdentifiersSharedBySelf: the asset global identifiers shared by self
-    ///   - completionHandler: the callback method
-    ///
-    func restoreQueueItems(
-        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys globalIdentifiersSharedBySelf: [GlobalIdentifier],
+    override internal func restore(
+        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
+        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
+        sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
+        sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        guard original.count > 0 else {
+        guard !self.isCancelled else {
+            log.info("[\(type(of: self))] download task cancelled. Finishing")
             completionHandler(.success(()))
             return
         }
         
-        guard globalIdentifiersSharedBySelf.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        let descriptors = original.values.filter({
-            globalIdentifiersSharedBySelf.contains($0.globalIdentifier)
-            && $0.localIdentifier != nil
-        })
-        
-        guard descriptors.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        var allUserIdsInDescriptors = Set<UserIdentifier>()
-        for descriptor in descriptors {
-            for recipientId in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
-                allUserIdsInDescriptors.insert(recipientId)
-            }
-        }
-        
-        self.getUsers(withIdentifiers: Array(allUserIdsInDescriptors)) { getUsersResult in
-            switch getUsersResult {
-                
-            case .failure(let error):
-                completionHandler(.failure(error))
+        ///
+        /// FOR THE ONES SHARED BY THIS USER
+        /// Notify the restoration delegates about the assets that need to be restored from the successful queues
+        /// These can only reference assets shared by THIS user. All other descriptors are ignored.
+        ///
+        /// These assets are definitely in the local server (because the descriptors fetch by a `SHLocalDownloadOperation`
+        /// contain only assets from the local server).
+        /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptorsByGlobalIdentifier:filteringKeys:)
+        /// takes care of creating them
+        ///
+        self.restoreQueueItems(
+            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
+            filteringKeys: sharedBySelfGlobalIdentifiers
+        ) { restoreResult in
             
-            case .success(let usersDict):
-                
-                let (
-                    groupIdToUploadItems,
-                    groupIdToShareItems
-                ) = self.historyItems(
-                    from: descriptors,
-                    usersDict: usersDict
-                )
-                
-                let restorationDelegate = self.restorationDelegate
-                self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
-                    restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
-                }
-                
-                completionHandler(.success(()))
+            if case .failure(let err) = restoreResult {
+                self.log.critical("failure while restoring queue items \(sharedBySelfGlobalIdentifiers): \(err.localizedDescription)")
+            } else {
+                Self.markAsAlreadyProcessed(sharedBySelfGlobalIdentifiers)
             }
+            
+            completionHandler(.success(()))
         }
     }
-    
     
     internal func decryptFromLocalStore(
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
@@ -237,18 +202,16 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             descriptor: descriptor
                         ) { result in
                             switch result {
+                                
                             case .failure(let error):
                                 self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
+                                ///
+                                /// Asset could not be decrypted, remove data and metadata from the local asset store.
+                                /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
+                                /// So make sure the metadata isn't present.
+                                ///
+                                unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
                                 
-                                self.delegatesQueue.async {
-                                    downloaderDelegates.forEach({
-                                        $0.didFailDownloadOfAsset(
-                                            withGlobalIdentifier: encryptedAsset.globalIdentifier,
-                                            in: groupId,
-                                            with: error
-                                        )
-                                    })
-                                }
                             case .success(let decryptedAsset):
                                 self.delegatesQueue.async {
                                     downloaderDelegates.forEach({
@@ -265,27 +228,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             dispatchGroup.leave()
                         }
                     } else {
-                        self.delegatesQueue.async {
-                            downloaderDelegates.forEach({
-                                $0.didFailDownloadOfAsset(
-                                    withGlobalIdentifier: globalAssetId,
-                                    in: groupId,
-                                    with: SHAssetStoreError.failedToRetrieveLocalAsset
-                                )
-                            })
-                        }
-                        
+                        self.log.error("[\(type(of: self))] unable to find asset \(globalAssetId) locally")
                         ///
                         /// Asset encrypted data could not be retrieved, so remove the metadata too
                         /// so that the asset can be fetched from server again.
-                        /// As long as the metadata is present in the local asset store, the RemoteDownloadOperation
-                        /// will ignore it.
+                        /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
+                        /// So make sure the metadata isn't present.
                         ///
                         unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
                     }
                 }
                 
-                dispatchGroup.notify(queue: .global(qos: qos)) {   
+                dispatchGroup.notify(queue: .global(qos: qos)) {
                     completionHandler(.success(successfullyDecrypted))
                 }
                 
@@ -303,60 +257,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     }
                 }
             }
-        }
-    }
-    
-    override internal func processForDownload(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
-        sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
-        sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
-    ) {
-        guard !self.isCancelled else {
-            log.info("[\(type(of: self))] download task cancelled. Finishing")
-            completionHandler(.success([]))
-            return
-        }
-        
-        // TODO: This method does not re-create missing items from the history queues. If an item is missing it will not be restored
-        
-        ///
-        /// FOR THE ONES SHARED BY THIS USER
-        /// Notify the restoration delegates about the assets that need to be restored from the successful queues
-        /// These can only reference assets shared by THIS user. All other descriptors are ignored.
-        ///
-        /// These assets are definitely in the local server (because the descriptors fetch by a `SHLocalDownloadOperation`
-        /// contain only assets from the local server).
-        /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptorsByGlobalIdentifier:filteringKeys:)
-        /// takes care of creating them
-        ///
-        self.restoreQueueItems(
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: sharedBySelfGlobalIdentifiers
-        ) { restoreResult in
-            
-            if case .failure(let err) = restoreResult {
-                self.log.critical("failure while restoring queue items \(sharedBySelfGlobalIdentifiers): \(err.localizedDescription)")
-            } else {
-                Self.markAsAlreadyProcessed(sharedBySelfGlobalIdentifiers)
-            }
-            
-            ///
-            /// FOR THE ONES SHARED BY OTHER USERS
-            /// Decrypt from the local store
-            ///
-            
-            ///
-            /// Remember: because the full manifest of descriptors (`descriptorsByGlobalIdentifier`)
-            /// is fetched from LocalStore, all assets are guaranteed to be found
-            ///
-            completionHandler(.success(Array(
-                descriptorsByGlobalIdentifier.values.filter({
-                    sharedByOthersGlobalIdentifiers.contains($0.globalIdentifier)
-                })
-            )))
         }
     }
     
@@ -384,7 +284,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             completionHandler(.failure(error))
         }
         
-        self.fetchDescriptorsForItemsToRestore(after: date) {
+        self.fetchDescriptors(after: date) {
             result in
             switch result {
             case .failure(let error):
@@ -400,14 +300,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         handleFailure(error)
                     case .success(let filteredDescriptors):
 #if DEBUG
-                        ///
-                        /// The `didReceiveLocalAssetDescriptors(_:referencing:)` delegate method is called
-                        /// with the descriptors.
-                        ///
-                        /// NOTE: no assets not referenced in the call to
-                        /// ```didReceiveLocalAssetDescriptors(_:referencing:)```
-                        /// should be referenced in `didStartDownloadOfAsset`, `didCompleteDownload` or `didFailDownloadOfAsset`.
-                        ///
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptors.count). delta=\(delta)")
 #endif
@@ -417,19 +309,20 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         ) { processedAssetsResult in
                             
                             switch processedAssetsResult {
-                            case .success(let descriptorsToDecrypt):
+                            case .success(let descriptorsReadyToDecrypt):
 #if DEBUG
-                                let delta1 = Set(filteredDescriptors.keys).subtracting(descriptorsToDecrypt.map({ $0.globalIdentifier }))
-                                let delta2 = Set(descriptorsToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
-                                self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
+                                let delta1 = Set(filteredDescriptors.keys).subtracting(descriptorsReadyToDecrypt.map({ $0.globalIdentifier }))
+                                let delta2 = Set(descriptorsReadyToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
+                                self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsReadyToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
+                                
                                 self.decryptFromLocalStore(
                                     descriptorsByGlobalIdentifier: filteredDescriptors,
-                                    filteringKeys: descriptorsToDecrypt.map({ $0.globalIdentifier }),
+                                    filteringKeys: descriptorsReadyToDecrypt.map({ $0.globalIdentifier }),
                                     qos: qos
                                 ) {
                                     decryptionResult in
-                                    
+                                 
                                     let downloaderDelegates = self.downloaderDelegates
                                     self.delegatesQueue.async {
                                         switch decryptionResult {
@@ -448,17 +341,18 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                         }
                                     }
                                     
-                                    completionHandler(.success(()))
-                                    
                                     if case .success(let decryptedAssetsAndDescriptors) = decryptionResult,
-                                        decryptedAssetsAndDescriptors.count > 0 {
+                                       decryptedAssetsAndDescriptors.count > 0 {
                                         Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.1.globalIdentifier }))
                                     }
+                                    
+                                    completionHandler(.success(()))
                                 }
                                 
                             case .failure(let error):
                                 handleFailure(error)
                             }
+                            
                         }
                     }
                 }

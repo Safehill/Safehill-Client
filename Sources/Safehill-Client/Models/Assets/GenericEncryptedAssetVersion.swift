@@ -18,24 +18,6 @@ public struct SHGenericEncryptedAssetVersion : SHEncryptedAssetVersion {
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
     }
-    
-    public static func fromDict(_ dict: [String: Any], data: Data?) -> SHEncryptedAssetVersion? {
-        if let encryptedData = data,
-           let qualityS = dict["quality"] as? String,
-           let quality = SHAssetQuality(rawValue: qualityS),
-           let encryptedSecret = dict["senderEncryptedSecret"] as? Data,
-           let publicKeyData = dict["publicKey"] as? Data,
-           let publicSignatureData = dict["publicSignature"] as? Data {
-            return SHGenericEncryptedAssetVersion(
-                quality: quality,
-                encryptedData: encryptedData,
-                encryptedSecret: encryptedSecret,
-                publicKeyData: publicKeyData,
-                publicSignatureData: publicSignatureData
-            )
-        }
-        return nil
-    }
 }
 
 
