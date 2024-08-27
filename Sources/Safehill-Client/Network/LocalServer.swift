@@ -768,7 +768,7 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+            if Set(sharedWithUsersInGroup.values).count > groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
                 log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
             }
             
