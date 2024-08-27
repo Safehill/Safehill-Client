@@ -168,23 +168,26 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
             
             guard let self = self else { return }
             
+            let downloaderDelegates = self.downloaderDelegates
+            
             switch result {
             case .failure(let error):
                 self.log.error("[\(type(of: self))] unable to fetch local assets: \(error.localizedDescription)")
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
             case .success(let encryptedAssets):
-                var unsuccessfullyDecryptedAssetGids = Set<GlobalIdentifier>()
+                var errorsByAssetGlobalId = [GlobalIdentifier: Error]()
                 var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
                 let dispatchGroup = DispatchGroup()
                 
                 for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
+                    
+                    dispatchGroup.enter()
+                    
                     guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
-                        unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
+                        errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.unexpectedData(descriptor.sharingInfo)
                         dispatchGroup.leave()
                         continue
                     }
-                    
-                    let downloaderDelegates = self.downloaderDelegates
                     
                     if let encryptedAsset = encryptedAssets[globalAssetId] {
                         self.delegatesQueue.async {
@@ -195,7 +198,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             })
                         }
                         
-                        dispatchGroup.enter()
                         localAssetsStore.decryptedAsset(
                             encryptedAsset: encryptedAsset,
                             versions: [.lowResolution],
@@ -210,7 +212,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                 /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
                                 /// So make sure the metadata isn't present.
                                 ///
-                                unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
+                                errorsByAssetGlobalId[globalAssetId] = error
                                 
                             case .success(let decryptedAsset):
                                 self.delegatesQueue.async {
@@ -235,25 +237,46 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                         /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
                         /// So make sure the metadata isn't present.
                         ///
-                        unsuccessfullyDecryptedAssetGids.insert(globalAssetId)
+                        errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.missingAssetInLocalServer(globalAssetId)
+                        
+                        dispatchGroup.leave()
                     }
                 }
                 
-                dispatchGroup.notify(queue: .global(qos: qos)) {
+                dispatchGroup.notify(queue: .global(qos: qos)) { [weak self] in
+                    
                     completionHandler(.success(successfullyDecrypted))
-                }
-                
-                guard unsuccessfullyDecryptedAssetGids.isEmpty == false else {
-                    return
-                }
-                
-                self.log.warning("failed to decrypt assets with ids \(unsuccessfullyDecryptedAssetGids)")
-                
-                self.serverProxy.localServer.deleteAssets(
-                    withGlobalIdentifiers: Array(unsuccessfullyDecryptedAssetGids)
-                ) { [weak self] deleteResult in
-                    if case .failure(let failure) = deleteResult {
-                        self?.log.error("failed to delete fail-to-decrypt assets from the local server. The remote download operation will not attempt to re-download them as long as their metadata is stored locally. \(failure.localizedDescription)")
+                    
+                    guard let self = self else { return }
+                    
+                    guard errorsByAssetGlobalId.isEmpty == false else {
+                        return
+                    }
+                    
+                    for (gid, error) in errorsByAssetGlobalId {
+                        guard let groupId = descriptorsByGlobalIdentifier[gid]?.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                            self.log.warning("will not notify delegates about asset decryption error for asset \(gid)")
+                            continue
+                        }
+                        self.delegatesQueue.async {
+                            downloaderDelegates.forEach({
+                                $0.didFailDownloadOfAsset(
+                                    withGlobalIdentifier: gid,
+                                    in: groupId,
+                                    with: error
+                                )
+                            })
+                        }
+                    }
+                    
+                    self.log.warning("failed to decrypt the following assets: \(errorsByAssetGlobalId)")
+                    
+                    self.serverProxy.localServer.deleteAssets(
+                        withGlobalIdentifiers: Array(errorsByAssetGlobalId.keys)
+                    ) { [weak self] deleteResult in
+                        if case .failure(let failure) = deleteResult {
+                            self?.log.error("failed to delete fail-to-decrypt assets from the local server. The remote download operation will not attempt to re-download them as long as their metadata is stored locally. \(failure.localizedDescription)")
+                        }
                     }
                 }
             }
