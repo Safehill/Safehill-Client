@@ -768,7 +768,7 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            if Set(sharedWithUsersInGroup.values).count != groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+            if Set(sharedWithUsersInGroup.values).count > groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
                 log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
             }
             
@@ -1023,7 +1023,7 @@ struct LocalServer : SHServerAPI {
             assetCondition = c
         }
         
-        log.debug("feching local server asset versions \(versions.map({ $0.rawValue })) chunk \(index) \(String(describing: assetIdentifiersChunk[index]))")
+        log.debug("feching local server asset versions \(versions.map({ $0.rawValue })) chunk \(index) \(String(describing: assetIdentifiersChunk))")
         
         assetStore.dictionaryRepresentation(forKeysMatching: prefixCondition.and(assetCondition)) {
             (result: Result) in

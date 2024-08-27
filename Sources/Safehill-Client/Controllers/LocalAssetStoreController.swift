@@ -70,8 +70,10 @@ public struct SHLocalAssetStoreController {
                     versions: versions,
                     receivedFrom: self.user
                 )
+                log.debug("[\(type(of: self))] successfully decrypted asset \(decryptedAsset.globalIdentifier)")
                 completionHandler(.success(decryptedAsset))
             } catch {
+                log.error("[\(type(of: self))] failed decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         } else {
@@ -80,11 +82,13 @@ public struct SHLocalAssetStoreController {
             ) { result in
                 switch result {
                 case .failure(let error):
+                    log.error("[\(type(of: self))] failed to fetch user \(descriptor.sharingInfo.sharedByUserIdentifier) details for decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")
                     completionHandler(.failure(error))
                 case .success(let usersDict):
                     guard usersDict.count == 1, let serverUser = usersDict.values.first,
                           serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
                     else {
+                        log.error("[\(type(of: self))] failed to fetch user details for decrypting asset \(encryptedAsset.globalIdentifier). No user \(descriptor.sharingInfo.sharedByUserIdentifier)")
                         completionHandler(.failure(SHBackgroundOperationError.unexpectedData(usersDict)))
                         return
                     }
@@ -95,8 +99,10 @@ public struct SHLocalAssetStoreController {
                             versions: versions,
                             receivedFrom: serverUser
                         )
+                        log.debug("[\(type(of: self))] successfully decrypted asset \(decryptedAsset.globalIdentifier)")
                         completionHandler(.success(decryptedAsset))
                     } catch {
+                        log.error("[\(type(of: self))] failed decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")
                         completionHandler(.failure(error))
                     }
                 }

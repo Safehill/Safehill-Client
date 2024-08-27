@@ -10,7 +10,7 @@ import Photos
 ///
 ///
 /// The steps are:
-/// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote
+/// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote. The incompletes (with upload state `.notStarted`) are carried over in each iteration, otherwise they would be filtered out by the  `afterDate` filter and missed forever
 /// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : all user referenced in the descriptor that can't be retrived from server are filtered out. If sender can't be retrieved the whole descriptor is filtered out
 /// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`).
 ///     - for the ones not in the photos library shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
@@ -19,6 +19,7 @@ import Photos
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
     
     internal static var lastFetchDate: Date? = nil
+    internal static var incompleteBeforeLastFetch = Set<GlobalIdentifier>()
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -49,42 +50,73 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? Self.lastFetchDate?.iso8601withFractionalSeconds ?? "nil")")
+        let afterDate = date ?? Self.lastFetchDate
+        
+        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(afterDate?.iso8601withFractionalSeconds ?? "nil")")
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
         self.serverProxy.getRemoteAssetDescriptors(
             for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
-            after: date ?? Self.lastFetchDate,
+            after: afterDate,
             filteringGroups: groupIds
-        ) { remoteResult in
-            switch remoteResult {
-            case .success(let remoteDescriptors):
-                ///
-                /// Get all the corresponding local descriptors.
-                /// The extra ones (to be DELETED) will be removed by the sync operation
-                /// The ones that changed (to be UPDATED) will be changed by the sync operation
-                ///
-                self.serverProxy.getLocalAssetDescriptors(
-                    for: remoteDescriptors.map { $0.globalIdentifier },
-                    useCache: false
-                ) { localResult in
-                    switch localResult {
-                    case .success(let localDescriptors):
-                        completionHandler(.success(remoteDescriptors.filter({
-                            remoteDesc in
-                            localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier }) == false
-                        })))
-                        
-                    case .failure(let err):
-                        self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
-                        completionHandler(.failure(err))
+        ) { remoteResult1 in
+            switch remoteResult1 {
+            case .success(let remoteDescriptors1):
+                
+                let filterOutLocal = { (remoteDescriptors: [any SHAssetDescriptor]) in
+                    ///
+                    /// Get all the corresponding local descriptors.
+                    /// The extra ones (to be DELETED) will be removed by the sync operation
+                    /// The ones that changed (to be UPDATED) will be changed by the sync operation
+                    ///
+                    self.serverProxy.getLocalAssetDescriptors(
+                        for: remoteDescriptors.map { $0.globalIdentifier },
+                        useCache: false
+                    ) { localResult in
+                        switch localResult {
+                        case .success(let localDescriptors):
+                            let onlyRemoteDescriptors = remoteDescriptors.filter({ remoteDesc in
+                                localDescriptors.contains(where: { $0.globalIdentifier == remoteDesc.globalIdentifier }) == false
+                            })
+                            
+                            completionHandler(.success(onlyRemoteDescriptors))
+                            
+                        case .failure(let err):
+                            self.log.error("[\(type(of: self))] failed to fetch descriptors from LOCAL server when syncing: \(err.localizedDescription)")
+                            completionHandler(.failure(err))
+                        }
                     }
                 }
                 
+                if afterDate != nil, Self.incompleteBeforeLastFetch.isEmpty == false {
+                    self.serverProxy.getRemoteAssetDescriptors(
+                        for: Array(Self.incompleteBeforeLastFetch),
+                        after: nil,
+                        filteringGroups: groupIds
+                    ) {
+                        remoteResult2 in
+                        switch remoteResult2 {
+                        case .success(let remoteDescriptors2):
+                            var allRemoteDescriptors = remoteDescriptors1
+                            allRemoteDescriptors.append(
+                                missingContentsFrom: remoteDescriptors2,
+                                compareUsing: { $0.globalIdentifier == $1.globalIdentifier }
+                            )
+                            filterOutLocal(allRemoteDescriptors)
+                        
+                        case .failure(let err):
+                            self.log.error("[\(type(of: self))] failed to fetch incompleteBeforeLastFetch descriptors from REMOTE: \(err.localizedDescription)")
+                            completionHandler(.failure(err))
+                        }
+                    }
+                } else {
+                    filterOutLocal(remoteDescriptors1)
+                }
+                
             case .failure(let err):
-                self.log.error("[\(type(of: self))] failed to fetch descriptors from REMOTE server when syncing: \(err.localizedDescription)")
+                self.log.error("[\(type(of: self))] failed to fetch descriptors from REMOTE server: \(err.localizedDescription)")
                 completionHandler(.failure(err))
             }
         }
