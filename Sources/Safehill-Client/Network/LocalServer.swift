@@ -2593,10 +2593,16 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
         var allGroupIds = Set<String>()
         
         var numCommentsByGroupId = [String: Int]()
         var reactionsByGroupId = [String: [ReactionOutputDTO]]()
+        var invitationsByGroupId = [String: [String]]()
         
         let allGroupsCondition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::")
         
@@ -2668,6 +2674,44 @@ struct LocalServer : SHServerAPI {
             dispatchGroup.leave()
         }
         
+        var malformedInvitationKeys = Set<String>()
+        
+        dispatchGroup.enter()
+        userStore.dictionaryRepresentation(
+            forKeysMatching: KBGenericCondition(.beginsWith, value: "invitations::\(SHInteractionAnchor.group.rawValue)")
+        ) {
+            invitationsResult in
+            switch invitationsResult {
+            case .success(let dict):
+                for (key, value) in dict {
+                    let keyComponents = key.components(separatedBy: "::")
+                    guard keyComponents.count == 3 else {
+                        malformedInvitationKeys.insert(key)
+                        continue
+                    }
+                    
+                    guard let value = value as? String else {
+                        continue
+                    }
+                    
+                    let groupId = keyComponents[2]
+                    let valueComponents = value.components(separatedBy: "::")
+                    
+                    invitationsByGroupId[groupId] = valueComponents
+                }
+            case .failure(let error):
+                log.error("failed to fetch user invitations. \(error.localizedDescription)")
+            }
+            
+            dispatchGroup.leave()
+        }
+        
+        if malformedInvitationKeys.isEmpty == false {
+            do {
+                try userStore.removeValues(for: Array(malformedInvitationKeys))
+            } catch {}
+        }
+        
         dispatchGroup.notify(queue: .global()) {
             var groupSummaryById = [String: InteractionsGroupSummaryDTO]()
             
@@ -2675,7 +2719,8 @@ struct LocalServer : SHServerAPI {
                 let groupSummary = InteractionsGroupSummaryDTO(
                     numComments: numCommentsByGroupId[groupId] ?? 0,
                     firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
-                    reactions: reactionsByGroupId[groupId] ?? []
+                    reactions: reactionsByGroupId[groupId] ?? [],
+                    invitedUsersPhoneNumbers: invitationsByGroupId[groupId] ?? []
                 )
                 
                 groupSummaryById[groupId] = groupSummary
@@ -2695,6 +2740,11 @@ struct LocalServer : SHServerAPI {
         }
         
         guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2726,12 +2776,31 @@ struct LocalServer : SHServerAPI {
                     log.critical("failed to retrieve messages for group \(groupId): \(error.localizedDescription)")
                 }
                 
-                let response = InteractionsGroupSummaryDTO(
-                    numComments: numMessages,
-                    firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
-                    reactions: reactions
-                )
-                completionHandler(.success(response))
+                userStore.value(for: "invitations::\(SHInteractionAnchor.group.rawValue)::\(groupId)") {
+                    invitationsResult in
+                    
+                    let invitedPhoneNumbers: [String]
+                    
+                    switch invitationsResult {
+                    case .success(let maybeValue):
+                        if let maybeValue = maybeValue as? String {
+                            invitedPhoneNumbers = maybeValue.components(separatedBy: "::")
+                        } else {
+                            invitedPhoneNumbers = []
+                        }
+                    case .failure(let error):
+                        log.error("failed to fetch user invitations. \(error.localizedDescription)")
+                        invitedPhoneNumbers = []
+                    }
+                    
+                    let response = InteractionsGroupSummaryDTO(
+                        numComments: numMessages,
+                        firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
+                        reactions: reactions,
+                        invitedUsersPhoneNumbers: invitedPhoneNumbers
+                    )
+                    completionHandler(.success(response))
+                }
             }
         }
     }
@@ -3454,6 +3523,57 @@ struct LocalServer : SHServerAPI {
             completionHandler(.failure(firstError))
         } else {
             completionHandler(.success(result))
+        }
+    }
+    
+    func invite(_ phoneNumbers: [String], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let key = "invitations::\(SHInteractionAnchor.group.rawValue)::\(groupId)"
+        
+        do {
+            var newList = Set<String>()
+            if let existing = try userStore.value(for: key) as? String {
+                newList = Set(existing.components(separatedBy: "::"))
+                phoneNumbers.forEach { newList.insert($0) }
+            } else {
+                newList = Set(phoneNumbers)
+            }
+            
+            try userStore.set(value: newList.joined(separator: "::"), for: key)
+            
+        } catch {
+            completionHandler(.failure(error))
+        }
+    }
+    
+    func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let key = "invitations::\(SHInteractionAnchor.group.rawValue)::\(groupId)"
+        
+        do {
+            var newList = Set<String>()
+            if let existing = try userStore.value(for: key) as? String {
+                newList = Set(existing.components(separatedBy: "::"))
+                phoneNumbers.forEach { newList.remove($0) }
+                
+                if newList.isEmpty {
+                    try userStore.removeValue(for: key)
+                } else {
+                    try userStore.set(value: newList.joined(separator: "::"), for: key)
+                }
+            } else {
+                try userStore.removeValue(for: key)
+            }
+        } catch {
+            completionHandler(.failure(error))
         }
     }
     

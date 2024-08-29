@@ -3,19 +3,23 @@ public struct InteractionsGroupSummaryDTO: Codable {
     public let numComments: Int
     public let firstEncryptedMessage: MessageOutputDTO?
     public let reactions: [ReactionOutputDTO]
+    public let invitedUsersPhoneNumbers: [String]
     
     enum CodingKeys: String, CodingKey {
         case numComments
         case firstEncryptedMessage
         case reactions
+        case invitedUsersPhoneNumbers
     }
     
     init(numComments: Int,
          firstEncryptedMessage: MessageOutputDTO?,
-         reactions: [ReactionOutputDTO]) {
+         reactions: [ReactionOutputDTO],
+         invitedUsersPhoneNumbers: [String]) {
         self.numComments = numComments
         self.firstEncryptedMessage = firstEncryptedMessage
         self.reactions = reactions
+        self.invitedUsersPhoneNumbers = invitedUsersPhoneNumbers
     }
     
     public init(from decoder: Decoder) throws {
@@ -23,6 +27,7 @@ public struct InteractionsGroupSummaryDTO: Codable {
         numComments = try container.decode(Int.self, forKey: .numComments)
         firstEncryptedMessage = try? container.decode(MessageOutputDTO?.self, forKey: .firstEncryptedMessage)
         reactions = try container.decode([ReactionOutputDTO].self, forKey: .reactions)
+        invitedUsersPhoneNumbers = try container.decode([String].self, forKey: .invitedUsersPhoneNumbers) ?? []
     }
     
     public func encode(to encoder: Encoder) throws {
@@ -31,5 +36,6 @@ public struct InteractionsGroupSummaryDTO: Codable {
         try container.encode(reactions, forKey: .reactions)
         try container.encode(firstEncryptedMessage, forKey: .firstEncryptedMessage)
         try container.encode(numComments, forKey: .numComments)
+        try container.encode(invitedUsersPhoneNumbers, forKey: .invitedUsersPhoneNumbers)
     }
 }

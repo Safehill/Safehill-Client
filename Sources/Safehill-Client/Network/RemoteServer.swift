@@ -1396,4 +1396,34 @@ struct RemoteServer : SHServerAPI {
             }
         }
     }
+    
+    func invite(_ phoneNumbers: [String], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        var parameters = [
+            "phoneNumbers": phoneNumbers
+        ] as [String: Any]
+        
+        self.post("groups/invitees/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        var parameters = [
+            "phoneNumbers": phoneNumbers
+        ] as [String: Any]
+        
+        self.delete("groups/invitees/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
 }

@@ -433,4 +433,26 @@ public protocol SHServerAPI {
         toThread threadId: String,
         completionHandler: @escaping (Result<[MessageOutputDTO], Error>) -> ()
     )
+    
+    /// Invite a list of phone numbers to a share, referenced by its group identifier
+    /// - Parameters:
+    ///   - phoneNumbers: the list of phone numbers to add to the invite
+    ///   - groupId: the group id
+    ///   - completionHandler: the callback method
+    func invite(
+        _ phoneNumbers: [String], 
+        to groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Remove a list of phone numbers to a share, referenced by its group identifier, if they were previously invited
+    /// - Parameters:
+    ///   - phoneNumbers: the list of phone numbers to remove from the invite
+    ///   - groupId: the group id
+    ///   - completionHandler: the callback method
+    func uninvite(
+        _ phoneNumbers: [String],
+        from groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
 }
