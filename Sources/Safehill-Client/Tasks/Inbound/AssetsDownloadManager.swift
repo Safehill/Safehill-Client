@@ -2,10 +2,6 @@ import Foundation
 import KnowledgeBase
 import Safehill_Crypto
 
-public enum SHAssetDownloadError: Error {
-    case assetIsBlacklisted(GlobalIdentifier)
-}
-
 public struct SHAssetsDownloadManager {
     let user: SHAuthenticatedLocalUser
     

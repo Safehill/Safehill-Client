@@ -16,7 +16,7 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
         groupIdByRecipientId: [UserIdentifier: String]
     )
     
-    func groupsWereUpdated(withIds groupIds: [String])
+    func groupsInfoWereUpdated(_: [String: SHAssetGroupInfo])
     
     func groupsWereRemoved(withIds groupIds: [String])
 }
