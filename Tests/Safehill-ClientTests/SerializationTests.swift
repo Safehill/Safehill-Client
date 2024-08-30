@@ -132,6 +132,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 groupId: "groupId",
                 eventOriginator: sender,
                 sharedWith: [],
+                invitedUsers: [],
                 shouldUpload: true,
                 isPhotoMessage: false
             ),
@@ -141,6 +142,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 groupId: "groupId",
                 eventOriginator: sender,
                 sharedWith: [sender],
+                invitedUsers: ["phoneNumber1", "phoneNumber2"],
                 shouldUpload: false,
                 isPhotoMessage: true,
                 isBackground: true
@@ -165,6 +167,7 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssertEqual(queueItem.eventOriginator.identifier, deserialized.eventOriginator.identifier)
             XCTAssert(queueItem.sharedWith.count == deserialized.sharedWith.count)
             XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
+            XCTAssertEqual(Set(queueItem.invitedUsers), Set(deserialized.invitedUsers))
             XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
             XCTAssertEqual(queueItem.isPhotoMessage, deserialized.isPhotoMessage)
             XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)

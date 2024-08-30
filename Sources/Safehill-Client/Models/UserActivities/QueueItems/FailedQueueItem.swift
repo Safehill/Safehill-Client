@@ -10,6 +10,7 @@ public class SHFailedQueueItem: SHAbstractOutboundShareableGroupableQueueItem, N
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
+                      invitedUsers: superSelf.invitedUsers,
                       isPhotoMessage: superSelf.isPhotoMessage,
                       isBackground: superSelf.isBackground)
             return

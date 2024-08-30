@@ -10,6 +10,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         case groupId
         case eventOriginator
         case sharedWith
+        case invitedUsers
         case isPhotoMessage
     }
     
@@ -29,8 +30,9 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     ///
     public let versions: [SHAssetQuality]
     public let groupId: String
-    public let eventOriginator: SHServerUser
-    public let sharedWith: [SHServerUser] // Empty if it's just a backup request
+    public let eventOriginator: any SHServerUser
+    public let sharedWith: [any SHServerUser] // Empty if it's just a backup request
+    public let invitedUsers: [String]
     
     public let isPhotoMessage: Bool
     
@@ -59,8 +61,9 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     
     public init(localIdentifier: String,
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
                 isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
@@ -68,6 +71,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         self.groupId = groupId
         self.eventOriginator = eventOriginator
         self.sharedWith = users
+        self.invitedUsers = invitedUsers
         self.isBackground = isBackground
         self.isPhotoMessage = isPhotoMessage
     }
@@ -75,8 +79,9 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     public init(localIdentifier: String,
                 versions: [SHAssetQuality],
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
                 isPhotoMessage: Bool,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
@@ -84,6 +89,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         self.groupId = groupId
         self.eventOriginator = eventOriginator
         self.sharedWith = users
+        self.invitedUsers = invitedUsers
         self.isBackground = isBackground
         self.isPhotoMessage = isPhotoMessage
     }
@@ -110,6 +116,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
             )
         }
         coder.encode(remoteReceivers, forKey: CodingKeys.sharedWith.rawValue)
+        coder.encode(invitedUsers, forKey: CodingKeys.invitedUsers.rawValue)
         coder.encode(NSNumber(booleanLiteral: self.isPhotoMessage), forKey: CodingKeys.isPhotoMessage.rawValue)
     }
     
@@ -119,6 +126,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         let groupId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupId.rawValue)
         let sender = decoder.decodeObject(of: SHRemoteUserClass.self, forKey: CodingKeys.eventOriginator.rawValue)
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: CodingKeys.sharedWith.rawValue)
+        let invitedUsers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.invitedUsers.rawValue)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isBackground.rawValue)
         let isPhotoMessage = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isPhotoMessage.rawValue)
         
@@ -160,6 +168,12 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
             log.error("unexpected value for sharedWith when decoding \(Self.Type.self) object")
             return nil
         }
+        
+        guard let invitedUsers = invitedUsers as? [String] else {
+            log.error("unexpected value for invitedUsers when decoding \(Self.Type.self) object")
+            return nil
+        }
+        
         // Convert to SHRemoteUser
         let remoteSender = SHRemoteUser(identifier: sender.identifier,
                                         name: sender.name,
@@ -183,6 +197,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                   groupId: groupId,
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
+                  invitedUsers: invitedUsers,
                   isPhotoMessage: isPhotoMessage?.boolValue ?? false,
                   isBackground: isBg.boolValue)
     }

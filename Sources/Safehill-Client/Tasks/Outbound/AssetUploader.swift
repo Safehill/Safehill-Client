@@ -60,6 +60,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let isPhotoMessage = request.isPhotoMessage
         
         /// Dequeque from UploadQueue
@@ -81,6 +82,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            invitedUsers: invitedUsers,
             isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground,
             error: error
@@ -125,6 +127,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let isPhotoMessage = request.isPhotoMessage
         let isBackground = request.isBackground
         
@@ -181,6 +184,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: sharedWith,
+                    invitedUsers: invitedUsers,
                     shouldUpload: false,
                     isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
@@ -209,6 +213,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                         groupId: request.groupId,
                         eventOriginator: request.eventOriginator,
                         sharedWith: request.sharedWith,
+                        invitedUsers: invitedUsers,
                         shouldUpload: true,
                         isPhotoMessage: request.isPhotoMessage,
                         isBackground: true
@@ -221,6 +226,11 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     throw error
                 }
             }
+        } else if invitedUsers.isEmpty == false {
+            self.serverProxy.invite(
+                invitedUsers,
+                to: groupId
+            ) { _ in }
         }
     }
     

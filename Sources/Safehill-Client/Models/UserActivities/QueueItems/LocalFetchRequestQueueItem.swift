@@ -16,8 +16,9 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
     public init(localIdentifier: String,
                 globalIdentifier: String? = nil,
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
                 shouldUpload: Bool,
                 isPhotoMessage: Bool,
                 isBackground: Bool = false) {
@@ -27,6 +28,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
+                   invitedUsers: invitedUsers,
                    isPhotoMessage: isPhotoMessage,
                    isBackground: isBackground)
     }
@@ -35,8 +37,9 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                 globalIdentifier: String? = nil,
                 versions: [SHAssetQuality],
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
                 shouldUpload: Bool,
                 isPhotoMessage: Bool,
                 isBackground: Bool = false) {
@@ -47,6 +50,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
+                   invitedUsers: invitedUsers,
                    isPhotoMessage: isPhotoMessage,
                    isBackground: isBackground)
     }
@@ -73,6 +77,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
+                      invitedUsers: superSelf.invitedUsers,
                       shouldUpload: su.boolValue,
                       isPhotoMessage: superSelf.isPhotoMessage,
                       isBackground: superSelf.isBackground)

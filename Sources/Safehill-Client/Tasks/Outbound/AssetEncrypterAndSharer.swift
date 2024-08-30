@@ -62,6 +62,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let isPhotoMessage = request.isPhotoMessage
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
@@ -79,6 +80,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            invitedUsers: invitedUsers,
             isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
@@ -231,6 +233,11 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                 completionHandler(.failure(err))
                 return
             }
+            
+            self.serverProxy.invite(
+                shareRequest.invitedUsers,
+                to: shareRequest.groupId
+            ) { _ in }
             
             do {
                 try self.markAsSuccessful(

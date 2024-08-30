@@ -11,10 +11,11 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         self.assetDescriptor.globalIdentifier
     }
     
-    public let eventOriginator: SHServerUser
-    public let sharedWith: [SHServerUser] = []
+    public let eventOriginator: any SHServerUser
+    public let sharedWith: [any SHServerUser] = []
+    public let invitedUsers: [String]
     
-    public var groupId: String
+    public let groupId: String
     
     private let receiverUserIdentifier: String
     
@@ -41,14 +42,8 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         self.eventOriginator = SHRemotePhantomUser(identifier: assetDescriptor.sharingInfo.sharedByUserIdentifier)
         self.receiverUserIdentifier = receiverUserIdentifier
         
-        /// The relevant group id is the group id used to share this asset with the receiver
-        for (userId, groupId) in self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-            if userId == receiverUserIdentifier {
-                self.groupId = groupId
-                return
-            }
-        }
-        self.groupId = ""
+        self.groupId = self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[receiverUserIdentifier] ?? ""
+        self.invitedUsers = self.assetDescriptor.sharingInfo.groupInfoById[self.groupId]?.invitedUsersPhoneNumbers ?? []
     }
     
     public required convenience init?(coder decoder: NSCoder) {

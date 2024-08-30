@@ -1934,7 +1934,7 @@ extension SHServerProxy {
     
     // MARK: - Phone Number Invitations
     
-    public func invite(
+    func invite(
         _ phoneNumbers: [String],
         to groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()

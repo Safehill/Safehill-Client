@@ -108,6 +108,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let isPhotoMessage = request.isPhotoMessage
         
         // Dequeue from FETCH queue
@@ -132,6 +133,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            invitedUsers: invitedUsers,
             isPhotoMessage: isPhotoMessage,
             isBackground: request.isBackground
         )
@@ -176,6 +178,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let shouldUpload = request.shouldUpload
         let isPhotoMessage = request.isPhotoMessage
         let isBackground = request.isBackground
@@ -199,6 +202,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
+                    invitedUsers: invitedUsers,
                     isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )
@@ -237,6 +241,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
+                    invitedUsers: invitedUsers,
                     isPhotoMessage: isPhotoMessage,
                     isBackground: isBackground
                 )

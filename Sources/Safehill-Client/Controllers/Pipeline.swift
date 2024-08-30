@@ -28,12 +28,14 @@ public struct SHUploadPipeline {
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
+    ///   - invitedUsers: the phone numbers invited to the share with groupId
     ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread, and it should show as a message
     public static func enqueueUpload(
         localIdentifier: String,
         groupId: String,
-        sender: SHServerUser,
-        recipients: [SHServerUser],
+        sender: any SHServerUser,
+        recipients: [any SHServerUser],
+        invitedUsers: [String],
         isPhotoMessage: Bool
     ) throws {
         do {
@@ -42,6 +44,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
+                invitedUsers: invitedUsers,
                 shouldUpload: true,
                 isPhotoMessage: isPhotoMessage
             )
@@ -52,6 +55,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
+                invitedUsers: invitedUsers,
                 isPhotoMessage: isPhotoMessage
             )
             try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedUpload))
@@ -62,6 +66,7 @@ public struct SHUploadPipeline {
                     groupId: groupId,
                     eventOriginator: sender,
                     sharedWith: recipients,
+                    invitedUsers: invitedUsers,
                     isPhotoMessage: isPhotoMessage
                 )
                 try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
@@ -86,7 +91,8 @@ public struct SHUploadPipeline {
         globalIdentifier: String?,
         groupId: String,
         sender: SHAuthenticatedLocalUser,
-        recipients: [SHServerUser],
+        recipients: [any SHServerUser],
+        invitedUsers: [String],
         isPhotoMessage: Bool
     ) throws {
         ///
@@ -115,6 +121,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
+                invitedUsers: invitedUsers,
                 shouldUpload: false,
                 isPhotoMessage: isPhotoMessage
             )
@@ -127,6 +134,7 @@ public struct SHUploadPipeline {
                 groupId: groupId,
                 eventOriginator: sender,
                 sharedWith: recipients,
+                invitedUsers: invitedUsers,
                 isPhotoMessage: isPhotoMessage
             )
             try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))

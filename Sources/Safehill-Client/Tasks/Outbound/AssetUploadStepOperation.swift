@@ -16,8 +16,9 @@ protocol SHUploadStepBackgroundOperation {
         localIdentifier: String,
         versions: [SHAssetQuality],
         groupId: String,
-        eventOriginator: SHServerUser,
-        sharedWith: [SHServerUser],
+        eventOriginator: any SHServerUser,
+        sharedWith: [any SHServerUser],
+        invitedUsers: [String],
         isPhotoMessage: Bool,
         isBackground: Bool,
         error: Error
@@ -53,8 +54,9 @@ extension SHUploadStepBackgroundOperation {
         localIdentifier: String,
         versions: [SHAssetQuality],
         groupId: String,
-        eventOriginator: SHServerUser,
-        sharedWith users: [SHServerUser],
+        eventOriginator: any SHServerUser,
+        sharedWith users: [any SHServerUser],
+        invitedUsers: [String],
         isPhotoMessage: Bool,
         isBackground: Bool,
         error: Error
@@ -65,6 +67,7 @@ extension SHUploadStepBackgroundOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
+            invitedUsers: invitedUsers,
             isPhotoMessage: isPhotoMessage,
             isBackground: isBackground
         )
@@ -92,6 +95,7 @@ extension SHUploadStepBackgroundOperation {
                 groupId: groupId,
                 eventOriginator: eventOriginator,
                 sharedWith: users,
+                invitedUsers: invitedUsers,
                 isPhotoMessage: isPhotoMessage,
                 isBackground: isBackground
             )
