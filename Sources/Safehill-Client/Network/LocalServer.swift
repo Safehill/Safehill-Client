@@ -623,12 +623,16 @@ struct LocalServer : SHServerAPI {
         )
         
         let recipientDetailsDict: [String: DBSecureSerializableAssetRecipientSharingDetails?]
+        let groupPhoneNumberInvitations: [String: [String]]
+        
         do {
             recipientDetailsDict = try assetStore
                 .dictionaryRepresentation(forKeysMatching: receiverCondition)
                 .mapValues { try? DBSecureSerializableAssetRecipientSharingDetails.from($0) }
+            
+            groupPhoneNumberInvitations = try self.groupPhoneNumberInvitations()
         } catch {
-            log.critical("error reading from the assets DB. \(error.localizedDescription)")
+            log.critical("error reading from DB. \(error.localizedDescription)")
             completionHandler(.failure(error))
             return
         }
@@ -669,9 +673,11 @@ struct LocalServer : SHServerAPI {
             }
             
             if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
+                let thisGroupPhoneNumberInvitation = groupPhoneNumberInvitations[groupId]
                 let groupInfo = SHGenericAssetGroupInfo(
                     name: value.groupName,
-                    createdAt: value.groupCreationDate
+                    createdAt: value.groupCreationDate,
+                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation
                 )
                 
                 if groupInfoByIdByAssetGid[assetGid] == nil {
@@ -859,8 +865,15 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        var keysToUpdate = [String: DBSecureSerializableAssetRecipientSharingDetails]()
-        var invalidKeys = Set<String>()
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let assetStoreWriteBatch = assetStore.writeBatch()
+        
+        var assetStoreKeysToUpdate = [String: DBSecureSerializableAssetRecipientSharingDetails]()
+        var assetStoreInvalidKeys = Set<String>()
         
         do {
             /// 
@@ -895,9 +908,9 @@ struct LocalServer : SHServerAPI {
                         publicSignature: versionDetails.publicSignature
                     )
                     
-                    keysToUpdate[key] = updatedValue
+                    assetStoreKeysToUpdate[key] = updatedValue
                 } catch {
-                    invalidKeys.insert(key)
+                    assetStoreInvalidKeys.insert(key)
                 }
             }
         } catch {
@@ -905,26 +918,73 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        if invalidKeys.isEmpty == false {
+        if assetStoreInvalidKeys.isEmpty == false {
             do {
-                let _ = try assetStore.removeValues(for: Array(invalidKeys))
+                let _ = try assetStore.removeValues(for: Array(assetStoreInvalidKeys))
             } catch {
-                log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
+                log.error("failed to remove invalid keys \(assetStoreInvalidKeys) from DB. \(error.localizedDescription)")
             }
         }
         
-        let writeBatch = assetStore.writeBatch()
-        
-        for (key, update) in keysToUpdate {
+        for (key, update) in assetStoreKeysToUpdate {
             do {
                 let serializedData = try NSKeyedArchiver.archivedData(withRootObject: update, requiringSecureCoding: true)
-                writeBatch.set(value: serializedData, for: key)
+                assetStoreWriteBatch.set(value: serializedData, for: key)
             } catch {
                 log.critical("failed to serialize recipient details update for key \(key): \(update). \(error.localizedDescription)")
             }
         }
         
-        writeBatch.write(completionHandler: completionHandler)
+        do {
+            try assetStoreWriteBatch.write()
+        } catch {
+            completionHandler(.failure(error))
+        }
+        
+        
+        let invitationsWriteBatch = userStore.writeBatch()
+        var userStoreInvalidKeys = Set<String>()
+        
+        do {
+            let allInvitationKeys = try userStore.keys(
+                    matching: KBGenericCondition(.beginsWith, value: "invitations::")
+                )
+            
+            for key in allInvitationKeys {
+                let keyComponents = key.components(separatedBy: "::")
+                guard keyComponents.count == 3
+                else {
+                    userStoreInvalidKeys.insert(key)
+                    continue
+                }
+                
+                let groupId = keyComponents[2]
+                guard keyComponents[1] == SHInteractionAnchor.group.rawValue,
+                      let newGroupInfo = groupInfoById[groupId]
+                else {
+                    continue
+                }
+                
+                invitationsWriteBatch.set(value: newGroupInfo.invitedUsersPhoneNumbers, for: key)
+            }
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }
+        
+        if userStoreInvalidKeys.isEmpty == false {
+            do {
+                let _ = try userStore.removeValues(for: Array(userStoreInvalidKeys))
+            } catch {
+                log.error("failed to remove invalid keys \(userStoreInvalidKeys) from DB. \(error.localizedDescription)")
+            }
+        }
+        
+        do {
+            try invitationsWriteBatch.write()
+        } catch {
+            completionHandler(.failure(error))
+        }
     }
     
     func removeGroupIds(_ groupIds: [String],
@@ -1159,7 +1219,11 @@ struct LocalServer : SHServerAPI {
                     sharedByUserIdentifier: self.requestor.identifier,
                     sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
                     groupInfoById: [
-                        groupId: SHGenericAssetGroupInfo(name: nil, createdAt: Date())
+                        groupId: SHGenericAssetGroupInfo(
+                            name: nil,
+                            createdAt: Date(),
+                            invitedUsersPhoneNumbers: nil
+                        )
                     ]
                 )
             )
@@ -1475,11 +1539,6 @@ struct LocalServer : SHServerAPI {
                                                     groupId: senderUploadGroupId,
                                                     versions: serverAssetVersions)
                     serverAssets.append(serverAsset)
-                    
-                    self.assetDescriptorInMemoryCache.set(
-                        descriptor.serialized(),
-                        forKey: asset.globalIdentifier
-                    )
                 }
                 
                 completionHandler(.success(serverAssets))
@@ -2582,6 +2641,79 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    private func groupPhoneNumberInvitations(from dict: [String: Any?]) -> [String: [String]] {
+        var invitationsByGroupId = [String: [String]]()
+        var malformedInvitationKeys = Set<String>()
+        
+        for (key, value) in dict {
+            let keyComponents = key.components(separatedBy: "::")
+            guard keyComponents.count == 3 else {
+                malformedInvitationKeys.insert(key)
+                continue
+            }
+            
+            guard let value = value as? String else {
+                continue
+            }
+            
+            let groupId = keyComponents[2]
+            let valueComponents = value.components(separatedBy: "::")
+            
+            invitationsByGroupId[groupId] = valueComponents
+        }
+        
+        if malformedInvitationKeys.isEmpty == false {
+            do {
+                try SHDBManager.sharedInstance.userStore?.removeValues(for: Array(malformedInvitationKeys))
+            } catch {}
+        }
+        
+        return invitationsByGroupId
+    }
+    
+    private func groupPhoneNumberInvitations() throws -> [String: [String]] {
+        
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            throw KBError.databaseNotReady
+        }
+        
+        do {
+            let dict = try userStore.dictionaryRepresentation(
+                forKeysMatching: KBGenericCondition(.beginsWith, value: "invitations::\(SHInteractionAnchor.group.rawValue)")
+            )
+            
+            return groupPhoneNumberInvitations(from: dict)
+        } catch {
+            log.error("failed to fetch user invitations. \(error.localizedDescription)")
+            throw error
+        }
+    }
+    
+    private func groupPhoneNumberInvitations(
+        completionHandler: @escaping (Result<[String: [String]], Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        userStore.dictionaryRepresentation(
+            forKeysMatching: KBGenericCondition(.beginsWith, value: "invitations::\(SHInteractionAnchor.group.rawValue)")
+        ) {
+            invitationsResult in
+            switch invitationsResult {
+            case .success(let dict):
+                
+                let invitationsByGroupId = groupPhoneNumberInvitations(from: dict)
+                completionHandler(.success(invitationsByGroupId))
+                
+            case .failure(let error):
+                log.error("failed to fetch user invitations. \(error.localizedDescription)")
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
     func topLevelGroupsInteractionsSummary(completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()) {
         guard let reactionStore = SHDBManager.sharedInstance.reactionStore else {
             completionHandler(.failure(KBError.databaseNotReady))
@@ -2589,11 +2721,6 @@ struct LocalServer : SHServerAPI {
         }
         
         guard let messagesQueue = SHDBManager.sharedInstance.messagesQueue else {
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        guard let userStore = SHDBManager.sharedInstance.userStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
@@ -2674,42 +2801,15 @@ struct LocalServer : SHServerAPI {
             dispatchGroup.leave()
         }
         
-        var malformedInvitationKeys = Set<String>()
-        
         dispatchGroup.enter()
-        userStore.dictionaryRepresentation(
-            forKeysMatching: KBGenericCondition(.beginsWith, value: "invitations::\(SHInteractionAnchor.group.rawValue)")
-        ) {
-            invitationsResult in
-            switch invitationsResult {
+        self.groupPhoneNumberInvitations { result in
+            switch result {
             case .success(let dict):
-                for (key, value) in dict {
-                    let keyComponents = key.components(separatedBy: "::")
-                    guard keyComponents.count == 3 else {
-                        malformedInvitationKeys.insert(key)
-                        continue
-                    }
-                    
-                    guard let value = value as? String else {
-                        continue
-                    }
-                    
-                    let groupId = keyComponents[2]
-                    let valueComponents = value.components(separatedBy: "::")
-                    
-                    invitationsByGroupId[groupId] = valueComponents
-                }
-            case .failure(let error):
-                log.error("failed to fetch user invitations. \(error.localizedDescription)")
+                invitationsByGroupId = dict
+            case .failure:
+                break
             }
-            
             dispatchGroup.leave()
-        }
-        
-        if malformedInvitationKeys.isEmpty == false {
-            do {
-                try userStore.removeValues(for: Array(malformedInvitationKeys))
-            } catch {}
         }
         
         dispatchGroup.notify(queue: .global()) {

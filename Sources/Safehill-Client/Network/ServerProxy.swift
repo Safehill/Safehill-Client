@@ -1929,3 +1929,40 @@ extension SHServerProxy {
         }
     }
 }
+
+extension SHServerProxy {
+    
+    // MARK: - Phone Number Invitations
+    
+    func invite(
+        _ phoneNumbers: [String],
+        to groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.invite(phoneNumbers, to: groupId) { remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.invite(phoneNumbers, to: groupId) { _ in }
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func uninvite(
+        _ phoneNumbers: [String],
+        from groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.uninvite(phoneNumbers, from: groupId) { remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.uninvite(phoneNumbers, from: groupId) { _ in }
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+}
