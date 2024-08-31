@@ -166,9 +166,24 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         }
         
         ///
-        /// Start the sharing part if needed
+        /// Start the sharing part as needed
         ///
-        if request.isSharingWithOtherUsers {
+        if request.isSharingWithOrInvitingOtherUsers {
+            
+            guard isBackground == false || request.isSharingWithOtherSafehillUsers else {
+                /// 
+                /// If there are no users to share with but only invitations to make
+                /// the invitation should only happen once, for items with `isBackground = false`.
+                /// If `isBackground` is `true`, then it's safe to assume that the invitation
+                /// has already happened.
+                ///
+                /// Of course if there are Safehill users to share the asset with,
+                /// the enqueuing of share of the hi resolution asset should continue for the `sharedWith` set
+                /// (`isBackground = true` and `request.versions.contains(.hiResolution) == false`)
+                ///
+                return
+            }
+            
             let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
             
             do {
@@ -176,7 +191,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
                 ///
                 log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
-
+                
                 let fetchRequest = SHLocalFetchRequestQueueItem(
                     localIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
@@ -226,11 +241,6 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     throw error
                 }
             }
-        } else if invitedUsers.isEmpty == false {
-            self.serverProxy.invite(
-                invitedUsers,
-                to: groupId
-            ) { _ in }
         }
     }
     

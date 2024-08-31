@@ -229,28 +229,46 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             isPhotoMessage: shareRequest.isPhotoMessage,
             suppressNotification: shareRequest.isBackground
         ) { shareResult in
-            if case .failure(let err) = shareResult {
+            
+            let handleSuccess = {
+                do {
+                    try self.markAsSuccessful(
+                        item: item,
+                        encryptionRequest: shareRequest,
+                        globalIdentifier: shareableEncryptedAsset.globalIdentifier
+                    )
+                } catch {
+                    self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops. \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                }
+                
+                completionHandler(.success(()))
+            }
+            
+            switch shareResult {
+            case .failure(let err):
                 completionHandler(.failure(err))
-                return
+                
+            case .success:
+                if shareRequest.isBackground == false,
+                   shareRequest.invitedUsers.count > 0 {
+                    
+                    self.serverProxy.invite(
+                        shareRequest.invitedUsers,
+                        to: shareRequest.groupId
+                    ) { inviteResult in
+                        switch inviteResult {
+                        case.success:
+                            handleSuccess()
+                            
+                        case .failure(let error):
+                            completionHandler(.failure(error))
+                        }
+                    }
+                } else {
+                    handleSuccess()
+                }
             }
-            
-            self.serverProxy.invite(
-                shareRequest.invitedUsers,
-                to: shareRequest.groupId
-            ) { _ in }
-            
-            do {
-                try self.markAsSuccessful(
-                    item: item,
-                    encryptionRequest: shareRequest,
-                    globalIdentifier: shareableEncryptedAsset.globalIdentifier
-                )
-            } catch {
-                self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops. \(error.localizedDescription)")
-                completionHandler(.failure(error))
-            }
-            
-            completionHandler(.success(()))
         }
     }
     
@@ -295,12 +313,41 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             completionHandler(.failure(error))
         }
         
-        guard shareRequest.sharedWith.count > 0 else {
-            handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers"))
+        let globalIdentifier = shareRequest.asset.globalIdentifier
+        guard let globalIdentifier else {
+            ///
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
             return
         }
         
-        log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
+        guard shareRequest.isSharingWithOrInvitingOtherUsers else {
+            handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers or invited phone numbers"))
+            return
+        }
+        
+        log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier }) and invited \(shareRequest.invitedUsers)")
+        
+        guard shareRequest.isOnlyInvitingUsers == false else {
+            /// 
+            /// If only inviting other users take this shortcut,
+            /// only invite and end early.
+            /// If in background, don't invite, cause the previous non-background item
+            /// would have invited the users for this request
+            ///
+            if shareRequest.isBackground == false {
+                self.serverProxy.invite(
+                    shareRequest.invitedUsers,
+                    to: shareRequest.groupId,
+                    completionHandler: completionHandler
+                )
+            } else {
+                completionHandler(.success(()))
+            }
+            return
+        }
         
         if shareRequest.isBackground == false {
             let assetDelegates = self.assetsDelegates
@@ -313,16 +360,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     }
                 }
             }
-        }
-        
-        let globalIdentifier = shareRequest.asset.globalIdentifier
-        guard let globalIdentifier else {
-            ///
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
-            return
         }
         
         ///
