@@ -43,7 +43,11 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         self.receiverUserIdentifier = receiverUserIdentifier
         
         self.groupId = self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[receiverUserIdentifier] ?? ""
-        self.invitedUsers = self.assetDescriptor.sharingInfo.groupInfoById[self.groupId]?.invitedUsersPhoneNumbers ?? []
+        if let invitedUsersPhoneNumbers = self.assetDescriptor.sharingInfo.groupInfoById[self.groupId]?.invitedUsersPhoneNumbers {
+            self.invitedUsers = Array(invitedUsersPhoneNumbers.keys)
+        } else {
+            self.invitedUsers = []
+        }
     }
     
     public required convenience init?(coder decoder: NSCoder) {

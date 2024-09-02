@@ -6,5 +6,5 @@ public protocol SHAssetGroupInfo {
     /// ISO8601 formatted datetime, representing the time the asset group was created
     var createdAt: Date? { get }
     /// The list of phone number that have been invited to this group
-    var invitedUsersPhoneNumbers: [String]? { get }
+    var invitedUsersPhoneNumbers: [String: String]? { get }
 }

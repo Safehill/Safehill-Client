@@ -1,6 +1,5 @@
 import Foundation
 
-
 class DBSecureSerializableUserMessage: NSObject, NSSecureCoding {
     
     public static var supportsSecureCoding = true

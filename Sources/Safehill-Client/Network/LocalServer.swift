@@ -623,7 +623,7 @@ struct LocalServer : SHServerAPI {
         )
         
         let recipientDetailsDict: [String: DBSecureSerializableAssetRecipientSharingDetails?]
-        let groupPhoneNumberInvitations: [String: [String]]
+        let groupPhoneNumberInvitations: [String: [String: String]]
         
         do {
             recipientDetailsDict = try assetStore
@@ -965,7 +965,20 @@ struct LocalServer : SHServerAPI {
                     continue
                 }
                 
-                invitationsWriteBatch.set(value: newGroupInfo.invitedUsersPhoneNumbers, for: key)
+                if let newInvitedNumbers = newGroupInfo.invitedUsersPhoneNumbers,
+                   newInvitedNumbers.isEmpty == false {
+                    invitationsWriteBatch.set(
+                        value: newInvitedNumbers.map({
+                            DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
+                        }),
+                        for: key
+                    )
+                } else {
+                    invitationsWriteBatch.set(
+                        value: nil,
+                        for: key
+                    )
+                }
             }
         } catch {
             completionHandler(.failure(error))
@@ -2641,8 +2654,8 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    private func groupPhoneNumberInvitations(from dict: [String: Any?]) -> [String: [String]] {
-        var invitationsByGroupId = [String: [String]]()
+    private func groupPhoneNumberInvitations(from dict: [String: Any?]) -> [String: [String: String]] {
+        var invitationsByGroupId = [String: [String: String]]()
         var malformedInvitationKeys = Set<String>()
         
         for (key, value) in dict {
@@ -2652,14 +2665,18 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            guard let value = value as? String else {
+            guard let values = value as? [DBSecureSerializableInvitation] else {
                 continue
             }
             
             let groupId = keyComponents[2]
-            let valueComponents = value.components(separatedBy: "::")
             
-            invitationsByGroupId[groupId] = valueComponents
+            invitationsByGroupId[groupId] = values.reduce([String: String]()) {
+                partialResult, item in
+                var result = partialResult
+                result[item.phoneNumber] = item.invitedAt
+                return result
+            }
         }
         
         if malformedInvitationKeys.isEmpty == false {
@@ -2671,7 +2688,7 @@ struct LocalServer : SHServerAPI {
         return invitationsByGroupId
     }
     
-    private func groupPhoneNumberInvitations() throws -> [String: [String]] {
+    private func groupPhoneNumberInvitations() throws -> [String: [String: String]] {
         
         guard let userStore = SHDBManager.sharedInstance.userStore else {
             throw KBError.databaseNotReady
@@ -2690,7 +2707,7 @@ struct LocalServer : SHServerAPI {
     }
     
     private func groupPhoneNumberInvitations(
-        completionHandler: @escaping (Result<[String: [String]], Error>) -> ()
+        completionHandler: @escaping (Result<[String: [String: String]], Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
             completionHandler(.failure(KBError.databaseNotReady))
@@ -2702,8 +2719,8 @@ struct LocalServer : SHServerAPI {
         ) {
             invitationsResult in
             switch invitationsResult {
-            case .success(let dict):
                 
+            case .success(let dict):
                 let invitationsByGroupId = groupPhoneNumberInvitations(from: dict)
                 completionHandler(.success(invitationsByGroupId))
                 
@@ -2729,7 +2746,7 @@ struct LocalServer : SHServerAPI {
         
         var numCommentsByGroupId = [String: Int]()
         var reactionsByGroupId = [String: [ReactionOutputDTO]]()
-        var invitationsByGroupId = [String: [String]]()
+        var invitationsByGroupId = [String: [String: String]]()
         
         let allGroupsCondition = KBGenericCondition(.beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::")
         
@@ -2820,7 +2837,7 @@ struct LocalServer : SHServerAPI {
                     numComments: numCommentsByGroupId[groupId] ?? 0,
                     firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
                     reactions: reactionsByGroupId[groupId] ?? [],
-                    invitedUsersPhoneNumbers: invitationsByGroupId[groupId] ?? []
+                    invitedUsersPhoneNumbers: invitationsByGroupId[groupId] ?? [:]
                 )
                 
                 groupSummaryById[groupId] = groupSummary
@@ -2879,18 +2896,23 @@ struct LocalServer : SHServerAPI {
                 userStore.value(for: "invitations::\(SHInteractionAnchor.group.rawValue)::\(groupId)") {
                     invitationsResult in
                     
-                    let invitedPhoneNumbers: [String]
+                    let invitedPhoneNumbers: [String: String]
                     
                     switch invitationsResult {
                     case .success(let maybeValue):
-                        if let maybeValue = maybeValue as? String {
-                            invitedPhoneNumbers = maybeValue.components(separatedBy: "::")
+                        if let values = maybeValue as? [DBSecureSerializableInvitation] {
+                            invitedPhoneNumbers = values.reduce([String: String]()) {
+                                partialResult, item in
+                                var result = partialResult
+                                result[item.phoneNumber] = item.invitedAt
+                                return result
+                            }
                         } else {
-                            invitedPhoneNumbers = []
+                            invitedPhoneNumbers = [:]
                         }
                     case .failure(let error):
                         log.error("failed to fetch user invitations. \(error.localizedDescription)")
-                        invitedPhoneNumbers = []
+                        invitedPhoneNumbers = [:]
                     }
                     
                     let response = InteractionsGroupSummaryDTO(
@@ -3632,18 +3654,31 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        guard phoneNumbers.isEmpty == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("empty phone number list to invite")))
+            return
+        }
+        
         let key = "invitations::\(SHInteractionAnchor.group.rawValue)::\(groupId)"
         
         do {
-            var newList = Set<String>()
-            if let existing = try userStore.value(for: key) as? String {
-                newList = Set(existing.components(separatedBy: "::"))
-                phoneNumbers.forEach { newList.insert($0) }
-            } else {
-                newList = Set(phoneNumbers)
+            var newInvitations = [String: String]()
+            
+            let now = Date().iso8601withFractionalSeconds
+            for phoneNumber in phoneNumbers {
+                newInvitations[phoneNumber] = now
             }
             
-            try userStore.set(value: String(newList.joined(separator: "::")), for: key)
+            if let existing = try userStore.value(for: key) as? [DBSecureSerializableInvitation] {
+                for item in existing {
+                    newInvitations[item.phoneNumber] = item.invitedAt
+                }
+            }
+            
+            try userStore.set(
+                value: newInvitations.map({ DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value) }),
+                for: key
+            )
             
         } catch {
             completionHandler(.failure(error))
@@ -3656,19 +3691,31 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        guard phoneNumbers.isEmpty == false else {
+            completionHandler(.failure(SHHTTPError.ClientError.badRequest("empty phone number list to uninvite")))
+            return
+        }
+        
         let key = "invitations::\(SHInteractionAnchor.group.rawValue)::\(groupId)"
         
         do {
-            var newList = Set<String>()
-            if let existing = try userStore.value(for: key) as? String {
-                newList = Set(existing.components(separatedBy: "::"))
-                phoneNumbers.forEach { newList.remove($0) }
-                
-                if newList.isEmpty {
-                    try userStore.removeValue(for: key)
-                } else {
-                    try userStore.set(value: String(newList.joined(separator: "::")), for: key)
+            var newInvitations = [String: String]()
+            
+            if let existing = try userStore.value(for: key) as? [DBSecureSerializableInvitation] {
+                for item in existing {
+                    newInvitations[item.phoneNumber] = item.invitedAt
                 }
+            }
+            
+            for phoneNumber in phoneNumbers {
+                newInvitations.removeValue(forKey: phoneNumber)
+            }
+            
+            if newInvitations.count > 0 {
+                try userStore.set(
+                    value: newInvitations.map({ DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value) }),
+                    for: key
+                )
             } else {
                 try userStore.removeValue(for: key)
             }

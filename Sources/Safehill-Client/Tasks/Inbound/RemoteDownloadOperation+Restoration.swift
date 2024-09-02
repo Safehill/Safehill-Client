@@ -156,7 +156,7 @@ extension SHRemoteDownloadOperation {
                         groupId: groupId,
                         eventOriginator: senderUser,
                         sharedWith: [],
-                        invitedUsers: groupInfo.invitedUsersPhoneNumbers ?? [],
+                        invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
                         isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                         isBackground: false
                     )
@@ -191,7 +191,7 @@ extension SHRemoteDownloadOperation {
                     groupId: groupId,
                     eventOriginator: senderUser,
                     sharedWith: shareInfo.map({ $0.with }),
-                    invitedUsers: descriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers ?? [],
+                    invitedUsers: Array((descriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers ?? [:]).keys),
                     isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
                     isBackground: false
                 )

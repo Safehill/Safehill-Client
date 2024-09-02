@@ -165,7 +165,8 @@ struct AssetDescriptorsDiff {
                 if let localGroupInfo = correspondingLocalDescriptor.sharingInfo.groupInfoById[groupId] {
                     if localGroupInfo.createdAt == groupInfo.createdAt,
                        localGroupInfo.name == groupInfo.name,
-                       Set(localGroupInfo.invitedUsersPhoneNumbers ?? []) == Set(groupInfo.invitedUsersPhoneNumbers ?? []) {
+                       localGroupInfo.invitedUsersPhoneNumbers?.keys.sorted()
+                        == groupInfo.invitedUsersPhoneNumbers?.keys.sorted() {
                         // They are the same
                     } else {
                         groupInfoToUpdate[groupId] = groupInfo
