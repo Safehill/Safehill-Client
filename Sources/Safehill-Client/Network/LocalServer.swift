@@ -967,17 +967,15 @@ struct LocalServer : SHServerAPI {
                 
                 if let newInvitedNumbers = newGroupInfo.invitedUsersPhoneNumbers,
                    newInvitedNumbers.isEmpty == false {
-                    invitationsWriteBatch.set(
-                        value: newInvitedNumbers.map({
+                    let data = try NSKeyedArchiver.archivedData(
+                        withRootObject: newInvitedNumbers.map({
                             DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
                         }),
-                        for: key
+                        requiringSecureCoding: true
                     )
+                    invitationsWriteBatch.set(value: data, for: key)
                 } else {
-                    invitationsWriteBatch.set(
-                        value: nil,
-                        for: key
-                    )
+                    invitationsWriteBatch.set(value: nil, for: key)
                 }
             }
         } catch {
@@ -2654,7 +2652,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    private func groupPhoneNumberInvitations(from dict: [String: Any?]) -> [String: [String: String]] {
+    private func groupPhoneNumberInvitations(from dict: [String: Any?]) throws -> [String: [String: String]] {
         var invitationsByGroupId = [String: [String: String]]()
         var malformedInvitationKeys = Set<String>()
         
@@ -2665,17 +2663,17 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            guard let values = value as? [DBSecureSerializableInvitation] else {
-                continue
-            }
-            
-            let groupId = keyComponents[2]
-            
-            invitationsByGroupId[groupId] = values.reduce([String: String]()) {
-                partialResult, item in
-                var result = partialResult
-                result[item.phoneNumber] = item.invitedAt
-                return result
+            if let value {
+                let dbInvitations = try DBSecureSerializableInvitation.deserializedList(from: value)
+                
+                let groupId = keyComponents[2]
+                
+                invitationsByGroupId[groupId] = dbInvitations.reduce([String: String]()) {
+                    partialResult, item in
+                    var result = partialResult
+                    result[item.phoneNumber] = item.invitedAt
+                    return result
+                }
             }
         }
         
@@ -2699,7 +2697,7 @@ struct LocalServer : SHServerAPI {
                 forKeysMatching: KBGenericCondition(.beginsWith, value: "invitations::\(SHInteractionAnchor.group.rawValue)")
             )
             
-            return groupPhoneNumberInvitations(from: dict)
+            return try groupPhoneNumberInvitations(from: dict)
         } catch {
             log.error("failed to fetch user invitations. \(error.localizedDescription)")
             throw error
@@ -2721,8 +2719,12 @@ struct LocalServer : SHServerAPI {
             switch invitationsResult {
                 
             case .success(let dict):
-                let invitationsByGroupId = groupPhoneNumberInvitations(from: dict)
-                completionHandler(.success(invitationsByGroupId))
+                do {
+                    let invitationsByGroupId = try groupPhoneNumberInvitations(from: dict)
+                    completionHandler(.success(invitationsByGroupId))
+                } catch {
+                    completionHandler(.failure(error))
+                }
                 
             case .failure(let error):
                 log.error("failed to fetch user invitations. \(error.localizedDescription)")
@@ -2900,8 +2902,13 @@ struct LocalServer : SHServerAPI {
                     
                     switch invitationsResult {
                     case .success(let maybeValue):
-                        if let values = maybeValue as? [DBSecureSerializableInvitation] {
-                            invitedPhoneNumbers = values.reduce([String: String]()) {
+                        guard let value = maybeValue else {
+                            completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nil)))
+                            return
+                        }
+                        
+                        if let dbInvitations = try? DBSecureSerializableInvitation.deserializedList(from: value) {
+                            invitedPhoneNumbers = dbInvitations.reduce([String: String]()) {
                                 partialResult, item in
                                 var result = partialResult
                                 result[item.phoneNumber] = item.invitedAt
@@ -3669,16 +3676,19 @@ struct LocalServer : SHServerAPI {
                 newInvitations[phoneNumber] = now
             }
             
-            if let existing = try userStore.value(for: key) as? [DBSecureSerializableInvitation] {
-                for item in existing {
+            if let data = try userStore.value(for: key) {
+                let dbInvitations = try DBSecureSerializableInvitation.deserializedList(from: data)
+                
+                for item in dbInvitations {
                     newInvitations[item.phoneNumber] = item.invitedAt
                 }
             }
             
-            try userStore.set(
-                value: newInvitations.map({ DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value) }),
-                for: key
+            let data = try NSKeyedArchiver.archivedData(
+                withRootObject: newInvitations.map({ DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value) }),
+                requiringSecureCoding: true
             )
+            try userStore.set(value: data, for: key)
             
         } catch {
             completionHandler(.failure(error))
@@ -3701,8 +3711,10 @@ struct LocalServer : SHServerAPI {
         do {
             var newInvitations = [String: String]()
             
-            if let existing = try userStore.value(for: key) as? [DBSecureSerializableInvitation] {
-                for item in existing {
+            if let value = try userStore.value(for: key) {
+                let dbInvitations = try DBSecureSerializableInvitation.deserializedList(from: value)
+                
+                for item in dbInvitations {
                     newInvitations[item.phoneNumber] = item.invitedAt
                 }
             }
@@ -3712,10 +3724,13 @@ struct LocalServer : SHServerAPI {
             }
             
             if newInvitations.count > 0 {
-                try userStore.set(
-                    value: newInvitations.map({ DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value) }),
-                    for: key
+                let data = try NSKeyedArchiver.archivedData(
+                    withRootObject: newInvitations.map({
+                        DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
+                    }),
+                    requiringSecureCoding: true
                 )
+                try userStore.set(value: data, for: key)
             } else {
                 try userStore.removeValue(for: key)
             }

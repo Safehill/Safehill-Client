@@ -41,4 +41,25 @@ class DBSecureSerializableInvitation: NSObject, NSSecureCoding {
         coder.encode(phoneNumber, forKey: CodingKeys.phoneNumber.rawValue)
         coder.encode(invitedAt, forKey: CodingKeys.invitedAt.rawValue)
     }
+    
+    static func deserializedList(from any: Any) throws -> [DBSecureSerializableInvitation] {
+        guard let serialized = any as? Data else {
+            throw SHBackgroundOperationError.unexpectedData(any)
+        }
+        
+        let unarchiver: NSKeyedUnarchiver
+        if #available(macOS 10.13, *) {
+            unarchiver = try NSKeyedUnarchiver(forReadingFrom: serialized)
+        } else {
+            unarchiver = NSKeyedUnarchiver(forReadingWith: serialized)
+        }
+        guard let result = unarchiver.decodeArrayOfObjects(
+            ofClass: DBSecureSerializableInvitation.self,
+            forKey: NSKeyedArchiveRootObjectKey
+        ) else {
+            throw SHBackgroundOperationError.unexpectedData(serialized)
+        }
+        
+        return result
+    }
 }
