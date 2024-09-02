@@ -3643,7 +3643,7 @@ struct LocalServer : SHServerAPI {
                 newList = Set(phoneNumbers)
             }
             
-            try userStore.set(value: newList.joined(separator: "::"), for: key)
+            try userStore.set(value: String(newList.joined(separator: "::")), for: key)
             
         } catch {
             completionHandler(.failure(error))
@@ -3667,7 +3667,7 @@ struct LocalServer : SHServerAPI {
                 if newList.isEmpty {
                     try userStore.removeValue(for: key)
                 } else {
-                    try userStore.set(value: newList.joined(separator: "::"), for: key)
+                    try userStore.set(value: String(newList.joined(separator: "::")), for: key)
                 }
             } else {
                 try userStore.removeValue(for: key)
