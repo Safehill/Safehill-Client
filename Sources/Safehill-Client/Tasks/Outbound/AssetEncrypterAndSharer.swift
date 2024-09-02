@@ -94,7 +94,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             throw error
         }
         
-        guard request.isBackground == false else {
+        guard request.isBackground == false, users.count > 0 else {
             /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
             return
         }

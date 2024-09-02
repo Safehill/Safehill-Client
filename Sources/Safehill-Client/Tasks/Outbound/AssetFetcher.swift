@@ -154,7 +154,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 if let delegate = delegate as? SHAssetFetcherDelegate {
                     if request.shouldUpload == true {
                         delegate.didFailFetchingForUpload(ofAsset: localIdentifier, in: groupId, error: error)
-                    } else {
+                    } else if users.isEmpty == false {
                         delegate.didFailFetchingForSharing(
                             ofAsset: localIdentifier,
                             sharingWith: users,
@@ -220,7 +220,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                         if let delegate = delegate as? SHAssetFetcherDelegate {
                             if request.shouldUpload == true {
                                 delegate.didCompleteFetchingForUpload(ofAsset: localIdentifier, in: groupId)
-                            } else {
+                            } else if users.isEmpty == false {
                                 delegate.didCompleteFetchingForSharing(
                                     ofAsset: localIdentifier,
                                     sharingWith: users,
@@ -328,7 +328,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                         if let delegate = delegate as? SHAssetFetcherDelegate {
                             if fetchRequest.shouldUpload == true {
                                 delegate.didStartFetchingForUpload(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
-                            } else {
+                            } else if fetchRequest.sharedWith.isEmpty == false {
                                 delegate.didStartFetchingForSharing(
                                     ofAsset: fetchRequest.localIdentifier,
                                     sharingWith: fetchRequest.sharedWith,
