@@ -886,17 +886,16 @@ struct LocalServer : SHServerAPI {
                     )
                 
             for (key, rawVersionDetails) in recipientDetails {
-                
-                ///
-                /// If the groupId matches, then collect the key and the updated value.
-                /// If not move on
-                ///
-                guard let update = groupInfoById[versionDetails.groupId] else {
-                    continue
-                }
-
                 do {
                     let versionDetails = try DBSecureSerializableAssetRecipientSharingDetails.from(rawVersionDetails)
+                    
+                    ///
+                    /// If the groupId matches, then collect the key and the updated value.
+                    /// If not move on
+                    ///
+                    guard let update = groupInfoById[versionDetails.groupId] else {
+                        continue
+                    }
                                         
                     let updatedValue = DBSecureSerializableAssetRecipientSharingDetails(
                         groupId: versionDetails.groupId,
