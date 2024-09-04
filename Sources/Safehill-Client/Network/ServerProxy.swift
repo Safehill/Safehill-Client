@@ -1954,7 +1954,9 @@ extension SHServerProxy {
         self.remoteServer.uninvite(phoneNumbers, from: groupId) { remoteResult in
             switch remoteResult {
             case .success:
-                self.localServer.uninvite(phoneNumbers, from: groupId) { _ in }
+                self.localServer.uninvite(phoneNumbers, from: groupId) { _ in
+                    completionHandler(.success(()))
+                }
                 
             case .failure(let error):
                 completionHandler(.failure(error))
