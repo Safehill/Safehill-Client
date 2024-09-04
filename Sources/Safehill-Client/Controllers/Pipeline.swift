@@ -36,7 +36,7 @@ public struct SHUploadPipeline {
         sender: any SHServerUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
-        asPhotoMessageInThreadId: String
+        asPhotoMessageInThreadId: String?
     ) throws {
         do {
             let queueItem = SHLocalFetchRequestQueueItem(
