@@ -118,7 +118,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func markAsSuccessful(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String
+        globalIdentifier: GlobalIdentifier
     ) throws {
         let localIdentifier = request.localIdentifier
         let groupId = request.groupId
@@ -128,11 +128,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
         catch {
-            log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
+            log.warning("asset \(localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
         }
         
         do {
-            /// Enquque to ShareHistoryQueue
             log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
             /// Remove items in the `FailedShareQueue` for the same identifier
@@ -331,19 +330,34 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier }) and invited \(shareRequest.invitedUsers)")
         
         guard shareRequest.isOnlyInvitingUsers == false else {
-            /// 
+            
+            ///
             /// If only inviting other users take this shortcut,
             /// only invite and end early.
             /// If in background, don't invite, cause the previous non-background item
             /// would have invited the users for this request
             ///
+            
+            let dequeue = {
+                do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
+                catch {
+                    self.log.warning("asset \(shareRequest.asset.phAsset.localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
+                }
+                
+                completionHandler(.success(()))
+            }
+            
             if shareRequest.isBackground == false {
                 self.serverProxy.invite(
                     shareRequest.invitedUsers,
-                    to: shareRequest.groupId,
-                    completionHandler: completionHandler
-                )
+                    to: shareRequest.groupId
+                ) { result in
+                    
+                    dequeue()
+                    completionHandler(result)
+                }
             } else {
+                dequeue()
                 completionHandler(.success(()))
             }
             return
