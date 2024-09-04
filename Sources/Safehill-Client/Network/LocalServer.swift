@@ -3815,6 +3815,8 @@ struct LocalServer : SHServerAPI {
             )
             try userStore.set(value: data, for: key)
             
+            completionHandler(.success(()))
+            
         } catch {
             completionHandler(.failure(error))
         }
@@ -3859,6 +3861,9 @@ struct LocalServer : SHServerAPI {
             } else {
                 try userStore.removeValue(for: key)
             }
+            
+            completionHandler(.success(()))
+            
         } catch {
             completionHandler(.failure(error))
         }
