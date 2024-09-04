@@ -20,7 +20,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                 sharedWith users: [any SHServerUser],
                 invitedUsers: [String],
                 shouldUpload: Bool,
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
@@ -29,7 +29,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    eventOriginator: eventOriginator,
                    sharedWith: users,
                    invitedUsers: invitedUsers,
-                   isPhotoMessage: isPhotoMessage,
+                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                    isBackground: isBackground)
     }
     
@@ -41,7 +41,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                 sharedWith users: [any SHServerUser],
                 invitedUsers: [String],
                 shouldUpload: Bool,
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
@@ -51,7 +51,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    eventOriginator: eventOriginator,
                    sharedWith: users,
                    invitedUsers: invitedUsers,
-                   isPhotoMessage: isPhotoMessage,
+                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                    isBackground: isBackground)
     }
     
@@ -79,7 +79,7 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                       sharedWith: superSelf.sharedWith,
                       invitedUsers: superSelf.invitedUsers,
                       shouldUpload: su.boolValue,
-                      isPhotoMessage: superSelf.isPhotoMessage,
+                      asPhotoMessageInThreadId: superSelf.asPhotoMessageInThreadId,
                       isBackground: superSelf.isBackground)
             return
         }

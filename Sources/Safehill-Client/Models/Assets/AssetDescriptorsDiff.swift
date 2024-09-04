@@ -133,6 +133,7 @@ struct AssetDescriptorsDiff {
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
                                 name: remoteDescGroupInfo?.name,
                                 createdAt: remoteDescGroupInfo?.createdAt,
+                                createdFromThreadId: remoteDescGroupInfo?.createdFromThreadId,
                                 invitedUsersPhoneNumbers: remoteDescGroupInfo?.invitedUsersPhoneNumbers
                             )]
                         )
@@ -149,6 +150,7 @@ struct AssetDescriptorsDiff {
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
                             name: newGroupInfoDict[groupId]?.name ?? remoteDescGroupInfo?.name,
                             createdAt: newGroupInfoDict[groupId]?.createdAt ?? remoteDescGroupInfo?.createdAt,
+                            createdFromThreadId: newGroupInfoDict[groupId]?.createdFromThreadId ?? remoteDescGroupInfo?.createdFromThreadId,
                             invitedUsersPhoneNumbers: newGroupInfoDict[groupId]?.invitedUsersPhoneNumbers ?? remoteDescGroupInfo?.invitedUsersPhoneNumbers
                         )
                         
@@ -165,6 +167,7 @@ struct AssetDescriptorsDiff {
                 if let localGroupInfo = correspondingLocalDescriptor.sharingInfo.groupInfoById[groupId] {
                     if localGroupInfo.createdAt == groupInfo.createdAt,
                        localGroupInfo.name == groupInfo.name,
+                       localGroupInfo.createdFromThreadId == groupInfo.createdFromThreadId,
                        localGroupInfo.invitedUsersPhoneNumbers?.keys.sorted()
                         == groupInfo.invitedUsersPhoneNumbers?.keys.sorted() {
                         // They are the same
@@ -198,6 +201,7 @@ struct AssetDescriptorsDiff {
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
                                 name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
                                 createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
+                                createdFromThreadId: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdFromThreadId,
                                 invitedUsersPhoneNumbers: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers
                             )]
                         )
@@ -209,6 +213,7 @@ struct AssetDescriptorsDiff {
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
                             name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
                             createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
+                            createdFromThreadId: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdFromThreadId,
                             invitedUsersPhoneNumbers: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers
                         )
                         

@@ -11,7 +11,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         case eventOriginator
         case sharedWith
         case invitedUsers
-        case isPhotoMessage
+        case asPhotoMessageInThreadId
     }
     
     public var identifier: String {
@@ -34,7 +34,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     public let sharedWith: [any SHServerUser] // Empty if it's just a backup request
     public let invitedUsers: [String]
     
-    public let isPhotoMessage: Bool
+    public let asPhotoMessageInThreadId: String?
     
     ///
     /// The recommended versions based on the type of request.
@@ -64,7 +64,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                 eventOriginator: any SHServerUser,
                 sharedWith users: [any SHServerUser],
                 invitedUsers: [String],
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = SHAbstractOutboundShareableGroupableQueueItem.recommendedVersions(forSharingWith: users)
@@ -73,7 +73,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         self.sharedWith = users
         self.invitedUsers = invitedUsers
         self.isBackground = isBackground
-        self.isPhotoMessage = isPhotoMessage
+        self.asPhotoMessageInThreadId = asPhotoMessageInThreadId
     }
     
     public init(localIdentifier: String,
@@ -82,7 +82,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                 eventOriginator: any SHServerUser,
                 sharedWith users: [any SHServerUser],
                 invitedUsers: [String],
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = versions
@@ -91,7 +91,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         self.sharedWith = users
         self.invitedUsers = invitedUsers
         self.isBackground = isBackground
-        self.isPhotoMessage = isPhotoMessage
+        self.asPhotoMessageInThreadId = asPhotoMessageInThreadId
     }
     
     public func encode(with coder: NSCoder) {
@@ -117,7 +117,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         }
         coder.encode(remoteReceivers, forKey: CodingKeys.sharedWith.rawValue)
         coder.encode(invitedUsers, forKey: CodingKeys.invitedUsers.rawValue)
-        coder.encode(NSNumber(booleanLiteral: self.isPhotoMessage), forKey: CodingKeys.isPhotoMessage.rawValue)
+        coder.encode(self.asPhotoMessageInThreadId, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
@@ -128,7 +128,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: CodingKeys.sharedWith.rawValue)
         let invitedUsers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.invitedUsers.rawValue)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isBackground.rawValue)
-        let isPhotoMessage = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isPhotoMessage.rawValue)
+        let asPhotoMessageInThreadId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue)
         
         guard let assetId = assetId as? String else {
             log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
@@ -198,7 +198,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
                   invitedUsers: invitedUsers,
-                  isPhotoMessage: isPhotoMessage?.boolValue ?? false,
+                  asPhotoMessageInThreadId: asPhotoMessageInThreadId as String?,
                   isBackground: isBg.boolValue)
     }
     

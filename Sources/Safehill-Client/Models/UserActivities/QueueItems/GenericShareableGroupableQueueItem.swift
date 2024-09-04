@@ -17,7 +17,7 @@ public class SHGenericShareableGroupableQueueItem: SHAbstractOutboundShareableGr
                 eventOriginator: SHServerUser,
                 sharedWith users: [SHServerUser] = [],
                 invitedUsers: [String],
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.globalAssetId = globalAssetId
         super.init(localIdentifier: localAssetId,
@@ -26,7 +26,7 @@ public class SHGenericShareableGroupableQueueItem: SHAbstractOutboundShareableGr
                    eventOriginator: eventOriginator,
                    sharedWith: users,
                    invitedUsers: invitedUsers,
-                   isPhotoMessage: isPhotoMessage,
+                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                    isBackground: isBackground)
     }
     
@@ -52,7 +52,7 @@ public class SHGenericShareableGroupableQueueItem: SHAbstractOutboundShareableGr
                 eventOriginator: superSelf.eventOriginator,
                 sharedWith: superSelf.sharedWith,
                 invitedUsers: superSelf.invitedUsers,
-                isPhotoMessage: superSelf.isPhotoMessage,
+                asPhotoMessageInThreadId: superSelf.asPhotoMessageInThreadId,
                 isBackground: superSelf.isBackground
             )
             return

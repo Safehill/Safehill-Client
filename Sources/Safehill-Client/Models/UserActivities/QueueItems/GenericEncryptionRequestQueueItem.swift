@@ -18,7 +18,7 @@ public class SHGenericEncryptionRequestQueueItem: SHAbstractOutboundShareableGro
                 eventOriginator: any SHServerUser,
                 sharedWith users: [any SHServerUser] = [],
                 invitedUsers: [String],
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.asset = asset
         super.init(localIdentifier: asset.phAsset.localIdentifier,
@@ -27,7 +27,7 @@ public class SHGenericEncryptionRequestQueueItem: SHAbstractOutboundShareableGro
                    eventOriginator: eventOriginator,
                    sharedWith: users,
                    invitedUsers: invitedUsers,
-                   isPhotoMessage: isPhotoMessage,
+                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                    isBackground: isBackground)
     }
     
@@ -51,7 +51,7 @@ public class SHGenericEncryptionRequestQueueItem: SHAbstractOutboundShareableGro
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
                       invitedUsers: superSelf.invitedUsers,
-                      isPhotoMessage: superSelf.isPhotoMessage,
+                      asPhotoMessageInThreadId: superSelf.asPhotoMessageInThreadId,
                       isBackground: superSelf.isBackground)
             return
         }

@@ -109,7 +109,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let invitedUsers = request.invitedUsers
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         // Dequeue from FETCH queue
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
@@ -134,7 +134,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
             eventOriginator: eventOriginator,
             sharedWith: users,
             invitedUsers: invitedUsers,
-            isPhotoMessage: isPhotoMessage,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground
         )
         
@@ -180,7 +180,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let users = request.sharedWith
         let invitedUsers = request.invitedUsers
         let shouldUpload = request.shouldUpload
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         let isBackground = request.isBackground
         
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
@@ -203,7 +203,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     eventOriginator: eventOriginator,
                     sharedWith: users,
                     invitedUsers: invitedUsers,
-                    isPhotoMessage: isPhotoMessage,
+                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                     isBackground: isBackground
                 )
                 try encryptionRequest.enqueue(in: encryptionQueue)
@@ -242,7 +242,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     eventOriginator: eventOriginator,
                     sharedWith: users,
                     invitedUsers: invitedUsers,
-                    isPhotoMessage: isPhotoMessage,
+                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                     isBackground: isBackground
                 )
                 try encryptionForSharingRequest.enqueue(in: shareQueue)

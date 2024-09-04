@@ -61,7 +61,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let invitedUsers = request.invitedUsers
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
@@ -83,7 +83,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             eventOriginator: eventOriginator,
             sharedWith: users,
             invitedUsers: invitedUsers,
-            isPhotoMessage: isPhotoMessage,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground,
             error: error
         )
@@ -128,7 +128,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
         let invitedUsers = request.invitedUsers
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
@@ -201,7 +201,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     sharedWith: sharedWith,
                     invitedUsers: invitedUsers,
                     shouldUpload: false,
-                    isPhotoMessage: isPhotoMessage,
+                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                     isBackground: isBackground
                 )
                 try fetchRequest.enqueue(in: fetchQueue)
@@ -230,7 +230,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                         sharedWith: request.sharedWith,
                         invitedUsers: invitedUsers,
                         shouldUpload: true,
-                        isPhotoMessage: request.isPhotoMessage,
+                        asPhotoMessageInThreadId: request.asPhotoMessageInThreadId,
                         isBackground: true
                     )
                     try hiResFetchQueueItem.enqueue(in: fetchQueue)

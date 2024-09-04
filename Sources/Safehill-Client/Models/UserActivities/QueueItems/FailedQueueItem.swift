@@ -11,7 +11,7 @@ public class SHFailedQueueItem: SHAbstractOutboundShareableGroupableQueueItem, N
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
                       invitedUsers: superSelf.invitedUsers,
-                      isPhotoMessage: superSelf.isPhotoMessage,
+                      asPhotoMessageInThreadId: superSelf.asPhotoMessageInThreadId,
                       isBackground: superSelf.isBackground)
             return
         }

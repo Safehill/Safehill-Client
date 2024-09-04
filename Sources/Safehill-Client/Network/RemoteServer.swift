@@ -747,7 +747,7 @@ struct RemoteServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               isPhotoMessage: Bool,
+               asPhotoMessageInThreadId: String? = nil,
                suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
@@ -772,7 +772,7 @@ struct RemoteServer : SHServerAPI {
             "globalAssetIdentifier": asset.globalIdentifier,
             "versionSharingDetails": versions,
             "groupId": asset.groupId,
-            "isPhotoMessage": isPhotoMessage,
+            "asPhotoMessageInThreadId": asPhotoMessageInThreadId,
             "suppressNotification": suppressNotification
         ]
         
@@ -782,23 +782,6 @@ struct RemoteServer : SHServerAPI {
                 completionHandler(.success(()))
             case .failure(let err):
                 completionHandler(.failure(err))
-            }
-        }
-    }
-    
-    func add(phoneNumbers: [SHPhoneNumber],
-             to groupId: String,
-             completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let parameters: [String: Any?] = [
-            "recipientPhoneNumbers": phoneNumbers.map({ $0.hashedPhoneNumber })
-        ]
-        
-        self.post("groups/add-phone-numbers/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
-            switch result {
-            case .failure(let error):
-                completionHandler(.failure(error))
-            case .success:
-                completionHandler(.success(()))
             }
         }
     }

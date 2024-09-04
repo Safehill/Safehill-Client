@@ -908,12 +908,12 @@ extension SHServerProxy {
     }
     
     func share(_ asset: SHShareableEncryptedAsset,
-               isPhotoMessage: Bool,
+               asPhotoMessageInThreadId: String?,
                suppressNotification: Bool = false,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.share(
             asset: asset,
-            isPhotoMessage: isPhotoMessage,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             suppressNotification: suppressNotification,
             completionHandler: completionHandler
         )
@@ -950,12 +950,6 @@ extension SHServerProxy {
 extension SHServerProxy {
     
     // - MARK: Groups, Threads and Interactions
-    
-    public func add(phoneNumbers: [SHPhoneNumber],
-                    to groupId: String,
-                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.remoteServer.add(phoneNumbers: phoneNumbers, to: groupId, completionHandler: completionHandler)
-    }
     
     func setupGroupEncryptionDetails(
         groupId: String,

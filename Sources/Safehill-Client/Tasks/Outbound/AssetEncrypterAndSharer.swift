@@ -63,7 +63,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
         let invitedUsers = request.invitedUsers
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
@@ -81,7 +81,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             eventOriginator: eventOriginator,
             sharedWith: users,
             invitedUsers: invitedUsers,
-            isPhotoMessage: isPhotoMessage,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground
         )
 
@@ -226,7 +226,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     ) {
         self.serverProxy.share(
             shareableEncryptedAsset,
-            isPhotoMessage: shareRequest.isPhotoMessage,
+            asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,
             suppressNotification: shareRequest.isBackground
         ) { shareResult in
             

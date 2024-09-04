@@ -142,24 +142,13 @@ public protocol SHServerAPI {
     /// Shares one or more assets with a set of users
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
-    ///   - isPhotoMessage: whether or not the asset is being shared in the context of a thread and it should show as a message
+    ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread and if so which thread
     ///   - suppressNotification: do not send a notification to the user. For instance, when the high resolution is shared in the background
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
-               isPhotoMessage: Bool,
+               asPhotoMessageInThreadId: String?,
                suppressNotification: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ())
-    
-    /// Adds a link between a share group and a set of phone numbers on the server.
-    /// This makes sure that once a new user is registered with that phone number, the sender
-    /// can get notified about encrypting and sharing with that new user
-    /// - Parameters:
-    ///   - phoneNumbers: the set of phone numbers
-    ///   - groupId: the groupId of the share
-    ///   - completionHandler: the callback method
-    func add(phoneNumbers: [SHPhoneNumber],
-             to groupId: String,
-             completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Unshares one asset (all of its versions) with a user. If the asset or the user don't exist, or the asset is not shared with the user, it's a no-op
     /// - Parameters:
