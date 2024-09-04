@@ -2935,6 +2935,7 @@ struct LocalServer : SHServerAPI {
                 }
                 let anchorId = keyComponents[1]
                 numCommentsByGroupId[anchorId] = (numCommentsByGroupId[anchorId] ?? 0) + 1
+                
                 allGroupIds.insert(anchorId)
             }
             
@@ -2946,9 +2947,12 @@ struct LocalServer : SHServerAPI {
             switch result {
             case .success(let dict):
                 invitationsByGroupId = dict
+                
+                dict.keys.forEach { allGroupIds.insert($0) }
             case .failure:
                 break
             }
+            
             dispatchGroup.leave()
         }
         
