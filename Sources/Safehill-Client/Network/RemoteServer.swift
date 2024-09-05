@@ -943,10 +943,12 @@ struct RemoteServer : SHServerAPI {
     /// - Parameters:
     ///   - name: the thread name, if any is provided. To update, `createThread` should be called again with a new value for name. 
     ///   - recipientsEncryptionDetails: the encryption details for all users in the thread. Locally we only store the ones for the local user
+    ///   - phoneNumbers: the list of phone numbers to invite to the thread
     ///   - completionHandler: the callback, returning the value from the server
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        invitedPhoneNumbers: [String]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         var parameters = [String: Any]()
@@ -961,6 +963,10 @@ struct RemoteServer : SHServerAPI {
                     "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
                 ]
             })
+        }
+        
+        if let invitedPhoneNumbers, invitedPhoneNumbers.isEmpty == false {
+            parameters["phoneNumbers"] = invitedPhoneNumbers
         }
         
         if let name {
@@ -1068,11 +1074,12 @@ struct RemoteServer : SHServerAPI {
     
     func getThread(
         withUsers users: [any SHServerUser],
+        and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         let parameters = [
             "byUsersPublicIdentifiers": users.map({ $0.identifier }),
-            "byInvitedPhoneNumbers": []
+            "byInvitedPhoneNumbers": phoneNumbers
         ] as [String: Any]
         
         self.post("threads/retrieve", parameters: parameters, requiresAuthentication: true) {

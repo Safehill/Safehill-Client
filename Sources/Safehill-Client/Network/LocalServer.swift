@@ -2023,6 +2023,7 @@ struct LocalServer : SHServerAPI {
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        invitedPhoneNumbers: [String]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ClientError.badRequest("Call the sister method and provide a thread identifier when storing a thread to local. This method should not be called.")))
@@ -2060,6 +2061,25 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: serverThread.creatorPublicIdentifier, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::creatorPublicIdentifier")
         writeBatch.set(value: serverThread.createdAt.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::createdAt")
         writeBatch.set(value: serverThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)::lastUpdatedAt")
+        
+        let invitationsKey = "invitations::\(SHInteractionAnchor.thread.rawValue)::\(serverThread.threadId)"
+        
+        var invitations = [DBSecureSerializableInvitation]()
+        for (phoneNumber, timestamp) in serverThread.invitedUsersPhoneNumbers {
+            let invitation = DBSecureSerializableInvitation(phoneNumber: phoneNumber, invitedAt: timestamp)
+            invitations.append(invitation)
+        }
+        
+        if invitations.isEmpty {
+            writeBatch.set(value: nil, for: invitationsKey)
+        } else {
+            do {
+                let data = try NSKeyedArchiver.archivedData(withRootObject: invitations, requiringSecureCoding: true)
+                writeBatch.set(value: data, for: invitationsKey)
+            } catch {
+                writeBatch.set(value: nil, for: invitationsKey)
+            }
+        }
         
         writeBatch.write { result in
             switch result {
@@ -2112,34 +2132,66 @@ struct LocalServer : SHServerAPI {
         }
         
         var condition: KBGenericCondition
+        var invitationsCondition: KBGenericCondition
         if let withIdentifiers, withIdentifiers.isEmpty == false {
             var c = KBGenericCondition(value: false)
+            var ic = KBGenericCondition(value: false)
             for identifier in withIdentifiers {
                 c = c.or(
                     KBGenericCondition(
-                        .beginsWith,
-                        value: "\(SHInteractionAnchor.thread.rawValue)::\(identifier)"
+                        .contains,
+                        value: "::\(identifier)"
                     )
                 )
             }
-            condition = c
+            condition = KBGenericCondition(
+                .beginsWith,
+                value: "\(SHInteractionAnchor.thread.rawValue)::"
+            ).and(c)
+            invitationsCondition = KBGenericCondition(
+                .beginsWith,
+                value: "invitations::\(SHInteractionAnchor.thread.rawValue)::"
+            ).and(c)
         } else {
             condition = KBGenericCondition(
                 .beginsWith,
                 value: "\(SHInteractionAnchor.thread.rawValue)::"
             )
+            invitationsCondition = KBGenericCondition(
+                .beginsWith,
+                value: "invitations::\(SHInteractionAnchor.thread.rawValue)::"
+            )
         }
         
         let kvPairs: KBKVPairs
+        let invitationsKVPairs: KBKVPairs
         do {
             kvPairs = try userStore
                 .dictionaryRepresentation(forKeysMatching: condition)
+            invitationsKVPairs = try userStore
+                .dictionaryRepresentation(forKeysMatching: invitationsCondition)
         } catch {
             completionHandler(.failure(error))
             return
         }
         
         var invalidKeys = Set<String>()
+        
+        var invitationsByThreadId = [String: [DBSecureSerializableInvitation]]()
+        for (key, value) in invitationsKVPairs {
+            let components = key.components(separatedBy: "::")
+            guard components.count == 3 else {
+                invalidKeys.insert(key)
+                continue
+            }
+            let threadId = components[1]
+            do {
+                let invitations = try DBSecureSerializableInvitation.deserializedList(from: value)
+                invitationsByThreadId[threadId] = invitations
+            } catch {
+                invalidKeys.insert(key)
+            }
+        }
         
         let list = kvPairs.reduce([String: ConversationThreadOutputDTO](), { (partialResult, pair) in
             let (key, value) = pair
@@ -2191,6 +2243,8 @@ struct LocalServer : SHServerAPI {
             /// From the partial result …
             var result = partialResult
             
+            let threadInvitations = invitationsByThreadId[threadId] ?? []
+            
             /// … update the field corresponding to the KV pair just processed
             /// in the existing conversation thread, or create a new one with the empty value
             result[threadId] = ConversationThreadOutputDTO(
@@ -2198,6 +2252,11 @@ struct LocalServer : SHServerAPI {
                 name: name ?? result[threadId]?.name,
                 creatorPublicIdentifier: creatorPublicId ?? result[threadId]?.creatorPublicIdentifier,
                 membersPublicIdentifier: membersPublicIdentifiers ?? result[threadId]?.membersPublicIdentifier ?? [],
+                invitedUsersPhoneNumbers: threadInvitations.reduce([:]) { partialResult, invitation in
+                    var result = partialResult
+                    result[invitation.phoneNumber] = invitation.invitedAt
+                    return result
+                },
                 createdAt: createdAt?.iso8601withFractionalSeconds ?? result[threadId]?.createdAt ?? Date().iso8601withFractionalSeconds,
                 lastUpdatedAt: lastUpdatedAt?.iso8601withFractionalSeconds ?? result[threadId]?.lastUpdatedAt,
                 encryptionDetails: RecipientEncryptionDetailsDTO(
@@ -2225,6 +2284,14 @@ struct LocalServer : SHServerAPI {
                 // Do not append threads with missing information
             } else {
                 filteredList.append(element)
+            }
+        }
+        
+        if invalidKeys.isEmpty == false {
+            do {
+                let _ = try userStore.removeValues(for: Array(invalidKeys))
+            } catch {
+                log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
             }
         }
         
@@ -2322,6 +2389,7 @@ struct LocalServer : SHServerAPI {
     
     func getThread(
         withUsers users: [any SHServerUser],
+        and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         self.listThreads { result in
@@ -2331,7 +2399,9 @@ struct LocalServer : SHServerAPI {
             case .success(let threads):
                 let userIdsToMatch = Set(users.map({ $0.identifier }))
                 for thread in threads {
-                    if Set(thread.membersPublicIdentifier) == userIdsToMatch {
+                    if Set(thread.membersPublicIdentifier) == userIdsToMatch,
+                       Set(thread.invitedUsersPhoneNumbers.keys) == Set(phoneNumbers)
+                    {
                         completionHandler(.success(thread))
                         return
                     }

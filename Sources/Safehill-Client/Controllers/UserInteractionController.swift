@@ -11,6 +11,17 @@ let E2eCreationSerialQueue = DispatchQueue(
     qos: .userInteractive
 )
 
+public enum SHInteractionsError: Error, LocalizedError {
+    case noSafehillUsersInThread
+    
+    public var errorDescription: String? {
+        switch self {
+        case .noSafehillUsersInThread:
+            return "A thread must contain at least one Safehill user"
+        }
+    }
+}
+
 public struct SHUserInteractionController {
     
     let user: SHLocalUserProtocol
@@ -33,10 +44,32 @@ public struct SHUserInteractionController {
         SymmetricKey(size: .bits256)
     }
     
+    internal func getExistingThread(
+        with users: [any SHServerUser],
+        and phoneNumbers: [String],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> Void
+    ) {
+        self.serverProxy.getThread(withUsers: users, and: phoneNumbers) { result in
+            switch result {
+            case .failure(let error):
+                log.error("failed to fetch thread with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers) from remote server")
+                completionHandler(.failure(error))
+            case .success(let conversationThread):
+                completionHandler(.success(conversationThread))
+            }
+        }
+    }
+    
     public func setupThread(
-        with users: [SHServerUser],
+        with users: [any SHServerUser],
+        and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void
     ) {
+        guard users.isEmpty == false else {
+            completionHandler(.failure(SHInteractionsError.noSafehillUsersInThread))
+            return
+        }
+        
         E2eCreationSerialQueue.async {
             guard let authedUser = self.user as? SHAuthenticatedLocalUser else {
                 completionHandler(.failure(SHLocalUserError.notAuthenticated))
@@ -48,20 +81,20 @@ public struct SHUserInteractionController {
                 return
             }
             
-            self.serverProxy.getThread(withUsers: users) { result in
+            self.getExistingThread(with: users, and: phoneNumbers) { result in
                 switch result {
                 case .failure(let error):
-                    log.error("failed to fetch thread with users \(users.map({ $0.identifier })) from remote server")
+                    log.error("failed to fetch thread with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers) from remote server")
                     completionHandler(.failure(error))
                 case .success(let conversationThread):
                     let symmetricKey: SymmetricKey
                     
                     if let conversationThread {
-                        log.info("found thread with users \(users.map({ $0.identifier })) from local or remote")
+                        log.info("found thread with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers) from local or remote")
                         completionHandler(.success(conversationThread))
                         return
                     } else {
-                        log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier }))")
+                        log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers)")
                         symmetricKey = createNewSecret()
                     }
                     
@@ -78,10 +111,11 @@ public struct SHUserInteractionController {
                             anchorId: conversationThread?.threadId
                         )
                         log.debug("generated recipients encryptionDetails \(recipientsEncryptionDetails.map({ "R=\($0.recipientUserIdentifier) ES=\($0.encryptedSecret), EPK=\($0.ephemeralPublicKey) SSig=\($0.secretPublicSignature) USig=\($0.senderPublicSignature)" }))")
-                        log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier }))")
+                        log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier })) and phone numbers \(phoneNumbers)")
                         self.serverProxy.createOrUpdateThread(
                             name: nil,
                             recipientsEncryptionDetails: recipientsEncryptionDetails,
+                            invitedPhoneNumbers: phoneNumbers,
                             completionHandler: completionHandler
                         )
                     } catch {
@@ -106,6 +140,7 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         self.serverProxy.createOrUpdateThread(
             name: name,
             recipientsEncryptionDetails: nil,
+            invitedPhoneNumbers: nil,
             completionHandler: completionHandler
         )
     }

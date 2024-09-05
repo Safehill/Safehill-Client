@@ -12,6 +12,7 @@ internal protocol SHServerProxyProtocol {
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        invitedPhoneNumbers: [String]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
     
@@ -194,6 +195,7 @@ internal protocol SHServerProxyProtocol {
     
     func getThread(
         withUsers users: [any SHServerUser],
+        and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     

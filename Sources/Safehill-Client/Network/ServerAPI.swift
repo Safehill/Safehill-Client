@@ -209,11 +209,13 @@ public protocol SHServerAPI {
     /// This method needs to be called every time both a thread is created or a  so that reactions and comments can be added to it.
     /// - Parameters:
     ///   - name: the optional name of the thread
-    ///   - recipientsEncryptionDetails: the encryption details for each reciepient. `nil` if this method is called to update the thread name
+    ///   - recipientsEncryptionDetails: the encryption details for each reciepient. `nil` to update other properties of the thread
+    ///   - invitedPhoneNumbers: the phone numbers invited to the thread. `nil` for updates to other properties of the thread
     ///   - completionHandler: the callback method, with the threadId
     func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        invitedPhoneNumbers: [String]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
     
@@ -244,9 +246,11 @@ public protocol SHServerAPI {
     /// Retrieve the thread with the specified users, if one exists
     /// - Parameters:
     ///   - users: the users to match
+    ///   - phoneNumbers: the phone numbers invited to the thread to match
     ///   - completionHandler: the callback method
     func getThread(
         withUsers users: [any SHServerUser],
+        and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     

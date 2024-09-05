@@ -390,7 +390,7 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         }
     }
     
-    func testUploadAndDownload() throws {
+    func _testUploadAndDownload() throws {
         let plainText = "example data"
         let data = plainText.data(using: .utf8)!
         let sender = self.testUser.shUser

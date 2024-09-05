@@ -996,6 +996,7 @@ extension SHServerProxy {
     internal func createOrUpdateThread(
         name: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        invitedPhoneNumbers: [String]?,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     ) {
         if let recipientsEncryptionDetails {
@@ -1004,7 +1005,8 @@ extension SHServerProxy {
         }
         self.remoteServer.createOrUpdateThread(
             name: name,
-            recipientsEncryptionDetails: recipientsEncryptionDetails
+            recipientsEncryptionDetails: recipientsEncryptionDetails,
+            invitedPhoneNumbers: invitedPhoneNumbers
         ) {
             remoteResult in
             switch remoteResult {
@@ -1084,17 +1086,18 @@ extension SHServerProxy {
     
     internal func getThread(
         withUsers users: [any SHServerUser],
+        and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.localServer.getThread(withUsers: users) { localResult in
+        self.localServer.getThread(withUsers: users, and: phoneNumbers) { localResult in
             switch localResult {
             case .failure:
-                self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+                self.remoteServer.getThread(withUsers: users, and: phoneNumbers, completionHandler: completionHandler)
             case .success(let maybeThread):
                 if let maybeThread {
                     completionHandler(.success(maybeThread))
                 } else {
-                    self.remoteServer.getThread(withUsers: users, completionHandler: completionHandler)
+                    self.remoteServer.getThread(withUsers: users, and: phoneNumbers, completionHandler: completionHandler)
                 }
             }
         }
