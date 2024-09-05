@@ -2184,7 +2184,7 @@ struct LocalServer : SHServerAPI {
                 invalidKeys.insert(key)
                 continue
             }
-            let threadId = components[1]
+            let threadId = components[2]
             do {
                 let invitations = try DBSecureSerializableInvitation.deserializedList(from: value)
                 invitationsByThreadId[threadId] = invitations
