@@ -1023,6 +1023,23 @@ extension SHServerProxy {
         }
     }
     
+    internal func updateThread(
+        _ threadId: String,
+        newName: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.updateThread(threadId, newName: newName) { remoteResult in
+            switch remoteResult {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                self.localServer.updateThread(threadId, newName: newName) { _ in
+                    completionHandler(.success(()))
+                }
+            }
+        }
+    }
+    
     internal func listThreads() async throws -> [ConversationThreadOutputDTO] {
         return try await withUnsafeThrowingContinuation { continuation in
             self.remoteServer.listThreads { remoteResult in

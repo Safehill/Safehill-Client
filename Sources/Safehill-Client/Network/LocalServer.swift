@@ -2091,6 +2091,23 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func updateThread(
+        _ threadId: String,
+        newName: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        userStore.set(
+            value: newName,
+            for: "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::name",
+            completionHandler: completionHandler
+        )
+    }
+    
     func updateLastUpdatedAt(
         with remoteThreads: [ConversationThreadOutputDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()

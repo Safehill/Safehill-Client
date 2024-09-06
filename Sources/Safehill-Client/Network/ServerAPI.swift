@@ -219,6 +219,17 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
     
+    /// Updates the thread name
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - newName: thre new name
+    ///   - completionHandler: the callback
+    func updateThread(
+       _ threadId: String,
+       newName: String,
+       completionHandler: @escaping (Result<Void, Error>) -> ()
+   )
+    
     /// List all the threads visibile to the requestor
     /// - Parameter completionHandler: the callback method
     func listThreads(

@@ -979,6 +979,23 @@ struct RemoteServer : SHServerAPI {
                   completionHandler: completionHandler)
     }
     
+    func updateThread(
+        _ threadId: String,
+        newName: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("threads/update",
+                  parameters: ["name": newName],
+                  requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {

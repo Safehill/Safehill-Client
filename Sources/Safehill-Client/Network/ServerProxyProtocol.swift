@@ -16,6 +16,12 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
     )
     
+    func updateThread(
+        _ threadId: String,
+        newName: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     func deleteThread(
         withId threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()

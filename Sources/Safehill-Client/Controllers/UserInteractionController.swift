@@ -130,17 +130,19 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         }
     }
     
-    public func updateThreadName(_ name: String, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    public func updateThread(
+        _ threadId: String,
+        newName: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard self.user as? SHAuthenticatedLocalUser != nil else {
             completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
         }
         
-        self.serverProxy.createOrUpdateThread(
-            name: name,
-            recipientsEncryptionDetails: nil,
-            invitedPhoneNumbers: nil,
+        self.serverProxy.updateThread(
+            threadId,
+            newName: newName,
             completionHandler: completionHandler
         )
     }
