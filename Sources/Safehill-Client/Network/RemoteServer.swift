@@ -984,7 +984,7 @@ struct RemoteServer : SHServerAPI {
         newName: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.post("threads/update",
+        self.post("threads/update/\(threadId)",
                   parameters: ["name": newName],
                   requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
