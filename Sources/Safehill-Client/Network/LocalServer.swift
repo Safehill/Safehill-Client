@@ -2108,8 +2108,8 @@ struct LocalServer : SHServerAPI {
         )
     }
     
-    func updateLastUpdatedAt(
-        with remoteThreads: [ConversationThreadOutputDTO],
+    func updateThreads(
+        from remoteThreads: [ConversationThreadOutputDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
@@ -2120,6 +2120,9 @@ struct LocalServer : SHServerAPI {
         let writeBatch = userStore.writeBatch()
         
         for remoteThread in remoteThreads {
+            if let name = remoteThread.name {
+                writeBatch.set(value: name, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::name")
+            }
             writeBatch.set(value: remoteThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::lastUpdatedAt")
         }
         

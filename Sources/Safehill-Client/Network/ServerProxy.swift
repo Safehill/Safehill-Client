@@ -1596,7 +1596,7 @@ extension SHServerProxy {
     
     /// Update the last updated at based on the value in the provided threads
     /// - Parameter threads: the threads
-    internal func updateLastUpdatedAt(
+    internal func updateLocalThreads(
         from threads: [ConversationThreadOutputDTO]
     ) async throws {
         guard threads.isEmpty == false else {
@@ -1604,8 +1604,8 @@ extension SHServerProxy {
         }
         
         return try await withUnsafeThrowingContinuation { continuation in
-            self.localServer.updateLastUpdatedAt(
-                with: threads
+            self.localServer.updateThreads(
+                from: threads
             ) { result in
                 switch result {
                 case .failure(let error):
