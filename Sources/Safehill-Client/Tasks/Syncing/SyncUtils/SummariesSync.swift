@@ -27,7 +27,7 @@ extension SHWebsocketSyncOperation: WebSocketDelegate {
 
 extension SHWebsocketSyncOperation {
     
-    fileprivate func syncSummaries() async throws {
+    public func syncSummaries() async throws {
         ///
         /// Get the summary to update the latest messages and interactions
         /// in threads and groups
