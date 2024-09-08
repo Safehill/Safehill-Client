@@ -11,12 +11,14 @@ public class SHRemoteUserClass: NSObject, NSSecureCoding {
     
     public let identifier: String
     public let name: String
+    public let phoneNumber: String?
     public let publicKeyData: Data
     public let publicSignatureData: Data
     
     enum CodingKeys: String, CodingKey {
         case identifier = "userIdentifier"
         case name = "userName"
+        case phoneNumber
         case publicKeyData = "publicKey"
         case publicSignatureData = "publicSignature"
     }
@@ -24,13 +26,15 @@ public class SHRemoteUserClass: NSObject, NSSecureCoding {
     public func encode(with coder: NSCoder) {
         coder.encode(self.identifier, forKey: CodingKeys.identifier.rawValue)
         coder.encode(self.name, forKey: CodingKeys.name.rawValue)
+        coder.encode(self.phoneNumber, forKey: CodingKeys.phoneNumber.rawValue)
         coder.encode(self.publicKeyData.base64EncodedString(), forKey: CodingKeys.publicKeyData.rawValue)
         coder.encode(self.publicSignatureData.base64EncodedString(), forKey: CodingKeys.publicSignatureData.rawValue)
     }
     
-    public init(identifier: String, name: String, publicKeyData: Data, publicSignatureData: Data) {
+    public init(identifier: String, name: String, phoneNumber: String?, publicKeyData: Data, publicSignatureData: Data) {
         self.identifier = identifier
         self.name = name
+        self.phoneNumber = phoneNumber
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
     }
@@ -38,6 +42,7 @@ public class SHRemoteUserClass: NSObject, NSSecureCoding {
     public required convenience init?(coder decoder: NSCoder) {
         let identifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.identifier.rawValue)
         let name = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.name.rawValue)
+        let phoneNumber = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.phoneNumber.rawValue)
         let publicKeyDataBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicKeyData.rawValue)
         let publicSignatureDataBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicSignatureData.rawValue)
         
@@ -62,6 +67,7 @@ public class SHRemoteUserClass: NSObject, NSSecureCoding {
         
         self.init(identifier: identifier,
                   name: name,
+                  phoneNumber: phoneNumber as? String,
                   publicKeyData: publicKeyData,
                   publicSignatureData: publicSignatureData)
     }

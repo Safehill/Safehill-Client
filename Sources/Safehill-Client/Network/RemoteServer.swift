@@ -1405,7 +1405,7 @@ struct RemoteServer : SHServerAPI {
     }
     
     func invite(_ phoneNumbers: [String], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        var parameters = [
+        let parameters = [
             "phoneNumbers": phoneNumbers
         ] as [String: Any]
         
@@ -1420,7 +1420,7 @@ struct RemoteServer : SHServerAPI {
     }
     
     func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        var parameters = [
+        let parameters = [
             "phoneNumbers": phoneNumbers
         ] as [String: Any]
         
@@ -1430,6 +1430,32 @@ struct RemoteServer : SHServerAPI {
                 completionHandler(.failure(error))
             case .success:
                 completionHandler(.success(()))
+            }
+        }
+    }
+    
+    func requestAccessToGroup(with groupId: String) async throws {
+        try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
+            self.post("groups/invitees/\(groupId)/access", parameters: nil) {  (result: Result<NoReply, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+    
+    func requestAccessToThread(with threadId: String) async throws {
+        try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
+            self.post("threads/invitees/\(threadId)/access", parameters: nil) {  (result: Result<NoReply, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
             }
         }
     }

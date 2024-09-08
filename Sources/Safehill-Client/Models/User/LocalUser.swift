@@ -27,7 +27,8 @@ public enum SHLocalUserError: Error, LocalizedError {
 /// It also provides utilities to encrypt and decrypt assets using the encryption keys.
 public struct SHLocalUser: SHLocalUserProtocol {
     
-    public var name: String { "" }
+    public let name: String = ""
+    public let phoneNumber: String? = nil
     
     public let shUser: SHLocalCryptoUser
     
@@ -146,6 +147,7 @@ public struct SHLocalUser: SHLocalUserProtocol {
         return SHAuthenticatedLocalUser(
             localUser: self,
             name: user.name,
+            phoneNumber: user.phoneNumber,
             encryptionProtocolSalt: encryptionProtocolSalt,
             authToken: bearerToken
         )

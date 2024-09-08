@@ -6,7 +6,7 @@ public struct SHRemoteUserLinkedToContact: SHServerUser, Codable {
     public let publicKeyData: Data
     public let publicSignatureData: Data
     
-    public let phoneNumber: String
+    public let phoneNumber: String?
     public let linkedSystemContactId: String
     
     init(identifier: String,
