@@ -58,8 +58,8 @@ extension SHInteractionsSyncOperation {
         ///
         if intersection.isEmpty == false {
             do {
-                try await self.updateLastUpdatedAt(
-                    for: Array(intersection),
+                try await self.updateLocalThreads(
+                    Array(intersection),
                     allRemoteThreads: remoteThreads
                 )
             } catch {
@@ -144,14 +144,14 @@ extension SHInteractionsSyncOperation {
     /// - Parameters:
     ///   - threads: the threads from server
     ///   - remoteThreads: the local threads if already available. If `nil`, the corresponding local threads will be fetched from DB
-    internal func updateLastUpdatedAt(
-        for threadIds: [String],
+    internal func updateLocalThreads(
+        _ threadIds: [String],
         allRemoteThreads: [ConversationThreadOutputDTO]
     ) async throws {
         let remoteThreads = allRemoteThreads.filter({
             threadIds.contains($0.threadId)
         })
-        try await self.serverProxy.updateLastUpdatedAt(from: remoteThreads)
+        try await self.serverProxy.updateLocalThreads(from: remoteThreads)
     }
     
     ///

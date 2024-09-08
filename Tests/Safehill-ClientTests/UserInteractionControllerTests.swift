@@ -8,6 +8,7 @@ struct MockThreadDetails {
     let creatorId: String
     let userIds: [String]
     let encryptionDetails: [RecipientEncryptionDetailsDTO]
+    let invitedPhoneNumbers: [String]
 }
 
 class SHMockServerProxyState {
@@ -226,6 +227,12 @@ struct SHMockServerProxy: SHServerProxyProtocol {
                 name: mockThread.name,
                 creatorPublicIdentifier: mockThread.creatorId,
                 membersPublicIdentifier: mockThread.userIds,
+                invitedUsersPhoneNumbers: mockThread.invitedPhoneNumbers.reduce([:], {
+                    partialResult, phoneNumber in
+                    var result = partialResult
+                    result[phoneNumber] = Date().iso8601withFractionalSeconds
+                    return result
+                }),
                 createdAt: Date().iso8601withFractionalSeconds,
                 lastUpdatedAt: Date().iso8601withFractionalSeconds,
                 encryptionDetails: selfEncryptionDetails
@@ -239,7 +246,12 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         try await self.listThreads()
     }
     
-    func createOrUpdateThread(name: String?, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?, completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()) {
+    func createOrUpdateThread(
+        name: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO]?,
+        invitedPhoneNumbers: [String]?,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> ()
+    ) {
         if let encryptionDetails = recipientsEncryptionDetails {
             guard let selfEncryptionDetails = encryptionDetails.first(where: { $0.recipientUserIdentifier == self.localServer.requestor.identifier }) else {
                 completionHandler(.failure(SHHTTPError.ClientError.badRequest("thread encryption details were not set up for some threads yet on the mock server")))
@@ -248,7 +260,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             
             let threadMembersId = encryptionDetails.map({ $0.recipientUserIdentifier })
             guard let threads = self.state.threads,
-               let matchingThreadIdx = threads.firstIndex(where: { $0.userIds.count == threadMembersId.count && Set(threadMembersId).subtracting($0.userIds).isEmpty })
+                  let matchingThreadIdx = threads.firstIndex(where: {
+                      Set($0.userIds) == Set(threadMembersId)
+                      && Set($0.invitedPhoneNumbers) == Set(invitedPhoneNumbers ?? [])
+                  })
             else {
                 completionHandler(.failure(SHHTTPError.ClientError.badRequest("thread encryption details for were not set up correctly on the mock server")))
                 return
@@ -261,7 +276,8 @@ struct SHMockServerProxy: SHServerProxyProtocol {
                 name: matchingThread.name,
                 creatorId: matchingThread.creatorId,
                 userIds: matchingThread.userIds,
-                encryptionDetails: encryptionDetails
+                encryptionDetails: encryptionDetails,
+                invitedPhoneNumbers: invitedPhoneNumbers ?? []
             )
             
             let serverThread = ConversationThreadOutputDTO(
@@ -269,16 +285,33 @@ struct SHMockServerProxy: SHServerProxyProtocol {
                 name: name,
                 creatorPublicIdentifier: matchingThread.creatorId,
                 membersPublicIdentifier: threadMembersId,
+                invitedUsersPhoneNumbers: (invitedPhoneNumbers ?? []).reduce([:], { partialResult, number in
+                    var result = partialResult
+                    result[number] = Date().iso8601withFractionalSeconds
+                    return result
+                }),
                 createdAt: Date().iso8601withFractionalSeconds,
                 lastUpdatedAt: Date().iso8601withFractionalSeconds,
                 encryptionDetails: selfEncryptionDetails
             )
             
-            self.localServer.createOrUpdateThread(serverThread: serverThread, completionHandler: completionHandler)
+            self.localServer.createOrUpdateThread(
+                serverThread: serverThread,
+                completionHandler: completionHandler
+            )
             
         } else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("updating a thread with a mock server is not supported")))
         }
+    }
+    
+    func updateThread(_ threadId: String, newName: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard let serverThread = self.state.threads?.first(where: {$0.threadId == threadId})
+        else {
+            completionHandler(.failure(SHHTTPError.ClientError.notFound))
+            return
+        }
+        self.localServer.updateThread(threadId, newName: newName, completionHandler: completionHandler)
     }
     
     func deleteThread(withId threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
@@ -296,10 +329,17 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func getThread(withUsers users: [any SHServerUser], completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()) {
+    func getThread(
+        withUsers users: [any SHServerUser],
+        and phoneNumbers: [String],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
         let threadMembersId = users.map({ $0.identifier })
         guard let threads = self.state.threads,
-           let matchingThread = threads.first(where: { $0.userIds.count == threadMembersId.count && Set(threadMembersId).subtracting($0.userIds).isEmpty })
+              let matchingThread = threads.first(where: {
+                  Set($0.userIds) == Set(threadMembersId)
+                  && Set(phoneNumbers) == Set($0.invitedPhoneNumbers)
+              })
         else {
             completionHandler(.success(nil))
             return
@@ -315,6 +355,11 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             name: matchingThread.name,
             creatorPublicIdentifier: matchingThread.creatorId,
             membersPublicIdentifier: matchingThread.userIds,
+            invitedUsersPhoneNumbers: phoneNumbers.reduce([:], { partialResult, number in
+                var result = partialResult
+                result[number] = Date().iso8601withFractionalSeconds
+                return result
+            }),
             createdAt: Date().iso8601withFractionalSeconds,
             lastUpdatedAt: Date().iso8601withFractionalSeconds,
             encryptionDetails: selfEncryptionDetails
@@ -677,7 +722,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 name: nil,
                 creatorId: self.testUser.identifier,
                 userIds: [self.testUser.identifier, recipient1.identifier],
-                encryptionDetails: []
+                encryptionDetails: [],
+                invitedPhoneNumbers: []
             )
         ]
         let serverProxy = SHMockServerProxy(user: self.testUser, threads: serverThreadDetails)
@@ -712,7 +758,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
-            ]
+            ],
+            and: []
         ) {
             result in
             if case .failure(let err) = result {
@@ -1207,7 +1254,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 name: nil,
                 creatorId: self.testUser.identifier,
                 userIds: [self.testUser.identifier, recipient1.identifier],
-                encryptionDetails: []
+                encryptionDetails: [],
+                invitedPhoneNumbers: []
             )
         ]
         let serverProxy = SHMockServerProxy(user: self.testUser, threads: serverThreadDetails)
@@ -1242,7 +1290,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
-            ]
+            ],
+            and: []
         ) {
             result in
             if case .failure(let err) = result {
@@ -1284,7 +1333,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
-            ]
+            ],
+            and: []
         ) { result in
             if case .failure(let err) = result {
                 XCTFail(err.localizedDescription)
@@ -1303,7 +1353,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
-            ]
+            ],
+            and: []
         ) {
             (result: Result<ConversationThreadOutputDTO, Error>) in
             if case .success = result {
@@ -1314,6 +1365,189 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         }
         
         wait(for: [expectation3], timeout: 5.0)
+    }
+    
+    func testCreateThreadWithPhoneNumbers() throws {
         
+        /// Cache `testUser` in the `ServerUserCache`
+        
+        ServerUserCache.shared.cache(
+            users: [
+                SHRemoteUser(identifier: self.testUser.identifier,
+                             name: "testUser",
+                             publicKeyData: self.testUser.publicKeyData,
+                             publicSignatureData: self.testUser.publicSignatureData)
+                ]
+            )
+        
+        let threadId1 = "testThreadId1"
+        let threadId2 = "testThreadId2"
+        
+        /// Create the other user `recipient1` and cache it
+        
+        let recipient1 = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.recipient1")
+        
+        ServerUserCache.shared.cache(
+            users: [
+                SHRemoteUser(identifier: recipient1.identifier,
+                             name: "recipient1",
+                             publicKeyData: recipient1.publicKeyData,
+                             publicSignatureData: recipient1.publicSignatureData)
+                ]
+            )
+        
+        /// Create the thread in the mock server for `testUser`, with no encryption details for now
+        
+        let threadUsers = [
+            SHRemoteUser(
+                identifier: self.testUser.identifier,
+                name: "testUser",
+                publicKeyData: self.testUser.publicKeyData,
+                publicSignatureData: self.testUser.publicSignatureData
+            ),
+            SHRemoteUser(
+                identifier: recipient1.identifier,
+                name: "recipient1",
+                publicKeyData: recipient1.publicKeyData,
+                publicSignatureData: recipient1.publicSignatureData
+            )
+        ]
+        let threadPhoneNumbers = ["+3917828928391"]
+        
+        let serverThreadDetails = [
+            MockThreadDetails(
+                threadId: threadId1,
+                name: nil,
+                creatorId: self.testUser.identifier,
+                userIds: [self.testUser.identifier, recipient1.identifier],
+                encryptionDetails: [],
+                invitedPhoneNumbers: []
+            ),
+            MockThreadDetails(
+                threadId: threadId2,
+                name: nil,
+                creatorId: self.testUser.identifier,
+                userIds: [self.testUser.identifier, recipient1.identifier],
+                encryptionDetails: [],
+                invitedPhoneNumbers: threadPhoneNumbers
+            )
+        ]
+        let serverProxy = SHMockServerProxy(user: self.testUser, threads: serverThreadDetails)
+        
+        let authenticatedUser1 = SHAuthenticatedLocalUser(
+            localUser: self.testUser,
+            name: "testUser",
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: ""
+        )
+        
+        let controller1 = SHUserInteractionController(
+            user: authenticatedUser1,
+            serverProxy: serverProxy
+        )
+        
+        /// Ask the mock server for `testUser` to create a new thread with `recipient1`
+        /// This will set up the encryption details in the mock server for the thread for both users
+        
+        let expectation1 = XCTestExpectation(description: "initialize the thread with NO invited numbers")
+        controller1.setupThread(
+            with: threadUsers,
+            and: []
+        ) { result in
+            if case .failure(let err) = result {
+                XCTFail(err.localizedDescription)
+            }
+            expectation1.fulfill()
+        }
+        
+        wait(for: [expectation1], timeout: 5.0)
+        
+        /// Ensure the encryption details for `testUser` are now present in the local server
+        
+        guard let mockServerThread = serverProxy.state.threads?.first(where: { $0.threadId == threadId1 }) else {
+            XCTFail() ; return
+        }
+        
+        guard let mockServerTestUserEncryptionDetails = mockServerThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == self.testUser.identifier })
+        else {
+            XCTFail() ; return
+        }
+        
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.ephemeralPublicKey)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.secretPublicSignature)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.senderPublicSignature)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails.encryptedSecret)
+        
+        let expectation2 = XCTestExpectation(description: "create a thread with same users but some invited phone numbers")
+        controller1.setupThread(
+            with: threadUsers,
+            and: threadPhoneNumbers
+        ) { result in
+            if case .failure(let err) = result {
+                XCTFail(err.localizedDescription)
+            }
+            expectation2.fulfill()
+        }
+        
+        wait(for: [expectation2], timeout: 5.0)
+        
+        guard let mockServerThread2 = serverProxy.state.threads?.first(where: { $0.threadId == threadId2 }) else {
+            XCTFail() ; return
+        }
+        
+        guard let mockServerTestUserEncryptionDetails2 = mockServerThread2.encryptionDetails.first(where: { $0.recipientUserIdentifier == self.testUser.identifier })
+        else {
+            XCTFail() ; return
+        }
+        
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails2.ephemeralPublicKey)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails2.secretPublicSignature)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails2.senderPublicSignature)
+        XCTAssertNotNil(mockServerTestUserEncryptionDetails2.encryptedSecret)
+        
+        let expectation4 = XCTestExpectation(description: "retrieve the thread with users and with users and invited phone numbers")
+        
+        controller1.getExistingThread(with: threadUsers, and: []) { result in
+            switch result {
+            case .failure(let error):
+                XCTFail(error.localizedDescription)
+                expectation4.fulfill()
+                
+            case .success(let maybeThreadWithNoInvitations):
+                guard let threadWithNoInvitations = maybeThreadWithNoInvitations else  {
+                    XCTFail()
+                    expectation4.fulfill()
+                    return
+                }
+                
+                XCTAssertEqual(threadWithNoInvitations.threadId, threadId1)
+                XCTAssertEqual(Set(threadWithNoInvitations.membersPublicIdentifier), Set(threadUsers.map({ $0.identifier })))
+                XCTAssertEqual(threadWithNoInvitations.invitedUsersPhoneNumbers.count, 0)
+                
+                controller1.getExistingThread(with: threadUsers, and: threadPhoneNumbers) { result in
+                    switch result {
+                    case .failure(let error):
+                        XCTFail(error.localizedDescription)
+                        expectation4.fulfill()
+                        
+                    case .success(let maybeThreadWithInvitations):
+                        guard let threadWithInvitations = maybeThreadWithInvitations else  {
+                            XCTFail()
+                            expectation4.fulfill()
+                            return
+                        }
+                        
+                        XCTAssertEqual(threadWithInvitations.threadId, threadId2)
+                        XCTAssertEqual(Set(threadWithInvitations.membersPublicIdentifier), Set(threadUsers.map({ $0.identifier })))
+                        XCTAssertEqual(Set(threadWithInvitations.invitedUsersPhoneNumbers.keys), Set(threadPhoneNumbers))
+                        
+                        expectation4.fulfill()
+                        
+                    }
+                }
+            }
+        }
+        
+        wait(for: [expectation4], timeout: 5.0)
     }
 }

@@ -189,7 +189,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
             dispatchGroup.enter()
             self.interactionsController.setupThread(
-                with: usersAndSelf
+                with: usersAndSelf,
+                and: shareRequest.invitedUsers
             ) {
                 setupThreadResult in
                 switch setupThreadResult {
