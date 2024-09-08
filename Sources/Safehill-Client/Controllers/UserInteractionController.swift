@@ -287,14 +287,6 @@ failed to add E2EE details to group \(groupId) for users \(users.map({ $0.identi
         self.serverProxy.getAssets(inThread: threadId, completionHandler: completionHandler)
     }
     
-    /// Retrieve the last message in the thread.
-    /// Because the last `ThreadLastInteractionSyncLimit` interactions
-    /// are synced via the `SHInteractionsSyncOperation`, we can safely collect the last message from local
-    ///
-    /// - Parameters:
-    ///   - threadId: the thread identifier
-    ///   - limit: limit the results
-    ///   - completionHandler: the callback with the last message if exists
     public func retrieveCachedInteractions(
         inThread threadId: String,
         ofType type: InteractionType? = nil,

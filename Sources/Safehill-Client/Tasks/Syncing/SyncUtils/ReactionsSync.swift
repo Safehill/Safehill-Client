@@ -1,6 +1,6 @@
 import Foundation
 
-extension SHInteractionsSyncOperation {
+extension SHWebsocketSyncOperation {
     
     func syncReactions(
         anchor: SHInteractionAnchor,
