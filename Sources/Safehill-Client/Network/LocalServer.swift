@@ -3962,4 +3962,12 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func requestAccessToGroup(with groupId: String) async throws {
+        throw SHHTTPError.ServerError.notImplemented
+    }
+    
+    func requestAccessToThread(with threadId: String) async throws {
+        throw SHHTTPError.ServerError.notImplemented
+    }
+    
 }

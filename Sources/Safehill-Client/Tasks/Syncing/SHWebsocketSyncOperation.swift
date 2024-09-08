@@ -57,7 +57,7 @@ public class SHWebsocketSyncOperation: Operation {
             return
         }
         
-        try await socket.connect(to: "ws/messages", 
+        try await socket.connect(to: "ws/messages",
                                  as: self.user,
                                  from: self.deviceId,
                                  keepAliveIntervalInSeconds: 5.0)
@@ -154,6 +154,7 @@ public class SHWebsocketSyncOperation: Operation {
                 let serverUser = SHRemoteUser(
                     identifier: requestor.identifier,
                     name: requestor.name,
+                    phoneNumber: requestor.phoneNumber,
                     publicKeyData: requestor.publicKeyData,
                     publicSignatureData: requestor.publicSignatureData
                 )
@@ -258,6 +259,23 @@ public class SHWebsocketSyncOperation: Operation {
                     }
                 })
                 
+            case .userConversionManifest:
+                
+                guard let conversionManifest = try? JSONDecoder().decode(WebSocketMessage.UserConversionManifest.self, from: contentData),
+                      let phoneNumber = conversionManifest.newUser.phoneNumber
+                else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] CONVERSION-MANIFEST for threads \(conversionManifest.threadIds) assets \(conversionManifest.assetIdsByGroupId)")
+                
+            case .threadUserConverted:
+                
+                self.log.debug("[ws] THREAD-USER-CONVERTED")
+                
+                break
+                
             case .threadAdd:
                 
                 guard let threadOutputDTO = try? JSONDecoder().decode(ConversationThreadOutputDTO.self, from: contentData) else {
@@ -297,7 +315,7 @@ public class SHWebsocketSyncOperation: Operation {
                     return
                     
                 } else {
-                    /// 
+                    ///
                     /// BACKWARD COMPATIBILITY:
                     /// group-assets-share type messages were sent with `ThreadAssets` as content
                     /// but since late August 2024 it's been sent as a `[ConversationThreadAssetDTO]`

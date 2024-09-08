@@ -1983,4 +1983,12 @@ extension SHServerProxy {
             }
         }
     }
+    
+    func requestAccessToGroup(with groupId: String) async throws {
+        try await remoteServer.requestAccessToGroup(with: groupId)
+    }
+    
+    func requestAccessToThread(with threadId: String) async throws {
+        try await remoteServer.requestAccessToThread(with: threadId)
+    }
 }
