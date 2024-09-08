@@ -444,6 +444,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: self.testUser.identifier,
                              name: "testUser",
+                             phoneNumber: nil,
                              publicKeyData: self.testUser.publicKeyData,
                              publicSignatureData: self.testUser.publicSignatureData)
             ]
@@ -456,6 +457,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: recipient1.identifier,
                              name: "recipient1",
+                             phoneNumber: nil,
                              publicKeyData: recipient1.publicKeyData,
                              publicSignatureData: recipient1.publicSignatureData)
             ]
@@ -466,6 +468,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let authenticatedUser = SHAuthenticatedLocalUser(
             localUser: self.testUser,
             name: "testUser",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -482,12 +485,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: self.testUser.identifier,
                     name: "testUser",
+                    phoneNumber: nil,
                     publicKeyData: self.testUser.publicKeyData,
                     publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -523,12 +528,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: self.testUser.identifier,
                     name: "testUser",
+                    phoneNumber: nil,
                     publicKeyData: self.testUser.publicKeyData,
                     publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -569,6 +576,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: self.testUser.identifier,
                              name: "testUser",
+                             phoneNumber: nil,
                              publicKeyData: self.testUser.publicKeyData,
                              publicSignatureData: self.testUser.publicSignatureData)
                 ]
@@ -581,6 +589,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: recipient1.identifier,
                              name: "recipient1",
+                             phoneNumber: nil,
                              publicKeyData: recipient1.publicKeyData,
                              publicSignatureData: recipient1.publicSignatureData)
                 ]
@@ -591,6 +600,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let authenticatedUser = SHAuthenticatedLocalUser(
             localUser: self.testUser,
             name: "testUser",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -607,12 +617,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: self.testUser.identifier,
                     name: "testUser",
+                    phoneNumber: nil,
                     publicKeyData: self.testUser.publicKeyData,
                     publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -689,6 +701,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: self.testUser.identifier,
                              name: "testUser",
+                             phoneNumber: nil,
                              publicKeyData: self.testUser.publicKeyData,
                              publicSignatureData: self.testUser.publicSignatureData)
                 ]
@@ -704,6 +717,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: recipient1.identifier,
                              name: "recipient1",
+                             phoneNumber: nil,
                              publicKeyData: recipient1.publicKeyData,
                              publicSignatureData: recipient1.publicSignatureData)
                 ]
@@ -731,6 +745,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let authenticatedUser1 = SHAuthenticatedLocalUser(
             localUser: self.testUser,
             name: "testUser",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -749,12 +764,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: self.testUser.identifier,
                     name: "testUser",
+                    phoneNumber: nil,
                     publicKeyData: self.testUser.publicKeyData,
                     publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -890,6 +907,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let authenticatedUser2 = SHAuthenticatedLocalUser(
             localUser: recipient1,
             name: "recipient1",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -1221,6 +1239,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: self.testUser.identifier,
                              name: "testUser",
+                             phoneNumber: nil,
                              publicKeyData: self.testUser.publicKeyData,
                              publicSignatureData: self.testUser.publicSignatureData)
                 ]
@@ -1236,6 +1255,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: recipient1.identifier,
                              name: "recipient1",
+                             phoneNumber: nil,
                              publicKeyData: recipient1.publicKeyData,
                              publicSignatureData: recipient1.publicSignatureData)
                 ]
@@ -1263,6 +1283,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let authenticatedUser1 = SHAuthenticatedLocalUser(
             localUser: self.testUser,
             name: "testUser",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )
@@ -1281,12 +1302,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: self.testUser.identifier,
                     name: "testUser",
+                    phoneNumber: nil,
                     publicKeyData: self.testUser.publicKeyData,
                     publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -1324,12 +1347,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: self.testUser.identifier,
                     name: "testUser",
+                    phoneNumber: nil,
                     publicKeyData: self.testUser.publicKeyData,
                     publicSignatureData: self.testUser.publicSignatureData
                 ),
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -1350,6 +1375,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 SHRemoteUser(
                     identifier: recipient1.identifier,
                     name: "recipient1",
+                    phoneNumber: nil,
                     publicKeyData: recipient1.publicKeyData,
                     publicSignatureData: recipient1.publicSignatureData
                 )
@@ -1375,6 +1401,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: self.testUser.identifier,
                              name: "testUser",
+                             phoneNumber: nil,
                              publicKeyData: self.testUser.publicKeyData,
                              publicSignatureData: self.testUser.publicSignatureData)
                 ]
@@ -1391,6 +1418,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             users: [
                 SHRemoteUser(identifier: recipient1.identifier,
                              name: "recipient1",
+                             phoneNumber: nil,
                              publicKeyData: recipient1.publicKeyData,
                              publicSignatureData: recipient1.publicSignatureData)
                 ]
@@ -1402,12 +1430,14 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
             SHRemoteUser(
                 identifier: self.testUser.identifier,
                 name: "testUser",
+                phoneNumber: nil,
                 publicKeyData: self.testUser.publicKeyData,
                 publicSignatureData: self.testUser.publicSignatureData
             ),
             SHRemoteUser(
                 identifier: recipient1.identifier,
                 name: "recipient1",
+                phoneNumber: nil,
                 publicKeyData: recipient1.publicKeyData,
                 publicSignatureData: recipient1.publicSignatureData
             )
@@ -1437,6 +1467,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         let authenticatedUser1 = SHAuthenticatedLocalUser(
             localUser: self.testUser,
             name: "testUser",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: ""
         )

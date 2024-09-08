@@ -103,6 +103,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         let remoteSender = SHRemoteUserClass(
             identifier: self.eventOriginator.identifier,
             name: self.eventOriginator.name,
+            phoneNumber: self.eventOriginator.phoneNumber,
             publicKeyData: self.eventOriginator.publicKeyData,
             publicSignatureData: self.eventOriginator.publicSignatureData
         )
@@ -111,6 +112,7 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
             SHRemoteUserClass(
                 identifier: $0.identifier,
                 name: $0.name,
+                phoneNumber: $0.phoneNumber,
                 publicKeyData: $0.publicKeyData,
                 publicSignatureData: $0.publicSignatureData
             )
@@ -177,11 +179,13 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         // Convert to SHRemoteUser
         let remoteSender = SHRemoteUser(identifier: sender.identifier,
                                         name: sender.name,
+                                        phoneNumber: sender.phoneNumber,
                                         publicKeyData: sender.publicKeyData,
                                         publicSignatureData: sender.publicSignatureData)
         let remoteReceivers = receivers.map {
             SHRemoteUser(identifier: $0.identifier,
                          name: $0.name,
+                         phoneNumber: $0.phoneNumber,
                          publicKeyData: $0.publicKeyData,
                          publicSignatureData: $0.publicSignatureData
             )

@@ -416,8 +416,10 @@ struct LocalServer : SHServerAPI {
                let publicKeyData = res["publicKey"] as? Data,
                let publicSignatureData = res["publicSignature"] as? Data {
                 
+                let phoneNumber = res["phoneNumber"] as? String
+                
                 let remoteUser: SHServerUser
-                if let phoneNumber = res["phoneNumber"] as? String,
+                if let phoneNumber,
                    let systemContactId = res["systemContactId"] as? String {
                     remoteUser = SHRemoteUserLinkedToContact(
                         identifier: identifier,
@@ -431,6 +433,7 @@ struct LocalServer : SHServerAPI {
                     remoteUser = SHRemoteUser(
                         identifier: identifier,
                         name: name,
+                        phoneNumber: phoneNumber,
                         publicKeyData: publicKeyData,
                         publicSignatureData: publicSignatureData
                     )

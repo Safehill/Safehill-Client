@@ -6,6 +6,7 @@ import Foundation
 public struct SHRemotePhantomUser : SHServerUser {
     public let identifier: String
     public let name: String = ""
+    public let phoneNumber: String? = nil
     public let publicKeyData: Data = "".data(using: .utf8)!
     public let publicSignatureData: Data = "".data(using: .utf8)!
     
