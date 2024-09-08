@@ -1457,7 +1457,7 @@ extension SHServerProxy {
         }
     }
     
-    internal func topLevelInteractionsSummaryFromLocal() async throws -> InteractionsSummaryDTO {
+    public func topLevelInteractionsSummaryFromLocal() async throws -> InteractionsSummaryDTO {
         try await withUnsafeThrowingContinuation { continuation in
             self.localServer.topLevelInteractionsSummary { result in
                 switch result {
