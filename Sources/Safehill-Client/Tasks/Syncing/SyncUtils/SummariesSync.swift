@@ -1,22 +1,37 @@
 import Foundation
 
-let ThreadLastInteractionSyncLimit = 20
-
-extension SHInteractionsSyncOperation {
+extension SHWebsocketSyncOperation: WebSocketDelegate {
     
-    public func syncInteractionSummaries() async throws {
+    /// 
+    /// CATCH-UP!
+    /// Every time the socket connects or re-connects,
+    /// make sure the local server is in sync with the remote server.
+    /// Only while the WS connection is connected changes on the server
+    /// are synced via handling of the Websocket message.
+    ///
+    public func didConnect() {
+        Task {
+            do {
+                try await self.syncSummaries()
+                log.debug("[SHInteractionsSyncOperation] done syncing interaction summaries")
+            } catch {
+                log.error("\(error.localizedDescription)")
+            }
+        }
+    }
+    
+    public func didDisconnect(error: Error?) {}
+    
+}
+
+
+extension SHWebsocketSyncOperation {
+    
+    public func syncSummaries() async throws {
         ///
         /// Get the summary to update the latest messages and interactions
         /// in threads and groups
         let remoteSummary = try await self.serverProxy.topLevelInteractionsSummaryFromRemote()
-        
-        self.delegatesQueue.async { [weak self] in
-            self?.interactionsSyncDelegates.forEach {
-                $0.didFetchRemoteThreadSummary(remoteSummary.summaryByThreadId)
-                $0.didFetchRemoteGroupSummary(remoteSummary.summaryByGroupId)
-            }
-        }
-        
         let localSummary = try await self.serverProxy.topLevelInteractionsSummaryFromLocal()
         
         ///
@@ -29,8 +44,29 @@ extension SHInteractionsSyncOperation {
             qos: .userInteractive
         )
         
-        self.updateThreadsInteractions(using: remoteSummary.summaryByThreadId)
-        self.updateGroupsInteractions(using: remoteSummary.summaryByGroupId)
+        ///
+        /// Sync remote and local w.r.t. interactions summaries for both threads and groups.
+        /// Notify the delegates about new messages and reactions as they get ingested, 
+        /// as if they were coming from websockets.
+        /// The delegates are responsible make the handlers of these notifications idempotent,
+        /// so that messages and reactions are not duplicated.
+        ///
+        /// Once the interactions sync has been completed, notify the delegate about the change in the summary,
+        /// so that the interactions can be updated.
+        /// From that point onwards, the delegates can pull that information from local server,
+        /// because they are assumed to be in sync.
+        /// Every new change will be handled by the websockets, until the syncing starts again
+        ///
+        self.updateThreadsInteractions(using: remoteSummary.summaryByThreadId) { [weak self] in
+            self?.updateGroupsInteractions(using: remoteSummary.summaryByGroupId) { [weak self] in
+                self?.delegatesQueue.async { [weak self] in
+                    self?.interactionsSyncDelegates.forEach {
+                        $0.didFetchRemoteThreadSummary(remoteSummary.summaryByThreadId)
+                        $0.didFetchRemoteGroupSummary(remoteSummary.summaryByGroupId)
+                    }
+                }
+            }
+        }
     }
     
     /// Sync the threads betwen remote and local server
@@ -38,7 +74,7 @@ extension SHInteractionsSyncOperation {
     ///
     /// - Parameter qos: the quality of service
     /// - Returns: the list of threads from known users
-    func syncRemoteAndLocalThreads(
+    fileprivate func syncRemoteAndLocalThreads(
         remoteSummary: InteractionsSummaryDTO,
         localSummary: InteractionsSummaryDTO,
         qos: DispatchQoS.QoSClass
@@ -116,7 +152,7 @@ extension SHInteractionsSyncOperation {
     /// - Parameters:
     ///   - threads: the threads from server
     ///   - localThreads: the local threads if already available. If `nil`, the corresponding local threads will be fetched from DB
-    internal func createThreads(
+    fileprivate func createThreads(
         withIds threadIds: [String],
         remoteThreads: [ConversationThreadOutputDTO]
     ) async {
@@ -144,7 +180,7 @@ extension SHInteractionsSyncOperation {
     /// - Parameters:
     ///   - threads: the threads from server
     ///   - remoteThreads: the local threads if already available. If `nil`, the corresponding local threads will be fetched from DB
-    internal func updateLocalThreads(
+    fileprivate func updateLocalThreads(
         _ threadIds: [String],
         allRemoteThreads: [ConversationThreadOutputDTO]
     ) async throws {
@@ -157,16 +193,23 @@ extension SHInteractionsSyncOperation {
     ///
     /// Add the last message pulled from the summary to the thread
     ///
-    internal func updateThreadsInteractions(
-        using summaryByThreadId: [String: InteractionsThreadSummaryDTO]
+    fileprivate func updateThreadsInteractions(
+        using summaryByThreadId: [String: InteractionsThreadSummaryDTO],
+        completionHandler: @escaping () -> Void
     ) {
+        let dispatchGroup = DispatchGroup()
+        
         for (threadId, threadSummary) in summaryByThreadId {
             if let lastMessage = threadSummary.lastEncryptedMessage {
+                
+                dispatchGroup.enter()
+                
                 self.serverProxy.addLocalMessages(
                     [lastMessage],
                     toThread: threadId
                 ) { result in
                     guard case .success(let messages) = result else {
+                        dispatchGroup.leave()
                         return
                     }
                     
@@ -176,22 +219,36 @@ extension SHInteractionsSyncOperation {
                             delegate.didReceiveTextMessages(messages, inThread: threadId)
                         })
                     }
+                    
+                    dispatchGroup.leave()
                 }
             }
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            completionHandler()
         }
     }
     
     ///
     /// Add all the interactions referenced in the summary
     ///
-    internal func updateGroupsInteractions(using summaryByGroupId: [String: InteractionsGroupSummaryDTO]) {
+    fileprivate func updateGroupsInteractions(
+        using summaryByGroupId: [String: InteractionsGroupSummaryDTO],
+        completionHandler: @escaping () -> Void
+    ) {
+        let dispatchGroup = DispatchGroup()
+        
         for (groupId, groupSummary) in summaryByGroupId {
+            
+            dispatchGroup.enter()
             
             self.serverProxy.addLocalReactions(
                 groupSummary.reactions,
                 toGroup: groupId
             ) { result in
                 guard case .success = result else {
+                    dispatchGroup.leave()
                     return
                 }
                 
@@ -204,11 +261,15 @@ extension SHInteractionsSyncOperation {
             }
             
             if let firstMessage = groupSummary.firstEncryptedMessage {
+                
+                dispatchGroup.enter()
+                
                 self.serverProxy.addLocalMessages(
                     [firstMessage],
                     toGroup: groupId
                 ) { result in
                     guard case .success(let messages) = result else {
+                        dispatchGroup.leave()
                         return
                     }
                     
@@ -218,8 +279,14 @@ extension SHInteractionsSyncOperation {
                             delegate.didReceiveTextMessages(messages, inGroup: groupId)
                         })
                     }
+                    
+                    dispatchGroup.leave()
                 }
             }
+        }
+        
+        dispatchGroup.notify(queue: .global()) {
+            completionHandler()
         }
     }
 }

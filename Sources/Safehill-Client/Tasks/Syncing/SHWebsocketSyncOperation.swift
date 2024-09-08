@@ -1,21 +1,16 @@
 import Foundation
 import os
 
-/// 
-/// Responsible for syncing:
-/// - full list of threads with server
-/// - LAST `ThreadLastInteractionSyncLimit` interactions in each
-///
-public class SHInteractionsSyncOperation: Operation {
+public class SHWebsocketSyncOperation: Operation {
     
     public typealias OperationResult = Result<Void, Error>
     
     private static var isWebSocketConnected = false
-    private static let memberAccessQueue = DispatchQueue(label: "SHInteractionsSyncOperation.memberAccessQueue")
+    private static let memberAccessQueue = DispatchQueue(label: "WebsocketSyncOperation.memberAccessQueue")
     
-    public let log = Logger(subsystem: "com.safehill", category: "BG-INTERACTIONS-SYNC")
+    public let log = Logger(subsystem: "com.safehill", category: "WS-SYNC")
     
-    let delegatesQueue = DispatchQueue(label: "com.safehill.threads-interactions-sync.delegates")
+    let delegatesQueue = DispatchQueue(label: "com.safehill.ws.delegates")
     
     let user: SHAuthenticatedLocalUser
     let deviceId: String
@@ -336,15 +331,6 @@ public class SHInteractionsSyncOperation: Operation {
     /// 3. Start the WEBSOCKET connection for updates
     public override func start() {
         super.start()
-        
-        Task {
-            do {
-                try await self.syncInteractionSummaries()
-                log.debug("[SHInteractionsSyncOperation] done syncing interaction summaries")
-            } catch {
-                log.error("\(error.localizedDescription)")
-            }
-        }
         
         Task(priority: .high) {
             do {
