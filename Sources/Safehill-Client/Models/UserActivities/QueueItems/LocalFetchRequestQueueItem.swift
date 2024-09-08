@@ -16,10 +16,11 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
     public init(localIdentifier: String,
                 globalIdentifier: String? = nil,
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
                 shouldUpload: Bool,
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
@@ -27,7 +28,8 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
-                   isPhotoMessage: isPhotoMessage,
+                   invitedUsers: invitedUsers,
+                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                    isBackground: isBackground)
     }
     
@@ -35,10 +37,11 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                 globalIdentifier: String? = nil,
                 versions: [SHAssetQuality],
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
                 shouldUpload: Bool,
-                isPhotoMessage: Bool,
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.globalIdentifier = globalIdentifier
         self.shouldUpload = shouldUpload
@@ -47,7 +50,8 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                    groupId: groupId,
                    eventOriginator: eventOriginator,
                    sharedWith: users,
-                   isPhotoMessage: isPhotoMessage,
+                   invitedUsers: invitedUsers,
+                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                    isBackground: isBackground)
     }
     
@@ -73,8 +77,9 @@ public class SHLocalFetchRequestQueueItem: SHAbstractOutboundShareableGroupableQ
                       groupId: superSelf.groupId,
                       eventOriginator: superSelf.eventOriginator,
                       sharedWith: superSelf.sharedWith,
+                      invitedUsers: superSelf.invitedUsers,
                       shouldUpload: su.boolValue,
-                      isPhotoMessage: superSelf.isPhotoMessage,
+                      asPhotoMessageInThreadId: superSelf.asPhotoMessageInThreadId,
                       isBackground: superSelf.isBackground)
             return
         }

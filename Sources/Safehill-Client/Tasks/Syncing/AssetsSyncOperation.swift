@@ -171,9 +171,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         assetsDelegates.forEach {
-                            $0.groupsWereUpdated(
-                                withIds: Array(diff.groupInfoDifferentOnRemote.keys)
-                            )
+                            $0.groupsInfoWereUpdated(diff.groupInfoDifferentOnRemote)
                         }
                     }
                     

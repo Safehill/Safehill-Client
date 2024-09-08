@@ -366,6 +366,14 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func addLocalReactions(_ reactions: [ReactionInput], toThread threadId: String, completionHandler: @escaping (Result<[ReactionOutputDTO], Error>) -> ()) {
         self.localServer.addReactions(reactions, toThread: threadId, completionHandler: completionHandler)
     }
+    
+    func invite(_ phoneNumbers: [String], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.invite(phoneNumbers, to: groupId, completionHandler: completionHandler)
+    }
+    
+    func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.uninvite(phoneNumbers, from: groupId, completionHandler: completionHandler)
+    }
 }
 
 

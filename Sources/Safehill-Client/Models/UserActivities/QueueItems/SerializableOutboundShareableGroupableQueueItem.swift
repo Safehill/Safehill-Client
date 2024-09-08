@@ -10,7 +10,8 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         case groupId
         case eventOriginator
         case sharedWith
-        case isPhotoMessage
+        case invitedUsers
+        case asPhotoMessageInThreadId
     }
     
     public var identifier: String {
@@ -29,10 +30,11 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     ///
     public let versions: [SHAssetQuality]
     public let groupId: String
-    public let eventOriginator: SHServerUser
-    public let sharedWith: [SHServerUser] // Empty if it's just a backup request
+    public let eventOriginator: any SHServerUser
+    public let sharedWith: [any SHServerUser] // Empty if it's just a backup request
+    public let invitedUsers: [String]
     
-    public let isPhotoMessage: Bool
+    public let asPhotoMessageInThreadId: String?
     
     ///
     /// The recommended versions based on the type of request.
@@ -59,33 +61,37 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
     
     public init(localIdentifier: String,
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
-                isPhotoMessage: Bool,
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = SHAbstractOutboundShareableGroupableQueueItem.recommendedVersions(forSharingWith: users)
         self.groupId = groupId
         self.eventOriginator = eventOriginator
         self.sharedWith = users
+        self.invitedUsers = invitedUsers
         self.isBackground = isBackground
-        self.isPhotoMessage = isPhotoMessage
+        self.asPhotoMessageInThreadId = asPhotoMessageInThreadId
     }
     
     public init(localIdentifier: String,
                 versions: [SHAssetQuality],
                 groupId: String,
-                eventOriginator: SHServerUser,
-                sharedWith users: [SHServerUser],
-                isPhotoMessage: Bool,
+                eventOriginator: any SHServerUser,
+                sharedWith users: [any SHServerUser],
+                invitedUsers: [String],
+                asPhotoMessageInThreadId: String?,
                 isBackground: Bool = false) {
         self.localIdentifier = localIdentifier
         self.versions = versions
         self.groupId = groupId
         self.eventOriginator = eventOriginator
         self.sharedWith = users
+        self.invitedUsers = invitedUsers
         self.isBackground = isBackground
-        self.isPhotoMessage = isPhotoMessage
+        self.asPhotoMessageInThreadId = asPhotoMessageInThreadId
     }
     
     public func encode(with coder: NSCoder) {
@@ -110,7 +116,8 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
             )
         }
         coder.encode(remoteReceivers, forKey: CodingKeys.sharedWith.rawValue)
-        coder.encode(NSNumber(booleanLiteral: self.isPhotoMessage), forKey: CodingKeys.isPhotoMessage.rawValue)
+        coder.encode(invitedUsers, forKey: CodingKeys.invitedUsers.rawValue)
+        coder.encode(self.asPhotoMessageInThreadId, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue)
     }
     
     public required convenience init?(coder decoder: NSCoder) {
@@ -119,8 +126,9 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
         let groupId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupId.rawValue)
         let sender = decoder.decodeObject(of: SHRemoteUserClass.self, forKey: CodingKeys.eventOriginator.rawValue)
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: CodingKeys.sharedWith.rawValue)
+        let invitedUsers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.invitedUsers.rawValue)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isBackground.rawValue)
-        let isPhotoMessage = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isPhotoMessage.rawValue)
+        let asPhotoMessageInThreadId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue)
         
         guard let assetId = assetId as? String else {
             log.error("unexpected value for assetId when decoding \(Self.Type.self) object")
@@ -160,6 +168,12 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
             log.error("unexpected value for sharedWith when decoding \(Self.Type.self) object")
             return nil
         }
+        
+        guard let invitedUsers = invitedUsers as? [String] else {
+            log.error("unexpected value for invitedUsers when decoding \(Self.Type.self) object")
+            return nil
+        }
+        
         // Convert to SHRemoteUser
         let remoteSender = SHRemoteUser(identifier: sender.identifier,
                                         name: sender.name,
@@ -183,7 +197,8 @@ public class SHAbstractOutboundShareableGroupableQueueItem: NSObject, SHOutbound
                   groupId: groupId,
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
-                  isPhotoMessage: isPhotoMessage?.boolValue ?? false,
+                  invitedUsers: invitedUsers,
+                  asPhotoMessageInThreadId: asPhotoMessageInThreadId as String?,
                   isBackground: isBg.boolValue)
     }
     

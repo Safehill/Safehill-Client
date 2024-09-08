@@ -201,7 +201,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let isPhotoMessage = request.isPhotoMessage
+        let invitedUsers = request.invitedUsers
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         ///
         /// Dequeue from Encryption queue
@@ -224,7 +225,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            isPhotoMessage: isPhotoMessage,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground,
             error: error
         )
@@ -292,8 +294,9 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let isBackground = request.isBackground
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         do {
             ///
@@ -315,7 +318,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            isPhotoMessage: isPhotoMessage,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: isBackground
         )
         

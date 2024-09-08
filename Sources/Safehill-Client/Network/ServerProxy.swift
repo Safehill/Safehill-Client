@@ -908,12 +908,12 @@ extension SHServerProxy {
     }
     
     func share(_ asset: SHShareableEncryptedAsset,
-               isPhotoMessage: Bool,
+               asPhotoMessageInThreadId: String?,
                suppressNotification: Bool = false,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.share(
             asset: asset,
-            isPhotoMessage: isPhotoMessage,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             suppressNotification: suppressNotification,
             completionHandler: completionHandler
         )
@@ -950,12 +950,6 @@ extension SHServerProxy {
 extension SHServerProxy {
     
     // - MARK: Groups, Threads and Interactions
-    
-    public func add(phoneNumbers: [SHPhoneNumber],
-                    to groupId: String,
-                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.remoteServer.add(phoneNumbers: phoneNumbers, to: groupId, completionHandler: completionHandler)
-    }
     
     func setupGroupEncryptionDetails(
         groupId: String,
@@ -1925,6 +1919,47 @@ extension SHServerProxy {
             case .failure(let serverErr):
                 log.critical("receipt server validation failed with error: \(serverErr.localizedDescription)")
                 completionHandler(.failure(serverErr))
+            }
+        }
+    }
+}
+
+extension SHServerProxy {
+    
+    // MARK: - Phone Number Invitations
+    
+    func invite(
+        _ phoneNumbers: [String],
+        to groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.invite(phoneNumbers, to: groupId) { remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.invite(phoneNumbers, to: groupId) { _ in
+                    completionHandler(.success(()))
+                }
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    public func uninvite(
+        _ phoneNumbers: [String],
+        from groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.uninvite(phoneNumbers, from: groupId) { remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.uninvite(phoneNumbers, from: groupId) { _ in
+                    completionHandler(.success(()))
+                }
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
         }
     }

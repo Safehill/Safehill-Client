@@ -196,5 +196,17 @@ internal protocol SHServerProxyProtocol {
         withUsers users: [any SHServerUser],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
+    
+    func invite(
+        _ phoneNumbers: [String],
+        to groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func uninvite(
+        _ phoneNumbers: [String],
+        from groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
 }
 

@@ -108,7 +108,8 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let isPhotoMessage = request.isPhotoMessage
+        let invitedUsers = request.invitedUsers
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         // Dequeue from FETCH queue
         log.info("dequeueing request for asset \(localIdentifier) from the FETCH queue")
@@ -132,7 +133,8 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            isPhotoMessage: isPhotoMessage,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground
         )
         
@@ -152,7 +154,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                 if let delegate = delegate as? SHAssetFetcherDelegate {
                     if request.shouldUpload == true {
                         delegate.didFailFetchingForUpload(ofAsset: localIdentifier, in: groupId, error: error)
-                    } else {
+                    } else if users.isEmpty == false {
                         delegate.didFailFetchingForSharing(
                             ofAsset: localIdentifier,
                             sharingWith: users,
@@ -176,8 +178,9 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         let shouldUpload = request.shouldUpload
-        let isPhotoMessage = request.isPhotoMessage
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         let isBackground = request.isBackground
         
         let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
@@ -199,7 +202,8 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
-                    isPhotoMessage: isPhotoMessage,
+                    invitedUsers: invitedUsers,
+                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                     isBackground: isBackground
                 )
                 try encryptionRequest.enqueue(in: encryptionQueue)
@@ -216,7 +220,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                         if let delegate = delegate as? SHAssetFetcherDelegate {
                             if request.shouldUpload == true {
                                 delegate.didCompleteFetchingForUpload(ofAsset: localIdentifier, in: groupId)
-                            } else {
+                            } else if users.isEmpty == false {
                                 delegate.didCompleteFetchingForSharing(
                                     ofAsset: localIdentifier,
                                     sharingWith: users,
@@ -237,7 +241,8 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: users,
-                    isPhotoMessage: isPhotoMessage,
+                    invitedUsers: invitedUsers,
+                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                     isBackground: isBackground
                 )
                 try encryptionForSharingRequest.enqueue(in: shareQueue)
@@ -323,7 +328,7 @@ internal class SHLocalFetchOperation: Operation, SHBackgroundQueueBackedOperatio
                         if let delegate = delegate as? SHAssetFetcherDelegate {
                             if fetchRequest.shouldUpload == true {
                                 delegate.didStartFetchingForUpload(ofAsset: fetchRequest.localIdentifier, in: fetchRequest.groupId)
-                            } else {
+                            } else if fetchRequest.sharedWith.isEmpty == false {
                                 delegate.didStartFetchingForSharing(
                                     ofAsset: fetchRequest.localIdentifier,
                                     sharingWith: fetchRequest.sharedWith,

@@ -55,7 +55,7 @@ public struct SHKGQuery {
             
             for photoMessage in conversationThreadAssets.photoMessages {
                 let data = try NSKeyedArchiver.archivedData(
-                    withRootObject: ConversationThreadAssetClass.fromDTO(photoMessage),
+                    withRootObject: DBSecureSerializableConversationThreadAsset.fromDTO(photoMessage),
                     requiringSecureCoding: true
                 )
                 writeBatch.set(
@@ -74,7 +74,7 @@ public struct SHKGQuery {
             
             for otherAsset in conversationThreadAssets.otherAssets {
                 let data = try NSKeyedArchiver.archivedData(
-                    withRootObject: UsersGroupAssetClass.fromDTO(otherAsset),
+                    withRootObject: DBSecureSerializableUserGroupAsset.fromDTO(otherAsset),
                     requiringSecureCoding: true
                 )
                 writeBatch.set(

@@ -60,7 +60,8 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let isPhotoMessage = request.isPhotoMessage
+        let invitedUsers = request.invitedUsers
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         /// Dequeque from UploadQueue
         log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
@@ -81,7 +82,8 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            isPhotoMessage: isPhotoMessage,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground,
             error: error
         )
@@ -125,7 +127,8 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
-        let isPhotoMessage = request.isPhotoMessage
+        let invitedUsers = request.invitedUsers
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
@@ -163,9 +166,24 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         }
         
         ///
-        /// Start the sharing part if needed
+        /// Start the sharing part as needed
         ///
-        if request.isSharingWithOtherUsers {
+        if request.isSharingWithOrInvitingOtherUsers {
+            
+            guard isBackground == false || request.isSharingWithOtherSafehillUsers else {
+                /// 
+                /// If there are no users to share with but only invitations to make
+                /// the invitation should only happen once, for items with `isBackground = false`.
+                /// If `isBackground` is `true`, then it's safe to assume that the invitation
+                /// has already happened.
+                ///
+                /// Of course if there are Safehill users to share the asset with,
+                /// the enqueuing of share of the hi resolution asset should continue for the `sharedWith` set
+                /// (`isBackground = true` and `request.versions.contains(.hiResolution) == false`)
+                ///
+                return
+            }
+            
             let fetchQueue = try BackgroundOperationQueue.of(type: .fetch)
             
             do {
@@ -173,7 +191,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 /// Enquque to FETCH queue for encrypting for sharing (note: `shouldUpload=false`)
                 ///
                 log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
-
+                
                 let fetchRequest = SHLocalFetchRequestQueueItem(
                     localIdentifier: localIdentifier,
                     globalIdentifier: globalIdentifier,
@@ -181,8 +199,9 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     groupId: groupId,
                     eventOriginator: eventOriginator,
                     sharedWith: sharedWith,
+                    invitedUsers: invitedUsers,
                     shouldUpload: false,
-                    isPhotoMessage: isPhotoMessage,
+                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
                     isBackground: isBackground
                 )
                 try fetchRequest.enqueue(in: fetchQueue)
@@ -209,8 +228,9 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                         groupId: request.groupId,
                         eventOriginator: request.eventOriginator,
                         sharedWith: request.sharedWith,
+                        invitedUsers: invitedUsers,
                         shouldUpload: true,
-                        isPhotoMessage: request.isPhotoMessage,
+                        asPhotoMessageInThreadId: request.asPhotoMessageInThreadId,
                         isBackground: true
                     )
                     try hiResFetchQueueItem.enqueue(in: fetchQueue)

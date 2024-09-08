@@ -62,7 +62,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let isPhotoMessage = request.isPhotoMessage
+        let invitedUsers = request.invitedUsers
+        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
@@ -79,7 +80,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             groupId: groupId,
             eventOriginator: eventOriginator,
             sharedWith: users,
-            isPhotoMessage: isPhotoMessage,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
             isBackground: request.isBackground
         )
 
@@ -92,7 +94,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             throw error
         }
         
-        guard request.isBackground == false else {
+        guard request.isBackground == false, users.count > 0 else {
             /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
             return
         }
@@ -116,7 +118,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     public override func markAsSuccessful(
         item: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String
+        globalIdentifier: GlobalIdentifier
     ) throws {
         let localIdentifier = request.localIdentifier
         let groupId = request.groupId
@@ -126,11 +128,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
         catch {
-            log.warning("asset \(localIdentifier) was uploaded but dequeuing from UPLOAD queue failed, so this operation will be attempted again")
+            log.warning("asset \(localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
         }
         
         do {
-            /// Enquque to ShareHistoryQueue
             log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
             /// Remove items in the `FailedShareQueue` for the same identifier
@@ -224,26 +225,49 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
     ) {
         self.serverProxy.share(
             shareableEncryptedAsset,
-            isPhotoMessage: shareRequest.isPhotoMessage,
+            asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,
             suppressNotification: shareRequest.isBackground
         ) { shareResult in
-            if case .failure(let err) = shareResult {
+            
+            let handleSuccess = {
+                do {
+                    try self.markAsSuccessful(
+                        item: item,
+                        encryptionRequest: shareRequest,
+                        globalIdentifier: shareableEncryptedAsset.globalIdentifier
+                    )
+                } catch {
+                    self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops. \(error.localizedDescription)")
+                    completionHandler(.failure(error))
+                }
+                
+                completionHandler(.success(()))
+            }
+            
+            switch shareResult {
+            case .failure(let err):
                 completionHandler(.failure(err))
-                return
+                
+            case .success:
+                if shareRequest.isBackground == false,
+                   shareRequest.invitedUsers.count > 0 {
+                    
+                    self.serverProxy.invite(
+                        shareRequest.invitedUsers,
+                        to: shareRequest.groupId
+                    ) { inviteResult in
+                        switch inviteResult {
+                        case.success:
+                            handleSuccess()
+                            
+                        case .failure(let error):
+                            completionHandler(.failure(error))
+                        }
+                    }
+                } else {
+                    handleSuccess()
+                }
             }
-            
-            do {
-                try self.markAsSuccessful(
-                    item: item,
-                    encryptionRequest: shareRequest,
-                    globalIdentifier: shareableEncryptedAsset.globalIdentifier
-                )
-            } catch {
-                self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops. \(error.localizedDescription)")
-                completionHandler(.failure(error))
-            }
-            
-            completionHandler(.success(()))
         }
     }
     
@@ -288,12 +312,56 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
             completionHandler(.failure(error))
         }
         
-        guard shareRequest.sharedWith.count > 0 else {
-            handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers"))
+        let globalIdentifier = shareRequest.asset.globalIdentifier
+        guard let globalIdentifier else {
+            ///
+            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
+            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
+            ///
+            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
             return
         }
         
-        log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier })")
+        guard shareRequest.isSharingWithOrInvitingOtherUsers else {
+            handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers or invited phone numbers"))
+            return
+        }
+        
+        log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier }) and invited \(shareRequest.invitedUsers)")
+        
+        guard shareRequest.isOnlyInvitingUsers == false else {
+            
+            ///
+            /// If only inviting other users take this shortcut,
+            /// only invite and end early.
+            /// If in background, don't invite, cause the previous non-background item
+            /// would have invited the users for this request
+            ///
+            
+            let dequeue = {
+                do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
+                catch {
+                    self.log.warning("asset \(shareRequest.asset.phAsset.localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
+                }
+                
+                completionHandler(.success(()))
+            }
+            
+            if shareRequest.isBackground == false {
+                self.serverProxy.invite(
+                    shareRequest.invitedUsers,
+                    to: shareRequest.groupId
+                ) { result in
+                    
+                    dequeue()
+                    completionHandler(result)
+                }
+            } else {
+                dequeue()
+                completionHandler(.success(()))
+            }
+            return
+        }
         
         if shareRequest.isBackground == false {
             let assetDelegates = self.assetsDelegates
@@ -306,16 +374,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                     }
                 }
             }
-        }
-        
-        let globalIdentifier = shareRequest.asset.globalIdentifier
-        guard let globalIdentifier else {
-            ///
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
-            return
         }
         
         ///

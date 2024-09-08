@@ -138,8 +138,13 @@ extension SHRemoteDownloadOperation {
             
             for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 
-                guard let groupCreationDate = descriptor.sharingInfo.groupInfoById[groupId]?.createdAt else {
+                guard let groupInfo = descriptor.sharingInfo.groupInfoById[groupId] else {
                     self.log.critical("[\(type(of: self))] no group info in descriptor for id \(groupId)")
+                    continue
+                }
+                
+                guard let groupCreationDate = groupInfo.createdAt else {
+                    self.log.critical("[\(type(of: self))] no group creation date in descriptor for id \(groupId)")
                     continue
                 }
                 
@@ -151,7 +156,8 @@ extension SHRemoteDownloadOperation {
                         groupId: groupId,
                         eventOriginator: senderUser,
                         sharedWith: [],
-                        isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                        invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
+                        asPhotoMessageInThreadId: groupInfo.createdFromThreadId,
                         isBackground: false
                     )
                     
@@ -185,7 +191,8 @@ extension SHRemoteDownloadOperation {
                     groupId: groupId,
                     eventOriginator: senderUser,
                     sharedWith: shareInfo.map({ $0.with }),
-                    isPhotoMessage: false, // TODO: We should fetch this information from server, instead of assuming it's false
+                    invitedUsers: Array((descriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers ?? [:]).keys),
+                    asPhotoMessageInThreadId: descriptor.sharingInfo.groupInfoById[groupId]?.createdFromThreadId,
                     isBackground: false
                 )
                 
