@@ -48,7 +48,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// One cycle of downloads has finished from local server
     /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
     func didCompleteDownloadCycle(
-        localAssetsAndDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+        localAssetsAndDescriptors: [AssetAndDescriptor]
     )
     
     /// One cycle of downloads has finished from remote server
