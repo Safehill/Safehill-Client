@@ -2125,10 +2125,16 @@ struct LocalServer : SHServerAPI {
             }
             writeBatch.set(value: remoteThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::lastUpdatedAt")
             
-            let value = remoteThread.invitedUsersPhoneNumbers.map {
+            let invitations = remoteThread.invitedUsersPhoneNumbers.map {
                 DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
             }
-            writeBatch.set(value: value, for: "invitations::\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)")
+            do {
+                let data = try NSKeyedArchiver.archivedData(withRootObject: invitations, requiringSecureCoding: true)
+                writeBatch.set(value: data, for: "invitations::\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)")
+            } catch {
+                log.critical("failed to archive thread invitations data for thread \(remoteThread.threadId) invitations \(remoteThread.invitedUsersPhoneNumbers). \(error.localizedDescription)")
+                writeBatch.set(value: nil, for: "invitations::\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)")
+            }
         }
         
         writeBatch.write { result in
