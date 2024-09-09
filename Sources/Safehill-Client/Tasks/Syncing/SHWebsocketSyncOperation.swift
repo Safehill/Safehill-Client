@@ -17,9 +17,9 @@ public class SHWebsocketSyncOperation: Operation {
     
     let socket: WebSocketAPI
     
-    let websocketConnectionDelegates: [WebSocketDelegate]
-    let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
-    let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+    private var websocketConnectionDelegates: [WebSocketDelegate]
+    internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
+    private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
@@ -37,6 +37,10 @@ public class SHWebsocketSyncOperation: Operation {
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.socket = WebSocketAPI()
+        
+        super.init()
+        
+        self.websocketConnectionDelegates.append(self)
     }
     
     deinit {
