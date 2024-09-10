@@ -19,7 +19,7 @@ extension SHServerProxy {
     // MARK: - Migrations
     
     public func runLocalMigrations(
-        currentBuild: Int?,
+        currentBuild: String?,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         self.localServer.runDataMigrations(

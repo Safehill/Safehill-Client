@@ -1,6 +1,9 @@
 import Foundation
 import KnowledgeBase
 
+let kSHDBMigrationsUDStoreName = "com.gf.safehill.snoog.migrations"
+let kSHLastBuildMigratedToKey = "lastBuildMigratedTo"
+
 public extension Array {
     func chunked(into size: Int) -> [[Element]] {
         guard !isEmpty && size > 0 else {
@@ -117,15 +120,8 @@ extension LocalServer {
     /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
     ///
     private func runAssetDataMigration(
-        currentBuild: Int?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
-        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
-            log.warning("failed to connect to the local asset store")
-            completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
         completionHandler(.success(()))
     }
     
@@ -137,7 +133,6 @@ extension LocalServer {
     /// Simply remove the old cache under the old keys.
     ///
     func runAssetThreadsMigration(
-        currentBuild: Int?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
@@ -171,14 +166,43 @@ extension LocalServer {
             }
         }
     }
+    
+    func runVersionMigration(
+        to: Int,
+        from: Int?,
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            log.warning("failed to connect to the local user store")
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
         
+        if to == 13 { // 1.3.0 migrations
+            let condition = KBGenericCondition(
+                .beginsWith,
+                value: "invitations::"
+            )
+            
+            userStore.removeValues(forKeysMatching: condition) { result in
+                switch result {
+                case .success:
+                    completionHandler(.success(()))
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            }
+        } else {
+            completionHandler(.success(()))
+        }
+    }
     
     /// Run migration of data in local databases
     /// - Parameters:
     ///   - currentBuild: the current client build, if available
     ///   - completionHandler: the callback
     public func runDataMigrations(
-        currentBuild: Int?,
+        currentBuild: String?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
         dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
@@ -188,17 +212,46 @@ extension LocalServer {
         let group = DispatchGroup()
         
         group.enter()
-        self.runAssetDataMigration(currentBuild: currentBuild) { result1 in
+        self.runAssetDataMigration { result1 in
             if case .failure(let error) = result1 {
                 errors.append(error)
             }
             
-            self.runAssetThreadsMigration(currentBuild: currentBuild) { result2 in
+            self.runAssetThreadsMigration { result2 in
                 if case .failure(let error) = result2 {
                     errors.append(error)
                 }
                 
                 group.leave()
+            }
+        }
+        
+        if let currentBuild,
+           let currentNumericVersion = Int(currentBuild.prefix(3).split(separator: ".").joined()) {
+            
+            let migrationUserDefaults = UserDefaults(suiteName: kSHDBMigrationsUDStoreName)!
+            let lastMigrationRunForVersion = migrationUserDefaults.value(forKey: kSHLastBuildMigratedToKey) as? String
+            
+            let lastRunNumericVersion: Int?
+            if let lastMigrationRunForVersion {
+                lastRunNumericVersion = Int(lastMigrationRunForVersion.prefix(3).split(separator: ".").joined())
+            } else {
+                lastRunNumericVersion = nil
+            }
+        
+            if lastRunNumericVersion == nil || currentNumericVersion > lastRunNumericVersion! {
+                
+                group.enter()
+                
+                self.runVersionMigration(to: currentNumericVersion, from: lastRunNumericVersion) { result3 in
+                    if case .failure(let error) = result3 {
+                        errors.append(error)
+                    } else {
+                        migrationUserDefaults.set(currentBuild, forKey: kSHLastBuildMigratedToKey)
+                    }
+                    
+                    group.leave()
+                }
             }
         }
         
