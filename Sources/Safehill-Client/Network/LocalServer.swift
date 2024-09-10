@@ -639,7 +639,7 @@ struct LocalServer : SHServerAPI {
                 .dictionaryRepresentation(forKeysMatching: receiverCondition)
                 .mapValues { try? DBSecureSerializableAssetRecipientSharingDetails.from($0) }
             
-            groupPhoneNumberInvitations = try self.groupPhoneNumberInvitations()
+            groupPhoneNumberInvitations = (try? self.groupPhoneNumberInvitations()) ?? [:]
         } catch {
             log.critical("error reading from DB. \(error.localizedDescription)")
             completionHandler(.failure(error))
