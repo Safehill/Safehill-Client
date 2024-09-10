@@ -51,7 +51,24 @@ extension LocalServer {
     private func runAssetDataMigration(
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
-        completionHandler(.success(()))
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            log.warning("failed to connect to the local asset store")
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let condition = KBGenericCondition(
+            .beginsWith,
+            value: SHInteractionAnchor.thread.rawValue + "data::data::"
+        )
+        assetStore.removeValues(forKeysMatching: condition) { result in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     ///
@@ -155,42 +172,49 @@ extension LocalServer {
             }
         }
         
-        if let currentBuild,
-           let currentNumericVersion = Int(currentBuild.prefix(3).split(separator: ".").joined()) {
-            
-            let migrationUserDefaults = UserDefaults(suiteName: kSHDBMigrationsUDStoreName)!
-            let lastMigrationRunForVersion = migrationUserDefaults.value(forKey: kSHLastBuildMigratedToKey) as? String
-            
-            let lastRunNumericVersion: Int?
-            if let lastMigrationRunForVersion {
-                lastRunNumericVersion = Int(lastMigrationRunForVersion.prefix(3).split(separator: ".").joined())
-            } else {
-                lastRunNumericVersion = nil
-            }
-        
-            if lastRunNumericVersion == nil || currentNumericVersion > lastRunNumericVersion! {
-                
-                group.enter()
-                
-                self.runVersionMigration(to: currentNumericVersion, from: lastRunNumericVersion) { result3 in
-                    if case .failure(let error) = result3 {
-                        errors.append(error)
-                    } else {
-                        migrationUserDefaults.set(currentBuild, forKey: kSHLastBuildMigratedToKey)
-                    }
-                    
-                    group.leave()
-                }
-            }
-        }
-        
         group.notify(queue: .global()) {
             guard errors.isEmpty == true else {
                 completionHandler(.failure(errors.first!))
                 return
             }
             
-            completionHandler(.success(()))
+            if let currentBuild,
+               let currentNumericVersion = Int(currentBuild.prefix(3).split(separator: ".").joined()) {
+                
+                let migrationUserDefaults = UserDefaults(suiteName: kSHDBMigrationsUDStoreName)!
+                let lastMigrationRunForVersion = migrationUserDefaults.value(forKey: kSHLastBuildMigratedToKey) as? String
+                
+                let lastRunNumericVersion: Int?
+                if let lastMigrationRunForVersion {
+                    lastRunNumericVersion = Int(lastMigrationRunForVersion.prefix(3).split(separator: ".").joined())
+                } else {
+                    lastRunNumericVersion = nil
+                }
+            
+                if lastRunNumericVersion == nil || currentNumericVersion > lastRunNumericVersion! {
+                    
+                    group.enter()
+                    
+                    self.runVersionMigration(to: currentNumericVersion, from: lastRunNumericVersion) { result3 in
+                        if case .failure(let error) = result3 {
+                            errors.append(error)
+                        } else {
+                            migrationUserDefaults.set(currentBuild, forKey: kSHLastBuildMigratedToKey)
+                        }
+                        
+                        group.leave()
+                    }
+                }
+            }
+            
+            group.notify(queue: .global()) {
+                guard errors.isEmpty == true else {
+                    completionHandler(.failure(errors.first!))
+                    return
+                }
+                
+                completionHandler(.success(()))
+            }
         }
     }
 }
