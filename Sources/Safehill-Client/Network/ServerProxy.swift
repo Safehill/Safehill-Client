@@ -679,10 +679,11 @@ extension SHServerProxy {
                 
                 guard error == nil else {
                     log.error("failed to get assets descriptors with \(assetIdentifiers) from server: \(error!.localizedDescription)")
+                    /// Call the completion handler with what could be retrieved locally if
+                    /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
+                    /// - `synchronousFetch` is `false` and the `localDictionary` is empty
                     if synchronousFetch || localDictionary.isEmpty {
                         completionHandler(.success(localDictionary))
-                    } else {
-                        /// For the async case, it's already been called as an intermediate result if not empty
                     }
                     return
                 }
@@ -702,10 +703,11 @@ extension SHServerProxy {
                 }
                 
                 guard assetVersionsToFetch.isEmpty == false else {
+                    /// Call the completion handler with what could be retrieved locally if
+                    /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
+                    /// - `synchronousFetch` is `false` and the `localDictionary` is empty
                     if synchronousFetch || localDictionary.isEmpty {
                         completionHandler(.success(localDictionary))
-                    } else {
-                        /// For the async case, it's already been called as an intermediate result if not empty
                     }
                     return
                 }
@@ -763,12 +765,7 @@ extension SHServerProxy {
                 
                 dispatchGroup.notify(queue: .global()) {
                     
-                    guard remoteDictionary.isEmpty == false else {
-                        completionHandler(.success([:]))
-                        return
-                    }
-                    
-                    if synchronousFetch {
+                    if synchronousFetch || localDictionary.isEmpty {
                         completionHandler(.success(remoteDictionary))
                     }
                     
