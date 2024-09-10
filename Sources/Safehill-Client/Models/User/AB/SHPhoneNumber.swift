@@ -41,7 +41,7 @@ public class SHPhoneNumberClass: NSObject, NSSecureCoding {
     }
 }
 
-public struct SHPhoneNumber: Hashable {
+public struct SHPhoneNumber: Hashable, Equatable {
     public let e164FormattedNumber: String
     public let stringValue: String
     public let label: String?
@@ -58,5 +58,9 @@ public struct SHPhoneNumber: Hashable {
     
     public var hashedPhoneNumber: String {
         SHHash.stringDigest(for: e164FormattedNumber.data(using: .utf8)!)
+    }
+    
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.e164FormattedNumber == rhs.e164FormattedNumber
     }
 }

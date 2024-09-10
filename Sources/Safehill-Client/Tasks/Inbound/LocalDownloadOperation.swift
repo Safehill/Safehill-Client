@@ -140,7 +140,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+        completionHandler: @escaping (Result<[AssetAndDescriptor], Error>) -> Void
     ) {
         guard original.count > 0 else {
             completionHandler(.success([]))
@@ -176,7 +176,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
             case .success(let encryptedAssets):
                 var errorsByAssetGlobalId = [GlobalIdentifier: Error]()
-                var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+                let successfullyDecrypted = ThreadSafeAssetAndDescriptors(list: [])
                 let dispatchGroup = DispatchGroup()
                 
                 for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
@@ -213,6 +213,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                 /// So make sure the metadata isn't present.
                                 ///
                                 errorsByAssetGlobalId[globalAssetId] = error
+                                dispatchGroup.leave()
                                 
                             case .success(let decryptedAsset):
                                 self.delegatesQueue.async {
@@ -224,10 +225,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     })
                                 }
                                 
-                                successfullyDecrypted.append((decryptedAsset, descriptor))
+                                Task {
+                                    let assetAndDescriptor = AssetAndDescriptor(asset: decryptedAsset, descriptor: descriptor)
+                                    await successfullyDecrypted.add(assetAndDescriptor)
+                                    dispatchGroup.leave()
+                                }
                             }
-                            
-                            dispatchGroup.leave()
                         }
                     } else {
                         self.log.error("[\(type(of: self))] unable to find asset \(globalAssetId) locally")
@@ -245,7 +248,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 
                 dispatchGroup.notify(queue: .global(qos: qos)) { [weak self] in
                     
-                    completionHandler(.success(successfullyDecrypted))
+                    Task {
+                        completionHandler(.success(await successfullyDecrypted.list))
+                    }
                     
                     guard let self = self else { return }
                     
@@ -366,7 +371,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     
                                     if case .success(let decryptedAssetsAndDescriptors) = decryptionResult,
                                        decryptedAssetsAndDescriptors.count > 0 {
-                                        Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.1.globalIdentifier }))
+                                        Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.asset.globalIdentifier }))
                                     }
                                     
                                     completionHandler(.success(()))
