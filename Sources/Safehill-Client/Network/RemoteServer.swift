@@ -403,7 +403,7 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         var parameters: [String: Any] = [
             "identifier": self.requestor.identifier
         ]

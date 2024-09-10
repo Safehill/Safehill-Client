@@ -403,7 +403,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    public func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+    public func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
