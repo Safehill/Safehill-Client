@@ -59,7 +59,7 @@ extension LocalServer {
         
         let condition = KBGenericCondition(
             .beginsWith,
-            value: SHInteractionAnchor.thread.rawValue + "data::data::"
+            value: "data::data::"
         )
         assetStore.removeValues(forKeysMatching: condition) { result in
             switch result {
