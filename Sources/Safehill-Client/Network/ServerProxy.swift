@@ -1134,16 +1134,6 @@ extension SHServerProxy {
                 
             case .success(let threadAssets):
                 completionHandler(.success(threadAssets))
-                /// 
-                /// Cache thread assets for offline consumption
-                ///
-                Task(priority: .background) {
-                    do {
-                        try await self.localServer.cache(threadAssets, in: threadId)
-                    } catch {
-                        log.warning("failed to cache thread assets: \(error)")
-                    }
-                }
                 
             case .failure(let failure):
                 log.error("failed to get assets in thread \(threadId) from remote server, trying local. \(failure.localizedDescription)")
@@ -1872,16 +1862,6 @@ extension SHServerProxy {
         )
     }
 }
-
-extension SHServerProxy {
-    public func syncLocalGraphWithServer(
-        dryRun: Bool = true,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        self.localServer.syncLocalGraphWithServer(dryRun: dryRun, completionHandler: completionHandler)
-    }
-}
-
 
 extension SHServerProxy {
     

@@ -1537,16 +1537,6 @@ struct LocalServer : SHServerAPI {
             }
         }
         
-        do {
-            try SHKGQuery.ingest(
-                Array(descriptorsByGlobalIdentifier.values),
-                receiverUserId: self.requestor.identifier
-            )
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
         writeBatch.write { (result: Result) in
             switch result {
             case .success():
@@ -2458,36 +2448,6 @@ struct LocalServer : SHServerAPI {
             }
         }
         return groupId
-    }
-    
-    internal func cache(
-        _ threadAssets: ConversationThreadAssetsDTO,
-        in threadId: String
-    ) async throws {
-        try await withUnsafeThrowingContinuation { continuation in
-            
-            self.getThread(withId: threadId) { threadResult in
-                switch threadResult {
-                case .success(let serverThread):
-                    if let serverThread {
-                        do {
-                            try SHKGQuery.ingest(
-                                threadAssets,
-                                in: serverThread
-                            )
-                            continuation.resume()
-                        } catch {
-                            continuation.resume(throwing: error)
-                        }
-                    } else {
-                        log.warning("failed to cache assets in non-existing local thread \(threadId)")
-                        continuation.resume()
-                    }
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
     }
     
     func groupIdToThreadIdMapping() throws -> [String: String] {
