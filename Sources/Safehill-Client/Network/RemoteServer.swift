@@ -408,7 +408,7 @@ struct RemoteServer : SHServerAPI {
             "identifier": self.requestor.identifier
         ]
         if let clientBuild = clientBuild {
-            parameters["clientBuild"] = clientBuild
+            parameters["clientBuildString"] = clientBuild
         }
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
             (result: Result<SHAuthChallenge, Error>) in
