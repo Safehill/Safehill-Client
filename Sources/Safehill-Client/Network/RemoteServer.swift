@@ -403,12 +403,12 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         var parameters: [String: Any] = [
             "identifier": self.requestor.identifier
         ]
         if let clientBuild = clientBuild {
-            parameters["clientBuild"] = clientBuild
+            parameters["clientBuildString"] = clientBuild
         }
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
             (result: Result<SHAuthChallenge, Error>) in
@@ -1168,6 +1168,10 @@ struct RemoteServer : SHServerAPI {
                 completionHandler(.failure(error))
             }
         }
+    }
+    
+    func topLevelInteractionsSummary(inGroup groupId: String, completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func addReactions(

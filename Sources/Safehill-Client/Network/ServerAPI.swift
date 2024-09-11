@@ -46,7 +46,7 @@ public protocol SHServerAPI {
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
+    func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
@@ -324,6 +324,15 @@ public protocol SHServerAPI {
     /// - Parameter completionHandler: the callback method
     func topLevelGroupsInteractionsSummary(
         completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()
+    )
+    
+    /// Retrieve an overall summary of all interactions in a specific group
+    /// - Parameters:
+    ///   - groupId:  the group identifier
+    ///   - completionHandler: the callback method
+    func topLevelInteractionsSummary(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()
     )
     
     /// Adds reactions to a share (group)

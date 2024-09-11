@@ -403,7 +403,7 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    public func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+    public func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -639,7 +639,7 @@ struct LocalServer : SHServerAPI {
                 .dictionaryRepresentation(forKeysMatching: receiverCondition)
                 .mapValues { try? DBSecureSerializableAssetRecipientSharingDetails.from($0) }
             
-            groupPhoneNumberInvitations = try self.groupPhoneNumberInvitations()
+            groupPhoneNumberInvitations = (try? self.groupPhoneNumberInvitations()) ?? [:]
         } catch {
             log.critical("error reading from DB. \(error.localizedDescription)")
             completionHandler(.failure(error))
@@ -1535,16 +1535,6 @@ struct LocalServer : SHServerAPI {
                 let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(dbValue.groupId)::\(dbValue.globalIdentifier)::photoMessage"
                 writeBatch.set(value: dbValue, for: key)
             }
-        }
-        
-        do {
-            try SHKGQuery.ingest(
-                Array(descriptorsByGlobalIdentifier.values),
-                receiverUserId: self.requestor.identifier
-            )
-        } catch {
-            completionHandler(.failure(error))
-            return
         }
         
         writeBatch.write { (result: Result) in
@@ -2460,36 +2450,6 @@ struct LocalServer : SHServerAPI {
         return groupId
     }
     
-    internal func cache(
-        _ threadAssets: ConversationThreadAssetsDTO,
-        in threadId: String
-    ) async throws {
-        try await withUnsafeThrowingContinuation { continuation in
-            
-            self.getThread(withId: threadId) { threadResult in
-                switch threadResult {
-                case .success(let serverThread):
-                    if let serverThread {
-                        do {
-                            try SHKGQuery.ingest(
-                                threadAssets,
-                                in: serverThread
-                            )
-                            continuation.resume()
-                        } catch {
-                            continuation.resume(throwing: error)
-                        }
-                    } else {
-                        log.warning("failed to cache assets in non-existing local thread \(threadId)")
-                        continuation.resume()
-                    }
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
-    }
-    
     func groupIdToThreadIdMapping() throws -> [String: String] {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             throw KBError.databaseNotReady
@@ -3128,12 +3088,8 @@ struct LocalServer : SHServerAPI {
                     
                     switch invitationsResult {
                     case .success(let maybeValue):
-                        guard let value = maybeValue else {
-                            completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nil)))
-                            return
-                        }
-                        
-                        if let dbInvitations = try? DBSecureSerializableInvitation.deserializedList(from: value) {
+                        if let value = maybeValue,
+                           let dbInvitations = try? DBSecureSerializableInvitation.deserializedList(from: value) {
                             invitedPhoneNumbers = dbInvitations.reduce([String: String]()) {
                                 partialResult, item in
                                 var result = partialResult
