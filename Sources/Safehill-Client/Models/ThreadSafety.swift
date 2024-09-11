@@ -1,5 +1,44 @@
 import Foundation
 
+internal actor ThreadSafeList<T: Codable> {
+    var list = [T]()
+    func append(_ item: T) {
+        list.append(item)
+    }
+}
+
+actor ThreadSafeDictionary<Key: Hashable, Value> {
+    
+    private var dictionary: [Key: Value] = [:]
+    
+    func getValue(forKey key: Key) -> Value? {
+        return dictionary[key]
+    }
+    
+    func setValue(_ value: Value, forKey key: Key) {
+        dictionary[key] = value
+    }
+    
+    func removeValue(forKey key: Key) {
+        dictionary.removeValue(forKey: key)
+    }
+    
+    func allKeys() -> [Key] {
+        return Array(dictionary.keys)
+    }
+    
+    func allValues() -> [Value] {
+        return Array(dictionary.values)
+    }
+    
+    func allKeyValues() -> [Key: Value] {
+        return dictionary
+    }
+    
+    func count() -> Int {
+        return dictionary.count
+    }
+}
 
 actor ThreadSafeS3Errors {
     var dictionary = [String: Error]()

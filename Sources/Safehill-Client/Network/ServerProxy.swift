@@ -575,236 +575,235 @@ extension SHServerProxy {
             return
         }
         
-        var error: Error? = nil
-        var localDictionary: [GlobalIdentifier: any SHEncryptedAsset] = [:]
-        var assetVersionsToFetch = [GlobalIdentifier: [SHAssetQuality]]()
-        
-        let dispatchGroup = DispatchGroup()
-        
         ///
         /// Get the asset from the local server cache.
         /// If all available from local cache return them.
         ///
-        dispatchGroup.enter()
         self.getLocalAssets(
             withGlobalIdentifiers: assetIdentifiers,
             versions: requestedVersions
         ) { localResult in
             switch localResult {
-            case .success(let assetsDict):
-                localDictionary = assetsDict
-            case .failure(let err):
-                error = err
-            }
-            dispatchGroup.leave()
-        }
-        
-        dispatchGroup.notify(queue: .global()) {
-            
-            guard error == nil else {
-                log.error("failed to get assets with \(assetIdentifiers): \(error!.localizedDescription)")
-                completionHandler(.failure(error!))
-                return
-            }
-            
-            ///
-            /// Collect assets and versions that weren't available on local,
-            /// and need to be fetched from remote
-            ///
-            let assetIdsMissing = assetIdentifiers.subtract(Array(localDictionary.keys))
-            for assetIdMissing in assetIdsMissing {
-                assetVersionsToFetch[assetIdMissing] = requestedVersions
-            }
-            for (assetId, encryptedAsset) in localDictionary {
-                let missingVersions = Set(requestedVersions).subtracting(encryptedAsset.encryptedVersions.keys)
-                for missingVersion in missingVersions {
-                    if assetVersionsToFetch[assetId] == nil {
-                        assetVersionsToFetch[assetId] = [missingVersion]
-                    } else {
-                        assetVersionsToFetch[assetId]!.append(missingVersion)
-                    }
-                }
-            }
-            
-            /// 
-            /// If all could be found locally return success
-            /// 
-            guard assetVersionsToFetch.isEmpty == false else {
-                log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
-                completionHandler(.success(localDictionary))
-                return
-            }
-            
-            log.debug("[asset-data] \(Array(assetVersionsToFetch)) DB CACHE MISS")
-            
-            ///
-            /// For asynchronous fetch, return the intermediate result from local
-            ///
-            if synchronousFetch == false, localDictionary.isEmpty == false {
-                completionHandler(.success(localDictionary))
-            }
-            
-            ///
-            /// Get the asset descriptors from the remote Safehill server.
-            /// This is needed to:
-            /// - filter out assets that haven't been uploaded yet. The call to the CDN would otherwise fail for those.
-            /// - filter out the ones that are no longer shared with this user. In fact, it is possible the client still asks for this asset, but it should not be fetched.
-            /// - determine the groupId used to upload or share by/with this user. That is the groupId that should be saved with the asset sharing info by the `LocalServer`.
-            ///
-            
-            var descriptorsByAssetGlobalId: [GlobalIdentifier: any SHAssetDescriptor] = [:]
-            
-            dispatchGroup.enter()
-            self.remoteServer.getAssetDescriptors(
-                forAssetGlobalIdentifiers: Array(assetVersionsToFetch.keys),
-                filteringGroupIds: nil,
-                after: nil
-            ) {
-                result in
-                switch result {
-                case .success(let descriptors):
-                    descriptorsByAssetGlobalId = descriptors
-                        .reduce([:]) { partialResult, descriptor in
-                            var result = partialResult
-                            result[descriptor.globalIdentifier] = descriptor
-                            return result
-                        }
-                case .failure(let err):
-                    error = err
-                }
-                dispatchGroup.leave()
-            }
-            
-            dispatchGroup.notify(queue: .global()) {
+            case .success(let localDictionary):
                 
-                guard error == nil else {
-                    log.error("failed to get assets descriptors with \(assetIdentifiers) from server: \(error!.localizedDescription)")
-                    /// Call the completion handler with what could be retrieved locally if
-                    /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
-                    /// - `synchronousFetch` is `false` and the `localDictionary` is empty
-                    if synchronousFetch || localDictionary.isEmpty {
-                        completionHandler(.success(localDictionary))
+                Task {
+                    ///
+                    /// Collect assets and versions that weren't available on local,
+                    /// and need to be fetched from remote
+                    ///
+                    var assetVersionsToFetch = [GlobalIdentifier: [SHAssetQuality]]()
+                    let assetIdsMissing = assetIdentifiers.subtract(Array(localDictionary.keys))
+                    for assetIdMissing in assetIdsMissing {
+                        assetVersionsToFetch[assetIdMissing] = requestedVersions
                     }
-                    return
-                }
-                
-                ///
-                /// Reset the descriptors to fetch based on the server descriptors.
-                /// Remove the ones that don't have a server descriptor
-                ///
-                if assetVersionsToFetch.count != descriptorsByAssetGlobalId.count {
-                    log.warning("assets requested to be fetched have no descriptor on the server (yet). Skipping those. \(Set(assetVersionsToFetch.keys).subtracting(descriptorsByAssetGlobalId.keys))")
                     
-                    for assetIdToFetch in assetVersionsToFetch.keys {
-                        if descriptorsByAssetGlobalId[assetIdToFetch] == nil {
-                            assetVersionsToFetch.removeValue(forKey: assetIdToFetch)
-                        }
-                    }
-                }
-                
-                guard assetVersionsToFetch.isEmpty == false else {
-                    /// Call the completion handler with what could be retrieved locally if
-                    /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
-                    /// - `synchronousFetch` is `false` and the `localDictionary` is empty
-                    if synchronousFetch || localDictionary.isEmpty {
-                        completionHandler(.success(localDictionary))
-                    }
-                    return
-                }
-                
-                ///
-                /// Get the asset from the remote server
-                ///
-                var remoteDictionary = localDictionary
-                
-                for (assetId, versionsToFetchRemotely) in assetVersionsToFetch {
-                    
-                    dispatchGroup.enter()
-                    self.getRemoteAssets(
-                        withGlobalIdentifiers: [assetId],
-                        versions: versionsToFetchRemotely
-                    ) { result in
-                        switch result {
-                            
-                        case .success(let remoteDict):
-                            if let remoteEncryptedAsset = remoteDict[assetId] {
-                                if let existing = remoteDictionary[assetId] {
-                                    var updatedVersions = remoteDictionary[assetId]!.encryptedVersions
-                                    for version in versionsToFetchRemotely {
-                                        updatedVersions[version] = remoteEncryptedAsset.encryptedVersions[version]
-                                    }
-                                    
-                                    remoteDictionary[assetId] = SHGenericEncryptedAsset(
-                                        globalIdentifier: existing.globalIdentifier, 
-                                        localIdentifier: existing.localIdentifier,
-                                        creationDate: existing.creationDate,
-                                        encryptedVersions: updatedVersions
-                                    )
-                                    
-                                } else {
-                                    remoteDictionary[assetId] = remoteEncryptedAsset
-                                }
-                                
-                                if synchronousFetch == false {
-                                    completionHandler(.success([
-                                        assetId: remoteEncryptedAsset
-                                    ]))
-                                }
-                                
+                    for (assetId, encryptedAsset) in localDictionary {
+                        let missingVersions = Set(requestedVersions).subtracting(encryptedAsset.encryptedVersions.keys)
+                        for missingVersion in missingVersions {
+                            if assetVersionsToFetch[assetId] == nil {
+                                assetVersionsToFetch[assetId] = [missingVersion]
                             } else {
-                                log.warning("failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping")
+                                assetVersionsToFetch[assetId]!.append(missingVersion)
+                            }
+                        }
+                    }
+                    
+                    ///
+                    /// If all could be found locally return success
+                    ///
+                    guard assetVersionsToFetch.isEmpty == false else {
+                        log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
+                        completionHandler(.success(localDictionary))
+                        return
+                    }
+                    
+                    log.debug("[asset-data] \(Array(assetVersionsToFetch)) DB CACHE MISS")
+                    
+                    ///
+                    /// For asynchronous fetch, return the intermediate result from local, unless it's empty
+                    ///
+                    if synchronousFetch == false, localDictionary.isEmpty == false {
+                        completionHandler(.success(localDictionary))
+                    }
+                    
+                    let threadSafeAssetVersionsToFetchByGid = ThreadSafeDictionary<GlobalIdentifier, [SHAssetQuality]>()
+                    for (assetId, versionsToFetch) in assetVersionsToFetch {
+                        await threadSafeAssetVersionsToFetchByGid.setValue(versionsToFetch, forKey: assetId)
+                    }
+                    
+                    ///
+                    /// Get the asset descriptors from the remote Safehill server.
+                    /// This is needed to:
+                    /// - filter out assets that haven't been uploaded yet. The call to the CDN would otherwise fail for those.
+                    /// - filter out the ones that are no longer shared with this user. In fact, it is possible the client still asks for this asset, but it should not be fetched.
+                    /// - determine the groupId used to upload or share by/with this user. That is the groupId that should be saved with the asset sharing info by the `LocalServer`.
+                    ///
+                    
+                    self.remoteServer.getAssetDescriptors(
+                        forAssetGlobalIdentifiers: Array(assetVersionsToFetch.keys),
+                        filteringGroupIds: nil,
+                        after: nil
+                    ) {
+                        result in
+                        switch result {
+                        case .success(let descriptors):
+                            
+                            Task {
+                                let descriptorsByAssetGlobalId = descriptors
+                                    .reduce([GlobalIdentifier: any SHAssetDescriptor]()) { partialResult, descriptor in
+                                        var result = partialResult
+                                        result[descriptor.globalIdentifier] = descriptor
+                                        return result
+                                    }
+                                
+                                ///
+                                /// Reset the descriptors to fetch based on the server descriptors.
+                                /// Remove the ones that don't have a server descriptor
+                                ///
+                                if await threadSafeAssetVersionsToFetchByGid.count() != descriptorsByAssetGlobalId.count {
+                                    let keysToFetch = await threadSafeAssetVersionsToFetchByGid.allKeys()
+                                    log.warning("assets requested to be fetched have no descriptor on the server (yet). Skipping those. \(Set(keysToFetch).subtracting(descriptorsByAssetGlobalId.keys))")
+                                    
+                                    for assetIdToFetch in keysToFetch {
+                                        if descriptorsByAssetGlobalId[assetIdToFetch] == nil {
+                                            await threadSafeAssetVersionsToFetchByGid.removeValue(forKey: assetIdToFetch)
+                                        }
+                                    }
+                                }
+                                
+                                let assetVersionsToFetch = await threadSafeAssetVersionsToFetchByGid.allKeyValues()
+                                
+                                guard assetVersionsToFetch.isEmpty == false else {
+                                    /// Call the completion handler with what could be retrieved locally if
+                                    /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
+                                    /// - `synchronousFetch` is `false` and the `localDictionary` is empty
+                                    if synchronousFetch || localDictionary.isEmpty {
+                                        completionHandler(.success(localDictionary))
+                                    }
+                                    return
+                                }
+                                
+                                ///
+                                /// Get the asset from the remote server
+                                /// Construct the remoteDictionary by starting from the local dictionary
+                                /// and appending new assets and versions as they are downloaded
+                                ///
+                                let threadSafeRemoteDictionary = ThreadSafeDictionary<GlobalIdentifier, any SHEncryptedAsset>()
+                                for (assetId, encryptedAsset) in localDictionary {
+                                    await threadSafeRemoteDictionary.setValue(encryptedAsset, forKey: assetId)
+                                }
+                                
+                                for (assetId, versionsToFetchRemotely) in assetVersionsToFetch {
+                                    do {
+                                        let remoteDict = try await self.getRemoteAssets(
+                                            withGlobalIdentifiers: [assetId],
+                                            versions: versionsToFetchRemotely
+                                        )
+                                        
+                                        if let remoteEncryptedAsset = remoteDict[assetId] {
+                                            if let existing = await threadSafeRemoteDictionary.getValue(forKey: assetId) {
+                                                var updatedVersions = existing.encryptedVersions
+                                                for version in versionsToFetchRemotely {
+                                                    updatedVersions[version] = remoteEncryptedAsset.encryptedVersions[version]
+                                                }
+                                                
+                                                let updatedValue = SHGenericEncryptedAsset(
+                                                    globalIdentifier: existing.globalIdentifier,
+                                                    localIdentifier: existing.localIdentifier,
+                                                    creationDate: existing.creationDate,
+                                                    encryptedVersions: updatedVersions
+                                                )
+                                                await threadSafeRemoteDictionary.setValue(updatedValue, forKey: assetId)
+                                                
+                                            } else {
+                                                await threadSafeRemoteDictionary.setValue(remoteEncryptedAsset, forKey: assetId)
+                                            }
+                                            
+                                            if synchronousFetch == false {
+                                                completionHandler(.success([
+                                                    assetId: remoteEncryptedAsset
+                                                ]))
+                                            }
+                                            
+                                        } else {
+                                            log.warning("failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping")
+                                        }
+                                        
+                                    } catch {
+                                        log.warning("failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping: \(error.localizedDescription)")
+                                    }
+                                }
+                                
+                                let remoteDictionary = await threadSafeRemoteDictionary.allKeyValues()
+                                
+                                if synchronousFetch {
+                                    completionHandler(.success(remoteDictionary))
+                                }
+                                
+                                ///
+                                /// Create a copy of the assets just fetched from the server in the local server (cache)
+                                ///
+                                
+                                var encryptedAssetsToCreate = [any SHEncryptedAsset]()
+                                for assetId in assetVersionsToFetch.keys {
+                                    if let remoteEncryptedAsset = remoteDictionary[assetId] {
+                                        encryptedAssetsToCreate.append(remoteEncryptedAsset)
+                                    }
+                                }
+                                
+                                self.localServer.create(
+                                    assets: Array(encryptedAssetsToCreate),
+                                    descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
+                                    uploadState: .completed,
+                                    overwriteFileIfExists: false
+                                ) { result in
+                                    if case .failure(let err) = result {
+                                        log.warning("could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                                    }
+                                }
                             }
                             
                         case .failure(let error):
-                            log.warning("failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping: \(error.localizedDescription)")
+                            
+                            log.error("failed to get assets descriptors with \(assetIdentifiers) from server: \(error.localizedDescription)")
+                            /// Call the completion handler with what could be retrieved locally if
+                            /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
+                            /// - `synchronousFetch` is `false` and the `localDictionary` is empty
+                            if synchronousFetch || localDictionary.isEmpty {
+                                completionHandler(.success(localDictionary))
+                            }
+                            return
                         }
-                        
-                        dispatchGroup.leave()
                     }
                 }
                 
-                dispatchGroup.notify(queue: .global()) {
-                    
-                    if synchronousFetch || localDictionary.isEmpty {
-                        completionHandler(.success(remoteDictionary))
-                    }
-                    
-                    ///
-                    /// Create a copy of the assets just fetched from the server in the local server (cache)
-                    ///
-                    
-                    var encryptedAssetsToCreate = [any SHEncryptedAsset]()
-                    for assetId in assetVersionsToFetch.keys {
-                        if let remoteEncryptedAsset = remoteDictionary[assetId] {
-                            encryptedAssetsToCreate.append(remoteEncryptedAsset)
-                        }
-                    }
-                    
-                    self.localServer.create(
-                        assets: Array(encryptedAssetsToCreate),
-                        descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                        uploadState: .completed,
-                        overwriteFileIfExists: false
-                    ) { result in
-                        if case .failure(let err) = result {
-                            log.warning("could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
-                        }
-                    }
-                }
+            case .failure(let error):
+                log.error("failed to get assets with \(assetIdentifiers): \(error.localizedDescription)")
+                completionHandler(.failure(error))
+                
             }
         }
     }
     
     func getRemoteAssets(
         withGlobalIdentifiers assetIdentifiers: [GlobalIdentifier],
-        versions requestedVersions: [SHAssetQuality],
-        completionHandler: @escaping (Result<[GlobalIdentifier: any SHEncryptedAsset], Error>) -> ()
-    ) {
-        self.remoteServer.getAssets(
-            withGlobalIdentifiers: assetIdentifiers,
-            versions: requestedVersions,
-            completionHandler: completionHandler
-        )
+        versions requestedVersions: [SHAssetQuality]
+    ) async throws -> [GlobalIdentifier: any SHEncryptedAsset]
+    {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.getAssets(
+                withGlobalIdentifiers: assetIdentifiers,
+                versions: requestedVersions
+            ) {
+                result in
+                switch result {
+                case .success(let dict):
+                    continuation.resume(returning: dict)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
     
     func upload(
