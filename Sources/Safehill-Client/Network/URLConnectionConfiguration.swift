@@ -14,10 +14,10 @@ public let SafehillServerURLComponents: URLComponents = {
     components.scheme = "http"
     components.host = "127.0.0.1"
     components.port = 8080
-//#elseif DEBUG
-//    components.scheme = "https"
-//    components.host = "9835-2601-645-c580-55eb-00-1001.ngrok-free.app" // safehill-stage-1-ec0cd53b3592.herokuapp.com"
-//    components.port = 443
+#elseif DEBUG
+    components.scheme = "https"
+    components.host = "9835-2601-645-c580-55eb-00-1001.ngrok-free.app" // safehill-stage-1-ec0cd53b3592.herokuapp.com"
+    components.port = 443
 #else
     components.scheme = "https"
     components.host = "app.safehill.io"
@@ -34,10 +34,10 @@ public let SafehillServerURLComponentsForWebsockets: URLComponents = {
     components.scheme = "ws"
     components.host = "127.0.0.1"
     components.port = 8080
-//#elseif DEBUG
-//    components.scheme = "wss"
-//    components.host = "9835-2601-645-c580-55eb-00-1001.ngrok-free.app" // "safehill-stage-1-ec0cd53b3592.herokuapp.com"
-//    components.port = 443
+#elseif DEBUG
+    components.scheme = "wss"
+    components.host = "9835-2601-645-c580-55eb-00-1001.ngrok-free.app" // "safehill-stage-1-ec0cd53b3592.herokuapp.com"
+    components.port = 443
 #else
     components.scheme = "wss"
     components.host = "app.safehill.io"
