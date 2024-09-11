@@ -1170,6 +1170,10 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
+    func topLevelInteractionsSummary(inGroup groupId: String, completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func addReactions(
         _ reactions: [ReactionInput],
         toGroup groupId: String,

@@ -3088,12 +3088,8 @@ struct LocalServer : SHServerAPI {
                     
                     switch invitationsResult {
                     case .success(let maybeValue):
-                        guard let value = maybeValue else {
-                            completionHandler(.failure(SHBackgroundOperationError.unexpectedData(nil)))
-                            return
-                        }
-                        
-                        if let dbInvitations = try? DBSecureSerializableInvitation.deserializedList(from: value) {
+                        if let value = maybeValue,
+                           let dbInvitations = try? DBSecureSerializableInvitation.deserializedList(from: value) {
                             invitedPhoneNumbers = dbInvitations.reduce([String: String]()) {
                                 partialResult, item in
                                 var result = partialResult

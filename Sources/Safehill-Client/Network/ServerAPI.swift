@@ -326,6 +326,15 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()
     )
     
+    /// Retrieve an overall summary of all interactions in a specific group
+    /// - Parameters:
+    ///   - groupId:  the group identifier
+    ///   - completionHandler: the callback method
+    func topLevelInteractionsSummary(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()
+    )
+    
     /// Adds reactions to a share (group)
     /// - Parameters:
     ///   - reactions: the reactions details
