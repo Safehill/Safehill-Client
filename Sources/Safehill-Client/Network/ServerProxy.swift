@@ -662,7 +662,7 @@ extension SHServerProxy {
                                 ///
                                 if await threadSafeAssetVersionsToFetchByGid.count() != descriptorsByAssetGlobalId.count {
                                     let keysToFetch = await threadSafeAssetVersionsToFetchByGid.allKeys()
-                                    log.warning("assets requested to be fetched have no descriptor on the server (yet). Skipping those. \(Set(keysToFetch).subtracting(descriptorsByAssetGlobalId.keys))")
+                                    log.warning("[asset-data] assets requested to be fetched have no descriptor on the server (yet). Skipping those. \(Set(keysToFetch).subtracting(descriptorsByAssetGlobalId.keys))")
                                     
                                     for assetIdToFetch in keysToFetch {
                                         if descriptorsByAssetGlobalId[assetIdToFetch] == nil {
@@ -726,11 +726,11 @@ extension SHServerProxy {
                                             }
                                             
                                         } else {
-                                            log.warning("failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping")
+                                            log.warning("[asset-data] failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping")
                                         }
                                         
                                     } catch {
-                                        log.warning("failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping: \(error.localizedDescription)")
+                                        log.warning("[asset-data] failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping: \(error.localizedDescription)")
                                     }
                                 }
                                 
@@ -758,14 +758,14 @@ extension SHServerProxy {
                                     overwriteFileIfExists: false
                                 ) { result in
                                     if case .failure(let err) = result {
-                                        log.warning("could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                                        log.warning("[asset-data] could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
                                     }
                                 }
                             }
                             
                         case .failure(let error):
                             
-                            log.error("failed to get assets descriptors with \(assetIdentifiers) from server: \(error.localizedDescription)")
+                            log.error("[asset-data] failed to get assets descriptors with \(assetIdentifiers) from server: \(error.localizedDescription)")
                             /// Call the completion handler with what could be retrieved locally if
                             /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
                             /// - `synchronousFetch` is `false` and the `localDictionary` is empty
@@ -778,7 +778,7 @@ extension SHServerProxy {
                 }
                 
             case .failure(let error):
-                log.error("failed to get assets with \(assetIdentifiers): \(error.localizedDescription)")
+                log.error("[asset-data] failed to get assets with \(assetIdentifiers): \(error.localizedDescription)")
                 completionHandler(.failure(error))
                 
             }
