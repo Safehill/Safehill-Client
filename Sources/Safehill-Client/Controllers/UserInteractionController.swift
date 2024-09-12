@@ -132,7 +132,7 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
     
     public func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard self.user as? SHAuthenticatedLocalUser != nil else {
