@@ -2083,7 +2083,7 @@ struct LocalServer : SHServerAPI {
     
     func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {

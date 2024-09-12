@@ -18,7 +18,7 @@ internal protocol SHServerProxyProtocol {
     
     func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
