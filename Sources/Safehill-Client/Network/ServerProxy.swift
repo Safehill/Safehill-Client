@@ -1021,7 +1021,7 @@ extension SHServerProxy {
     
     internal func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.remoteServer.updateThread(threadId, newName: newName) { remoteResult in

@@ -981,7 +981,7 @@ struct RemoteServer : SHServerAPI {
     
     func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.post("threads/update/\(threadId)",

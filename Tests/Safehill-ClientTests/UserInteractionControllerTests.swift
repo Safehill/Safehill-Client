@@ -305,8 +305,8 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         }
     }
     
-    func updateThread(_ threadId: String, newName: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        guard let serverThread = self.state.threads?.first(where: {$0.threadId == threadId})
+    func updateThread(_ threadId: String, newName: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard let _ = self.state.threads?.first(where: {$0.threadId == threadId})
         else {
             completionHandler(.failure(SHHTTPError.ClientError.notFound))
             return
