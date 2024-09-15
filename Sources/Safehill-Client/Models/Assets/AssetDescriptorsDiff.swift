@@ -2,6 +2,8 @@ import Foundation
 
 typealias ShareSenderReceivers = (from: UserIdentifier, groupIdByRecipientId: [UserIdentifier: String], groupInfoById: [String: SHAssetGroupInfo])
 
+typealias GroupInfoDiff = (groupInfo: SHAssetGroupInfo, assetGlobalIdentifiers: [GlobalIdentifier])
+
 ///
 /// Utility class to diff descriptors coming from `LocalServer` and `RemoteServer`
 ///
@@ -19,7 +21,7 @@ struct AssetDescriptorsDiff {
     
     let assetsRemovedOnRemote: [SHBackedUpAssetIdentifier]
     let stateDifferentOnRemote: [AssetVersionState]
-    let groupInfoDifferentOnRemote: [String: SHAssetGroupInfo]
+    let groupInfoDifferentOnRemote: [String: GroupInfoDiff]
     let groupInfoRemovedOnRemote: [String]
     let userIdsAddedToTheShareOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
     let userIdsRemovedFromTheSharesOfAssetGid: [GlobalIdentifier: ShareSenderReceivers]
@@ -99,7 +101,7 @@ struct AssetDescriptorsDiff {
         
         var userIdsToAddToSharesByAssetGid = [GlobalIdentifier: ShareSenderReceivers]()
         var userIdsToRemoveFromSharesByAssetGid = [GlobalIdentifier: ShareSenderReceivers]()
-        var groupInfoToUpdate = [String: SHAssetGroupInfo]()
+        var groupInfoToUpdate = [String: GroupInfoDiff]()
         var groupInfoToRemove = Set<String>()
         
         for remoteDescriptor in remoteDescriptors {
@@ -172,10 +174,18 @@ struct AssetDescriptorsDiff {
                         == groupInfo.invitedUsersPhoneNumbers?.keys.sorted() {
                         // They are the same
                     } else {
-                        groupInfoToUpdate[groupId] = groupInfo
+                        if groupInfoToUpdate[groupId] != nil {
+                            groupInfoToUpdate[groupId]?.assetGlobalIdentifiers.append(remoteDescriptor.globalIdentifier)
+                        } else {
+                            groupInfoToUpdate[groupId] = (groupInfo: groupInfo, assetGlobalIdentifiers: [remoteDescriptor.globalIdentifier])
+                        }
                     }
                 } else {
-                    groupInfoToUpdate[groupId] = groupInfo
+                    if groupInfoToUpdate[groupId] != nil {
+                        groupInfoToUpdate[groupId]?.assetGlobalIdentifiers.append(remoteDescriptor.globalIdentifier)
+                    } else {
+                        groupInfoToUpdate[groupId] = (groupInfo: groupInfo, assetGlobalIdentifiers: [remoteDescriptor.globalIdentifier])
+                    }
                 }
             }
         }
