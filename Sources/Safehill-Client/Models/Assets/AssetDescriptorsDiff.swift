@@ -170,8 +170,8 @@ struct AssetDescriptorsDiff {
                     if localGroupInfo.createdAt == groupInfo.createdAt,
                        localGroupInfo.name == groupInfo.name,
                        localGroupInfo.createdFromThreadId == groupInfo.createdFromThreadId,
-                       (localGroupInfo.invitedUsersPhoneNumbers?.keys ?? []).sorted()
-                        == (groupInfo.invitedUsersPhoneNumbers?.keys ?? []).sorted() {
+                       (localGroupInfo.invitedUsersPhoneNumbers ?? [:]).keys.sorted()
+                        == (groupInfo.invitedUsersPhoneNumbers ?? [:]).keys.sorted() {
                         // They are the same
                     } else {
                         if groupInfoToUpdate[groupId] != nil {
