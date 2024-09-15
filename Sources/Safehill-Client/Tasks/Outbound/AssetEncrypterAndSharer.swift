@@ -442,7 +442,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation {
                                     }
                                     
                                     /// After remote sharing is successful, add `receiver::` rows in local server
-                                    self.serverProxy.shareAssetLocally(shareableEncryptedAsset) { _ in }
+                                    self.serverProxy.shareAssetLocally(
+                                        shareableEncryptedAsset,
+                                        asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId
+                                    ) { _ in }
                                     
                                     completionHandler(.success(()))
                                     

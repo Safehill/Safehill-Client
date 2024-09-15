@@ -1771,7 +1771,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               asPhotoMessageInThreadId: String? = nil,
+               asPhotoMessageInThreadId: String?,
                suppressNotification: Bool = true,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
