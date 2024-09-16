@@ -62,7 +62,6 @@ public class SHPhotosIndexer : NSObject, PHPhotoLibraryChangeObserver, PHPhotoLi
         self.imageManager = PHCachingImageManager()
         self.imageManager.allowsCachingHighQualityImages = false
         super.init()
-        self.requestAuthorization { _ in }
     }
     
     deinit {

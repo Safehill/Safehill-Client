@@ -14,7 +14,7 @@ public class SHAddressBookContactHandler {
         self.contactStore = contactStore
     }
     
-    private func fetchOrRequestPermission(completionHandler: @escaping (Result<Bool, Error>) -> Void) {
+    public func fetchOrRequestPermission(completionHandler: @escaping (Result<Bool, Error>) -> Void) {
         self.contactStore = CNContactStore.init()
         self.contactStore!.requestAccess(for: .contacts) { authorized, error in
             guard error == nil else {

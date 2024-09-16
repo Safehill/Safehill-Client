@@ -855,7 +855,7 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(descriptors))
     }
     
-    func updateGroupIds(_ groupInfoById: [String: SHAssetGroupInfo],
+    func updateGroupIds(_ groupInfoById: [String: GroupInfoDiff],
                         completionHandler: @escaping (Result<Void, Error>) -> Void) {
         
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -867,6 +867,72 @@ struct LocalServer : SHServerAPI {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
+        
+        ///
+        /// Update the USER STORE
+        /// - invitations
+        /// - remove invalid keys
+        ///
+        
+        let invitationsWriteBatch = userStore.writeBatch()
+        var userStoreInvalidKeys = Set<String>()
+        
+        do {
+            let allInvitationKeys = try userStore.keys(
+                    matching: KBGenericCondition(.beginsWith, value: "invitations::")
+                )
+            
+            for key in allInvitationKeys {
+                let keyComponents = key.components(separatedBy: "::")
+                guard keyComponents.count == 3
+                else {
+                    userStoreInvalidKeys.insert(key)
+                    continue
+                }
+                
+                let groupId = keyComponents[2]
+                guard keyComponents[1] == SHInteractionAnchor.group.rawValue,
+                      let newGroupInfo = groupInfoById[groupId]?.groupInfo
+                else {
+                    continue
+                }
+                
+                if let newInvitedNumbers = newGroupInfo.invitedUsersPhoneNumbers,
+                   newInvitedNumbers.isEmpty == false {
+                    let data = try NSKeyedArchiver.archivedData(
+                        withRootObject: newInvitedNumbers.map({
+                            DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
+                        }),
+                        requiringSecureCoding: true
+                    )
+                    invitationsWriteBatch.set(value: data, for: key)
+                } else {
+                    invitationsWriteBatch.set(value: nil, for: key)
+                }
+            }
+        } catch {
+            log.error("failed to update group invitations from remote to local server. \(error.localizedDescription)")
+        }
+        
+        if userStoreInvalidKeys.isEmpty == false {
+            do {
+                let _ = try userStore.removeValues(for: Array(userStoreInvalidKeys))
+            } catch {
+                log.error("failed to remove invalid keys \(userStoreInvalidKeys) from DB. \(error.localizedDescription)")
+            }
+        }
+        
+        do {
+            try invitationsWriteBatch.write()
+        } catch {
+            log.error("failed to update invitations remote to local server. \(error.localizedDescription)")
+        }
+        
+        ///
+        /// Update the ASSET STORE
+        /// - recipients
+        /// - thread assets (photo messages)
+        ///
         
         let assetStoreWriteBatch = assetStore.writeBatch()
         
@@ -893,7 +959,7 @@ struct LocalServer : SHServerAPI {
                     /// If the groupId matches, then collect the key and the updated value.
                     /// If not move on
                     ///
-                    guard let update = groupInfoById[versionDetails.groupId] else {
+                    guard let update = groupInfoById[versionDetails.groupId]?.groupInfo else {
                         continue
                     }
                                         
@@ -913,16 +979,7 @@ struct LocalServer : SHServerAPI {
                 }
             }
         } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        if assetStoreInvalidKeys.isEmpty == false {
-            do {
-                let _ = try assetStore.removeValues(for: Array(assetStoreInvalidKeys))
-            } catch {
-                log.error("failed to remove invalid keys \(assetStoreInvalidKeys) from DB. \(error.localizedDescription)")
-            }
+            log.error("failed to update groupIds from remote to local server. \(error.localizedDescription)")
         }
         
         for (key, update) in assetStoreKeysToUpdate {
@@ -934,62 +991,78 @@ struct LocalServer : SHServerAPI {
             }
         }
         
-        do {
-            try assetStoreWriteBatch.write()
-        } catch {
-            completionHandler(.failure(error))
-        }
+        let dispatchGroup = DispatchGroup()
         
-        let invitationsWriteBatch = userStore.writeBatch()
-        var userStoreInvalidKeys = Set<String>()
-        
-        do {
-            let allInvitationKeys = try userStore.keys(
-                    matching: KBGenericCondition(.beginsWith, value: "invitations::")
-                )
+        for (groupId, diff) in groupInfoById {
             
-            for key in allInvitationKeys {
-                let keyComponents = key.components(separatedBy: "::")
-                guard keyComponents.count == 3
-                else {
-                    userStoreInvalidKeys.insert(key)
-                    continue
+            dispatchGroup.enter()
+            
+            let assetGlobalIdsInGroup = diff.assetGlobalIdentifiers
+            
+            if let threadId = diff.groupInfo.createdFromThreadId {
+                self.getAssetDescriptors(
+                    forAssetGlobalIdentifiers: assetGlobalIdsInGroup,
+                    useCache: false
+                ) { result in
+                    switch result {
+                    case .failure(let error):
+                        log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
+                        
+                    case .success(let descriptors):
+                        for descriptor in descriptors {
+                            guard let addedAt = diff.groupInfo.createdAt?.iso8601withFractionalSeconds else {
+                                log.error("Group information doesn't include creation data. Skipping")
+                                continue
+                            }
+                            
+                            let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(groupId)::\(descriptor.globalIdentifier)::photoMessage"
+                            let value = DBSecureSerializableConversationThreadAsset(
+                                globalIdentifier: descriptor.globalIdentifier,
+                                addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
+                                addedAt: addedAt,
+                                groupId: groupId
+                            )
+                            do {
+                                let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                                assetStoreWriteBatch.set(value: serializedData, for: key)
+                            } catch {
+                                log.critical("error serializing photoMessage in DB. \(error.localizedDescription)")
+                            }
+                        }
+                    }
+                    dispatchGroup.leave()
                 }
-                
-                let groupId = keyComponents[2]
-                guard keyComponents[1] == SHInteractionAnchor.group.rawValue,
-                      let newGroupInfo = groupInfoById[groupId]
-                else {
-                    continue
-                }
-                
-                if let newInvitedNumbers = newGroupInfo.invitedUsersPhoneNumbers,
-                   newInvitedNumbers.isEmpty == false {
-                    let data = try NSKeyedArchiver.archivedData(
-                        withRootObject: newInvitedNumbers.map({
-                            DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
-                        }),
-                        requiringSecureCoding: true
+            } else {
+                var condition = KBGenericCondition(value: false)
+                for assetId in assetGlobalIdsInGroup {
+                    condition = condition.or(
+                        KBGenericCondition(.endsWith, value: "\(groupId)::\(assetId)::photoMessage")
                     )
-                    invitationsWriteBatch.set(value: data, for: key)
-                } else {
-                    invitationsWriteBatch.set(value: nil, for: key)
+                }
+                
+                assetStore.removeValues(forKeysMatching: condition) { result in
+                    switch result {
+                    case .failure(let error):
+                        log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
+                        
+                    case .success:
+                        break
+                    }
+                    
+                    dispatchGroup.leave()
                 }
             }
-        } catch {
-            completionHandler(.failure(error))
-            return
         }
         
-        if userStoreInvalidKeys.isEmpty == false {
+        dispatchGroup.notify(queue: .global()) {
             do {
-                let _ = try userStore.removeValues(for: Array(userStoreInvalidKeys))
+                try assetStoreWriteBatch.write()
             } catch {
-                log.error("failed to remove invalid keys \(userStoreInvalidKeys) from DB. \(error.localizedDescription)")
+                log.error("failed to update groupIds from remote to local server. \(error.localizedDescription)")
             }
+            
+            completionHandler(.success(()))
         }
-        
-        invitationsWriteBatch.write(completionHandler: completionHandler)
     }
     
     func removeGroupIds(_ groupIds: [String],
@@ -1771,7 +1844,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               asPhotoMessageInThreadId: String? = nil,
+               asPhotoMessageInThreadId: String?,
                suppressNotification: Bool = true,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {

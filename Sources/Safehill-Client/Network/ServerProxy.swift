@@ -890,9 +890,15 @@ extension SHServerProxy {
         self.localServer.deleteAllAssets(completionHandler: completionHandler)
     }
     
-    func shareAssetLocally(_ asset: SHShareableEncryptedAsset,
-                           completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.share(asset: asset) {
+    func shareAssetLocally(
+        _ asset: SHShareableEncryptedAsset,
+        asPhotoMessageInThreadId: String?,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.share(
+            asset: asset,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId
+        ) {
             result in
             switch result {
             case .success(_):
