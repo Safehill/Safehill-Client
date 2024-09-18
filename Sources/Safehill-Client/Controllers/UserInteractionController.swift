@@ -76,7 +76,7 @@ public struct SHUserInteractionController {
                 return
             }
             
-            guard usersAndSelf.contains(where: { $0.identifier == self.user.identifier }) else {
+            guard usersAndSelf.contains(where: { $0.identifier == authedUser.identifier }) else {
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
                 return
             }
@@ -92,13 +92,6 @@ public struct SHUserInteractionController {
                     if let conversationThread {
                         log.info("found thread with users \(usersAndSelf.map({ $0.identifier })) and phone numbers \(phoneNumbers) from local or remote")
                         completionHandler(.success(conversationThread))
-                    } else if usersAndSelf.count == 1 {
-                        self.serverProxy.createOrUpdateThread(
-                            name: nil,
-                            recipientsEncryptionDetails: [],
-                            invitedPhoneNumbers: phoneNumbers,
-                            completionHandler: completionHandler
-                        )
                     } else {
                         log.info("creating new thread, because one could not be found on remote with users \(usersAndSelf.map({ $0.identifier })) and phone numbers \(phoneNumbers)")
                         symmetricKey = createNewSecret()
