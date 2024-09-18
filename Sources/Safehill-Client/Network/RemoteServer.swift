@@ -996,6 +996,29 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
+    func updateThreadMembers(
+        for threadId: String,
+        _ update: ConversationThreadMembersUpdateDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("threads/update/\(threadId)/members",
+                  parameters: [
+                    "recipientsToAdd": update.recipientsToAdd,
+                    "membersPublicIdentifierToRemove": update.membersPublicIdentifierToRemove,
+                    "phoneNumbersToAdd": update.phoneNumbersToAdd,
+                    "phoneNumbersToRemove": update.phoneNumbersToRemove,
+                  ],
+                  requiresAuthentication: true
+        ) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     func listThreads(
         completionHandler: @escaping (Result<[ConversationThreadOutputDTO], Error>) -> ()
     ) {
@@ -1102,10 +1125,17 @@ struct RemoteServer : SHServerAPI {
         self.post("threads/retrieve", parameters: parameters, requiresAuthentication: true) {
             (result: Result<[ConversationThreadOutputDTO], Error>) in
             switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
             case .success(let listOfThreads):
                 completionHandler(.success(listOfThreads.first))
-            case .failure(let failure):
-                completionHandler(.failure(failure))
             }
         }
     }

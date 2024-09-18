@@ -2171,6 +2171,10 @@ struct LocalServer : SHServerAPI {
         )
     }
     
+    func updateThreadMembers(for threadId: String, _ update: ConversationThreadMembersUpdateDTO, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func updateThreads(
         from remoteThreads: [ConversationThreadOutputDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()

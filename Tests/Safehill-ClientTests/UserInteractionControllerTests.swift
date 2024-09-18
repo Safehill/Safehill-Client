@@ -314,6 +314,14 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.updateThread(threadId, newName: newName, completionHandler: completionHandler)
     }
     
+    func updateThreadMembers(
+        for threadId: String,
+        _ update: ConversationThreadMembersUpdateDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.updateThreadMembers(for: threadId, update, completionHandler: completionHandler)
+    }
+    
     func deleteThread(withId threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.deleteThread(withId: threadId, completionHandler: completionHandler)
     }

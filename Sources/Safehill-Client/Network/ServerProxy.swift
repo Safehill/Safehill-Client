@@ -1042,6 +1042,14 @@ extension SHServerProxy {
         }
     }
     
+    internal func updateThreadMembers(
+        for threadId: String,
+        _ update: ConversationThreadMembersUpdateDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.updateThreadMembers(for: threadId, update, completionHandler: completionHandler)
+    }
+    
     internal func listThreads() async throws -> [ConversationThreadOutputDTO] {
         return try await withUnsafeThrowingContinuation { continuation in
             self.remoteServer.listThreads { remoteResult in

@@ -222,11 +222,22 @@ public protocol SHServerAPI {
     /// Updates the thread name
     /// - Parameters:
     ///   - threadId: the thread identifier
-    ///   - newName: thre new name. nil for clearing an existing name
+    ///   - newName: the new name. nil for clearing an existing name
     ///   - completionHandler: the callback
     func updateThread(
        _ threadId: String,
        newName: String?,
+       completionHandler: @escaping (Result<Void, Error>) -> ()
+   )
+    
+    /// Updates the thread name
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - update: the updates to the members
+    ///   - completionHandler: the callback
+    func updateThreadMembers(
+       for threadId: String,
+       _ update: ConversationThreadMembersUpdateDTO,
        completionHandler: @escaping (Result<Void, Error>) -> ()
    )
     
