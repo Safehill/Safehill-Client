@@ -61,11 +61,11 @@ public struct SHUserInteractionController {
     }
     
     public func setupThread(
-        with users: [any SHServerUser],
+        with usersAndSelf: [any SHServerUser],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO, Error>) -> Void
     ) {
-        guard users.isEmpty == false else {
+        guard usersAndSelf.count > 1 || phoneNumbers.count > 0 else {
             completionHandler(.failure(SHInteractionsError.noSafehillUsersInThread))
             return
         }
@@ -76,54 +76,55 @@ public struct SHUserInteractionController {
                 return
             }
             
-            guard users.contains(where: { $0.identifier == self.user.identifier }) else {
+            guard usersAndSelf.contains(where: { $0.identifier == self.user.identifier }) else {
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("users can only create groups they are part of")))
                 return
             }
             
-            self.getExistingThread(with: users, and: phoneNumbers) { result in
+            self.getExistingThread(with: usersAndSelf, and: phoneNumbers) { result in
                 switch result {
                 case .failure(let error):
-                    log.error("failed to fetch thread with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers) from remote server")
+                    log.error("failed to fetch thread with users \(usersAndSelf.map({ $0.identifier })) and phone numbers \(phoneNumbers) from remote server")
                     completionHandler(.failure(error))
                 case .success(let conversationThread):
                     let symmetricKey: SymmetricKey
                     
                     if let conversationThread {
-                        log.info("found thread with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers) from local or remote")
+                        log.info("found thread with users \(usersAndSelf.map({ $0.identifier })) and phone numbers \(phoneNumbers) from local or remote")
                         completionHandler(.success(conversationThread))
-                        return
-                    } else {
-                        log.info("creating new thread, because one could not be found on remote with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers)")
-                        symmetricKey = createNewSecret()
-                    }
-                    
-                    var usersAndSelf = users
-                    if users.contains(where: { $0.identifier == authedUser.identifier }) == false {
-                        usersAndSelf.append(authedUser)
-                    }
-                    
-                    do {
-                        let recipientsEncryptionDetails = try newRecipientEncryptionDetails(
-                            from: symmetricKey,
-                            for: usersAndSelf,
-                            anchor: .thread,
-                            anchorId: conversationThread?.threadId
-                        )
-                        log.debug("generated recipients encryptionDetails \(recipientsEncryptionDetails.map({ "R=\($0.recipientUserIdentifier) ES=\($0.encryptedSecret), EPK=\($0.ephemeralPublicKey) SSig=\($0.secretPublicSignature) USig=\($0.senderPublicSignature)" }))")
-                        log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier })) and phone numbers \(phoneNumbers)")
+                    } else if usersAndSelf.count == 1 {
                         self.serverProxy.createOrUpdateThread(
                             name: nil,
-                            recipientsEncryptionDetails: recipientsEncryptionDetails,
+                            recipientsEncryptionDetails: [],
                             invitedPhoneNumbers: phoneNumbers,
                             completionHandler: completionHandler
                         )
-                    } catch {
-                        log.critical("""
+                    } else {
+                        log.info("creating new thread, because one could not be found on remote with users \(usersAndSelf.map({ $0.identifier })) and phone numbers \(phoneNumbers)")
+                        symmetricKey = createNewSecret()
+                        
+                        do {
+                            let recipientsEncryptionDetails = try newRecipientEncryptionDetails(
+                                from: symmetricKey,
+                                for: usersAndSelf,
+                                anchor: .thread,
+                                anchorId: conversationThread?.threadId
+                            )
+                            log.debug("generated recipients encryptionDetails \(recipientsEncryptionDetails.map({ "R=\($0.recipientUserIdentifier) ES=\($0.encryptedSecret), EPK=\($0.ephemeralPublicKey) SSig=\($0.secretPublicSignature) USig=\($0.senderPublicSignature)" }))")
+                            log.info("creating or updating threads on server with recipient encryption details for users \(recipientsEncryptionDetails.map({ $0.recipientUserIdentifier })) and phone numbers \(phoneNumbers)")
+                            self.serverProxy.createOrUpdateThread(
+                                name: nil,
+                                recipientsEncryptionDetails: recipientsEncryptionDetails,
+                                invitedPhoneNumbers: phoneNumbers,
+                                completionHandler: completionHandler
+                            )
+                        } catch {
+                            log.critical("""
 failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "<NEW>"). error=\(error.localizedDescription)
 """)
-                        completionHandler(.failure(error))
-                        return
+                            completionHandler(.failure(error))
+                            return
+                        }
                     }
                 }
             }
