@@ -147,6 +147,33 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         )
     }
     
+    public func updateThreadMembers(
+        for threadId: String,
+        recipientsToAdd: [UserIdentifier],
+        membersPublicIdentifierToRemove: [UserIdentifier],
+        phoneNumbersToAdd: [String],
+        phoneNumbersToRemove: [String],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
+        let update = ConversationThreadMembersUpdateDTO(
+            recipientsToAdd: [],
+            membersPublicIdentifierToRemove: [],
+            phoneNumbersToAdd: phoneNumbersToAdd,
+            phoneNumbersToRemove: []
+        )
+        
+        self.serverProxy.updateThreadMembers(
+            for: threadId,
+            update,
+            completionHandler: completionHandler
+        )
+    }
+    
     public func deleteThread(threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard self.user as? SHAuthenticatedLocalUser != nil else {
             completionHandler(.failure(SHLocalUserError.notAuthenticated))
