@@ -281,6 +281,31 @@ public class SHWebsocketSyncOperation: Operation {
                     $0.didAddThread(threadOutputDTO)
                 }
                 
+            case .threadUpdate:
+                
+                guard let threadUpdateWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadUpdate.self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                Task {
+                    do {
+                        try await self.serverProxy.updateLocalThread(from: threadUpdateWsMessage)
+                        
+                        self.serverProxy.getThread(withId: threadUpdateWsMessage.threadId) { result in
+                            if case .success(let threadOutputDTO) = result, let threadOutputDTO {
+                                interactionsSyncDelegates.forEach {
+                                    $0.didAddThread(threadOutputDTO)
+                                }
+                            } else {
+                                self.log.critical("[ws] error retrieving thread from DB after \(message.type.rawValue) message via WebSockets")
+                            }
+                        }
+                    } catch {
+                        self.log.critical("[ws] error updating DB after \(message.type.rawValue) message via WebSockets. \(error.localizedDescription)")
+                    }
+                }
+                
             case .threadAssetsShare, .groupAssetsShare:
                 
                 if let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) {

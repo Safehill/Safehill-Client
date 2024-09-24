@@ -12,12 +12,16 @@ let E2eCreationSerialQueue = DispatchQueue(
 )
 
 public enum SHInteractionsError: Error, LocalizedError {
-    case noSafehillUsersInThread
+    case noSafehillUsersInThread, noSuchThread, failedToFetchUsers
     
     public var errorDescription: String? {
         switch self {
         case .noSafehillUsersInThread:
             return "A thread must contain at least one Safehill user"
+        case .noSuchThread:
+            return "A thread with the specified identifier does not exist"
+        case .failedToFetchUsers:
+            return "Some of the users don't exist or can not be fetched right now"
         }
     }
 }
@@ -149,23 +153,63 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         phoneNumbersToRemove: [String],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        guard self.user as? SHAuthenticatedLocalUser != nil else {
+        guard let user = self.user as? SHAuthenticatedLocalUser else {
             completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
         }
         
-        let update = ConversationThreadMembersUpdateDTO(
-            recipientsToAdd: [],
-            membersPublicIdentifierToRemove: [],
-            phoneNumbersToAdd: phoneNumbersToAdd,
-            phoneNumbersToRemove: []
-        )
+        let updateMembers = { (newUsersEncryptionDetails: [RecipientEncryptionDetailsDTO]) in
+            let update = ConversationThreadMembersUpdateDTO(
+                recipientsToAdd: newUsersEncryptionDetails,
+                membersPublicIdentifierToRemove: membersPublicIdentifierToRemove,
+                phoneNumbersToAdd: phoneNumbersToAdd,
+                phoneNumbersToRemove: phoneNumbersToRemove
+            )
+            
+            self.serverProxy.updateThreadMembers(
+                for: threadId,
+                update,
+                completionHandler: completionHandler
+            )
+        }
         
-        self.serverProxy.updateThreadMembers(
-            for: threadId,
-            update,
-            completionHandler: completionHandler
-        )
+        if recipientsToAdd.isEmpty {
+            /// 
+            /// If no members to add, no need to fetch the symmetric encryption key for the thread
+            /// and encrypt it for the new recipients
+            ///
+            updateMembers([])
+        } else {
+            let symmetricKey: SymmetricKey?
+            do {
+                symmetricKey = try self.fetchSymmetricKey(forAnchor: .thread, anchorId: threadId)
+            } catch {
+                symmetricKey = nil
+            }
+            
+            if let symmetricKey {
+                Task {
+                    let users = try await SHUsersController(localUser: user).getUsers(withIdentifiers: recipientsToAdd)
+                    guard users.count == recipientsToAdd.count else {
+                        completionHandler(.failure(SHInteractionsError.failedToFetchUsers))
+                        return
+                    }
+                    
+                    let newRecipientsEncryptionDetails = try newRecipientEncryptionDetails(
+                        from: symmetricKey,
+                        for: Array(users.values),
+                        anchor: .thread,
+                        anchorId: threadId
+                    )
+                    
+                    updateMembers(newRecipientsEncryptionDetails)
+                    
+                    completionHandler(.success(()))
+                }
+            } else {
+                completionHandler(.failure(SHInteractionsError.noSuchThread))
+            }
+        }
     }
     
     public func deleteThread(threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {

@@ -1617,6 +1617,26 @@ extension SHServerProxy {
         }
     }
     
+    /// Update the last updated at based on the value in the provided threads
+    /// - Parameter threads: the threads
+    internal func updateLocalThread(
+        from threadUpdate: WebSocketMessage.ThreadUpdate
+    ) async throws {
+        
+        return try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.updateThreads(
+                from: [threadUpdate]
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let threadOutput):
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+    
     func addLocalInteractions(
         _ remoteInteractions: InteractionsGroupDTO,
         inAnchor anchor: SHInteractionAnchor,

@@ -2176,7 +2176,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func updateThreads(
-        from remoteThreads: [ConversationThreadOutputDTO],
+        from remoteThreads: [ConversationThreadUpdate],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
@@ -2191,6 +2191,8 @@ struct LocalServer : SHServerAPI {
                 writeBatch.set(value: name, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::name")
             }
             writeBatch.set(value: remoteThread.lastUpdatedAt?.iso8601withFractionalSeconds?.timeIntervalSince1970, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::lastUpdatedAt")
+            
+            writeBatch.set(value: remoteThread.membersPublicIdentifier, for: "\(SHInteractionAnchor.thread.rawValue)::\(remoteThread.threadId)::membersPublicIdentifiers")
             
             let invitations = remoteThread.invitedUsersPhoneNumbers.map {
                 DBSecureSerializableInvitation(phoneNumber: $0.key, invitedAt: $0.value)
@@ -2233,7 +2235,6 @@ struct LocalServer : SHServerAPI {
         var invitationsCondition: KBGenericCondition
         if let withIdentifiers, withIdentifiers.isEmpty == false {
             var c = KBGenericCondition(value: false)
-            var ic = KBGenericCondition(value: false)
             for identifier in withIdentifiers {
                 c = c.or(
                     KBGenericCondition(
