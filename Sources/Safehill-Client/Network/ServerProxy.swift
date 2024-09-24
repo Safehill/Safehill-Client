@@ -1993,4 +1993,18 @@ extension SHServerProxy {
             }
         }
     }
+    
+    public func requestAccess(
+        toGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.requestAccess(toGroupId: toGroupId, completionHandler: completionHandler)
+    }
+    
+    public func requestAccess(
+        toThreadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.requestAccess(toThreadId: toThreadId, completionHandler: completionHandler)
+    }
 }

@@ -1439,7 +1439,7 @@ struct RemoteServer : SHServerAPI {
     }
     
     func invite(_ phoneNumbers: [String], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        var parameters = [
+        let parameters = [
             "phoneNumbers": phoneNumbers
         ] as [String: Any]
         
@@ -1454,11 +1454,39 @@ struct RemoteServer : SHServerAPI {
     }
     
     func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        var parameters = [
+        let parameters = [
             "phoneNumbers": phoneNumbers
         ] as [String: Any]
         
         self.delete("groups/invitees/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    func requestAccess(
+        toThreadId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("threads/invitees/\(threadId)/access", parameters: nil) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    func requestAccess(
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("groups/invitees/\(groupId)/access", parameters: nil) { (result: Result<NoReply, Error>) in
             switch result {
             case .failure(let error):
                 completionHandler(.failure(error))

@@ -479,4 +479,14 @@ public protocol SHServerAPI {
         from groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
+    
+    func requestAccess(
+        toThreadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func requestAccess(
+        toGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
 }
