@@ -17,7 +17,8 @@ public let SafehillServerURLComponents: URLComponents = {
 //#elseif DEBUG
 #if DEBUG
     components.scheme = "https"
-    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
+    components.host = "4c41-2601-645-c580-55eb-00-1002.ngrok-free.app"
+//    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #else
     components.scheme = "https"
@@ -38,7 +39,8 @@ public let SafehillServerURLComponentsForWebsockets: URLComponents = {
 //#elseif DEBUG
 #if DEBUG
     components.scheme = "wss"
-    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
+    components.host = "4c41-2601-645-c580-55eb-00-1002.ngrok-free.app"
+//    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #else
     components.scheme = "wss"
