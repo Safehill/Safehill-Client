@@ -326,6 +326,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.deleteThread(withId: threadId, completionHandler: completionHandler)
     }
     
+    func deleteLocalThread(withId threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.deleteThread(withId: threadId, completionHandler: completionHandler)
+    }
+    
     func retrieveUserEncryptionDetails(forThread threadId: String, completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()) {
         self.localServer.getThread(withId: threadId) { result in
             switch result {

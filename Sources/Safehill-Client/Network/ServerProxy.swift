@@ -1175,6 +1175,16 @@ extension SHServerProxy {
         }
     }
     
+    internal func deleteLocalThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.deleteThread(
+            withId: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
     internal func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()

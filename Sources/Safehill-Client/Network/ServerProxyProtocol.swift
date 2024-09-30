@@ -33,6 +33,11 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    func deleteLocalThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],

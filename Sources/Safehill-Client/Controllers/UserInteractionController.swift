@@ -12,7 +12,11 @@ let E2eCreationSerialQueue = DispatchQueue(
 )
 
 public enum SHInteractionsError: Error, LocalizedError {
-    case noSafehillUsersInThread, noSuchThread, failedToFetchUsers
+    case noSafehillUsersInThread
+    case noSuchThread
+    case failedToFetchUsers
+    case leavingCreatedThreadNotAllowed
+    case userNotInThread
     
     public var errorDescription: String? {
         switch self {
@@ -22,6 +26,10 @@ public enum SHInteractionsError: Error, LocalizedError {
             return "A thread with the specified identifier does not exist"
         case .failedToFetchUsers:
             return "Some of the users don't exist or can not be fetched right now"
+        case .leavingCreatedThreadNotAllowed:
+            return "The one and only admin can't leave the Thread"
+        case .userNotInThread:
+            return "The user is not currently in this Thread"
         }
     }
 }

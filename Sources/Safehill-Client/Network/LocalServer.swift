@@ -2455,7 +2455,25 @@ struct LocalServer : SHServerAPI {
             let _ = try userStore.removeValues(forKeysMatching: condition)
             let _ = try reactionStore.removeValues(forKeysMatching: condition)
             let _ = try messagesQueue.removeValues(forKeysMatching: condition)
+            
+            if anchor == .thread {
+                guard let assetsStore = SHDBManager.sharedInstance.userStore else {
+                    completionHandler(.success(()))
+                    return
+                }
+                
+                let photoMessageCondition = KBGenericCondition(
+                    .beginsWith,
+                    value: "\(SHInteractionAnchor.thread.rawValue)::\(anchorId)::"
+                ).and(KBGenericCondition(
+                    .endsWith,
+                    value: "::photoMessage")
+                )
+                let _ = try assetsStore.removeValues(forKeysMatching: photoMessageCondition)
+            }
+            
             completionHandler(.success(()))
+            
         } catch {
             completionHandler(.failure(error))
         }

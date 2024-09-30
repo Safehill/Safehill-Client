@@ -188,6 +188,63 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
         self.serverProxy.deleteThread(withId: threadId, completionHandler: completionHandler)
     }
     
+    public func leaveThread(threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        guard self.user as? SHAuthenticatedLocalUser != nil else {
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
+            return
+        }
+        
+        self.getThread(withId: threadId) { getThreadResult in
+            switch getThreadResult {
+            case .failure(let error):
+                completionHandler(.failure(error))
+                
+            case .success(let maybeThread):
+                guard let thread = maybeThread else {
+                    completionHandler(.failure(SHInteractionsError.noSuchThread))
+                    return
+                }
+                
+                guard thread.creatorPublicIdentifier != self.user.identifier
+                else {
+                    completionHandler(.failure(SHInteractionsError.leavingCreatedThreadNotAllowed))
+                    return
+                }
+                
+                guard thread.membersPublicIdentifier.contains(self.user.identifier)
+                else {
+                    completionHandler(.failure(SHInteractionsError.leavingCreatedThreadNotAllowed))
+                    return
+                }
+                
+                let update = ConversationThreadMembersUpdateDTO(
+                    recipientsToAdd: [],
+                    membersPublicIdentifierToRemove: [self.user.identifier],
+                    phoneNumbersToAdd: [],
+                    phoneNumbersToRemove: []
+                )
+                
+                self.serverProxy.updateThreadMembers(
+                    for: threadId,
+                    update
+                ) { result in
+                    switch result {
+                        
+                    case .success:
+                        SHUserInteractionController.encryptionDetailsCache.evict(anchor: .thread, anchorId: threadId)
+                        
+                        self.serverProxy.deleteLocalThread(withId: threadId) { _ in
+                            completionHandler(.success(()))
+                        }
+                    
+                    case .failure(let failure):
+                        completionHandler(.failure(failure))
+                    }
+                }
+            }
+        }
+    }
+    
     public func fetchThreadsInteractionsSummary() async throws -> [String: InteractionsThreadSummaryDTO] {
         return try await self.serverProxy.topLevelThreadsInteractionsSummary()
     }
