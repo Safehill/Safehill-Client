@@ -211,6 +211,11 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     
+    func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    )
+    
     func invite(
         _ phoneNumbers: [String],
         to groupId: String,

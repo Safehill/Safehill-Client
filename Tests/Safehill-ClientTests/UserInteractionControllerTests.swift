@@ -338,6 +338,39 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     }
     
     func getThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        let threads = self.state.threads,
+        let matchingThread = threads.first(where: { $0.threadId == threadId })
+        else {
+            completionHandler(.success(nil))
+            return
+        }
+        
+        guard let selfEncryptionDetails = matchingThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == self.localServer.requestor.identifier }) else {
+            completionHandler(.success(nil))
+            return
+        }
+        
+        let serverThread = ConversationThreadOutputDTO(
+            threadId: matchingThread.threadId,
+            name: matchingThread.name,
+            creatorPublicIdentifier: matchingThread.creatorId,
+            membersPublicIdentifier: matchingThread.userIds,
+            invitedUsersPhoneNumbers: phoneNumbers.reduce([:], { partialResult, number in
+                var result = partialResult
+                result[number] = Date().iso8601withFractionalSeconds
+                return result
+            }),
+            createdAt: Date().iso8601withFractionalSeconds,
+            lastUpdatedAt: Date().iso8601withFractionalSeconds,
+            encryptionDetails: selfEncryptionDetails
+        )
+        completionHandler(.success(serverThread))
+    }
+    
+    func getThread(
         withUsers users: [any SHServerUser],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
