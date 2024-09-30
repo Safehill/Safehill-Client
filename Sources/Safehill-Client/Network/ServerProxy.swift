@@ -608,11 +608,15 @@ extension SHServerProxy {
                         }
                     }
                     
+                    log.debug("""
+[asset-data] requested \(assetIdentifiers) versions \(requestedVersions). localDictionary=\(Array(localDictionary.keys)). assetVersionsToFetch=\(assetVersionsToFetch)
+""")
+                    
                     ///
                     /// If all could be found locally return success
                     ///
                     guard assetVersionsToFetch.isEmpty == false else {
-                        log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
+                        log.debug("[asset-data] DB CACHE HIT")
                         completionHandler(.success(localDictionary))
                         return
                     }
@@ -1630,7 +1634,7 @@ extension SHServerProxy {
                 switch result {
                 case .failure(let error):
                     continuation.resume(throwing: error)
-                case .success(let threadOutput):
+                case .success:
                     continuation.resume(returning: ())
                 }
             }

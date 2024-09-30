@@ -4,7 +4,7 @@ import KnowledgeBase
 import Photos
 
 
-internal class SHEncryptAndShareOperation: SHEncryptionOperation {
+internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sendable {
     
     override var operationType: BackgroundOperationQueue.OperationType { .share }
     override var processingState: ProcessingState { .sharing }

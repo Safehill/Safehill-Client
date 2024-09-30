@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-public class SHWebsocketSyncOperation: Operation {
+public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     
     public typealias OperationResult = Result<Void, Error>
     
