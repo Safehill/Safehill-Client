@@ -1,9 +1,9 @@
 import Foundation
 
 public struct ConversationThreadMembersUpdateDTO: Codable {
-    let recipientsToAdd: [RecipientEncryptionDetailsDTO]
-    let membersPublicIdentifierToRemove: [UserIdentifier]
+    public let recipientsToAdd: [RecipientEncryptionDetailsDTO]
+    public let membersPublicIdentifierToRemove: [UserIdentifier]
     
-    let phoneNumbersToAdd: [String]
-    let phoneNumbersToRemove: [String]
+    public let phoneNumbersToAdd: [String]
+    public let phoneNumbersToRemove: [String]
 }
