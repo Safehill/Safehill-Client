@@ -513,7 +513,7 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "deviceId": deviceId,
             "token": token
