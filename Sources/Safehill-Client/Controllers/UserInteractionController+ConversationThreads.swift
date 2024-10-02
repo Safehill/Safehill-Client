@@ -189,6 +189,14 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
     }
     
     public func leaveThread(threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.removeUser(self.user.identifier, from: threadId, completionHandler: completionHandler)
+    }
+    
+    public func removeUser(
+        _ userIdentifier: UserIdentifier,
+        from threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
         guard self.user as? SHAuthenticatedLocalUser != nil else {
             completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
@@ -205,21 +213,29 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
                     return
                 }
                 
-                guard thread.creatorPublicIdentifier != self.user.identifier
-                else {
-                    completionHandler(.failure(SHInteractionsError.leavingCreatedThreadNotAllowed))
-                    return
+                if userIdentifier == self.user.identifier {
+                    guard thread.creatorPublicIdentifier != self.user.identifier
+                    else {
+                        completionHandler(.failure(SHInteractionsError.leavingCreatedThreadNotAllowed))
+                        return
+                    }
+                } else {
+                    guard thread.creatorPublicIdentifier == userIdentifier
+                    else {
+                        completionHandler(.failure(SHInteractionsError.noPrivileges))
+                        return
+                    }
                 }
                 
-                guard thread.membersPublicIdentifier.contains(self.user.identifier)
+                guard thread.membersPublicIdentifier.contains(userIdentifier)
                 else {
-                    completionHandler(.failure(SHInteractionsError.leavingCreatedThreadNotAllowed))
+                    completionHandler(.failure(SHInteractionsError.userNotInThread))
                     return
                 }
                 
                 let update = ConversationThreadMembersUpdateDTO(
                     recipientsToAdd: [],
-                    membersPublicIdentifierToRemove: [self.user.identifier],
+                    membersPublicIdentifierToRemove: [userIdentifier],
                     phoneNumbersToAdd: [],
                     phoneNumbersToRemove: []
                 )

@@ -17,6 +17,7 @@ public enum SHInteractionsError: Error, LocalizedError {
     case failedToFetchUsers
     case leavingCreatedThreadNotAllowed
     case userNotInThread
+    case noPrivileges
     
     public var errorDescription: String? {
         switch self {
@@ -30,6 +31,8 @@ public enum SHInteractionsError: Error, LocalizedError {
             return "The one and only admin can't leave the Thread"
         case .userNotInThread:
             return "The user is not currently in this Thread"
+        case .noPrivileges:
+            return "Only an administrator of this Thread can perform this operation"
         }
     }
 }
