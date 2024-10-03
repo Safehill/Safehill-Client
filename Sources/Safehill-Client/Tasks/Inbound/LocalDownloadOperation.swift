@@ -27,7 +27,7 @@ import os
 ///
 /// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
 ///
-public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
+public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sendable {
     
     private static var alreadyProcessed = Set<GlobalIdentifier>()
     

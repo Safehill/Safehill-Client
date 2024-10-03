@@ -362,7 +362,7 @@ extension SHServerProxy {
         }
     }
     
-    public func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.registerDevice(deviceId, token: token, completionHandler: completionHandler)
     }
 }
@@ -608,11 +608,15 @@ extension SHServerProxy {
                         }
                     }
                     
+                    log.debug("""
+[asset-data] requested \(assetIdentifiers) versions \(requestedVersions). localDictionary=\(Array(localDictionary.keys)). assetVersionsToFetch=\(assetVersionsToFetch)
+""")
+                    
                     ///
                     /// If all could be found locally return success
                     ///
                     guard assetVersionsToFetch.isEmpty == false else {
-                        log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
+                        log.debug("[asset-data] DB CACHE HIT")
                         completionHandler(.success(localDictionary))
                         return
                     }
@@ -1171,6 +1175,16 @@ extension SHServerProxy {
         }
     }
     
+    internal func deleteLocalThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.deleteThread(
+            withId: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
     internal func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
@@ -1617,6 +1631,26 @@ extension SHServerProxy {
         }
     }
     
+    /// Update the last updated at based on the value in the provided threads
+    /// - Parameter threads: the threads
+    internal func updateLocalThread(
+        from threadUpdate: WebSocketMessage.ThreadUpdate
+    ) async throws {
+        
+        return try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.updateThreads(
+                from: [threadUpdate]
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+    
     func addLocalInteractions(
         _ remoteInteractions: InteractionsGroupDTO,
         inAnchor anchor: SHInteractionAnchor,
@@ -1972,5 +2006,19 @@ extension SHServerProxy {
                 completionHandler(.failure(error))
             }
         }
+    }
+    
+    public func requestAccess(
+        toGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.requestAccess(toGroupId: toGroupId, completionHandler: completionHandler)
+    }
+    
+    public func requestAccess(
+        toThreadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.requestAccess(toThreadId: toThreadId, completionHandler: completionHandler)
     }
 }

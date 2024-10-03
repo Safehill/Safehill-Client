@@ -1,6 +1,14 @@
 import Foundation
 
-public struct ConversationThreadOutputDTO: Codable {
+internal protocol ConversationThreadUpdate {
+    var threadId: String { get }
+    var name: String? { get }
+    var membersPublicIdentifier: [UserIdentifier] { get }
+    var invitedUsersPhoneNumbers: [String: String] { get }
+    var lastUpdatedAt: String? { get }
+}
+
+public struct ConversationThreadOutputDTO: ConversationThreadUpdate, Codable {
     public let threadId: String
     public let name: String?
     public let creatorPublicIdentifier: UserIdentifier?

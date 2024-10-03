@@ -33,6 +33,11 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    func deleteLocalThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     func setupGroupEncryptionDetails(
         groupId: String,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
@@ -208,6 +213,11 @@ internal protocol SHServerProxyProtocol {
     func getThread(
         withUsers users: [any SHServerUser],
         and phoneNumbers: [String],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    )
+    
+    func getThread(
+        withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     

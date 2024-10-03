@@ -3,7 +3,7 @@ import KnowledgeBase
 import Photos
 import os
 
-open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtocol {
+open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
     
     public enum ParallelizationOption {
         case aggressive, conservative

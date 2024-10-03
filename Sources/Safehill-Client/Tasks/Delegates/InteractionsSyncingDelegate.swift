@@ -8,6 +8,8 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func didAddThread(_: ConversationThreadOutputDTO)
     
+    func didRemoveThread(with threadId: String)
+    
     func didReceiveTextMessages(_ messages: [MessageOutputDTO],
                                 inGroup groupId: String)
     func didReceiveTextMessages(_: [MessageOutputDTO],

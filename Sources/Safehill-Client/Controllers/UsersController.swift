@@ -129,7 +129,7 @@ public class SHUsersController {
         }
         
         serverProxy.getUsers(
-            withIdentifiers: userIdentifiers
+            withIdentifiers: missingUserIds
         ) { result in
             switch result {
             case .success(let serverUsers):
