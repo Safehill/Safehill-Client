@@ -281,6 +281,25 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     $0.didAddThread(threadOutputDTO)
                 }
                 
+            case .threadRemove:
+                
+                guard let threadId = try? JSONDecoder().decode(String.self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] REMOVE-THREAD: thread id \(threadId)")
+                
+                self.serverProxy.deleteLocalThread(withId: threadId) { res in
+                    if case .failure(let failure) = res {
+                        self.log.error("failed to remove thread from local server. Thread sync will attempt this again. \(failure.localizedDescription)")
+                    }
+                }
+                
+                interactionsSyncDelegates.forEach {
+                    $0.didRemoveThread(with: threadId)
+                }
+                
             case .threadUpdate:
                 
                 guard let threadUpdateWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadUpdate.self, from: contentData) else {

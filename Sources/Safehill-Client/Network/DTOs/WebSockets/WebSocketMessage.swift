@@ -9,6 +9,7 @@ public struct WebSocketMessage: Codable {
         case reactionRemove = "reaction-remove"
         case threadAdd = "thread-add"
         case threadUpdate = "thread-update"
+        case threadRemove = "thread-remove"
         case threadAssetsShare = "thread-assets-share"
         case groupAssetsShare = "group-assets-share"
         case connectionRequest = "connection-request"
