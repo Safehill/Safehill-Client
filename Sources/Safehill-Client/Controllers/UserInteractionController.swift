@@ -18,6 +18,7 @@ public enum SHInteractionsError: Error, LocalizedError {
     case leavingCreatedThreadNotAllowed
     case userNotInThread
     case noPrivileges
+    case threadConflict(ConversationThreadOutputDTO?)
     
     public var errorDescription: String? {
         switch self {
@@ -33,6 +34,8 @@ public enum SHInteractionsError: Error, LocalizedError {
             return "The user is not currently in this Thread"
         case .noPrivileges:
             return "Only an administrator of this Thread can perform this operation"
+        case .threadConflict(let conflictingThread):
+            return "You created Thread with these users already"
         }
     }
 }
@@ -305,7 +308,7 @@ public struct SHUserInteractionController {
         }
     }
     
-    private func fetchSelfEncryptionDetails(forAnchor anchor: SHInteractionAnchor, anchorId: String) throws -> RecipientEncryptionDetailsDTO? {
+    internal func fetchSelfEncryptionDetails(forAnchor anchor: SHInteractionAnchor, anchorId: String) throws -> RecipientEncryptionDetailsDTO? {
         let semaphore = DispatchSemaphore(value: 0)
         
         var encryptionDetails: RecipientEncryptionDetailsDTO? = nil

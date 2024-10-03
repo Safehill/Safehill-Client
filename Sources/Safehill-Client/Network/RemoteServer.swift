@@ -1113,12 +1113,12 @@ struct RemoteServer : SHServerAPI {
     }
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         let parameters = [
-            "byUsersPublicIdentifiers": users.map({ $0.identifier }),
+            "byUsersPublicIdentifiers": userIds,
             "byInvitedPhoneNumbers": phoneNumbers
         ] as [String: Any]
         

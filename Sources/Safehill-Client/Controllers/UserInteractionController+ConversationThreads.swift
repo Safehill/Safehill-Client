@@ -15,14 +15,14 @@ extension SHUserInteractionController {
     }
     
     internal func getExistingThread(
-        with users: [any SHServerUser],
+        with userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> Void
     ) {
-        self.serverProxy.getThread(withUsers: users, and: phoneNumbers) { result in
+        self.serverProxy.getThread(withUserIds: userIds, and: phoneNumbers) { result in
             switch result {
             case .failure(let error):
-                log.error("failed to fetch thread with users \(users.map({ $0.identifier })) and phone numbers \(phoneNumbers) from remote server")
+                log.error("failed to fetch thread with users \(userIds) and phone numbers \(phoneNumbers) from remote server")
                 completionHandler(.failure(error))
             case .success(let conversationThread):
                 completionHandler(.success(conversationThread))
@@ -51,7 +51,7 @@ extension SHUserInteractionController {
                 return
             }
             
-            self.getExistingThread(with: usersAndSelf, and: phoneNumbers) { result in
+            self.getExistingThread(with: usersAndSelf.map({ $0.identifier }), and: phoneNumbers) { result in
                 switch result {
                 case .failure(let error):
                     log.error("failed to fetch thread with users \(usersAndSelf.map({ $0.identifier })) and phone numbers \(phoneNumbers) from remote server")
@@ -134,9 +134,64 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
             
             self.serverProxy.updateThreadMembers(
                 for: threadId,
-                update,
-                completionHandler: completionHandler
-            )
+                update
+            ) {
+                updateThreadResult in
+                switch updateThreadResult {
+                case .success:
+                    completionHandler(.success(()))
+                
+                case .failure(let error):
+                    switch error {
+                    case SHHTTPError.ClientError.conflict:
+                        self.serverProxy.getThread(withId: threadId) { getThreadIdResult in
+                            switch getThreadIdResult {
+                            case .failure(let error):
+                                completionHandler(.failure(error))
+                                
+                            case .success(let existingThread):
+                                guard let existingThread else {
+                                    completionHandler(.failure(SHInteractionsError.noSuchThread))
+                                    return
+                                }
+                                var newMembers = Set(existingThread.membersPublicIdentifier)
+                                var newPhoneNumbers = Set(existingThread.invitedUsersPhoneNumbers.keys)
+                                for memberToAdd in recipientsToAdd {
+                                    newMembers.insert(memberToAdd)
+                                }
+                                for memberToRemove in membersPublicIdentifierToRemove {
+                                    newMembers.remove(memberToRemove)
+                                }
+                                for numberToAdd in phoneNumbersToAdd {
+                                    newPhoneNumbers.insert(numberToAdd)
+                                }
+                                for numberToRemove in phoneNumbersToRemove {
+                                    newPhoneNumbers.remove(numberToRemove)
+                                }
+                                
+                                self.serverProxy.getThread(
+                                    withUserIds: Array(newMembers),
+                                    and: Array(newPhoneNumbers)
+                                ) {
+                                    getConflictingThreadResult in
+                                    
+                                    switch getConflictingThreadResult {
+                                    case .failure(let error):
+                                        completionHandler(.failure(error))
+                                    case .success(let maybeConflictingThread):
+                                        completionHandler(.failure(
+                                            SHInteractionsError.threadConflict(maybeConflictingThread)
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+                        
+                    default:
+                        completionHandler(.failure(error))
+                    }
+                }
+            }
         }
         
         if recipientsToAdd.isEmpty {
@@ -253,8 +308,29 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
                             completionHandler(.success(()))
                         }
                     
-                    case .failure(let failure):
-                        completionHandler(.failure(failure))
+                    case .failure(let error):
+                        
+                        switch error {
+                        case SHHTTPError.ClientError.conflict:
+                            self.serverProxy.getThread(
+                                withUserIds: thread.membersPublicIdentifier.filter({ $0 != userIdentifier }),
+                                and: Array(thread.invitedUsersPhoneNumbers.keys)
+                            ) {
+                                getConflictingThreadResult in
+                                
+                                switch getConflictingThreadResult {
+                                case .failure(let error):
+                                    completionHandler(.failure(error))
+                                case .success(let maybeConflictingThread):
+                                    completionHandler(.failure(
+                                        SHInteractionsError.threadConflict(maybeConflictingThread)
+                                    ))
+                                }
+                            }
+                            
+                        default:
+                            completionHandler(.failure(error))
+                        }
                     }
                 }
             }

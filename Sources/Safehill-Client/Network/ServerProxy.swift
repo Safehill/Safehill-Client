@@ -1116,19 +1116,19 @@ extension SHServerProxy {
     }
     
     internal func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.localServer.getThread(withUsers: users, and: phoneNumbers) { localResult in
+        self.localServer.getThread(withUserIds: userIds, and: phoneNumbers) { localResult in
             switch localResult {
             case .failure:
-                self.remoteServer.getThread(withUsers: users, and: phoneNumbers, completionHandler: completionHandler)
+                self.remoteServer.getThread(withUserIds: userIds, and: phoneNumbers, completionHandler: completionHandler)
             case .success(let maybeThread):
                 if let maybeThread {
                     completionHandler(.success(maybeThread))
                 } else {
-                    self.remoteServer.getThread(withUsers: users, and: phoneNumbers, completionHandler: completionHandler)
+                    self.remoteServer.getThread(withUserIds: userIds, and: phoneNumbers, completionHandler: completionHandler)
                 }
             }
         }

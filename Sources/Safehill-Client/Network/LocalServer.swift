@@ -2505,7 +2505,7 @@ struct LocalServer : SHServerAPI {
     }
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIdsToMatch: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
@@ -2514,9 +2514,8 @@ struct LocalServer : SHServerAPI {
             case .failure(let error):
                 completionHandler(.failure(error))
             case .success(let threads):
-                let userIdsToMatch = Set(users.map({ $0.identifier }))
                 for thread in threads {
-                    if Set(thread.membersPublicIdentifier) == userIdsToMatch,
+                    if Set(thread.membersPublicIdentifier) == Set(userIdsToMatch),
                        Set(thread.invitedUsersPhoneNumbers.keys) == Set(phoneNumbers)
                     {
                         completionHandler(.success(thread))

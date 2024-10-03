@@ -345,8 +345,8 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        let threads = self.state.threads,
-        let matchingThread = threads.first(where: { $0.threadId == threadId })
+        guard let threads = self.state.threads,
+              let matchingThread = threads.first(where: { $0.threadId == threadId })
         else {
             completionHandler(.success(nil))
             return
@@ -362,7 +362,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
             name: matchingThread.name,
             creatorPublicIdentifier: matchingThread.creatorId,
             membersPublicIdentifier: matchingThread.userIds,
-            invitedUsersPhoneNumbers: phoneNumbers.reduce([:], { partialResult, number in
+            invitedUsersPhoneNumbers: matchingThread.invitedPhoneNumbers.reduce([:], { partialResult, number in
                 var result = partialResult
                 result[number] = Date().iso8601withFractionalSeconds
                 return result
@@ -375,11 +375,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     }
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds threadMembersId: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        let threadMembersId = users.map({ $0.identifier })
         guard let threads = self.state.threads,
               let matchingThread = threads.first(where: {
                   Set($0.userIds) == Set(threadMembersId)
@@ -1552,7 +1551,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let expectation4 = XCTestExpectation(description: "retrieve the thread with users and with users and invited phone numbers")
         
-        controller1.getExistingThread(with: threadUsers, and: []) { result in
+        controller1.getExistingThread(with: threadUsers.map({ $0.identifier }), and: []) { result in
             switch result {
             case .failure(let error):
                 XCTFail(error.localizedDescription)
@@ -1569,7 +1568,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 XCTAssertEqual(Set(threadWithNoInvitations.membersPublicIdentifier), Set(threadUsers.map({ $0.identifier })))
                 XCTAssertEqual(threadWithNoInvitations.invitedUsersPhoneNumbers.count, 0)
                 
-                controller1.getExistingThread(with: threadUsers, and: threadPhoneNumbers) { result in
+                controller1.getExistingThread(with: threadUsers.map({ $0.identifier }), and: threadPhoneNumbers) { result in
                     switch result {
                     case .failure(let error):
                         XCTFail(error.localizedDescription)
