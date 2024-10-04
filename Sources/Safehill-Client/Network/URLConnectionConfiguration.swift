@@ -10,11 +10,12 @@ public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
 public let SafehillServerURLComponents: URLComponents = {
     var components = URLComponents()
     
-#if targetEnvironment(simulator)
-    components.scheme = "http"
-    components.host = "127.0.0.1"
-    components.port = 8080
-#elseif DEBUG
+//#if targetEnvironment(simulator)
+//    components.scheme = "http"
+//    components.host = "127.0.0.1"
+//    components.port = 8080
+//#elseif DEBUG
+#if DEBUG
     components.scheme = "https"
     components.host = "4c41-2601-645-c580-55eb-00-1002.ngrok-free.app"
 //    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
@@ -31,11 +32,12 @@ public let SafehillServerURLComponents: URLComponents = {
 public let SafehillServerURLComponentsForWebsockets: URLComponents = {
     var components = URLComponents()
     
-#if targetEnvironment(simulator)
-    components.scheme = "ws"
-    components.host = "127.0.0.1"
-    components.port = 8080
-#elseif DEBUG
+//#if targetEnvironment(simulator)
+//    components.scheme = "ws"
+//    components.host = "127.0.0.1"
+//    components.port = 8080
+//#elseif DEBUG
+#if DEBUG
     components.scheme = "wss"
     components.host = "4c41-2601-645-c580-55eb-00-1002.ngrok-free.app"
 //    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
