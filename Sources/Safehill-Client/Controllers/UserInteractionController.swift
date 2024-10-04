@@ -18,7 +18,7 @@ public enum SHInteractionsError: Error, LocalizedError {
     case leavingCreatedThreadNotAllowed
     case userNotInThread
     case noPrivileges
-    case threadConflict(ConversationThreadOutputDTO?)
+    case threadConflict(ConversationThreadOutputDTO)
     
     public var errorDescription: String? {
         switch self {
@@ -34,7 +34,7 @@ public enum SHInteractionsError: Error, LocalizedError {
             return "The user is not currently in this Thread"
         case .noPrivileges:
             return "Only an administrator of this Thread can perform this operation"
-        case .threadConflict(let conflictingThread):
+        case .threadConflict:
             return "You created Thread with these users already"
         }
     }

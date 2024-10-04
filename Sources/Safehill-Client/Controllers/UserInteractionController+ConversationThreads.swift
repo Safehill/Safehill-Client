@@ -141,13 +141,13 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
                 case .success:
                     completionHandler(.success(()))
                 
-                case .failure(let error):
-                    switch error {
+                case .failure(let updateError):
+                    switch updateError {
                     case SHHTTPError.ClientError.conflict:
                         self.serverProxy.getThread(withId: threadId) { getThreadIdResult in
                             switch getThreadIdResult {
-                            case .failure(let error):
-                                completionHandler(.failure(error))
+                            case .failure(let getError):
+                                completionHandler(.failure(getError))
                                 
                             case .success(let existingThread):
                                 guard let existingThread else {
@@ -179,16 +179,20 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
                                     case .failure(let error):
                                         completionHandler(.failure(error))
                                     case .success(let maybeConflictingThread):
-                                        completionHandler(.failure(
-                                            SHInteractionsError.threadConflict(maybeConflictingThread)
-                                        ))
+                                        if let conflictingThread = maybeConflictingThread {
+                                            completionHandler(.failure(
+                                                SHInteractionsError.threadConflict(conflictingThread)
+                                            ))
+                                        } else {
+                                            completionHandler(.failure(updateError))
+                                        }
                                     }
                                 }
                             }
                         }
                         
                     default:
-                        completionHandler(.failure(error))
+                        completionHandler(.failure(updateError))
                     }
                 }
             }
@@ -308,9 +312,9 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
                             completionHandler(.success(()))
                         }
                     
-                    case .failure(let error):
+                    case .failure(let updateError):
                         
-                        switch error {
+                        switch updateError {
                         case SHHTTPError.ClientError.conflict:
                             self.serverProxy.getThread(
                                 withUserIds: thread.membersPublicIdentifier.filter({ $0 != userIdentifier }),
@@ -319,17 +323,21 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
                                 getConflictingThreadResult in
                                 
                                 switch getConflictingThreadResult {
-                                case .failure(let error):
-                                    completionHandler(.failure(error))
+                                case .failure(let getError):
+                                    completionHandler(.failure(getError))
                                 case .success(let maybeConflictingThread):
-                                    completionHandler(.failure(
-                                        SHInteractionsError.threadConflict(maybeConflictingThread)
-                                    ))
+                                    if let conflictingThread = maybeConflictingThread {
+                                        completionHandler(.failure(
+                                            SHInteractionsError.threadConflict(conflictingThread)
+                                        ))
+                                    } else {
+                                        completionHandler(.failure(updateError))
+                                    }
                                 }
                             }
                             
                         default:
-                            completionHandler(.failure(error))
+                            completionHandler(.failure(updateError))
                         }
                     }
                 }
