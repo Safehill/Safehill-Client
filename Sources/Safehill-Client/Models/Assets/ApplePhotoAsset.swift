@@ -229,11 +229,8 @@ extension SHApplePhotoAsset {
         switch self.phAsset.mediaType {
         
         case .image:
-            let options: PHContentEditingInputRequestOptions = PHContentEditingInputRequestOptions()
-            options.canHandleAdjustmentData = { _ in return true }
-            
             return await withUnsafeContinuation { continuation in
-                self.phAsset.requestContentEditingInput(with: options, completionHandler: {
+                self.phAsset.requestContentEditingInput(with: nil, completionHandler: {
                     (contentEditingInput: PHContentEditingInput?, info: [AnyHashable : Any]) -> Void in
                     continuation.resume(returning: contentEditingInput!.fullSizeImageURL as URL?)
                 })
@@ -278,7 +275,7 @@ extension SHApplePhotoAsset {
     func fileData() async throws -> Data {
         let url = try await self.url()
         if let url,
-           FileManager.default.fileExists(atPath: url.absoluteString) {
+           FileManager.default.fileExists(atPath: url.relativePath) {
             return try Data(contentsOf: url, options: .mappedIfSafe)
         } else {
             throw SHPhotoAssetError.applePhotoAssetFileNotOnDisk(url?.absoluteString)
