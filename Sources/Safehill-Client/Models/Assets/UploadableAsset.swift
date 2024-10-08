@@ -7,9 +7,9 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     
     public static var supportsSecureCoding = true
     
-    let localIdentifier: LocalIdentifier
-    let globalIdentifier: GlobalIdentifier
-    let creationDate: Date?
+    public let localIdentifier: LocalIdentifier
+    public let globalIdentifier: GlobalIdentifier
+    public let creationDate: Date?
     let data: [SHAssetQuality: Data]
     
     enum CodingKeys: String, CodingKey {
