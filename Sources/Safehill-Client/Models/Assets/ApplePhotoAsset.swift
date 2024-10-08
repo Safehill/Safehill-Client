@@ -314,7 +314,7 @@ extension SHApplePhotoAsset {
 
 extension SHApplePhotoAsset {
     
-    func toUploadableAsset(
+    public func toUploadableAsset(
         for versions: [SHAssetQuality]
     ) async throws -> SHUploadableAsset {
         let globalIdentifier = await self.generateGlobalIdentifier()
