@@ -35,7 +35,13 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
         let creationDateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.creationDate.rawValue) as? String
-        let data = decoder.decodeObject(of: NSDictionary.self, forKey: CodingKeys.creationDate.rawValue)
+        
+        var dataDict = [SHAssetQuality: Data]()
+        for quality in SHAssetQuality.all {
+            if let qdata = decoder.decodeObject(of: NSData.self, forKey: CodingKeys.data.rawValue + "::" + quality.rawValue) as? Data {
+                dataDict[quality] = qdata
+            }
+        }
         
         guard let localIdentifier = localIdentifier as? String else {
             log.error("unexpected value for localIdentifier when decoding SHUploadableAsset object")
@@ -44,11 +50,6 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
         
         guard let globalIdentifier = globalIdentifier as? String  else {
             log.error("unexpected value for globalIdentifier when decoding SHUploadableAsset object")
-            return nil
-        }
-        
-        guard let data = data as? [SHAssetQuality: Data] else {
-            log.error("unexpected value for data when decoding SHUploadableAsset object")
             return nil
         }
         
@@ -67,7 +68,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
             localIdentifier: localIdentifier,
             globalIdentifier: globalIdentifier,
             creationDate: creationDate,
-            data: data
+            data: dataDict
         )
     }
     
@@ -75,7 +76,10 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
         coder.encode(self.globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(self.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
         coder.encode(self.creationDate?.iso8601withFractionalSeconds, forKey: CodingKeys.creationDate.rawValue)
-        coder.encode(self.data, forKey: CodingKeys.data.rawValue)
+        
+        for (version, data) in self.data {
+            coder.encode(data, forKey: CodingKeys.data.rawValue + "::" + version.rawValue)
+        }
     }
 }
 
