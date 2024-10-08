@@ -91,7 +91,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: CodingKeys.sharedWith.rawValue)
         let invitedUsers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.invitedUsers.rawValue)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isBackground.rawValue)
-        let asPhotoMessageInThreadId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue)
+        let asPhotoMessageInThreadId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue) as? String
         
         guard let asset = asset else {
             log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
@@ -133,11 +133,6 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         
         guard let invitedUsers = invitedUsers as? [String] else {
             log.error("unexpected value for invitedUsers when decoding \(Self.Type.self) object")
-            return nil
-        }
-        
-        guard let asPhotoMessageInThreadId = asPhotoMessageInThreadId as String? else {
-            log.error("unexpected value for asPhotoMessageInThreadId when decoding \(Self.Type.self) object")
             return nil
         }
         
