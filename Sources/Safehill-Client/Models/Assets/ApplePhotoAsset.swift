@@ -7,13 +7,14 @@ import AppKit
 #endif
 import Safehill_Crypto
 
-
-private let PHAssetIdentifierKey = "phAssetLocalIdentifier"
-private let CalculatedGlobalIdentifier = "calculatedGlobalIdentifier"
-
-
 public class SHApplePhotoAsset : NSObject, NSSecureCoding {
+    
     public static var supportsSecureCoding = true
+    
+    enum CodingKeys: String, CodingKey {
+        case localIdentifier
+        case globalIdentifier
+    }
     
     private var calculatedGlobalIdentifier: GlobalIdentifier? = nil
     
@@ -38,8 +39,8 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     }
     
     public required convenience init?(coder decoder: NSCoder) {
-        let phAssetIdentifier = decoder.decodeObject(of: NSString.self, forKey: PHAssetIdentifierKey)
-        let calculatedGlobalId = decoder.decodeObject(of: NSString.self, forKey: CalculatedGlobalIdentifier)
+        let phAssetIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
+        let calculatedGlobalId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
         
         guard let phAssetIdentifier = phAssetIdentifier as? String else {
             log.error("unexpected value for phAssetIdentifier when decoding SHApplePhotoAsset object")
@@ -106,10 +107,9 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     }
     
     public func encode(with coder: NSCoder) {
-        coder.encode(self.phAsset.localIdentifier, forKey: PHAssetIdentifierKey)
-        coder.encode(self.calculatedGlobalIdentifier, forKey: CalculatedGlobalIdentifier)
+        coder.encode(self.phAsset.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
+        coder.encode(self.calculatedGlobalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
     }
-    
 }
 
 extension SHApplePhotoAsset {
@@ -223,3 +223,107 @@ extension SHApplePhotoAsset {
 }
 
 
+extension SHApplePhotoAsset {
+    
+    func url() async throws -> URL? {
+        switch self.phAsset.mediaType {
+        
+        case .image:
+            let options: PHContentEditingInputRequestOptions = PHContentEditingInputRequestOptions()
+            options.canHandleAdjustmentData = { _ in return true }
+            
+            return await withUnsafeContinuation { continuation in
+                self.phAsset.requestContentEditingInput(with: options, completionHandler: {
+                    (contentEditingInput: PHContentEditingInput?, info: [AnyHashable : Any]) -> Void in
+                    continuation.resume(returning: contentEditingInput!.fullSizeImageURL as URL?)
+                })
+            }
+        
+//        case .video:
+//            let options: PHVideoRequestOptions = PHVideoRequestOptions()
+//            options.version = .original
+//            
+//            return await withUnsafeContinuation { continuation in
+//                PHImageManager.default().requestAVAsset(
+//                    forVideo: self.phAsset,
+//                    options: options,
+//                    resultHandler: {
+//                        (asset: AVAsset?, audioMix: AVAudioMix?, info: [AnyHashable : Any]?) -> Void in
+//                        if let urlAsset = asset as? AVURLAsset {
+//                            let localVideoUrl: URL = urlAsset.url as URL
+//                            continuation.resume(returning: localVideoUrl)
+//                        } else {
+//                            continuation.resume(returning: nil)
+//                        }
+//                    }
+//                )
+//            }
+            
+        default:
+            throw SHPhotoAssetError.unsupportedMediaType
+        }
+    }
+    
+    func fileSize() -> Int64? {
+        let resources = PHAssetResource.assetResources(for: self.phAsset)
+                  
+        if let resource = resources.first {
+            let unsignedInt64 = resource.value(forKey: "fileSize") as? CLong
+            return Int64(bitPattern: UInt64(unsignedInt64!))
+        }
+        
+        return nil
+    }
+    
+    func fileData() async throws -> Data {
+        let url = try await self.url()
+        if let url,
+           FileManager.default.fileExists(atPath: url.absoluteString) {
+            return try Data(contentsOf: url, options: .mappedIfSafe)
+        } else {
+            throw SHPhotoAssetError.applePhotoAssetFileNotOnDisk(url?.absoluteString)
+        }
+    }
+    
+    func data(for versions: [SHAssetQuality]) async throws -> [SHAssetQuality: Data] {
+        var dict = [SHAssetQuality: Data]()
+        
+        for version in versions {
+            let size = kSHSizeForQuality(quality: version)
+            let resizedData = try await self.phAsset.dataSynchronous(
+                forSize: size,
+                usingImageManager: self.imageManager,
+                deliveryMode: .highQualityFormat,
+                resizeMode: .exact
+            )
+            
+            if let originalSize = self.fileSize(),
+               originalSize < resizedData.count,
+               let originalData = try? await self.fileData() {
+                dict[version] = originalData
+            } else {
+                dict[version] = resizedData
+            }
+            
+            log.debug("[file-size] \(version.rawValue): data size \(dict[version]?.count ?? 0)")
+        }
+
+        return dict
+    }
+}
+
+extension SHApplePhotoAsset {
+    
+    func toUploadableAsset(
+        for versions: [SHAssetQuality]
+    ) async throws -> SHUploadableAsset {
+        let globalIdentifier = await self.generateGlobalIdentifier()
+        
+        return SHUploadableAsset(
+            localIdentifier: self.phAsset.localIdentifier,
+            globalIdentifier: globalIdentifier,
+            creationDate: self.phAsset.creationDate,
+            data: try await data(for: versions)
+        )
+    }
+}

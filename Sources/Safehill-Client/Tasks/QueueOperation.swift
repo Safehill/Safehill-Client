@@ -29,8 +29,7 @@ public enum SHQueueOperation {
             return partialResult.or(KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier)))
         })
         
-        var removed =  try BackgroundOperationQueue.of(type: .fetch).removeValues(forKeysMatching: condition)
-        removed += try BackgroundOperationQueue.of(type: .encryption).removeValues(forKeysMatching: condition)
+        var removed = try BackgroundOperationQueue.of(type: .encryption).removeValues(forKeysMatching: condition)
         removed += try BackgroundOperationQueue.of(type: .upload).removeValues(forKeysMatching: condition)
         removed += try BackgroundOperationQueue.of(type: .failedUpload).removeValues(forKeysMatching: condition)
         

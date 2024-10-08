@@ -150,8 +150,12 @@ extension SHRemoteDownloadOperation {
                 
                 if recipientUserId == self.user.identifier {
                     let item = SHUploadHistoryItem(
-                        localAssetId: localIdentifier,
-                        globalAssetId: descriptor.globalIdentifier,
+                        asset: SHUploadableAsset(
+                            localIdentifier: localIdentifier,
+                            globalIdentifier: descriptor.globalIdentifier,
+                            creationDate: descriptor.creationDate,
+                            data: [:]
+                        ),
                         versions: [.lowResolution, .hiResolution],
                         groupId: groupId,
                         eventOriginator: senderUser,
@@ -185,8 +189,12 @@ extension SHRemoteDownloadOperation {
             
             for (groupId, shareInfo) in otherUserIdsSharedWith {
                 let item = SHShareHistoryItem(
-                    localAssetId: localIdentifier,
-                    globalAssetId: descriptor.globalIdentifier,
+                    asset: SHUploadableAsset(
+                        localIdentifier: localIdentifier,
+                        globalIdentifier: descriptor.globalIdentifier,
+                        creationDate: descriptor.creationDate,
+                        data: [:]
+                    ),
                     versions: [.lowResolution, .hiResolution],
                     groupId: groupId,
                     eventOriginator: senderUser,
