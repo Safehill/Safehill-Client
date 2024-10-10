@@ -11,7 +11,7 @@ let kSHFullResPictureSize: CGSize? = nil
 // TODO: This should change to `kSHFullResPictureSize` for premium accounts
 let kSHMaxPictureSize = (quality: SHAssetQuality.hiResolution, size: kSHHiResPictureSize)
 
-func kSHSizeForQuality(quality: SHAssetQuality) -> CGSize {
+public func SHSizeForQuality(quality: SHAssetQuality) -> CGSize {
     switch quality {
     case .lowResolution:
         return LowResPictureSize

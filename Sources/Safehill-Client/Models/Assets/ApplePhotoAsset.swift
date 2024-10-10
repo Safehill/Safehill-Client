@@ -165,7 +165,7 @@ extension SHApplePhotoAsset {
     
     func getControlPixelColor() async throws -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat)? {
         let nsUIimage = try await self.phAsset.imageSynchronous(
-            forSize: kSHSizeForQuality(quality: SHAssetQuality.lowResolution),
+            forSize: SHSizeForQuality(quality: SHAssetQuality.lowResolution),
             usingImageManager: self.imageManager,
             resizeMode: .exact
         )
@@ -286,7 +286,7 @@ extension SHApplePhotoAsset {
         var dict = [SHAssetQuality: Data]()
         
         for version in versions {
-            let size = kSHSizeForQuality(quality: version)
+            let size = SHSizeForQuality(quality: version)
             let resizedData = try await self.phAsset.dataSynchronous(
                 forSize: size,
                 usingImageManager: self.imageManager,
