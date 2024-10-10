@@ -10,7 +10,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public let localIdentifier: LocalIdentifier
     public let globalIdentifier: GlobalIdentifier
     public let creationDate: Date?
-    let data: [SHAssetQuality: Data]
+    public let data: [SHAssetQuality: Data]
     
     enum CodingKeys: String, CodingKey {
         case localIdentifier
