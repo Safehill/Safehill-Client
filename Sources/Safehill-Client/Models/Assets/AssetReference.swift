@@ -13,8 +13,18 @@ public struct AssetReference: GenericAssetIdentifiable {
         self.globalIdentifier = globalIdentifier
     }
     
-    public init(localIdentifier: LocalIdentifier, globalIdentifier: GlobalIdentifier) {
+    public init(localIdentifier: LocalIdentifier?, globalIdentifier: GlobalIdentifier?) {
+        assert(localIdentifier != nil || globalIdentifier != nil)
         self.localIdentifier = localIdentifier
         self.globalIdentifier = globalIdentifier
+    }
+}
+
+extension Asset {
+    func idReference() -> AssetReference {
+        AssetReference(
+            localIdentifier: self.localIdentifier,
+            globalIdentifier: self.globalIdentifier
+        )
     }
 }
