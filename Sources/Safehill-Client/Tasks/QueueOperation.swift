@@ -5,29 +5,37 @@ import KnowledgeBase
 public enum SHQueueOperation {
     
     public static func queueIdentifier(
-        for localIdentifier: String,
+        for globalIdentifier: GlobalIdentifier,
         groupId: String? = nil
     ) -> String {
-        return [localIdentifier, groupId ?? ""].joined(separator: "+")
+        return [globalIdentifier, groupId ?? ""].joined(separator: "+")
     }
     
     public static func removeItems(
-        correspondingTo assetLocalIdentifiers: [String], groupId: String? = nil
+        correspondingTo globalIdentifiers: [GlobalIdentifier], groupId: String? = nil
     ) throws {
-        try SHQueueOperation.removeUploadItems(correspondingTo: assetLocalIdentifiers)
-        try SHQueueOperation.removeShareItems(correspondingTo: assetLocalIdentifiers, groupId: groupId)
+        try SHQueueOperation.removeUploadItems(correspondingTo: globalIdentifiers)
+        try SHQueueOperation.removeShareItems(correspondingTo: globalIdentifiers, groupId: groupId)
     }
     
     public static func removeUploadItems(
-        correspondingTo assetLocalIdentifiers: [String]
+        correspondingTo globalIdentifiers: [GlobalIdentifier]
     ) throws {
-        guard assetLocalIdentifiers.isEmpty == false else {
+        guard globalIdentifiers.isEmpty == false else {
             return
         }
         
-        let condition = assetLocalIdentifiers.reduce(KBGenericCondition(value: false), { partialResult, localIdentifier in
-            return partialResult.or(KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier)))
-        })
+        let condition = globalIdentifiers.reduce(
+            KBGenericCondition(value: false),
+            { partialResult, globalId in
+                return partialResult.or(
+                    KBGenericCondition(
+                        .beginsWith,
+                        value: SHQueueOperation.queueIdentifier(for: globalId)
+                    )
+                )
+            }
+        )
         
         var removed = try BackgroundOperationQueue.of(type: .encryption).removeValues(forKeysMatching: condition)
         removed += try BackgroundOperationQueue.of(type: .upload).removeValues(forKeysMatching: condition)
@@ -39,16 +47,24 @@ public enum SHQueueOperation {
     }
     
     public static func removeShareItems(
-        correspondingTo assetLocalIdentifiers: [String],
+        correspondingTo globalIdentifiers: [GlobalIdentifier],
         groupId: String? = nil
     ) throws {
-        guard assetLocalIdentifiers.isEmpty == false else {
+        guard globalIdentifiers.isEmpty == false else {
             return
         }
         
-        let condition = assetLocalIdentifiers.reduce(KBGenericCondition(value: false), { partialResult, localIdentifier in
-            return partialResult.or(KBGenericCondition(.beginsWith, value: SHQueueOperation.queueIdentifier(for: localIdentifier, groupId: groupId)))
-        })
+        let condition = globalIdentifiers.reduce(
+            KBGenericCondition(value: false),
+            { partialResult, globalId in
+                return partialResult.or(
+                    KBGenericCondition(
+                        .beginsWith,
+                        value: SHQueueOperation.queueIdentifier(for: globalId, groupId: groupId)
+                    )
+                )
+            }
+        )
         
         var removed = try BackgroundOperationQueue.of(type: .share).removeValues(forKeysMatching: condition)
         removed += try BackgroundOperationQueue.of(type: .failedShare).removeValues(forKeysMatching: condition)
