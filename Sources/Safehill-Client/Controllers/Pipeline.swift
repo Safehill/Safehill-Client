@@ -129,9 +129,14 @@ public struct SHUploadPipeline {
 
 public extension SHUploadPipeline {
     
-    static func queueItemIdentifier(groupId: String, assetLocalIdentifier: String, versions: [SHAssetQuality], users: [SHServerUser]) -> String {
+    static func queueItemIdentifier(
+        groupId: String,
+        globalIdentifier: GlobalIdentifier,
+        versions: [SHAssetQuality],
+        users: [any SHServerUser]
+    ) -> String {
         var components = [
-            assetLocalIdentifier,
+            globalIdentifier,
             groupId
         ]
         if users.count > 0 {
@@ -147,7 +152,7 @@ public extension SHUploadPipeline {
         return components.joined(separator: "+")
     }
     
-    static func assetLocalIdentifier(fromItemIdentifier itemIdentifier: String) -> String? {
+    static func assetGlobalIdentifier(fromItemIdentifier itemIdentifier: String) -> GlobalIdentifier? {
         let components = itemIdentifier.components(separatedBy: "+")
         guard components.count >= 3 else {
             return nil

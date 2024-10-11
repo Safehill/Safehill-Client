@@ -30,23 +30,23 @@ open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtoc
     }
     
     public func run(
-        forAssetLocalIdentifiers localIdentifiers: [String],
+        forAssetsWithGlobalIdentifiers globalIdentifiers: [GlobalIdentifier],
         groupId: String,
-        sharedWith: [SHServerUser],
+        sharedWith: [any SHServerUser],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let queueItemIdentifiers = localIdentifiers.flatMap({
+        let queueItemIdentifiers = globalIdentifiers.flatMap({
             [
                 SHUploadPipeline.queueItemIdentifier(
                     groupId: groupId,
-                    assetLocalIdentifier: $0,
+                    globalIdentifier: $0,
                     versions: [.lowResolution, .midResolution],
                     users: sharedWith
                 ),
                 SHUploadPipeline.queueItemIdentifier(
                     groupId: groupId,
-                    assetLocalIdentifier: $0,
+                    globalIdentifier: $0,
                     versions: [.lowResolution, .hiResolution],
                     users: sharedWith
                 )

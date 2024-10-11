@@ -18,7 +18,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
     public var identifier: String {
         return SHUploadPipeline.queueItemIdentifier(
             groupId: self.groupId,
-            assetLocalIdentifier: self.asset.localIdentifier,
+            globalIdentifier: self.asset.globalIdentifier,
             versions: self.versions,
             users: self.sharedWith
         )
