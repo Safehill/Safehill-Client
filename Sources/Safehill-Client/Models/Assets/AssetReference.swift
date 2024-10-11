@@ -20,8 +20,14 @@ public struct AssetReference: GenericAssetIdentifiable {
     }
 }
 
+extension AssetReference: CustomStringConvertible {
+    public var description: String {
+        return "l=\(self.localIdentifier ?? "nil") g=\(self.globalIdentifier ?? "nil")"
+    }
+}
+
 extension Asset {
-    func idReference() -> AssetReference {
+    public func idReference() -> AssetReference {
         AssetReference(
             localIdentifier: self.localIdentifier,
             globalIdentifier: self.globalIdentifier
