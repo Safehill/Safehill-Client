@@ -40,25 +40,25 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         encryptionRequest request: SHEncryptionRequestQueueItem,
         error: Error
     ) throws {
-        let localIdentifier = request.asset.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let users = request.sharedWith
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
-            log.error("asset \(localIdentifier) failed to share but dequeueing from SHARE queue failed. Sharing will be attempted again")
+            log.error("asset \(globalIdentifier) failed to share but dequeueing from SHARE queue failed. Sharing will be attempted again")
             throw error
         }
         
         /// Enquque to failed
-        log.info("enqueueing share request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
+        log.info("enqueueing share request for asset \(globalIdentifier) versions \(versions) in the FAILED queue")
         do {
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
             try request.enqueue(in: failedShareQueue, with: request.identifier)
         }
         catch {
-            log.fault("asset \(localIdentifier) failed to share but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
+            log.fault("asset \(globalIdentifier) failed to share but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
             throw error
         }
         
@@ -73,7 +73,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
                     delegate.didFailSharing(
-                        ofAsset: localIdentifier,
+                        ofAsset: globalIdentifier,
                         with: users,
                         in: groupId,
                         error: error
@@ -88,25 +88,25 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         encryptionRequest request: SHEncryptionRequestQueueItem,
         globalIdentifier: GlobalIdentifier
     ) throws {
-        let localIdentifier = request.asset.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let groupId = request.groupId
         
         /// Dequeque from ShareQueue
-        log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
+        log.info("dequeueing request for asset \(globalIdentifier) from the SHARE queue")
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
-            log.warning("asset \(localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
+            log.warning("asset \(globalIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
         }
         
         do {
-            log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
+            log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
             /// Remove items in the `FailedShareQueue` for the same identifier
             let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: queueItem.identifier))
         }
         catch {
-            log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
+            log.fault("asset \(globalIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
             throw error
         }
         
@@ -120,7 +120,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didCompleteSharing(ofAsset: localIdentifier, with: request.sharedWith, in: groupId)
+                    delegate.didCompleteSharing(ofAsset: globalIdentifier, with: request.sharedWith, in: groupId)
                 }
             }
         }
@@ -316,7 +316,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             let dequeue = {
                 do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
                 catch {
-                    self.log.warning("asset \(shareRequest.asset.localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
+                    self.log.warning("asset \(shareRequest.asset.globalIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
                 }
                 
                 completionHandler(.success(()))
@@ -343,7 +343,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             self.delegatesQueue.async {
                 for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(ofAsset: shareRequest.asset.localIdentifier,
+                        delegate.didStartSharing(ofAsset: shareRequest.asset.globalIdentifier,
                                                  with: shareRequest.sharedWith,
                                                  in: shareRequest.groupId)
                     }

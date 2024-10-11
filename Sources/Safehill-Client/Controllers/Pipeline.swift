@@ -85,27 +85,9 @@ public struct SHUploadPipeline {
         invitedUsers: [String],
         asPhotoMessageInThreadId: String?
     ) throws {
-        ///
-        /// First, check if the asset already exists in the local store.
-        /// If the hi resolution exists, share the `.hiResolution` directly,
-        /// without proxying through the `.midResolution`
-        ///
-        let locallyEncryptedVersions = SHLocalAssetStoreController(
-            user: sender
-        ).locallyEncryptedVersions(
-            forLocalIdentifier: asset.localIdentifier
-        )
-        
-        let versions: [SHAssetQuality]
-        if locallyEncryptedVersions.contains(.hiResolution) {
-            versions = [.lowResolution, .hiResolution]
-        } else {
-            versions = [.lowResolution, .midResolution]
-        }
-        
         let request = SHEncryptionRequestQueueItem(
             asset: asset,
-            versions: versions,
+            versions: [.lowResolution, .hiResolution],
             groupId: groupId,
             eventOriginator: sender,
             sharedWith: recipients,

@@ -116,8 +116,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 usingSecret: privateSecret
             )
         } catch {
-            log.error("failed to encrypt data for localIdentifier \(asset.localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
-            throw SHBackgroundOperationError.fatalError("failed to encrypt data for localIdentifier \(asset.localIdentifier)")
+            log.error("failed to encrypt data for asset \(asset.globalIdentifier). Dequeueing item, as it's unlikely to succeed again.")
+            throw SHBackgroundOperationError.fatalError("failed to encrypt data for asset \(asset.globalIdentifier)")
         }
         let encryptEnd = CFAbsoluteTimeGetCurrent()
         log.debug("[PERF] it took \(CFAbsoluteTime(encryptEnd - encryptStart)) to encrypt the data. versions=\(versions)")
@@ -131,7 +131,6 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let localIdentifier = request.asset.localIdentifier
         let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
@@ -140,7 +139,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         ///
         /// Dequeue from Encryption queue
         ///
-        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(globalIdentifier) from the ENCRYPT queue")
         
         do {
             let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
@@ -169,12 +168,12 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 /// Notify the delegates
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
+                        delegate.didFailEncryption(ofAsset: globalIdentifier, in: groupId, error: error)
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
                             delegate.didFailSharing(
-                                ofAsset: localIdentifier,
+                                ofAsset: globalIdentifier,
                                 with: users,
                                 in: groupId,
                                 error: error
@@ -193,7 +192,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         encryptionRequest request: SHGenericShareableGroupableQueueItem,
         globalIdentifier: String
     ) throws {
-        let localIdentifier = request.asset.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let isBackground = request.isBackground
@@ -214,12 +213,12 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             ///
             /// Enqueue to Upload queue
             ///
-            log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
+            log.info("enqueueing upload request in the UPLOAD queue for asset \(globalIdentifier) versions \(versions) isBackground=\(isBackground)")
             
             let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
             try request.enqueue(in: uploadQueue, with: request.identifier)
         } catch {
-            log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
+            log.fault("asset \(globalIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
         }
         
@@ -233,7 +232,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didCompleteEncryption(ofAsset: localIdentifier, in: groupId)
+                    delegate.didCompleteEncryption(ofAsset: globalIdentifier, in: groupId)
                 }
             }
         }
@@ -286,7 +285,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
                         delegate.didStartEncryption(
-                            ofAsset: encryptionRequest.asset.localIdentifier,
+                            ofAsset: encryptionRequest.asset.globalIdentifier,
                             in: encryptionRequest.groupId
                         )
                     }

@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
-    func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [SHServerUser]])
+    func assetIdsAreVisibleToUsers(_: [GlobalIdentifier: [any SHServerUser]])
     
     func assetsWereDeleted(_ assets: [SHBackedUpAssetIdentifier])
     

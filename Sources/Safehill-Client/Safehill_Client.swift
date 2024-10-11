@@ -36,7 +36,7 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
     case unexpectedData(Any?)
     case fatalError(String)
     case timedOut
-    case globalIdentifierDisagreement(String)
+    case globalIdentifierDisagreement(GlobalIdentifier, GlobalIdentifier)
     case missingAssetInLocalServer(String)
     case missingUnauthorizedDownloadIndexForUserId(String)
     case missingE2EEDetailsForGroup(String)

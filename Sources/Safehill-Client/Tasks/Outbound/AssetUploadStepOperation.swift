@@ -47,7 +47,7 @@ extension SHUploadStepBackgroundOperation {
         request: SHGenericShareableGroupableQueueItem,
         error: Error
     ) {
-        let localIdentifier = request.asset.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let users = request.sharedWith
         
@@ -55,13 +55,13 @@ extension SHUploadStepBackgroundOperation {
         /// Enqueue to the FAILED UPLOAD queue
         ///
         do {
-            log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) to the UPLOAD FAILED queue")
+            log.info("enqueueing upload request for asset \(globalIdentifier) versions \(versions) to the UPLOAD FAILED queue")
             
             let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
             try request.enqueue(in: failedUploadQueue, with: request.identifier)
         }
         catch {
-            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as 'failed to upload' because enqueueing to UPLOAD FAILED queue failed: \(error.localizedDescription)")
+            log.fault("asset \(globalIdentifier) failed to upload but will never be recorded as 'failed to upload' because enqueueing to UPLOAD FAILED queue failed: \(error.localizedDescription)")
         }
         
         if users.count > 0 {
@@ -73,7 +73,7 @@ extension SHUploadStepBackgroundOperation {
                 try request.enqueue(in: failedShareQueue, with: request.identifier)
             }
             catch {
-                log.fault("asset \(localIdentifier) failed to encrypt, hence it couldn't be shared, but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
+                log.fault("asset \(globalIdentifier) failed to encrypt, hence it couldn't be shared, but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
             }
         }
     }

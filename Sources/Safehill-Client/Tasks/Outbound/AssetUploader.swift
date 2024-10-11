@@ -34,22 +34,20 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let localIdentifier = request.asset.localIdentifier
         let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let users = request.sharedWith
-        let invitedUsers = request.invitedUsers
         
         /// Dequeque from UploadQueue
-        log.info("dequeueing request for asset \(localIdentifier) from the UPLOAD queue")
+        log.info("dequeueing request for asset \(globalIdentifier) from the UPLOAD queue")
         
         do {
             let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
             _ = try uploadQueue.dequeue(item: item)
         }
         catch {
-            log.error("asset \(localIdentifier) failed to upload but dequeuing from UPLOAD queue failed, so this operation will be attempted again.")
+            log.error("asset \(globalIdentifier) failed to upload but dequeuing from UPLOAD queue failed, so this operation will be attempted again.")
             completionHandler(.failure(error))
             return
         }
@@ -71,11 +69,11 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             self.delegatesQueue.async {
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didFailUpload(ofAsset: localIdentifier, in: groupId, error: error)
+                        delegate.didFailUpload(ofAsset: globalIdentifier, in: groupId, error: error)
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
-                            delegate.didFailSharing(ofAsset: localIdentifier,
+                            delegate.didFailSharing(ofAsset: globalIdentifier,
                                                     with: users,
                                                     in: groupId,
                                                     error: error)
@@ -92,7 +90,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         item: KBQueueItem,
         uploadRequest request: SHUploadRequestQueueItem
     ) throws {
-        let localIdentifier = request.asset.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let eventOriginator = request.eventOriginator
@@ -119,7 +117,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             let _ = try failedUploadQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: item.identifier))
             
         } catch {
-            log.warning("asset \(localIdentifier) was upload but removal from the failed upload queue failed")
+            log.warning("asset \(globalIdentifier) was upload but removal from the failed upload queue failed")
         }
         
         if isBackground == false {
@@ -128,7 +126,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 /// Notify the delegates
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didCompleteUpload(ofAsset: localIdentifier, in: groupId)
+                        delegate.didCompleteUpload(ofAsset: globalIdentifier, in: groupId)
                     }
                 }
             }
@@ -159,7 +157,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 ///
                 /// Enquque to SHARE queue for encrypting for sharing
                 ///
-                log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
+                log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(globalIdentifier) versions \(versions) isBackground=\(isBackground)")
                 
                 let request = SHEncryptionRequestQueueItem(
                     asset: request.asset,
@@ -173,7 +171,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 )
                 try request.enqueue(in: shareQueue, with: request.identifier)
             } catch {
-                log.fault("asset \(localIdentifier) was uploaded but will never be shared because enqueueing to SHARE queue failed")
+                log.fault("asset \(globalIdentifier) was uploaded but will never be shared because enqueueing to SHARE queue failed")
                 throw error
             }
         }
@@ -223,7 +221,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             self.delegatesQueue.async {
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didStartUpload(ofAsset: uploadRequest.asset.localIdentifier, in: uploadRequest.groupId)
+                        delegate.didStartUpload(ofAsset: uploadRequest.asset.globalIdentifier, in: uploadRequest.groupId)
                     }
                 }
             }
@@ -241,7 +239,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             
             switch result {
             case .failure(let error):
-                self.log.error("failed to retrieve local server asset for localIdentifier \(localIdentifier): \(error.localizedDescription).")
+                self.log.error("failed to retrieve local server asset \(globalIdentifier): \(error.localizedDescription).")
                 handleError(error)
             case .success(let encryptedAssets):
                 guard let encryptedAsset = encryptedAssets[globalIdentifier] else {
@@ -251,7 +249,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 }
                 
                 guard globalIdentifier == encryptedAsset.globalIdentifier else {
-                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(globalIdentifier, encryptedAsset.globalIdentifier)
                     handleError(error)
                     return
                 }
@@ -282,7 +280,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 }
                 
                 guard globalIdentifier == serverAsset.globalIdentifier else {
-                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(localIdentifier)
+                    let error = SHBackgroundOperationError.globalIdentifierDisagreement(globalIdentifier, serverAsset.globalIdentifier)
                     handleError(error)
                     return
                 }

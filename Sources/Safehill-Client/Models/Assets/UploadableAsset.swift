@@ -7,7 +7,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     
     public static var supportsSecureCoding = true
     
-    public let localIdentifier: LocalIdentifier
+    public let localIdentifier: LocalIdentifier?
     public let globalIdentifier: GlobalIdentifier
     public let creationDate: Date?
     public let data: [SHAssetQuality: Data]
