@@ -20,7 +20,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     }
     
     public init(
-        localIdentifier: LocalIdentifier,
+        localIdentifier: LocalIdentifier?,
         globalIdentifier: GlobalIdentifier,
         creationDate: Date?,
         data: [SHAssetQuality: Data]
@@ -43,11 +43,6 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
             }
         }
         
-        guard let localIdentifier = localIdentifier as? String else {
-            log.error("unexpected value for localIdentifier when decoding SHUploadableAsset object")
-            return nil
-        }
-        
         guard let globalIdentifier = globalIdentifier as? String  else {
             log.error("unexpected value for globalIdentifier when decoding SHUploadableAsset object")
             return nil
@@ -65,7 +60,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
         }
         
         self.init(
-            localIdentifier: localIdentifier,
+            localIdentifier: localIdentifier as? String,
             globalIdentifier: globalIdentifier,
             creationDate: creationDate,
             data: dataDict

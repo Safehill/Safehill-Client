@@ -228,7 +228,6 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         }
         
         let globalIdentifier = uploadRequest.asset.globalIdentifier
-        let localIdentifier = uploadRequest.asset.localIdentifier
         let versions = uploadRequest.versions
         
         log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
