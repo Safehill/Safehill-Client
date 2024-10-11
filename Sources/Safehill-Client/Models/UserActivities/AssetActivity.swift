@@ -8,7 +8,7 @@ public protocol AssetActivity: ReadableAssetActivity {
     /// Use this method to keep assets in the activity immutable.
     /// - Parameter ids: the asset ids to remove
     /// - Returns: `nil` if no assets remain, the new activity otherwise
-    func withAssetsRemoved(ids: [String]) -> (any AssetActivity)?
+    func withAssetsRemoved(ids: [AssetReference]) -> (any AssetActivity)?
     
     /// Returns an copy of the activity with the invited phone numbers removed.
     /// Use this method to keep assets in the activity immutable.
