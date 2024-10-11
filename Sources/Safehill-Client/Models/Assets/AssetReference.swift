@@ -13,4 +13,8 @@ public struct AssetReference: GenericAssetIdentifiable {
         self.globalIdentifier = globalIdentifier
     }
     
+    public init(localIdentifier: LocalIdentifier, globalIdentifier: GlobalIdentifier) {
+        self.localIdentifier = localIdentifier
+        self.globalIdentifier = globalIdentifier
+    }
 }
