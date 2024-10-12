@@ -318,8 +318,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                 catch {
                     self.log.warning("asset \(shareRequest.asset.globalIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
                 }
-                
-                completionHandler(.success(()))
             }
             
             if shareRequest.isBackground == false {
