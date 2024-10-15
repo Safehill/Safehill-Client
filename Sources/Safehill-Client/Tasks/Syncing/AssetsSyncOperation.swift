@@ -5,7 +5,7 @@ import os
 
 // MARK: - Sync Operation
 
-public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-ASSETS-SYNC")
     

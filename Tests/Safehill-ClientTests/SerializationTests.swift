@@ -351,7 +351,39 @@ final class Safehill_SerializationTests: XCTestCase {
         
         print(deserializedUser.name)
         print(deserializedUser.identifier)
+    }
+    
+    func testEncodingDTO() throws {
+        let parameters = ConversationThreadMembersUpdateDTO(
+            recipientsToAdd: [
+                RecipientEncryptionDetailsDTO(
+                    recipientUserIdentifier: "uid",
+                    ephemeralPublicKey: "epk",
+                    encryptedSecret: "es",
+                    secretPublicSignature: "sps",
+                    senderPublicSignature: "spsig"
+                )
+            ],
+            membersPublicIdentifierToRemove: ["uid2"],
+            phoneNumbersToAdd: ["1"],
+            phoneNumbersToRemove: ["2"]
+        )
         
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(parameters)
+        
+        let decoder = JSONDecoder()
+        let serialized = try decoder.decode(ConversationThreadMembersUpdateDTO.self, from: data)
+        
+        XCTAssertEqual(serialized.recipientsToAdd.first?.recipientUserIdentifier, parameters.recipientsToAdd.first?.recipientUserIdentifier)
+        XCTAssertEqual(serialized.recipientsToAdd.first?.ephemeralPublicKey, parameters.recipientsToAdd.first?.ephemeralPublicKey)
+        XCTAssertEqual(serialized.recipientsToAdd.first?.encryptedSecret, parameters.recipientsToAdd.first?.encryptedSecret)
+        XCTAssertEqual(serialized.recipientsToAdd.first?.secretPublicSignature, parameters.recipientsToAdd.first?.secretPublicSignature)
+        XCTAssertEqual(serialized.recipientsToAdd.first?.senderPublicSignature, parameters.recipientsToAdd.first?.senderPublicSignature)
+
+        XCTAssertEqual(Set(serialized.membersPublicIdentifierToRemove), Set(parameters.membersPublicIdentifierToRemove))
+        XCTAssertEqual(Set(serialized.phoneNumbersToAdd), Set(parameters.phoneNumbersToAdd))
+        XCTAssertEqual(Set(serialized.phoneNumbersToRemove), Set(parameters.phoneNumbersToRemove))
     }
     
     func testSerializePhone() throws {

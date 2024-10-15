@@ -267,7 +267,7 @@ struct RemoteServer : SHServerAPI {
         
         if let parameters = parameters {
             do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: parameters, options: .prettyPrinted)
+                request.httpBody = try JSONSerialization.data(withJSONObject: parameters)
             } catch {
                 return completionHandler(.failure(error))
             }
@@ -279,6 +279,43 @@ struct RemoteServer : SHServerAPI {
             decodingResponseAs: T.self,
             completionHandler: completionHandler
         )
+    }
+    
+    private func route<Request: Encodable, Response: Decodable>(
+        _ route: String,
+        method: String,
+        parameters: Request,
+        requiresAuthentication: Bool,
+        completionHandler: @escaping (Result<Response, Error>) -> Void
+    ) {
+        let url = requestURL(route: route)
+        
+        var request = URLRequest(url: url, timeoutInterval: 90)
+        request.httpMethod = method
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if requiresAuthentication {
+            guard let authedUser = self.requestor as? SHAuthenticatedLocalUser else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
+                return
+            }
+            request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
+        }
+        
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(parameters)
+            request.httpBody = data
+            
+            RemoteServer.makeRequest(
+                request: request,
+                usingSession: Self.safehillURLSession,
+                decodingResponseAs: Response.self,
+                completionHandler: completionHandler
+            )
+        } catch {
+            completionHandler(.failure(error))
+        }
     }
     
     func post<T: Decodable>(_ route: String,
@@ -513,7 +550,7 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "deviceId": deviceId,
             "token": token
@@ -1001,14 +1038,11 @@ struct RemoteServer : SHServerAPI {
         _ update: ConversationThreadMembersUpdateDTO,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        self.post("threads/update/\(threadId)/members",
-                  parameters: [
-                    "recipientsToAdd": update.recipientsToAdd,
-                    "membersPublicIdentifierToRemove": update.membersPublicIdentifierToRemove,
-                    "phoneNumbersToAdd": update.phoneNumbersToAdd,
-                    "phoneNumbersToRemove": update.phoneNumbersToRemove,
-                  ],
-                  requiresAuthentication: true
+        self.route(
+            "threads/update/\(threadId)/members",
+            method: "POST",
+            parameters: update,
+            requiresAuthentication: true
         ) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
@@ -1113,12 +1147,12 @@ struct RemoteServer : SHServerAPI {
     }
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         let parameters = [
-            "byUsersPublicIdentifiers": users.map({ $0.identifier }),
+            "byUsersPublicIdentifiers": userIds,
             "byInvitedPhoneNumbers": phoneNumbers
         ] as [String: Any]
         
@@ -1439,7 +1473,7 @@ struct RemoteServer : SHServerAPI {
     }
     
     func invite(_ phoneNumbers: [String], to groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        var parameters = [
+        let parameters = [
             "phoneNumbers": phoneNumbers
         ] as [String: Any]
         
@@ -1454,11 +1488,39 @@ struct RemoteServer : SHServerAPI {
     }
     
     func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        var parameters = [
+        let parameters = [
             "phoneNumbers": phoneNumbers
         ] as [String: Any]
         
         self.delete("groups/invitees/\(groupId)", parameters: parameters) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    func requestAccess(
+        toThreadId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("threads/invitees/\(threadId)/access", parameters: nil) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
+            }
+        }
+    }
+    
+    func requestAccess(
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("groups/invitees/\(groupId)/access", parameters: nil) { (result: Result<NoReply, Error>) in
             switch result {
             case .failure(let error):
                 completionHandler(.failure(error))

@@ -267,11 +267,11 @@ public protocol SHServerAPI {
     
     /// Retrieve the thread with the specified users, if one exists
     /// - Parameters:
-    ///   - users: the users to match
+    ///   - userIds: the users to match
     ///   - phoneNumbers: the phone numbers invited to the thread to match
     ///   - completionHandler: the callback method
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
@@ -477,6 +477,16 @@ public protocol SHServerAPI {
     func uninvite(
         _ phoneNumbers: [String],
         from groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func requestAccess(
+        toThreadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func requestAccess(
+        toGroupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
 }
