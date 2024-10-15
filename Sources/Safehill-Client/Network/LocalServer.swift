@@ -598,7 +598,7 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        var invalidKeys = Set<String>()
+        var invalidAssetStoreKeys = Set<String>()
         
         for senderKey in senderKeys {
             let components = senderKey.components(separatedBy: "::")
@@ -615,7 +615,7 @@ struct LocalServer : SHServerAPI {
                 senderInfoDict[globalIdentifier] = sharedByUserId
             } else {
                 log.error("invalid sender info key in DB: \(senderKey)")
-                invalidKeys.insert(senderKey)
+                invalidAssetStoreKeys.insert(senderKey)
             }
         }
         
@@ -646,10 +646,20 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        let encryptedTitles: [String: String]
+        
+        do {
+            encryptedTitles = try self.getEncryptedTitles()
+        } catch {
+            log.critical("error retrieving group titles. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
         for (key, value) in recipientDetailsDict {
             
             guard let value else {
-                invalidKeys.insert(key)
+                invalidAssetStoreKeys.insert(key)
                 continue
             }
             
@@ -677,14 +687,17 @@ struct LocalServer : SHServerAPI {
                 }
             } else {
                 log.error("failed to retrieve sharing information. Invalid entry format: \(key) -> \(value)")
-                invalidKeys.insert(key)
+                invalidAssetStoreKeys.insert(key)
                 continue
             }
             
             if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
                 let thisGroupPhoneNumberInvitation = groupPhoneNumberInvitations[groupId]
+                let createdBy = senderInfoDict[assetGid]
+                let encryptedTitle = encryptedTitles[groupId]
                 let groupInfo = SHGenericAssetGroupInfo(
-                    name: value.groupName,
+                    encryptedTitle: encryptedTitle,
+                    createdBy: createdBy,
                     createdAt: value.groupCreationDate,
                     createdFromThreadId: groupIdsToThreadIds[value.groupId],
                     invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation
@@ -723,7 +736,7 @@ struct LocalServer : SHServerAPI {
         for (k, v) in keyValues {
             
             guard let v else {
-                invalidKeys.insert(k)
+                invalidAssetStoreKeys.insert(k)
                 continue
             }
             
@@ -747,11 +760,11 @@ struct LocalServer : SHServerAPI {
         ///
         /// Remove keys that couldn't be deserialized
         ///
-        if invalidKeys.isEmpty == false {
+        if invalidAssetStoreKeys.isEmpty == false {
             do {
-                let _ = try assetStore.removeValues(for: Array(invalidKeys))
+                let _ = try assetStore.removeValues(for: Array(invalidAssetStoreKeys))
             } catch {
-                log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
+                log.error("failed to remove invalid keys \(invalidAssetStoreKeys) from DB. \(error.localizedDescription)")
             }
         }
         
@@ -773,7 +786,7 @@ struct LocalServer : SHServerAPI {
             }
             
             if Set(sharedWithUsersInGroup.values).count > groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
-                log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.name, $0.value.createdAt) }))")
+                log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.createdAt) }))")
             }
             
             if groupInfoById.isEmpty {
@@ -855,6 +868,73 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(descriptors))
     }
     
+    func getEncryptedTitles(
+        for groupIds: [String]? = nil
+    ) throws -> [String: String] {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            throw KBError.databaseNotReady
+        }
+        
+        let encryptedTitles: [String: String]
+        
+        var condition = KBGenericCondition(
+            .beginsWith, value: "\(SHInteractionAnchor.group.rawValue)::"
+        )
+        
+        if groupIds == nil {
+            condition = condition.and(KBGenericCondition(
+                .endsWith, value: "::encryptedTitle"
+            ))
+        } else {
+            var groupCondition = KBGenericCondition(value: false)
+            for groupId in groupIds! {
+                groupCondition = groupCondition.or(KBGenericCondition(
+                    .endsWith, value: "::\(groupId)::encryptedTitle"
+                ))
+            }
+            condition = condition.and(groupCondition)
+        }
+        
+        encryptedTitles = try userStore.dictionaryRepresentation(
+            forKeysMatching: condition
+        ).reduce([String: String]()) { (partialResult, tuple) in
+            let (key, value) = tuple
+            let components = key.components(separatedBy: "::")
+            guard components.count == 3 else {
+                log.warning("invalid encryptedTitle key: \(key)")
+                return partialResult
+            }
+            let groupId = components[1]
+
+            guard let encryptedTitle = value as? String else {
+                log.warning("invalid encryptedTitle value: \(key) -> \(String(describing: value))")
+                return partialResult
+            }
+            
+            var result = partialResult
+            result[groupId] = encryptedTitle
+            return result
+        }
+        
+        return encryptedTitles
+    }
+    
+    func setGroupTitle(
+        encryptedTitle: String,
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        userStore.set(
+            value: encryptedTitle,
+            for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedTitle",
+            completionHandler: completionHandler
+        )
+    }
+    
     func updateGroupIds(_ groupInfoById: [String: GroupInfoDiff],
                         completionHandler: @escaping (Result<Void, Error>) -> Void) {
         
@@ -872,9 +952,10 @@ struct LocalServer : SHServerAPI {
         /// Update the USER STORE
         /// - invitations
         /// - remove invalid keys
+        /// - update group titles
         ///
         
-        let invitationsWriteBatch = userStore.writeBatch()
+        let userStoreWriteBatch = userStore.writeBatch()
         var userStoreInvalidKeys = Set<String>()
         
         do {
@@ -905,13 +986,22 @@ struct LocalServer : SHServerAPI {
                         }),
                         requiringSecureCoding: true
                     )
-                    invitationsWriteBatch.set(value: data, for: key)
+                    userStoreWriteBatch.set(value: data, for: key)
                 } else {
-                    invitationsWriteBatch.set(value: nil, for: key)
+                    userStoreWriteBatch.set(value: nil, for: key)
                 }
             }
         } catch {
             log.error("failed to update group invitations from remote to local server. \(error.localizedDescription)")
+        }
+        
+        for (groupId, diff) in groupInfoById {
+            if let encryptedTitle = diff.groupInfo.encryptedTitle {
+                userStoreWriteBatch.set(
+                    value: encryptedTitle,
+                    for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedTitle"
+                )
+            }
         }
         
         if userStoreInvalidKeys.isEmpty == false {
@@ -923,7 +1013,7 @@ struct LocalServer : SHServerAPI {
         }
         
         do {
-            try invitationsWriteBatch.write()
+            try userStoreWriteBatch.write()
         } catch {
             log.error("failed to update invitations remote to local server. \(error.localizedDescription)")
         }
@@ -965,7 +1055,6 @@ struct LocalServer : SHServerAPI {
                                         
                     let updatedValue = DBSecureSerializableAssetRecipientSharingDetails(
                         groupId: versionDetails.groupId,
-                        groupName: update.name ?? versionDetails.groupName,
                         groupCreationDate: update.createdAt ?? versionDetails.groupCreationDate,
                         quality: versionDetails.quality,
                         senderEncryptedSecret: versionDetails.senderEncryptedSecret,
@@ -1298,7 +1387,8 @@ struct LocalServer : SHServerAPI {
                     sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
                     groupInfoById: [
                         groupId: SHGenericAssetGroupInfo(
-                            name: nil,
+                            encryptedTitle: nil,
+                            createdBy: self.requestor.identifier,
                             createdAt: Date(),
                             createdFromThreadId: nil,
                             invitedUsersPhoneNumbers: nil
@@ -1521,7 +1611,6 @@ struct LocalServer : SHServerAPI {
                 
                 let value = DBSecureSerializableAssetRecipientSharingDetails(
                     groupId: senderUploadGroupId,
-                    groupName: senderGroupIdInfo?.name,
                     groupCreationDate: senderGroupIdInfo?.createdAt,
                     quality: encryptedVersion.quality,
                     senderEncryptedSecret: encryptedVersion.encryptedSecret,
@@ -1562,7 +1651,6 @@ struct LocalServer : SHServerAPI {
                     
                     let value = DBSecureSerializableAssetRecipientSharingDetails(
                         groupId: recipientGroupId,
-                        groupName: recipientGroupInfo?.name,
                         groupCreationDate: recipientGroupInfo?.createdAt,
                         quality: encryptedVersion.quality,
                         senderEncryptedSecret: nil,
@@ -1684,7 +1772,6 @@ struct LocalServer : SHServerAPI {
                     
                     let value = DBSecureSerializableAssetRecipientSharingDetails(
                         groupId: groupId,
-                        groupName: groupInfo.name,
                         groupCreationDate: groupInfo.createdAt,
                         quality: version,
                         senderEncryptedSecret: nil,
@@ -1866,7 +1953,6 @@ struct LocalServer : SHServerAPI {
             
             let value = DBSecureSerializableAssetRecipientSharingDetails(
                 groupId: asset.groupId,
-                groupName: nil,
                 groupCreationDate: Date(),
                 quality: sharedVersion.quality,
                 senderEncryptedSecret: nil,
@@ -2397,8 +2483,47 @@ struct LocalServer : SHServerAPI {
         completionHandler(.success(filteredList))
     }
     
-    func setGroupEncryptionDetails(
+    func retrieveGroupDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDetailsResponseDTO?, Error>) -> Void
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+    
+        do {
+            let encryptedTitle = try userStore.value(
+                for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedTitle"
+            )
+            
+            self.retrieveUserEncryptionDetails(
+                anchorType: .group,
+                anchorId: groupId
+            ) {
+                result in
+                switch result {
+                case .success(let details):
+                    if let details {
+                        completionHandler(.success(InteractionsGroupDetailsResponseDTO(
+                            encryptedTitle: encryptedTitle as? String,
+                            encryptionDetails: details
+                        )))
+                    } else {
+                        completionHandler(.success(nil))
+                    }
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            }
+        } catch {
+            completionHandler(.failure(error))
+        }
+    }
+    
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
@@ -2419,6 +2544,7 @@ struct LocalServer : SHServerAPI {
         writeBatch.set(value: selfEncryptionDetails.ephemeralPublicKey, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::ephemeralPublicKey")
         writeBatch.set(value: selfEncryptionDetails.secretPublicSignature, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::secretPublicSignature")
         writeBatch.set(value: selfEncryptionDetails.senderPublicSignature, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::senderPublicSignature")
+        writeBatch.set(value: encryptedTitle, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedTitle")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -3115,18 +3241,25 @@ struct LocalServer : SHServerAPI {
         dispatchGroup.notify(queue: .global()) {
             var groupSummaryById = [String: InteractionsGroupSummaryDTO]()
             
-            for groupId in allGroupIds {
-                let groupSummary = InteractionsGroupSummaryDTO(
-                    numComments: numCommentsByGroupId[groupId] ?? 0,
-                    firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
-                    reactions: reactionsByGroupId[groupId] ?? [],
-                    invitedUsersPhoneNumbers: invitationsByGroupId[groupId] ?? [:]
-                )
+            do {
+                let groupEncryptedTitles = try self.getEncryptedTitles(for: Array(allGroupIds))
                 
-                groupSummaryById[groupId] = groupSummary
+                for groupId in allGroupIds {
+                    let groupSummary = InteractionsGroupSummaryDTO(
+                        numComments: numCommentsByGroupId[groupId] ?? 0,
+                        encryptedTitle: groupEncryptedTitles[groupId],
+                        reactions: reactionsByGroupId[groupId] ?? [],
+                        invitedUsersPhoneNumbers: invitationsByGroupId[groupId] ?? [:]
+                    )
+                    
+                    groupSummaryById[groupId] = groupSummary
+                }
+                
+                completionHandler(.success(groupSummaryById))
+            } catch {
+                log.critical("failed to retrieve encrypted titles for \(allGroupIds). \(error.localizedDescription)")
+                completionHandler(.failure(error))
             }
-            
-            completionHandler(.success(groupSummaryById))
         }
     }
     
@@ -3199,13 +3332,20 @@ struct LocalServer : SHServerAPI {
                         invitedPhoneNumbers = [:]
                     }
                     
-                    let response = InteractionsGroupSummaryDTO(
-                        numComments: numMessages,
-                        firstEncryptedMessage: nil, // TODO: Retrieve earliest message for each group easily
-                        reactions: reactions,
-                        invitedUsersPhoneNumbers: invitedPhoneNumbers
-                    )
-                    completionHandler(.success(response))
+                    do {
+                        let encryptedTitle = try self.getEncryptedTitles(for: [groupId])[groupId]
+                        
+                        let response = InteractionsGroupSummaryDTO(
+                            numComments: numMessages,
+                            encryptedTitle: encryptedTitle,
+                            reactions: reactions,
+                            invitedUsersPhoneNumbers: invitedPhoneNumbers
+                        )
+                        completionHandler(.success(response))
+                    } catch {
+                        log.critical("failed to retrieve encrypted titles for \(groupId). \(error.localizedDescription)")
+                        completionHandler(.failure(error))
+                    }
                 }
             }
         }

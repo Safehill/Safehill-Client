@@ -1062,12 +1062,13 @@ struct RemoteServer : SHServerAPI {
                   completionHandler: completionHandler)
     }
     
-    func setGroupEncryptionDetails(
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        let parameters = [
+        var parameters = [
             "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
                 return [
                     "encryptedSecret": encryptionDetails.encryptedSecret,
@@ -1076,9 +1077,11 @@ struct RemoteServer : SHServerAPI {
                     "senderPublicSignature": encryptionDetails.senderPublicSignature,
                     "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
                 ]
-            }),
-            "overwrite": false
+            })
         ] as [String: Any]
+        if let encryptedTitle {
+            parameters["encryptedTitle"] = encryptedTitle
+        }
         
         self.post("groups/setup/\(groupId)", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
@@ -1100,6 +1103,27 @@ struct RemoteServer : SHServerAPI {
                 completionHandler(.success(()))
             case .failure(let err):
                 completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func retrieveGroupDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDetailsResponseDTO?, Error>) -> ()
+    ) {
+        self.post("groups/retrieve-details/\(groupId)", parameters: nil, requiresAuthentication: true) { (result: Result<InteractionsGroupDetailsResponseDTO, Error>) in
+            switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let groupDetails):
+                completionHandler(.success(groupDetails))
             }
         }
     }

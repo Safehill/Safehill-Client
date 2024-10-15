@@ -83,23 +83,66 @@ extension SHRemoteDownloadOperation {
                 
             case .success(let usersDict):
                 
-                let (
-                    groupIdToUploadItems,
-                    groupIdToShareItems
-                ) = self.historyItems(
-                    from: Array(descriptorsByGlobalIdentifier.values),
-                    usersDict: usersDict
-                )
-
-                let restorationDelegate = self.restorationDelegate
-                self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
-                    restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
+                Task {
+                    let (
+                        groupIdToUploadItems,
+                        groupIdToShareItems
+                    ) = await self.historyItems(
+                        from: Array(descriptorsByGlobalIdentifier.values),
+                        usersDict: usersDict
+                    )
+                    
+                    let restorationDelegate = self.restorationDelegate
+                    self.delegatesQueue.async {
+                        restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
+                        restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
+                    }
+                    
+                    completionHandler(.success(()))
                 }
-                
-                completionHandler(.success(()))
             }
         }
+    }
+    
+    /// Returns nil if the encrypted title is nil
+    /// Throws if the decryption fails or some required details are missing
+    /// - Parameters:
+    ///   - groupInfo: the GroupInfo in the descriptor
+    ///   - groupId: the group id
+    /// - Returns: 
+    private func decryptTitle(
+        groupInfo: any SHAssetGroupInfo,
+        groupId: String
+    ) async throws -> String? {
+        if let encryptedTitle = groupInfo.encryptedTitle,
+           let groupCreatorPublicId = groupInfo.createdBy
+        {
+            let usersController = SHUsersController(localUser: self.user)
+            let interactionsController = SHUserInteractionController(user: self.user)
+            
+            let messageToDecrypt = MessageOutputDTO(
+                interactionId: "",
+                senderPublicIdentifier: groupCreatorPublicId,
+                inReplyToAssetGlobalIdentifier: nil,
+                inReplyToInteractionId: nil,
+                encryptedMessage: encryptedTitle,
+                createdAt: Date().iso8601withFractionalSeconds
+            )
+            
+            let clearTitle = try await interactionsController.decryptMessages(
+                [messageToDecrypt],
+                in: .group,
+                anchorId: groupId
+            ).first?.message
+            
+            guard let clearTitle else {
+                throw SHBackgroundOperationError.fatalError("failed to decrypt title is null")
+            }
+            
+            return clearTitle
+        }
+        
+        return nil
     }
     
     /// For each descriptor (there's one per asset), create in-memory representation of:
@@ -116,7 +159,7 @@ extension SHRemoteDownloadOperation {
     internal func historyItems(
         from descriptors: [any SHAssetDescriptor],
         usersDict: [UserIdentifier: any SHServerUser]
-    ) -> (
+    ) async -> (
         [String: [(SHUploadHistoryItem, Date)]],
         [String: [(SHShareHistoryItem, Date)]]
     ) {
@@ -145,6 +188,14 @@ extension SHRemoteDownloadOperation {
                 }
                 
                 if recipientUserId == self.user.identifier {
+                    let clearTitle: String?
+                    do {
+                        clearTitle = try await self.decryptTitle(groupInfo: groupInfo, groupId: groupId)
+                    } catch {
+                        self.log.critical("Unable to decrypt title for groupId=\(groupId): \(error.localizedDescription)")
+                        continue
+                    }
+                    
                     let item = SHUploadHistoryItem(
                         asset: SHUploadableAsset(
                             localIdentifier: descriptor.localIdentifier,
@@ -154,6 +205,7 @@ extension SHRemoteDownloadOperation {
                         ),
                         versions: [.lowResolution, .hiResolution],
                         groupId: groupId,
+                        groupTitle: clearTitle,
                         eventOriginator: senderUser,
                         sharedWith: [],
                         invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
@@ -184,6 +236,19 @@ extension SHRemoteDownloadOperation {
             }
             
             for (groupId, shareInfo) in otherUserIdsSharedWithByGroupId {
+                guard let groupInfo = descriptor.sharingInfo.groupInfoById[groupId] else {
+                    self.log.critical("[\(type(of: self))] no group info in descriptor for id \(groupId)")
+                    continue
+                }
+                
+                let clearTitle: String?
+                do {
+                    clearTitle = try await self.decryptTitle(groupInfo: groupInfo, groupId: groupId)
+                } catch {
+                    self.log.critical("Unable to decrypt title for groupId=\(groupId): \(error.localizedDescription)")
+                    continue
+                }
+                
                 let item = SHShareHistoryItem(
                     asset: SHUploadableAsset(
                         localIdentifier: descriptor.localIdentifier,
@@ -193,6 +258,7 @@ extension SHRemoteDownloadOperation {
                     ),
                     versions: [.lowResolution, .hiResolution],
                     groupId: groupId,
+                    groupTitle: clearTitle,
                     eventOriginator: senderUser,
                     sharedWith: shareInfo.map({ $0.with }),
                     invitedUsers: Array((descriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers ?? [:]).keys),
