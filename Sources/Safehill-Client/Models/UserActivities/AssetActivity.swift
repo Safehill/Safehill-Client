@@ -7,18 +7,6 @@ public protocol AssetActivity: Hashable, Equatable, Identifiable {
     var eventOriginator: any SHServerUser { get }
     var shareInfo: [(with: any SHServerUser, at: Date)] { get }
     var invitationsInfo: [(with: String, at: Date)] { get }
-    
-    /// Returns an copy of the activity with the assets removed.
-    /// Use this method to keep assets in the activity immutable.
-    /// - Parameter ids: the asset ids to remove
-    /// - Returns: `nil` if no assets remain, the new activity otherwise
-    func withAssetsRemoved(ids: [GlobalIdentifier]) -> (any AssetActivity)?
-    
-    /// Returns an copy of the activity with the invited phone numbers removed.
-    /// Use this method to keep assets in the activity immutable.
-    /// - Parameter phoneNumbers: the asset ids to remove
-    /// - Returns: `nil` if no assets remain, the new activity otherwise
-    func withPhoneNumbersRemoved(_ phoneNumbers: [String]) -> any AssetActivity
 }
 
 
