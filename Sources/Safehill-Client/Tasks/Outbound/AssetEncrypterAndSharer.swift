@@ -13,84 +13,52 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         Logger(subsystem: "com.gf.safehill", category: "BG-SHARE")
     }
     
-    public override func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
-        guard let data = item.content as? Data else {
-            throw KBError.unexpectedData(item.content)
-        }
-        
-        let unarchiver: NSKeyedUnarchiver
-        if #available(macOS 10.13, *) {
-            unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
-        } else {
-            unarchiver = NSKeyedUnarchiver(forReadingWith: data)
-        }
-        
-        guard let uploadRequest = unarchiver.decodeObject(of: SHEncryptionForSharingRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey) else {
-            throw KBError.unexpectedData(item)
-        }
-        
-        return uploadRequest
+    internal var interactionsController: SHUserInteractionController {
+        SHUserInteractionController(user: self.user)
     }
     
     public override func markAsFailed(
-        item: KBQueueItem,
+        queueItem: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: GlobalIdentifier?,
         error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         do {
             try self.markAsFailed(
+                queueItem: queueItem,
                 encryptionRequest: request,
-                queueItem: item,
                 error: error
             )
             completionHandler(.success(()))
         } catch {
             completionHandler(.failure(error))
         }
-        
     }
     
     public func markAsFailed(
-        encryptionRequest request: SHEncryptionRequestQueueItem,
         queueItem: KBQueueItem,
+        encryptionRequest request: SHEncryptionRequestQueueItem,
         error: Error
     ) throws {
-        let localIdentifier = request.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
-        let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let invitedUsers = request.invitedUsers
-        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
-            log.error("asset \(localIdentifier) failed to share but dequeueing from SHARE queue failed. Sharing will be attempted again")
+            log.error("asset \(globalIdentifier) failed to share but dequeueing from SHARE queue failed. Sharing will be attempted again")
             throw error
         }
         
         /// Enquque to failed
-        log.info("enqueueing share request for asset \(localIdentifier) versions \(versions) in the FAILED queue")
-        
-        let failedShare = SHFailedShareRequestQueueItem(
-            localIdentifier: localIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: users,
-            invitedUsers: invitedUsers,
-            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-            isBackground: request.isBackground
-        )
-
+        log.info("enqueueing share request for asset \(globalIdentifier) versions \(versions) in the FAILED queue")
         do {
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
-            try failedShare.enqueue(in: failedShareQueue)
+            try request.enqueue(in: failedShareQueue, with: request.identifier)
         }
         catch {
-            log.fault("asset \(localIdentifier) failed to share but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
+            log.fault("asset \(globalIdentifier) failed to share but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
             throw error
         }
         
@@ -105,7 +73,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
                     delegate.didFailSharing(
-                        ofAsset: localIdentifier,
+                        ofAsset: globalIdentifier,
                         with: users,
                         in: groupId,
                         error: error
@@ -116,29 +84,29 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
     }
     
     public override func markAsSuccessful(
-        item: KBQueueItem,
+        queueItem: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
         globalIdentifier: GlobalIdentifier
     ) throws {
-        let localIdentifier = request.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let groupId = request.groupId
         
         /// Dequeque from ShareQueue
-        log.info("dequeueing request for asset \(localIdentifier) from the SHARE queue")
+        log.info("dequeueing request for asset \(globalIdentifier) from the SHARE queue")
         
-        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
+        do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
-            log.warning("asset \(localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
+            log.warning("asset \(globalIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
         }
         
         do {
-            log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(localIdentifier)")
+            log.info("SHARING succeeded. Enqueueing sharing upload request in the SUCCESS queue (upload history) for asset \(globalIdentifier)")
             let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
             /// Remove items in the `FailedShareQueue` for the same identifier
-            let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: item.identifier))
+            let _ = try failedShareQueue.removeValues(forKeysMatching: KBGenericCondition(.equal, value: queueItem.identifier))
         }
         catch {
-            log.fault("asset \(localIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
+            log.fault("asset \(globalIdentifier) was shared but will never be recorded as shared because enqueueing to SUCCESS queue failed")
             throw error
         }
         
@@ -152,7 +120,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didCompleteSharing(ofAsset: localIdentifier, with: request.sharedWith, in: groupId)
+                    delegate.didCompleteSharing(ofAsset: globalIdentifier, with: request.sharedWith, in: groupId)
                 }
             }
         }
@@ -233,7 +201,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             let handleSuccess = {
                 do {
                     try self.markAsSuccessful(
-                        item: item,
+                        queueItem: item,
                         encryptionRequest: shareRequest,
                         globalIdentifier: shareableEncryptedAsset.globalIdentifier
                     )
@@ -262,6 +230,20 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                             handleSuccess()
                             
                         case .failure(let error):
+                            let assetsDelegates = self.assetsDelegates
+                            self.delegatesQueue.async {
+                                /// Notify the delegates
+                                for delegate in assetsDelegates {
+                                    if let delegate = delegate as? SHAssetSharerDelegate {
+                                        delegate.didFailInviting(
+                                            phoneNumbers: shareRequest.invitedUsers,
+                                            to: shareRequest.groupId,
+                                            error: error
+                                        )
+                                    }
+                                }
+                            }
+                            
                             completionHandler(.failure(error))
                         }
                     }
@@ -302,8 +284,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             self.log.critical("Error in SHARE asset: \(error.localizedDescription)")
             do {
                 try self.markAsFailed(
-                    encryptionRequest: shareRequest,
                     queueItem: item,
+                    encryptionRequest: shareRequest,
                     error: error
                 )
             } catch {
@@ -314,14 +296,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         }
         
         let globalIdentifier = shareRequest.asset.globalIdentifier
-        guard let globalIdentifier else {
-            ///
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
-            return
-        }
         
         guard shareRequest.isSharingWithOrInvitingOtherUsers else {
             handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers or invited phone numbers"))
@@ -342,10 +316,8 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             let dequeue = {
                 do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
                 catch {
-                    self.log.warning("asset \(shareRequest.asset.phAsset.localIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
+                    self.log.warning("asset \(shareRequest.asset.globalIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
                 }
-                
-                completionHandler(.success(()))
             }
             
             if shareRequest.isBackground == false {
@@ -369,7 +341,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             self.delegatesQueue.async {
                 for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(ofAsset: shareRequest.localIdentifier,
+                        delegate.didStartSharing(ofAsset: shareRequest.asset.globalIdentifier,
                                                  with: shareRequest.sharedWith,
                                                  in: shareRequest.groupId)
                     }

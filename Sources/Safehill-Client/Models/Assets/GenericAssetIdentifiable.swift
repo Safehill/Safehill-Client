@@ -1,8 +1,8 @@
 import Foundation
 
 public protocol GenericAssetIdentifiable: Hashable {
-    var localIdentifier: String? { get }
-    var globalIdentifier: String? { get }
+    var localIdentifier: LocalIdentifier? { get }
+    var globalIdentifier: GlobalIdentifier? { get }
 }
 
 public extension GenericAssetIdentifiable {

@@ -7,8 +7,7 @@ import KnowledgeBase
 public struct BackgroundOperationQueue {
     
     public enum OperationType: CaseIterable {
-        case fetch, // fetching asset from Photos library
-             encryption, // encrypting assets
+        case encryption, // encrypting assets
              upload, // uploading encrypted assets to server and CDN
              share, // share assets with other users
              failedUpload, // failed upload history
@@ -16,8 +15,6 @@ public struct BackgroundOperationQueue {
         
         var identifier: String {
             switch self {
-            case .fetch:
-                return "com.gf.safehill.PhotoAssetFetchQueue"
             case .encryption:
                 return "com.gf.safehill.PhotoAssetEncryptionQueue"
             case .upload:
@@ -43,12 +40,11 @@ public struct BackgroundOperationQueue {
 ///
 /// Queue item reservations
 ///
-enum ProcessingState { case fetching, encrypting, uploading, sharing }
+enum ProcessingState { case encrypting, uploading, sharing }
 
 private let ProcessingStateUpdateQueue = DispatchQueue(label: "com.gf.safehill.ProcessingStateUpdateQueue", attributes: .concurrent)
 
 private var ItemIdentifiersInProcessByState: [ProcessingState: Set<String>] = [
-    .fetching: Set<String>(),
     .encrypting: Set<String>(),
     .uploading: Set<String>(),
     .sharing: Set<String>(),

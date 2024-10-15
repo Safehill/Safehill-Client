@@ -15,8 +15,8 @@ public enum SHAssetQuality: String {
     }
     
     public static func forSize(_ size: CGSize?) -> SHAssetQuality {
-        let maxLowSize = kSHSizeForQuality(quality: .lowResolution)
-        let maxMidSize = kSHSizeForQuality(quality: .midResolution)
+        let maxLowSize = SHSizeForQuality(quality: .lowResolution)
+        let maxMidSize = SHSizeForQuality(quality: .midResolution)
         
         let requestedQuality: SHAssetQuality
         

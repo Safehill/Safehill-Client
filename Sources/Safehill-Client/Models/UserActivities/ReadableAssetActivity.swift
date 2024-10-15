@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol ReadableAssetActivity: Hashable, Equatable, Identifiable {
-    var assetIds: [String] { get }
+    var assetIds: [GlobalIdentifier] { get }
     var groupId: String { get }
     var eventOriginator: any SHServerUser { get }
     var shareInfo: [(with: any SHServerUser, at: Date)] { get }

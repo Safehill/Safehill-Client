@@ -11,7 +11,7 @@ let kSHFullResPictureSize: CGSize? = nil
 // TODO: This should change to `kSHFullResPictureSize` for premium accounts
 let kSHMaxPictureSize = (quality: SHAssetQuality.hiResolution, size: kSHHiResPictureSize)
 
-func kSHSizeForQuality(quality: SHAssetQuality) -> CGSize {
+public func SHSizeForQuality(quality: SHAssetQuality) -> CGSize {
     switch quality {
     case .lowResolution:
         return LowResPictureSize
@@ -36,7 +36,7 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
     case unexpectedData(Any?)
     case fatalError(String)
     case timedOut
-    case globalIdentifierDisagreement(String)
+    case globalIdentifierDisagreement(GlobalIdentifier, GlobalIdentifier)
     case missingAssetInLocalServer(String)
     case missingUnauthorizedDownloadIndexForUserId(String)
     case missingE2EEDetailsForGroup(String)

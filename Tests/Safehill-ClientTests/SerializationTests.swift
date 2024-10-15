@@ -124,26 +124,32 @@ final class Safehill_SerializationTests: XCTestCase {
     
     func testSerializeFetchRequest() throws {
         let sender = SHLocalUser.create(keychainPrefix: "com.gf.safehill.client.testUser")
+        
+        let asset1 = SHUploadableAsset(
+            localIdentifier: "localIdentifier",
+            globalIdentifier: "globalIdentifier",
+            creationDate: nil,
+            data: [:]
+        )
+        
         let queueItems = [
-            SHLocalFetchRequestQueueItem(
-                localIdentifier: "localIdentifier",
-                globalIdentifier: "globalIdentifier",
+            SHGenericShareableGroupableQueueItem(
+                asset: asset1,
                 versions: [.lowResolution, .hiResolution],
                 groupId: "groupId",
                 eventOriginator: sender,
                 sharedWith: [],
                 invitedUsers: [],
-                shouldUpload: true,
-                asPhotoMessageInThreadId: nil
+                asPhotoMessageInThreadId: nil,
+                isBackground: false
             ),
-            SHLocalFetchRequestQueueItem(
-                localIdentifier: "localIdentifier",
-                globalIdentifier: nil,
+            SHGenericShareableGroupableQueueItem(
+                asset: asset1,
+                versions: [.hiResolution],
                 groupId: "groupId",
                 eventOriginator: sender,
                 sharedWith: [sender],
                 invitedUsers: ["phoneNumber1", "phoneNumber2"],
-                shouldUpload: false,
                 asPhotoMessageInThreadId: "threadId",
                 isBackground: true
             ),
@@ -153,14 +159,14 @@ final class Safehill_SerializationTests: XCTestCase {
             let data = try NSKeyedArchiver.archivedData(withRootObject: queueItem, requiringSecureCoding: true)
             
             let unarchiver: NSKeyedUnarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
-            let deserialized = unarchiver.decodeObject(of: SHLocalFetchRequestQueueItem.self, forKey: NSKeyedArchiveRootObjectKey)
+            let deserialized = unarchiver.decodeObject(of: SHGenericShareableGroupableQueueItem.self, forKey: NSKeyedArchiveRootObjectKey)
             
             guard let deserialized = deserialized else {
                 XCTFail()
                 return
             }
-            XCTAssertEqual(queueItem.localIdentifier, deserialized.localIdentifier)
-            XCTAssertEqual(queueItem.globalIdentifier, deserialized.globalIdentifier)
+            XCTAssertEqual(queueItem.asset.localIdentifier, deserialized.asset.localIdentifier)
+            XCTAssertEqual(queueItem.asset.globalIdentifier, deserialized.asset.globalIdentifier)
             XCTAssertEqual(queueItem.groupId, deserialized.groupId)
             XCTAssert(queueItem.versions.count == deserialized.versions.count)
             XCTAssert(queueItem.versions.sorted(by: { $0.rawValue >= $1.rawValue }).elementsEqual(deserialized.versions.sorted(by: { $0.rawValue >= $1.rawValue })))
@@ -168,7 +174,6 @@ final class Safehill_SerializationTests: XCTestCase {
             XCTAssert(queueItem.sharedWith.count == deserialized.sharedWith.count)
             XCTAssert(queueItem.sharedWith.map({$0.identifier}).sorted().elementsEqual(deserialized.sharedWith.map({$0.identifier}).sorted()))
             XCTAssertEqual(Set(queueItem.invitedUsers), Set(deserialized.invitedUsers))
-            XCTAssertEqual(queueItem.shouldUpload, deserialized.shouldUpload)
             XCTAssertEqual(queueItem.asPhotoMessageInThreadId, deserialized.asPhotoMessageInThreadId)
             XCTAssertEqual(queueItem.isBackground, deserialized.isBackground)
         }

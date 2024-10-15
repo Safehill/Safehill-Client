@@ -125,16 +125,12 @@ extension SHRemoteDownloadOperation {
         
         for descriptor in descriptors {
             
-            guard let localIdentifier = descriptor.localIdentifier else {
-                continue
-            }
-            
             guard let senderUser = usersDict[descriptor.sharingInfo.sharedByUserIdentifier] else {
                 self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(descriptor.sharingInfo.sharedByUserIdentifier)")
                 continue
             }
             
-            var otherUserIdsSharedWith = [String: [(with: any SHServerUser, at: Date)]]()
+            var otherUserIdsSharedWithByGroupId = [String: [(with: any SHServerUser, at: Date)]]()
             
             for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
                 
@@ -150,8 +146,12 @@ extension SHRemoteDownloadOperation {
                 
                 if recipientUserId == self.user.identifier {
                     let item = SHUploadHistoryItem(
-                        localAssetId: localIdentifier,
-                        globalAssetId: descriptor.globalIdentifier,
+                        asset: SHUploadableAsset(
+                            localIdentifier: descriptor.localIdentifier,
+                            globalIdentifier: descriptor.globalIdentifier,
+                            creationDate: descriptor.creationDate,
+                            data: [:]
+                        ),
                         versions: [.lowResolution, .hiResolution],
                         groupId: groupId,
                         eventOriginator: senderUser,
@@ -172,10 +172,10 @@ extension SHRemoteDownloadOperation {
                         self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(recipientUserId)")
                         continue
                     }
-                    if otherUserIdsSharedWith[groupId] == nil {
-                        otherUserIdsSharedWith[groupId] = [(with: recipient, at: groupCreationDate)]
+                    if otherUserIdsSharedWithByGroupId[groupId] == nil {
+                        otherUserIdsSharedWithByGroupId[groupId] = [(with: recipient, at: groupCreationDate)]
                     } else {
-                        otherUserIdsSharedWith[groupId]?.append(
+                        otherUserIdsSharedWithByGroupId[groupId]?.append(
                             missingContentsFrom: [(with: recipient, at: groupCreationDate)],
                             compareUsing: { $0.with.identifier == $1.with.identifier }
                         )
@@ -183,10 +183,14 @@ extension SHRemoteDownloadOperation {
                 }
             }
             
-            for (groupId, shareInfo) in otherUserIdsSharedWith {
+            for (groupId, shareInfo) in otherUserIdsSharedWithByGroupId {
                 let item = SHShareHistoryItem(
-                    localAssetId: localIdentifier,
-                    globalAssetId: descriptor.globalIdentifier,
+                    asset: SHUploadableAsset(
+                        localIdentifier: descriptor.localIdentifier,
+                        globalIdentifier: descriptor.globalIdentifier,
+                        creationDate: descriptor.creationDate,
+                        data: [:]
+                    ),
                     versions: [.lowResolution, .hiResolution],
                     groupId: groupId,
                     eventOriginator: senderUser,

@@ -11,26 +11,6 @@ import AppKit
 #endif
 
 
-extension SHApplePhotoAsset {
-    func data(for versions: [SHAssetQuality]) async throws -> [SHAssetQuality: Data] {
-        var dict = [SHAssetQuality: Data]()
-        
-        for version in versions {
-            let size = kSHSizeForQuality(quality: version)
-            dict[version] = try await self.phAsset.dataSynchronous(
-                forSize: size,
-                usingImageManager: self.imageManager,
-                deliveryMode: .highQualityFormat,
-                resizeMode: .exact
-            )
-            
-            log.debug("[file-size] \(version.rawValue): data size \(dict[version]?.count ?? 0)")
-        }
-
-        return dict
-    }
-}
-
 internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperationProtocol, SHOutboundBackgroundOperation, SHUploadStepBackgroundOperation, @unchecked Sendable {
     typealias OperationResult = Result<Void, Error>
     
@@ -47,65 +27,39 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.encrypt.delegates")
     
-    internal var interactionsController: SHUserInteractionController {
-        SHUserInteractionController(user: self.user)
-    }
-    
-    var imageManager: PHCachingImageManager
-    
     public init(user: SHAuthenticatedLocalUser,
                 assetsDelegates: [SHOutboundAssetOperationDelegate],
-                limitPerRun limit: Int,
-                imageManager: PHCachingImageManager? = nil) {
+                limitPerRun limit: Int) {
         self.user = user
         self.limit = limit
         self.assetsDelegates = assetsDelegates
-        self.imageManager = imageManager ?? PHCachingImageManager()
     }
     
     var serverProxy: SHServerProxy {
         self.user.serverProxy
     }
     
-    public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
-        guard let data = item.content as? Data else {
-            throw SHBackgroundOperationError.unexpectedData(item.content)
-        }
-        
-        let unarchiver: NSKeyedUnarchiver
-        if #available(macOS 10.13, *) {
-            unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
-        } else {
-            unarchiver = NSKeyedUnarchiver(forReadingWith: data)
-        }
-        
-        guard let encryptionRequest = unarchiver.decodeObject(of: SHEncryptionRequestQueueItem.self,
-                                                              forKey: NSKeyedArchiveRootObjectKey)
-        else {
-            throw SHBackgroundOperationError.unexpectedData(data)
-        }
-        
-        return encryptionRequest
-    }
-    
     private func encrypt(
-        asset: SHApplePhotoAsset,
-        with globalIdentifier: String,
+        asset: SHUploadableAsset,
+        versions: [SHAssetQuality],
         for recipients: [SHServerUser],
-        usingSecret privateSecret: Data,
-        payloads: [SHAssetQuality: Data]) throws -> any SHEncryptedAsset
-    {
-        log.info("encrypting asset \(globalIdentifier) versions to be shared with users \(recipients.map { $0.identifier }) using symmetric key \(privateSecret.base64EncodedString(), privacy: .private(mask: .hash))")
+        usingSecret privateSecret: Data
+    ) throws -> any SHEncryptedAsset {
+        
+        log.info("encrypting asset \(asset.globalIdentifier) versions to be shared with users \(recipients.map { $0.identifier }) using symmetric key \(privateSecret.base64EncodedString(), privacy: .private(mask: .hash))")
         
         ///
         /// Encrypt all asset versions with a new symmetric keys generated at encryption time
         ///
         let privateSecret = try SymmetricKey(rawRepresentation: privateSecret)
-        let encryptedPayloads = try payloads.mapValues {
-            try SHEncryptedData(privateSecret: privateSecret, clearData: $0)
+        let encryptedPayloads = try versions.map {
+            guard let data = asset.data[$0] else {
+                throw SHBackgroundOperationError.unexpectedData(asset.data)
+            }
+            return try SHEncryptedData(privateSecret: privateSecret, clearData: data)
         }
         
-        log.debug("encrypting asset \(globalIdentifier): generated encrypted payloads")
+        log.debug("encrypting asset \(asset.globalIdentifier): generated encrypted payloads")
         
         var encryptedVersions = [SHAssetQuality: SHEncryptedAssetVersion]()
         
@@ -119,10 +73,10 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 toShareWith: recipient
             )
             
-            for quality in payloads.keys {
+            for (idx, quality) in versions.enumerated() {
                 encryptedVersions[quality] = SHGenericEncryptedAssetVersion(
                     quality: quality,
-                    encryptedData: encryptedPayloads[quality]!.encryptedData,
+                    encryptedData: encryptedPayloads[idx].encryptedData,
                     encryptedSecret: encryptedAssetSecret.cyphertext,
                     publicKeyData: encryptedAssetSecret.ephemeralPublicKeyData,
                     publicSignatureData: encryptedAssetSecret.signature
@@ -131,9 +85,9 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         }
         
         return SHGenericEncryptedAsset(
-            globalIdentifier: globalIdentifier,
-            localIdentifier: asset.phAsset.localIdentifier,
-            creationDate: asset.phAsset.creationDate,
+            globalIdentifier: asset.globalIdentifier,
+            localIdentifier: asset.localIdentifier,
+            creationDate: asset.creationDate,
             encryptedVersions: encryptedVersions
         )
     }
@@ -141,46 +95,29 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
     /// Encrypt the asset for the reciepients. This method is called by both the SHEncryptionOperation and the SHEncryptAndShareOperation. In the first case, the recipient will be the user (for backup), in the second it's the list of users to share the assets with
     /// - Parameters:
     ///   - asset: the asset to encrypt
+    ///   - versions: the versions to encrypt
+    ///   - privateSecret: the secret to use for the encryption
     ///   - recipients: the list of recipients (using their public key for encryption)
-    ///   - item: the queue item
-    ///   - request: the corresponding request
     /// - Returns: the encrypted asset
     func generateEncryptedAsset(
-        for asset: SHApplePhotoAsset,
-        with globalIdentifier: String,
+        asset: SHUploadableAsset,
+        versions: [SHAssetQuality],
         usingPrivateSecret privateSecret: Data,
-        recipients: [SHServerUser],
-        request: SHEncryptionRequestQueueItem
+        recipients: [any SHServerUser]
     ) async throws -> any SHEncryptedAsset {
-        let versions = request.versions
-        
-        let localIdentifier = asset.phAsset.localIdentifier
-        var payloads: [SHAssetQuality: Data]
-        
-        let fetchStart = CFAbsoluteTimeGetCurrent()
-        do {
-            payloads = try await asset.data(for: versions)
-        } catch {
-            log.error("failed to retrieve data for localIdentifier \(localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
-            throw SHBackgroundOperationError.fatalError("failed to retrieve data for localIdentifier \(localIdentifier)")
-        }
-        let fetchEnd = CFAbsoluteTimeGetCurrent()
-        log.debug("[PERF] it took \(CFAbsoluteTime(fetchEnd - fetchStart)) to fetch the data to encrypt. versions=\(versions)")
-        
         let encryptedAsset: any SHEncryptedAsset
         
         let encryptStart = CFAbsoluteTimeGetCurrent()
         do {
             encryptedAsset = try self.encrypt(
                 asset: asset,
-                with: globalIdentifier,
+                versions: versions,
                 for: recipients,
-                usingSecret: privateSecret,
-                payloads: payloads
+                usingSecret: privateSecret
             )
         } catch {
-            log.error("failed to encrypt data for localIdentifier \(localIdentifier). Dequeueing item, as it's unlikely to succeed again.")
-            throw SHBackgroundOperationError.fatalError("failed to encrypt data for localIdentifier \(localIdentifier)")
+            log.error("failed to encrypt data for asset \(asset.globalIdentifier). Dequeueing item, as it's unlikely to succeed again.")
+            throw SHBackgroundOperationError.fatalError("failed to encrypt data for asset \(asset.globalIdentifier)")
         }
         let encryptEnd = CFAbsoluteTimeGetCurrent()
         log.debug("[PERF] it took \(CFAbsoluteTime(encryptEnd - encryptStart)) to encrypt the data. versions=\(versions)")
@@ -189,28 +126,24 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
     }
     
     public func markAsFailed(
-        item: KBQueueItem,
+        queueItem: KBQueueItem,
         encryptionRequest request: SHEncryptionRequestQueueItem,
-        globalIdentifier: String?,
         error: Error,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let localIdentifier = request.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
-        let eventOriginator = request.eventOriginator
         let users = request.sharedWith
-        let invitedUsers = request.invitedUsers
-        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         ///
         /// Dequeue from Encryption queue
         ///
-        log.info("dequeueing request for asset \(localIdentifier) from the ENCRYPT queue")
+        log.info("dequeueing request for asset \(globalIdentifier) from the ENCRYPT queue")
         
         do {
             let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-            _ = try encryptionQueue.dequeue(item: item)
+            _ = try encryptionQueue.dequeue(item: queueItem)
         }
         catch {
             log.warning("dequeuing failed of unexpected data in ENCRYPT queue. This task will be attempted again.")
@@ -219,119 +152,73 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         }
         
         self.markAsFailed(
-            localIdentifier: localIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: users,
-            invitedUsers: invitedUsers,
-            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-            isBackground: request.isBackground,
+            request: request,
             error: error
         )
         
-        if let globalIdentifier = globalIdentifier {
-            self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions) {
-                guard request.isBackground == false else {
-                    /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
-                    completionHandler(.success(()))
-                    return
-                }
-                
-                let assetsDelegates = self.assetsDelegates
-                self.delegatesQueue.async {
-                    /// Notify the delegates
-                    for delegate in assetsDelegates {
-                        if let delegate = delegate as? SHAssetEncrypterDelegate {
-                            delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
-                        }
-                        if users.count > 0 {
-                            if let delegate = delegate as? SHAssetSharerDelegate {
-                                delegate.didFailSharing(
-                                    ofAsset: localIdentifier,
-                                    with: users,
-                                    in: groupId,
-                                    error: error
-                                )
-                            }
-                        }
-                    }
-                }
-                
+        self.markLocalAssetAsFailed(globalIdentifier: globalIdentifier, versions: versions) {
+            guard request.isBackground == false else {
+                /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
                 completionHandler(.success(()))
+                return
             }
-        } else {
+            
             let assetsDelegates = self.assetsDelegates
             self.delegatesQueue.async {
                 /// Notify the delegates
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didFailEncryption(ofAsset: localIdentifier, in: groupId, error: error)
+                        delegate.didFailEncryption(ofAsset: globalIdentifier, in: groupId, error: error)
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
                             delegate.didFailSharing(
-                                ofAsset: localIdentifier,
+                                ofAsset: globalIdentifier,
                                 with: users,
-                                in: groupId, 
+                                in: groupId,
                                 error: error
                             )
                         }
                     }
                 }
             }
+            
+            completionHandler(.success(()))
         }
     }
     
     public func markAsSuccessful(
-        item: KBQueueItem,
-        encryptionRequest request: SHEncryptionRequestQueueItem,
+        queueItem: KBQueueItem,
+        encryptionRequest request: SHGenericShareableGroupableQueueItem,
         globalIdentifier: String
     ) throws {
-        let localIdentifier = request.localIdentifier
+        let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
-        let eventOriginator = request.eventOriginator
-        let users = request.sharedWith
-        let invitedUsers = request.invitedUsers
         let isBackground = request.isBackground
-        let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
         
         do {
             ///
             /// Dequeue from Encryption queue
             ///
-            log.info("dequeueing item \(item.identifier) from the ENCRYPT queue")
+            log.info("dequeueing item \(queueItem.identifier) from the ENCRYPT queue")
             let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-            _ = try encryptionQueue.dequeue(item: item)
+            _ = try encryptionQueue.dequeue(item: queueItem)
         } catch {
-            log.warning("item \(item.identifier) was completed but dequeuing failed. This task will be attempted again.")
+            log.warning("item \(queueItem.identifier) was completed but dequeuing failed. This task will be attempted again.")
             throw error
         }
-        
-        
-        let uploadRequest = SHUploadRequestQueueItem(
-            localAssetId: localIdentifier,
-            globalAssetId: globalIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: users,
-            invitedUsers: invitedUsers,
-            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-            isBackground: isBackground
-        )
         
         do {
             ///
             /// Enqueue to Upload queue
             ///
-            log.info("enqueueing upload request in the UPLOAD queue for asset \(localIdentifier) versions \(versions) isBackground=\(isBackground)")
+            log.info("enqueueing upload request in the UPLOAD queue for asset \(globalIdentifier) versions \(versions) isBackground=\(isBackground)")
             
             let uploadQueue = try BackgroundOperationQueue.of(type: .upload)
-            try uploadRequest.enqueue(in: uploadQueue)
+            try request.enqueue(in: uploadQueue, with: request.identifier)
         } catch {
-            log.fault("asset \(localIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
+            log.fault("asset \(globalIdentifier) was encrypted but will never be uploaded because enqueueing to UPLOAD queue failed")
             throw error
         }
         
@@ -345,31 +232,31 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didCompleteEncryption(ofAsset: localIdentifier, in: groupId)
+                    delegate.didCompleteEncryption(ofAsset: globalIdentifier, in: groupId)
                 }
             }
         }
     }
     
     internal func process(
-        _ item: KBQueueItem,
+        _ queueItem: KBQueueItem,
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let encryptionRequest: SHEncryptionRequestQueueItem
         
         do {
-            let content = try content(ofQueueItem: item)
+            let content = try content(ofQueueItem: queueItem)
             guard let content = content as? SHEncryptionRequestQueueItem else {
                 log.error("unexpected data found in ENCRYPT queue. Dequeueing")
                 // Delegates can't be called as item content can't be read and it will be silently removed from the queue
-                throw SHBackgroundOperationError.unexpectedData(item.content)
+                throw SHBackgroundOperationError.unexpectedData(queueItem.content)
             }
             encryptionRequest = content
         } catch {
             do {
                 let encryptionQueue = try BackgroundOperationQueue.of(type: .encryption)
-                _ = try encryptionQueue.dequeue(item: item)
+                _ = try encryptionQueue.dequeue(item: queueItem)
             }
             catch {
                 log.fault("dequeuing failed of unexpected data in ENCRYPT queue")
@@ -379,28 +266,17 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         }
         
         let asset = encryptionRequest.asset
-        let globalIdentifier = asset.globalIdentifier
         
         let handleError = { (error: Error) in
             self.log.error("FAIL in ENCRYPT: \(error.localizedDescription)")
             
             self.markAsFailed(
-                item: item,
+                queueItem: queueItem,
                 encryptionRequest: encryptionRequest,
-                globalIdentifier: globalIdentifier,
                 error: error
             ) { _ in
                 completionHandler(.failure(error))
             }
-        }
-        
-        guard let globalIdentifier else {
-            ///
-            /// At this point the global identifier should be calculated by the `SHLocalFetchOperation`,
-            /// serialized and deserialized as part of the `SHApplePhotoAsset` object.
-            ///
-            handleError(SHBackgroundOperationError.globalIdentifierDisagreement(""))
-            return
         }
         
         if encryptionRequest.isBackground == false {
@@ -408,7 +284,10 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             self.delegatesQueue.async {
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didStartEncryption(ofAsset: encryptionRequest.localIdentifier, in: encryptionRequest.groupId)
+                        delegate.didStartEncryption(
+                            ofAsset: encryptionRequest.asset.globalIdentifier,
+                            in: encryptionRequest.groupId
+                        )
                     }
                 }
             }
@@ -419,8 +298,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 /// ingest that identifier into the graph as a provisional share.
                 ///
                 try SHKGQuery.ingestProvisionalShare(
-                    of: globalIdentifier,
-                    localIdentifier: encryptionRequest.localIdentifier,
+                    of: asset.globalIdentifier,
+                    localIdentifier: encryptionRequest.asset.localIdentifier,
                     from: self.user.identifier,
                     to: encryptionRequest.sharedWith.map({ $0.identifier })
                 )
@@ -443,7 +322,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         
         dispatchGroup.enter()
         SHLocalAssetStoreController(user: self.user).retrieveCommonEncryptionKey(
-            for: globalIdentifier
+            for: asset.globalIdentifier
         ) {
             result in
             switch result {
@@ -480,11 +359,10 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 
                 do {
                     encryptedAsset = try await self.generateEncryptedAsset(
-                        for: asset,
-                        with: globalIdentifier,
+                        asset: asset,
+                        versions: encryptionRequest.versions,
                         usingPrivateSecret: privateSecret.rawRepresentation,
-                        recipients: [self.user],
-                        request: encryptionRequest
+                        recipients: [self.user]
                     )
                 } catch {
                     handleError(error)
@@ -509,7 +387,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                         ///
                         do {
                             try self.markAsSuccessful(
-                                item: item,
+                                queueItem: queueItem,
                                 encryptionRequest: encryptionRequest,
                                 globalIdentifier: encryptedAsset.globalIdentifier
                             )

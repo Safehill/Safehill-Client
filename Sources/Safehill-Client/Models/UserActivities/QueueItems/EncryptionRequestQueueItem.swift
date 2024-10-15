@@ -1,1 +1,1 @@
-public typealias SHEncryptionRequestQueueItem = SHGenericEncryptionRequestQueueItem
+public typealias SHEncryptionRequestQueueItem = SHGenericShareableGroupableQueueItem

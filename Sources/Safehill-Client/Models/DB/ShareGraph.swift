@@ -96,7 +96,7 @@ public struct SHKGQuery {
     
     internal static func ingestProvisionalShare(
         of assetIdentifier: GlobalIdentifier,
-        localIdentifier: String?,
+        localIdentifier: LocalIdentifier?,
         from senderUserId: UserIdentifier,
         to receiverUserIds: [UserIdentifier]
     ) throws {

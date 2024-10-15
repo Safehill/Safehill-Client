@@ -171,67 +171,6 @@ public struct SHLocalAssetStoreController {
             }
         }
     }
-    
-    /// Returns a list of `SHAssetQuality` corresponding to the versions that are stored encrypted in the local asset store,
-    /// for the asset having localIdentifier the identifier passed in.
-    /// - Parameter localIdentifier: the asset local identifier
-    /// - Returns: the list of versions (quality)
-    public func locallyEncryptedVersions(
-        forLocalIdentifier localIdentifier: String
-    ) -> [SHAssetQuality] {
-        var availableVersions = [SHAssetQuality]()
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        // TODO: Make this more efficient
-        self.serverProxy.getLocalAssetDescriptors(after: nil) { descResult in
-            if case .success(let descs) = descResult {
-                if let descriptor = descs.first(where: {
-                    descriptor in descriptor.localIdentifier == localIdentifier
-                }) {
-                    if let versions = self.locallyEncryptedVersions(
-                        forGlobalIdentifiers: [descriptor.globalIdentifier]
-                    ).values.first {
-                        availableVersions = versions
-                    }
-                }
-            }
-            semaphore.signal()
-        }
-        
-        let _ = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds))
-        
-        return availableVersions
-    }
-    
-    /// Returns a list of `SHAssetQuality` corresponding to the versions that are stored encrypted in the local asset store,
-    /// for the asset having localIdentifier the identifier passed in.
-    /// - Parameter localIdentifier: the asset local identifier
-    /// - Returns: the list of versions (quality)
-    internal func locallyEncryptedVersions(
-        forGlobalIdentifiers globalIdentifiers: [String]
-    ) -> [String: [SHAssetQuality]] {
-        var availableVersions = [String: [SHAssetQuality]]()
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        self.serverProxy.getLocalAssets(
-            withGlobalIdentifiers: globalIdentifiers,
-            versions: SHAssetQuality.all
-        ) { assetResult in
-            switch assetResult {
-            case .success(let dict):
-                for (globalId, encryptedAsset) in dict {
-                    availableVersions[globalId] = Array(encryptedAsset.encryptedVersions.keys)
-                }
-            case .failure(_):
-                break
-            }
-            semaphore.signal()
-        }
-        
-        let _ = semaphore.wait(timeout: .now() + .milliseconds(SHDefaultDBTimeoutInMilliseconds * 2))
-        
-        return availableVersions
-    }
 }
 
 
