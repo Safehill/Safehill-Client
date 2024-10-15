@@ -378,6 +378,33 @@ public struct SHUserInteractionController {
         return SymmetricKey(data: decryptedSecret)
     }
     
+    public func decryptTitle(
+        encryptedTitle: String,
+        createdBy: UserIdentifier,
+        groupId: String
+    ) async throws -> String {
+        let messageToDecrypt = MessageOutputDTO(
+            interactionId: "",
+            senderPublicIdentifier: createdBy,
+            inReplyToAssetGlobalIdentifier: nil,
+            inReplyToInteractionId: nil,
+            encryptedMessage: encryptedTitle,
+            createdAt: Date().iso8601withFractionalSeconds
+        )
+        
+        let clearTitle = try await self.decryptMessages(
+            [messageToDecrypt],
+            in: .group,
+            anchorId: groupId
+        ).first?.message
+        
+        guard let clearTitle else {
+            throw SHBackgroundOperationError.fatalError("failed to decrypt title is null")
+        }
+        
+        return clearTitle
+    }
+    
     public func decryptMessages(
         _ encryptedMessages: [MessageOutputDTO],
         in anchor: SHInteractionAnchor,

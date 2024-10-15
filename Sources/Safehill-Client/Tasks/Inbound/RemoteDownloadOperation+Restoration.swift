@@ -117,29 +117,12 @@ extension SHRemoteDownloadOperation {
         if let encryptedTitle = groupInfo.encryptedTitle,
            let groupCreatorPublicId = groupInfo.createdBy
         {
-            let usersController = SHUsersController(localUser: self.user)
             let interactionsController = SHUserInteractionController(user: self.user)
-            
-            let messageToDecrypt = MessageOutputDTO(
-                interactionId: "",
-                senderPublicIdentifier: groupCreatorPublicId,
-                inReplyToAssetGlobalIdentifier: nil,
-                inReplyToInteractionId: nil,
-                encryptedMessage: encryptedTitle,
-                createdAt: Date().iso8601withFractionalSeconds
+            return try await interactionsController.decryptTitle(
+                encryptedTitle: encryptedTitle,
+                createdBy: groupCreatorPublicId,
+                groupId: groupId
             )
-            
-            let clearTitle = try await interactionsController.decryptMessages(
-                [messageToDecrypt],
-                in: .group,
-                anchorId: groupId
-            ).first?.message
-            
-            guard let clearTitle else {
-                throw SHBackgroundOperationError.fatalError("failed to decrypt title is null")
-            }
-            
-            return clearTitle
         }
         
         return nil
