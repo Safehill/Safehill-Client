@@ -26,6 +26,7 @@ public struct SHUploadPipeline {
     /// - Parameters:
     ///   - asset: the asset to upload
     ///   - groupId: the request unique identifier
+    ///   - groupTitle: the message associated with the share (the Post message)
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - invitedUsers: the phone numbers invited to the share with groupId
@@ -33,6 +34,7 @@ public struct SHUploadPipeline {
     public static func enqueueUpload(
         of asset: SHUploadableAsset,
         groupId: String,
+        groupTitle: String?,
         sender: any SHServerUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
@@ -43,6 +45,7 @@ public struct SHUploadPipeline {
             asset: asset,
             versions: [.lowResolution, .hiResolution],
             groupId: groupId,
+            groupTitle: groupTitle,
             eventOriginator: sender,
             sharedWith: recipients,
             invitedUsers: invitedUsers,
@@ -74,12 +77,14 @@ public struct SHUploadPipeline {
     /// - Parameters:
     ///   - asset: the asset to share
     ///   - groupId: the request unique identifier
+    ///   - groupTitle: the message associated with the share (the Post message)
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread, and if so which thread
     public static func enqueueShare(
         of asset: SHUploadableAsset,
         groupId: String,
+        groupTitle: String?,
         sender: SHAuthenticatedLocalUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
@@ -89,6 +94,7 @@ public struct SHUploadPipeline {
             asset: asset,
             versions: [.lowResolution, .hiResolution],
             groupId: groupId,
+            groupTitle: groupTitle,
             eventOriginator: sender,
             sharedWith: recipients,
             invitedUsers: invitedUsers,

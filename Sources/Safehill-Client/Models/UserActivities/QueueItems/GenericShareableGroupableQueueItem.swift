@@ -8,6 +8,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         case asset
         case versions
         case groupId
+        case groupTitle
         case eventOriginator
         case sharedWith
         case invitedUsers
@@ -27,6 +28,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
     public let asset: SHUploadableAsset
     public let versions: [SHAssetQuality]
     public let groupId: String
+    public let groupTitle: String?
     public let eventOriginator: any SHServerUser
     public let sharedWith: [any SHServerUser] // Empty if it's just a backup request
     public let invitedUsers: [String]
@@ -41,6 +43,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
     public init(asset: SHUploadableAsset,
                 versions: [SHAssetQuality],
                 groupId: String,
+                groupTitle: String?,
                 eventOriginator: any SHServerUser,
                 sharedWith users: [any SHServerUser],
                 invitedUsers: [String],
@@ -49,6 +52,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         self.asset = asset
         self.versions = versions
         self.groupId = groupId
+        self.groupTitle = groupTitle
         self.eventOriginator = eventOriginator
         self.sharedWith = users
         self.invitedUsers = invitedUsers
@@ -60,6 +64,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         coder.encode(self.asset, forKey: CodingKeys.asset.rawValue)
         coder.encode(self.versions.map({ $0.rawValue }), forKey: CodingKeys.versions.rawValue)
         coder.encode(self.groupId, forKey: CodingKeys.groupId.rawValue)
+        coder.encode(self.groupTitle, forKey: CodingKeys.groupTitle.rawValue)
         // Convert to SHRemoteUserClass
         let remoteSender = SHRemoteUserClass(
             identifier: self.eventOriginator.identifier,
@@ -87,6 +92,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         let asset = decoder.decodeObject(of: SHUploadableAsset.self, forKey: CodingKeys.asset.rawValue)
         let versions = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.versions.rawValue)
         let groupId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupId.rawValue)
+        let groupTitle = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupTitle.rawValue)
         let sender = decoder.decodeObject(of: SHRemoteUserClass.self, forKey: CodingKeys.eventOriginator.rawValue)
         let receivers = decoder.decodeObject(of: [NSArray.self, SHRemoteUserClass.self], forKey: CodingKeys.sharedWith.rawValue)
         let invitedUsers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.invitedUsers.rawValue)
@@ -157,6 +163,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         self.init(asset: asset,
                   versions: parsedVersions,
                   groupId: groupId,
+                  groupTitle: groupTitle as? String,
                   eventOriginator: remoteSender,
                   sharedWith: remoteReceivers,
                   invitedUsers: invitedUsers,

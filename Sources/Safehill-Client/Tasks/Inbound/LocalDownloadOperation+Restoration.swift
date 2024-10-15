@@ -51,21 +51,23 @@ extension SHLocalDownloadOperation {
             
             case .success(let usersDict):
                 
-                let (
-                    groupIdToUploadItems,
-                    groupIdToShareItems
-                ) = self.historyItems(
-                    from: descriptors,
-                    usersDict: usersDict
-                )
-                
-                let restorationDelegate = self.restorationDelegate
-                self.delegatesQueue.async {
-                    restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
-                    restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
+                Task {
+                    let (
+                        groupIdToUploadItems,
+                        groupIdToShareItems
+                    ) = await self.historyItems(
+                        from: descriptors,
+                        usersDict: usersDict
+                    )
+                    
+                    let restorationDelegate = self.restorationDelegate
+                    self.delegatesQueue.async {
+                        restorationDelegate.restoreUploadHistoryItems(from: groupIdToUploadItems)
+                        restorationDelegate.restoreShareHistoryItems(from: groupIdToShareItems)
+                    }
+                    
+                    completionHandler(.success(()))
                 }
-                
-                completionHandler(.success(()))
             }
         }
     }

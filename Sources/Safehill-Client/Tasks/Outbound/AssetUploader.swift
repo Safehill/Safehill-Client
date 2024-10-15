@@ -93,6 +93,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let globalIdentifier = request.asset.globalIdentifier
         let versions = request.versions
         let groupId = request.groupId
+        let groupTitle = request.groupTitle
         let eventOriginator = request.eventOriginator
         let sharedWith = request.sharedWith
         let invitedUsers = request.invitedUsers
@@ -163,6 +164,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     asset: request.asset,
                     versions: versions,
                     groupId: groupId,
+                    groupTitle: groupTitle,
                     eventOriginator: eventOriginator,
                     sharedWith: sharedWith,
                     invitedUsers: invitedUsers,

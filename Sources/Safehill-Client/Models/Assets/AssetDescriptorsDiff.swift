@@ -133,7 +133,8 @@ struct AssetDescriptorsDiff {
                             from: correspondingLocalDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: [userId: groupId],
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
-                                name: remoteDescGroupInfo?.name,
+                                encryptedTitle: remoteDescGroupInfo?.encryptedTitle,
+                                createdBy: remoteDescGroupInfo?.createdBy,
                                 createdAt: remoteDescGroupInfo?.createdAt,
                                 createdFromThreadId: remoteDescGroupInfo?.createdFromThreadId,
                                 invitedUsersPhoneNumbers: remoteDescGroupInfo?.invitedUsersPhoneNumbers
@@ -150,7 +151,8 @@ struct AssetDescriptorsDiff {
                         
                         var newGroupInfoDict = userIdsToAddToSharesByAssetGid[correspondingLocalDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
-                            name: newGroupInfoDict[groupId]?.name ?? remoteDescGroupInfo?.name,
+                            encryptedTitle: newGroupInfoDict[groupId]?.encryptedTitle ?? remoteDescGroupInfo?.encryptedTitle,
+                            createdBy: newGroupInfoDict[groupId]?.createdBy ?? remoteDescGroupInfo?.createdBy,
                             createdAt: newGroupInfoDict[groupId]?.createdAt ?? remoteDescGroupInfo?.createdAt,
                             createdFromThreadId: newGroupInfoDict[groupId]?.createdFromThreadId ?? remoteDescGroupInfo?.createdFromThreadId,
                             invitedUsersPhoneNumbers: newGroupInfoDict[groupId]?.invitedUsersPhoneNumbers ?? remoteDescGroupInfo?.invitedUsersPhoneNumbers
@@ -168,7 +170,8 @@ struct AssetDescriptorsDiff {
             for (groupId, groupInfo) in remoteDescriptor.sharingInfo.groupInfoById {
                 if let localGroupInfo = correspondingLocalDescriptor.sharingInfo.groupInfoById[groupId] {
                     if localGroupInfo.createdAt == groupInfo.createdAt,
-                       localGroupInfo.name == groupInfo.name,
+                       localGroupInfo.createdBy == groupInfo.createdBy,
+                       localGroupInfo.encryptedTitle == groupInfo.encryptedTitle,
                        localGroupInfo.createdFromThreadId == groupInfo.createdFromThreadId,
                        (localGroupInfo.invitedUsersPhoneNumbers ?? [:]).keys.sorted()
                         == (groupInfo.invitedUsersPhoneNumbers ?? [:]).keys.sorted() {
@@ -209,7 +212,8 @@ struct AssetDescriptorsDiff {
                             from: localDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdByRecipientId: [userId: groupId],
                             groupInfoById: [groupId: SHGenericAssetGroupInfo(
-                                name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
+                                encryptedTitle: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.encryptedTitle,
+                                createdBy: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdBy,
                                 createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
                                 createdFromThreadId: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdFromThreadId,
                                 invitedUsersPhoneNumbers: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers
@@ -221,7 +225,8 @@ struct AssetDescriptorsDiff {
                         
                         var newGroupInfoDict = userIdsToRemoveFromSharesByAssetGid[localDescriptor.globalIdentifier]!.groupInfoById
                         newGroupInfoDict[groupId] = SHGenericAssetGroupInfo(
-                            name: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.name,
+                            encryptedTitle: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.encryptedTitle,
+                            createdBy: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdBy,
                             createdAt: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
                             createdFromThreadId: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.createdFromThreadId,
                             invitedUsersPhoneNumbers: remoteDescriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers

@@ -126,66 +126,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         }
     }
     
-    private func initializeGroupAndThread(
-        shareRequest: SHEncryptionForSharingRequestQueueItem,
-        skipThreadCreation: Bool,
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        var errorInitializingGroup: Error? = nil
-        var errorInitializingThread: Error? = nil
-        let dispatchGroup = DispatchGroup()
-        
-        var usersAndSelf = shareRequest.sharedWith
-        usersAndSelf.append(self.user)
-        
-        self.log.debug("creating or updating group for request \(shareRequest.identifier)")
-        dispatchGroup.enter()
-        self.interactionsController.setupGroupEncryptionDetails(
-            groupId: shareRequest.groupId,
-            with: usersAndSelf
-        ) { initializeGroupResult in
-            switch initializeGroupResult {
-            case .failure(let error):
-                errorInitializingGroup = error
-            default: break
-            }
-            dispatchGroup.leave()
-        }
-        
-        if skipThreadCreation == false {
-            self.log.debug("creating or updating thread for request \(shareRequest.identifier)")
-            dispatchGroup.enter()
-            self.interactionsController.setupThread(
-                with: usersAndSelf,
-                and: shareRequest.invitedUsers
-            ) {
-                setupThreadResult in
-                switch setupThreadResult {
-                case .success:
-                    break
-                case .failure(let error):
-                    errorInitializingThread = error
-                }
-                dispatchGroup.leave()
-            }
-        } else {
-            self.log.info("skipping thread creation as instructed by request \(shareRequest.identifier)")
-        }
-        
-        dispatchGroup.notify(queue: .global(qos: qos)) {
-            guard errorInitializingGroup == nil,
-                  errorInitializingThread == nil else {
-                self.log.error("failed to initialize thread or group. \((errorInitializingGroup ?? errorInitializingThread!).localizedDescription)")
-                // Mark as failed on any other error
-                completionHandler(.failure(errorInitializingGroup ?? errorInitializingThread!))
-                return
-            }
-            
-            completionHandler(.success(()))
-        }
-    }
-    
     private func share(
         _ shareableEncryptedAsset: SHShareableEncryptedAsset,
         from shareRequest: SHEncryptionForSharingRequestQueueItem,
@@ -382,14 +322,18 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
 #endif
                 
                 if shareRequest.isBackground == false {
-                    self.initializeGroupAndThread(
-                        shareRequest: shareRequest,
-                        skipThreadCreation: false,
-                        qos: qos
+                    var usersAndSelf = shareRequest.sharedWith
+                    usersAndSelf.append(self.user)
+                    
+                    self.log.debug("creating or updating group for request \(shareRequest.identifier)")
+                    self.interactionsController.setupGroup(
+                        title: shareRequest.groupTitle,
+                        groupId: shareRequest.groupId,
+                        with: usersAndSelf
                     ) { result in
                         switch result {
                         case .failure(let error):
-                            self.log.error("failed to initialize thread or group. \(error.localizedDescription)")
+                            self.log.error("failed to initialize group. \(error.localizedDescription)")
                             // Mark as failed on any other error
                             handleError(error)
                         case .success:

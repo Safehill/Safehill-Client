@@ -291,10 +291,12 @@ public protocol SHServerAPI {
     /// This method needs to be called every time a share (group) is created so that reactions and comments can be added to it.
     /// - Parameters:
     ///   - groupId: the group identifier
+    ///   - encryptedTitle: the message accompanying the group, if any, encrypted with the group E2EE details
     ///   - recipientsEncryptionDetails: the encryption details for each reciepient
     ///   - completionHandler: the callback method
-    func setGroupEncryptionDetails(
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
@@ -306,6 +308,15 @@ public protocol SHServerAPI {
     func deleteGroup(
         groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Retrieves the title and the encryption details for the group
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func retrieveGroupDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDetailsResponseDTO?, Error>) -> Void
     )
     
     /// Retrieved the E2EE details for a group, if one exists
