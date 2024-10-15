@@ -7,7 +7,6 @@ public protocol AssetActivity: Hashable, Equatable, Identifiable {
     var eventOriginator: any SHServerUser { get }
     var shareInfo: [(with: any SHServerUser, at: Date)] { get }
     var invitationsInfo: [(with: String, at: Date)] { get }
-    var requestedAt: Date { get }
     
     /// Returns an copy of the activity with the assets removed.
     /// Use this method to keep assets in the activity immutable.
