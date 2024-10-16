@@ -62,7 +62,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             throw error
         }
         
-        guard request.isBackground == false, users.count > 0 else {
+        guard request.isBackground == false else {
             /// Avoid other side-effects for background  `SHEncryptionRequestQueueItem`
             return
         }
@@ -126,7 +126,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         }
     }
     
-    private func share(
+    private func shareAndInvite(
         _ shareableEncryptedAsset: SHShareableEncryptedAsset,
         from shareRequest: SHEncryptionForSharingRequestQueueItem,
         queueItem item: KBQueueItem,
@@ -137,21 +137,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,
             suppressNotification: shareRequest.isBackground
         ) { shareResult in
-            
-            let handleSuccess = {
-                do {
-                    try self.markAsSuccessful(
-                        queueItem: item,
-                        encryptionRequest: shareRequest,
-                        globalIdentifier: shareableEncryptedAsset.globalIdentifier
-                    )
-                } catch {
-                    self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops. \(error.localizedDescription)")
-                    completionHandler(.failure(error))
-                }
-                
-                completionHandler(.success(()))
-            }
             
             switch shareResult {
             case .failure(let err):
@@ -167,7 +152,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                     ) { inviteResult in
                         switch inviteResult {
                         case.success:
-                            handleSuccess()
+                            completionHandler(.success(()))
                             
                         case .failure(let error):
                             let assetsDelegates = self.assetsDelegates
@@ -188,7 +173,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                         }
                     }
                 } else {
-                    handleSuccess()
+                    completionHandler(.success(()))
                 }
             }
         }
@@ -220,6 +205,23 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             return
         }
         
+        let globalIdentifier = shareRequest.asset.globalIdentifier
+        
+        let handleSuccess = {
+            do {
+                try self.markAsSuccessful(
+                    queueItem: item,
+                    encryptionRequest: shareRequest,
+                    globalIdentifier: globalIdentifier
+                )
+            } catch {
+                self.log.critical("failed to mark SHARE as successful. This will likely cause infinite loops. \(error.localizedDescription)")
+                completionHandler(.failure(error))
+            }
+            
+            completionHandler(.success(()))
+        }
+        
         let handleError = { (error: Error) in
             self.log.critical("Error in SHARE asset: \(error.localizedDescription)")
             do {
@@ -235,46 +237,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             completionHandler(.failure(error))
         }
         
-        let globalIdentifier = shareRequest.asset.globalIdentifier
-        
-        guard shareRequest.isSharingWithOrInvitingOtherUsers else {
-            handleError(SHBackgroundOperationError.fatalError("empty sharing information in SHEncryptionForSharingRequestQueueItem object. SHEncryptAndShareOperation can only operate on sharing operations, which require user identifiers or invited phone numbers"))
-            return
-        }
-        
         log.info("sharing it with users \(shareRequest.sharedWith.map { $0.identifier }) and invited \(shareRequest.invitedUsers)")
-        
-        guard shareRequest.isOnlyInvitingUsers == false else {
-            
-            ///
-            /// If only inviting other users take this shortcut,
-            /// only invite and end early.
-            /// If in background, don't invite, cause the previous non-background item
-            /// would have invited the users for this request
-            ///
-            
-            let dequeue = {
-                do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: item) }
-                catch {
-                    self.log.warning("asset \(shareRequest.asset.globalIdentifier) was uploaded but dequeuing from the SHARE queue failed, so this operation will be attempted again")
-                }
-            }
-            
-            if shareRequest.isBackground == false {
-                self.serverProxy.invite(
-                    shareRequest.invitedUsers,
-                    to: shareRequest.groupId
-                ) { result in
-                    
-                    dequeue()
-                    completionHandler(result)
-                }
-            } else {
-                dequeue()
-                completionHandler(.success(()))
-            }
-            return
-        }
         
         if shareRequest.isBackground == false {
             let assetDelegates = self.assetsDelegates
@@ -289,63 +252,107 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             }
         }
         
-        ///
-        /// Generate sharing information from the locally encrypted asset
-        ///
-        log.info("generating encrypted assets for asset with id \(globalIdentifier) for users \(shareRequest.sharedWith.map({ $0.identifier }))")
-        self.user.shareableEncryptedAsset(
-            globalIdentifier: globalIdentifier,
-            versions: shareRequest.versions,
-            recipients: shareRequest.sharedWith,
-            groupId: shareRequest.groupId
-        ) {
-            result in
-            
-            switch result {
-            case .failure(let error):
-                handleError(error)
-                return
-            case .success(let shareableEncryptedAsset):
-                self.log.info("successfully generated asset \(globalIdentifier) sharing information")
+        Task {
+            if shareRequest.isBackground == false {
+                ///
+                /// Create group encryption details and title
+                ///
+                var usersAndSelf = shareRequest.sharedWith
+                usersAndSelf.append(self.user)
                 
-                ///
-                /// Share using Safehill Server API
-                ///
-#if DEBUG
-                guard ErrorSimulator.percentageShareFailures == 0
-                        || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
-                    self.log.debug("simulating SHARE failure")
-                    let error = SHBackgroundOperationError.fatalError("simulated share failed")
+                do {
+                    try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, any Error>) in
+                        self.log.debug("creating or updating group for request \(shareRequest.identifier)")
+                        self.interactionsController.setupGroup(
+                            title: shareRequest.groupTitle,
+                            groupId: shareRequest.groupId,
+                            with: usersAndSelf
+                        ) { result in
+                            switch result {
+                            case .failure(let error):
+                                self.log.error("failed to initialize group. \(error.localizedDescription)")
+                                continuation.resume(throwing: error)
+                            case .success:
+                                continuation.resume(returning: ())
+                            }
+                        }
+                    }
+                } catch {
                     handleError(error)
                     return
                 }
-#endif
-                
+            }
+            
+            if shareRequest.isSharingWithOrInvitingOtherUsers == false {
+                ///
+                /// After setting up the group details terminate early
+                /// if there's no user to share with and
+                /// no phone number to invite
+                ///
+                handleSuccess()
+            } else if shareRequest.isOnlyInvitingUsers {
+                ///
+                /// If only inviting other users take this shortcut,
+                /// only invite and end early.
+                /// If in background, don't invite, cause the previous non-background item
+                /// would have invited the users for this request
+                ///
                 if shareRequest.isBackground == false {
-                    var usersAndSelf = shareRequest.sharedWith
-                    usersAndSelf.append(self.user)
-                    
-                    self.log.debug("creating or updating group for request \(shareRequest.identifier)")
-                    self.interactionsController.setupGroup(
-                        title: shareRequest.groupTitle,
-                        groupId: shareRequest.groupId,
-                        with: usersAndSelf
+                    self.serverProxy.invite(
+                        shareRequest.invitedUsers,
+                        to: shareRequest.groupId
                     ) { result in
                         switch result {
-                        case .failure(let error):
-                            self.log.error("failed to initialize group. \(error.localizedDescription)")
-                            // Mark as failed on any other error
-                            handleError(error)
                         case .success:
-                            self.share(
-                                shareableEncryptedAsset,
-                                from: shareRequest,
-                                queueItem: item
-                            ) {
-                                result in
-                                
-                                switch result {
-                                case .success:
+                            handleSuccess()
+                        case .failure(let error):
+                            handleError(error)
+                        }
+                    }
+                } else {
+                    handleSuccess()
+                }
+            } else {
+                ///
+                /// Otherwise start sharing and inviting
+                ///
+                
+                /// Generate sharing information from the locally encrypted asset
+                log.info("generating encrypted assets for asset with id \(globalIdentifier) for users \(shareRequest.sharedWith.map({ $0.identifier }))")
+                self.user.shareableEncryptedAsset(
+                    globalIdentifier: globalIdentifier,
+                    versions: shareRequest.versions,
+                    recipients: shareRequest.sharedWith,
+                    groupId: shareRequest.groupId
+                ) {
+                    result in
+                    
+                    switch result {
+                    case .failure(let error):
+                        handleError(error)
+                        
+                    case .success(let shareableEncryptedAsset):
+                        self.log.info("successfully generated asset \(globalIdentifier) sharing information")
+                        
+                        /// Share using Safehill Server API
+#if DEBUG
+                        guard ErrorSimulator.percentageShareFailures == 0
+                                || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
+                            self.log.debug("simulating SHARE failure")
+                            let error = SHBackgroundOperationError.fatalError("simulated share failed")
+                            handleError(error)
+                            return
+                        }
+#endif
+                        
+                        self.shareAndInvite(
+                            shareableEncryptedAsset,
+                            from: shareRequest,
+                            queueItem: item
+                        ) { result in
+                            switch result {
+                            case .success:
+                                if shareRequest.isBackground == false {
                                     do {
                                         // Ingest into the graph
                                         try SHKGQuery.ingestShare(
@@ -362,22 +369,15 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                                         shareableEncryptedAsset,
                                         asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId
                                     ) { _ in }
-                                    
-                                    completionHandler(.success(()))
-                                    
-                                case .failure(let error):
-                                    handleError(error)
                                 }
+                                
+                                handleSuccess()
+                                
+                            case .failure(let error):
+                                handleError(error)
                             }
                         }
                     }
-                } else {
-                    self.share(
-                        shareableEncryptedAsset,
-                        from: shareRequest,
-                        queueItem: item,
-                        completionHandler: completionHandler
-                    )
                 }
             }
         }

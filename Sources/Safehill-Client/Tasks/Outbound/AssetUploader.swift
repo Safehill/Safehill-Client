@@ -134,48 +134,31 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         }
         
         ///
-        /// Start the sharing part as needed
+        /// Start the sharing as needed
         ///
-        if request.isSharingWithOrInvitingOtherUsers {
+        let shareQueue = try BackgroundOperationQueue.of(type: .share)
+        
+        do {
+            ///
+            /// Enquque to SHARE queue for encrypting for sharing
+            ///
+            log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(globalIdentifier) versions \(versions) isBackground=\(isBackground)")
             
-            guard isBackground == false || request.isSharingWithOtherSafehillUsers else {
-                /// 
-                /// If there are no users to share with but only invitations to make
-                /// the invitation should only happen once, for items with `isBackground = false`.
-                /// If `isBackground` is `true`, then it's safe to assume that the invitation
-                /// has already happened.
-                ///
-                /// Of course if there are Safehill users to share the asset with,
-                /// the enqueuing of share of the hi resolution asset should continue for the `sharedWith` set
-                /// (`isBackground = true` and `request.versions.contains(.hiResolution) == false`)
-                ///
-                return
-            }
-            
-            let shareQueue = try BackgroundOperationQueue.of(type: .share)
-            
-            do {
-                ///
-                /// Enquque to SHARE queue for encrypting for sharing
-                ///
-                log.info("enqueueing upload request in the FETCH+SHARE queue for asset \(globalIdentifier) versions \(versions) isBackground=\(isBackground)")
-                
-                let request = SHEncryptionRequestQueueItem(
-                    asset: request.asset,
-                    versions: versions,
-                    groupId: groupId,
-                    groupTitle: groupTitle,
-                    eventOriginator: eventOriginator,
-                    sharedWith: sharedWith,
-                    invitedUsers: invitedUsers,
-                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-                    isBackground: isBackground
-                )
-                try request.enqueue(in: shareQueue, with: request.identifier)
-            } catch {
-                log.fault("asset \(globalIdentifier) was uploaded but will never be shared because enqueueing to SHARE queue failed")
-                throw error
-            }
+            let request = SHEncryptionRequestQueueItem(
+                asset: request.asset,
+                versions: versions,
+                groupId: groupId,
+                groupTitle: groupTitle,
+                eventOriginator: eventOriginator,
+                sharedWith: sharedWith,
+                invitedUsers: invitedUsers,
+                asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+                isBackground: isBackground
+            )
+            try request.enqueue(in: shareQueue, with: request.identifier)
+        } catch {
+            log.fault("asset \(globalIdentifier) was uploaded but will never be shared because enqueueing to SHARE queue failed")
+            throw error
         }
     }
     
