@@ -252,7 +252,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             }
         }
         
-        Task {
+        Task(priority: qos.toTaskPriority()) {
             if shareRequest.isBackground == false {
                 ///
                 /// Create group encryption details and title
