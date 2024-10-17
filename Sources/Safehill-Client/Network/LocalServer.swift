@@ -1353,6 +1353,7 @@ struct LocalServer : SHServerAPI {
     
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
+                createdFromThreadId: String?,
                 filterVersions: [SHAssetQuality]?,
                 overwriteFileIfExists: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
@@ -1390,7 +1391,7 @@ struct LocalServer : SHServerAPI {
                             encryptedTitle: nil,
                             createdBy: self.requestor.identifier,
                             createdAt: Date(),
-                            createdFromThreadId: nil,
+                            createdFromThreadId: createdFromThreadId,
                             invitedUsersPhoneNumbers: nil
                         )
                     ]
