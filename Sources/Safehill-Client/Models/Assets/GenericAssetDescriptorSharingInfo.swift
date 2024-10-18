@@ -1,7 +1,7 @@
 import Foundation
 
 public struct SHGenericDescriptorSharingInfo : SHDescriptorSharingInfo, Codable {
-    public let sharedByUserIdentifier: String
+    public let sharedByUserIdentifier: UserIdentifier
     public let groupIdsByRecipientUserIdentifier: [UserIdentifier: [String]]
     public let groupInfoById: [String: SHAssetGroupInfo]
     
