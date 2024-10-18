@@ -682,7 +682,11 @@ struct LocalServer : SHServerAPI {
                     if sharedWithUsersInGroupByAssetGid[assetGid] == nil {
                         sharedWithUsersInGroupByAssetGid[assetGid] = [receiverUser: [groupId]]
                     } else {
-                        sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser]!.append(groupId)
+                        if sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] == nil {
+                            sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] = [groupId]
+                        } else {
+                            sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser]!.append(groupId)
+                        }
                     }
                 }
             } else {
