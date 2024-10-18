@@ -183,7 +183,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                     
                     dispatchGroup.enter()
                     
-                    guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                    guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                         errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.unexpectedData(descriptor.sharingInfo)
                         dispatchGroup.leave()
                         continue
@@ -192,9 +192,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                     if let encryptedAsset = encryptedAssets[globalAssetId] {
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
-                                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                                           descriptor: descriptor,
-                                                           in: groupId)
+                                $0.didStartDownloadOfAsset(
+                                    withGlobalIdentifier: globalAssetId,
+                                    descriptor: descriptor,
+                                    in: groupIds
+                                )
                             })
                         }
                         
@@ -220,7 +222,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                                     downloaderDelegates.forEach({
                                         $0.didCompleteDownload(
                                             of: decryptedAsset,
-                                            in: groupId
+                                            in: groupIds
                                         )
                                     })
                                 }
@@ -259,7 +261,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                     }
                     
                     for (gid, error) in errorsByAssetGlobalId {
-                        guard let groupId = descriptorsByGlobalIdentifier[gid]?.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                        guard let groupIds = descriptorsByGlobalIdentifier[gid]?.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                             self.log.warning("will not notify delegates about asset decryption error for asset \(gid)")
                             continue
                         }
@@ -267,7 +269,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                             downloaderDelegates.forEach({
                                 $0.didFailDownloadOfAsset(
                                     withGlobalIdentifier: gid,
-                                    in: groupId,
+                                    in: groupIds,
                                     with: error
                                 )
                             })

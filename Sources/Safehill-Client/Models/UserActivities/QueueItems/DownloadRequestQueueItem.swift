@@ -5,10 +5,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
     enum CodingKeys: String, CodingKey {
         case assetDescriptor
         case userIdentifier
-    }
-    
-    public var localIdentifier: String {
-        self.assetDescriptor.globalIdentifier
+        case groupId
     }
     
     public let eventOriginator: any SHServerUser
@@ -17,7 +14,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
     
     public let groupId: String
     
-    private let receiverUserIdentifier: String
+    private let receiverUserIdentifier: UserIdentifier
     
     public static var supportsSecureCoding: Bool = true
     
@@ -37,12 +34,13 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
     }
     
     public init(assetDescriptor: any SHAssetDescriptor,
-                receiverUserIdentifier: String) {
+                receiverUserIdentifier: String,
+                groupId: String) {
         self.assetDescriptor = assetDescriptor
         self.eventOriginator = SHRemotePhantomUser(identifier: assetDescriptor.sharingInfo.sharedByUserIdentifier)
         self.receiverUserIdentifier = receiverUserIdentifier
         
-        self.groupId = self.assetDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup[receiverUserIdentifier] ?? ""
+        self.groupId = groupId
         if let invitedUsersPhoneNumbers = self.assetDescriptor.sharingInfo.groupInfoById[self.groupId]?.invitedUsersPhoneNumbers {
             self.invitedUsers = Array(invitedUsersPhoneNumbers.keys)
         } else {
@@ -53,6 +51,7 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
     public required convenience init?(coder decoder: NSCoder) {
         let descriptor = decoder.decodeObject(of: SHGenericAssetDescriptorClass.self, forKey: CodingKeys.assetDescriptor.rawValue)
         let receiverUserIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.userIdentifier.rawValue)
+        let groupId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupId.rawValue)
         
         guard let descriptor = descriptor else {
             log.error("unexpected value for assetDescriptor when decoding SHDownloadRequestQueueItem object")
@@ -60,6 +59,10 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         }
         guard let receiverUserIdentifier = receiverUserIdentifier as? String else {
             log.error("unexpected value for receiverUserIdentifier when decoding SHDownloadRequestQueueItem object")
+            return nil
+        }
+        guard let groupId = groupId as? String else {
+            log.error("unexpected value for groupId when decoding SHDownloadRequestQueueItem object")
             return nil
         }
         
@@ -73,7 +76,8 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         )
         
         self.init(assetDescriptor: assetDescriptor,
-                  receiverUserIdentifier: receiverUserIdentifier)
+                  receiverUserIdentifier: receiverUserIdentifier,
+                  groupId: groupId)
     }
 }
 

@@ -577,7 +577,7 @@ struct LocalServer : SHServerAPI {
         
         var senderInfoDict = [GlobalIdentifier: UserIdentifier]()
         var groupInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetGroupInfo]]()
-        var sharedWithUsersInGroupByAssetGid = [GlobalIdentifier: [UserIdentifier: String]]()
+        var sharedWithUsersInGroupByAssetGid = [GlobalIdentifier: [UserIdentifier: [String]]]()
         
         ///
         /// Retrieve all information from the asset store for all assets and `.lowResolution` versions.
@@ -680,9 +680,9 @@ struct LocalServer : SHServerAPI {
                     let receiverUser = components[1]
                     
                     if sharedWithUsersInGroupByAssetGid[assetGid] == nil {
-                        sharedWithUsersInGroupByAssetGid[assetGid] = [receiverUser: groupId]
+                        sharedWithUsersInGroupByAssetGid[assetGid] = [receiverUser: [groupId]]
                     } else {
-                        sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] = groupId
+                        sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser]!.append(groupId)
                     }
                 }
             } else {
@@ -778,14 +778,15 @@ struct LocalServer : SHServerAPI {
             }
             
             guard let groupInfoById = groupInfoByIdByAssetGid[globalIdentifier],
-                  let sharedWithUsersInGroup = sharedWithUsersInGroupByAssetGid[globalIdentifier]
+                  let sharedWithUsersInGroups = sharedWithUsersInGroupByAssetGid[globalIdentifier]
             else {
                 log.error("failed to retrieve group information for asset \(globalIdentifier)")
                 invalidGlobalIdentifiersInDB.insert(globalIdentifier)
                 continue
             }
             
-            if Set(sharedWithUsersInGroup.values).count > groupInfoById.count || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
+            if Set(sharedWithUsersInGroups.values).count > groupInfoById.count
+                || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
                 log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.createdAt) }))")
             }
             
@@ -800,7 +801,7 @@ struct LocalServer : SHServerAPI {
             
             let sharingInfo = SHGenericDescriptorSharingInfo(
                 sharedByUserIdentifier: sharedBy,
-                sharedWithUserIdentifiersInGroup: sharedWithUsersInGroup,
+                groupIdsByRecipientUserIdentifier: sharedWithUsersInGroups,
                 groupInfoById: groupInfoById
             )
             
@@ -1385,7 +1386,7 @@ struct LocalServer : SHServerAPI {
                 uploadState: .started,
                 sharingInfo: SHGenericDescriptorSharingInfo(
                     sharedByUserIdentifier: self.requestor.identifier,
-                    sharedWithUserIdentifiersInGroup: [self.requestor.identifier: groupId],
+                    groupIdsByRecipientUserIdentifier: [self.requestor.identifier: [groupId]],
                     groupInfoById: [
                         groupId: SHGenericAssetGroupInfo(
                             encryptedTitle: nil,
@@ -1436,15 +1437,22 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            guard let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier] else {
+            guard let senderUploadGroupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[descriptor.sharingInfo.sharedByUserIdentifier] else {
                 log.error("No groupId specified in descriptor for asset to create for sender user: userId=\(descriptor.sharingInfo.sharedByUserIdentifier)")
                 continue
             }
-            let senderGroupIdInfo = descriptor.sharingInfo.groupInfoById[senderUploadGroupId]
-            let senderGroupCreatedAt = senderGroupIdInfo?.createdAt
+            var senderGroupCreatedAt: Date? = senderUploadGroupIds.reduce(Date.distantFuture, { partialResult, groupId in
+                if let createdAt = descriptor.sharingInfo.groupInfoById[groupId]?.createdAt,
+                   partialResult.compare(createdAt) == .orderedDescending {
+                    return createdAt
+                } else {
+                    return partialResult
+                }
+            })
             
-            if senderGroupCreatedAt == nil {
-                log.error("No groupId info or creation date set for sender group id \(senderUploadGroupId)")
+            if senderGroupCreatedAt == .distantFuture {
+                senderGroupCreatedAt = nil
+                log.error("No creation date set for sender group ids \(senderUploadGroupIds)")
             }
             
             for encryptedVersion in asset.encryptedVersions.values {
@@ -1467,28 +1475,32 @@ struct LocalServer : SHServerAPI {
                             value: nil,
                             for: "data::" + "\(quality)::" + asset.globalIdentifier
                         )
-                        writeBatch.set(
-                            value: nil, 
-                            for: [
-                                "sender",
-                                descriptor.sharingInfo.sharedByUserIdentifier,
-                                quality.rawValue,
-                                asset.globalIdentifier,
-                                senderUploadGroupId
-                            ].joined(separator: "::")
-                        )
-                        
-                        for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                        for groupId in senderUploadGroupIds {
                             writeBatch.set(
                                 value: nil,
                                 for: [
-                                    "receiver",
-                                    recipientUserId,
+                                    "sender",
+                                    descriptor.sharingInfo.sharedByUserIdentifier,
                                     quality.rawValue,
                                     asset.globalIdentifier,
                                     groupId
                                 ].joined(separator: "::")
                             )
+                        }
+                        
+                        for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                            for groupId in groupIds {
+                                writeBatch.set(
+                                    value: nil,
+                                    for: [
+                                        "receiver",
+                                        recipientUserId,
+                                        quality.rawValue,
+                                        asset.globalIdentifier,
+                                        groupId
+                                    ].joined(separator: "::")
+                                )
+                            }
                         }
                         
                         let versionDataURL = Self.assetVersionDataFile(
@@ -1519,28 +1531,32 @@ struct LocalServer : SHServerAPI {
                         value: nil,
                         for: "data::" + "\(SHAssetQuality.midResolution.rawValue)::" + asset.globalIdentifier
                     )
-                    writeBatch.set(
-                        value: nil,
-                        for: [
-                            "sender",
-                            descriptor.sharingInfo.sharedByUserIdentifier,
-                            SHAssetQuality.midResolution.rawValue,
-                            asset.globalIdentifier,
-                            senderUploadGroupId
-                       ].joined(separator: "::")
-                    )
-                    
-                    for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
+                    for senderUploadGroupId in senderUploadGroupIds {
                         writeBatch.set(
                             value: nil,
                             for: [
-                                "receiver",
-                                recipientUserId,
+                                "sender",
+                                descriptor.sharingInfo.sharedByUserIdentifier,
                                 SHAssetQuality.midResolution.rawValue,
                                 asset.globalIdentifier,
-                                groupId
-                           ].joined(separator: "::")
+                                senderUploadGroupId
+                            ].joined(separator: "::")
                         )
+                    }
+                    
+                    for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                        for groupId in groupIds {
+                            writeBatch.set(
+                                value: nil,
+                                for: [
+                                    "receiver",
+                                    recipientUserId,
+                                    SHAssetQuality.midResolution.rawValue,
+                                    asset.globalIdentifier,
+                                    groupId
+                                ].joined(separator: "::")
+                            )
+                        }
                     }
                     
                     let versionDataURL = Self.assetVersionDataFile(
@@ -1591,72 +1607,33 @@ struct LocalServer : SHServerAPI {
                     for: "data::" + "\(encryptedVersion.quality.rawValue)::" + asset.globalIdentifier
                 )
                 
-                writeBatch.set(
-                    value: true,
-                    for: [
-                        "sender",
+                for senderUploadGroupId in senderUploadGroupIds {
+                    writeBatch.set(
+                        value: true,
+                        for: [
+                            "sender",
+                            descriptor.sharingInfo.sharedByUserIdentifier,
+                            encryptedVersion.quality.rawValue,
+                            asset.globalIdentifier,
+                            senderUploadGroupId
+                        ].joined(separator: "::")
+                    )
+                    
+                    let key = [
+                        "receiver",
                         descriptor.sharingInfo.sharedByUserIdentifier,
                         encryptedVersion.quality.rawValue,
                         asset.globalIdentifier,
                         senderUploadGroupId
                     ].joined(separator: "::")
-                )
-                
-                let key = [
-                    "receiver",
-                    descriptor.sharingInfo.sharedByUserIdentifier,
-                    encryptedVersion.quality.rawValue,
-                    asset.globalIdentifier,
-                    senderUploadGroupId
-                ].joined(separator: "::")
-                
-                let value = DBSecureSerializableAssetRecipientSharingDetails(
-                    groupId: senderUploadGroupId,
-                    groupCreationDate: senderGroupIdInfo?.createdAt,
-                    quality: encryptedVersion.quality,
-                    senderEncryptedSecret: encryptedVersion.encryptedSecret,
-                    ephemeralPublicKey: encryptedVersion.publicKeyData,
-                    publicSignature: encryptedVersion.publicSignatureData
-                )
-                
-                do {
-                    let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
-                    
-                    writeBatch.set(
-                        value: serializedData,
-                        for: key
-                    )
-                } catch {
-                    log.critical("failed to serialize recipient info for key \(key): \(value). \(error.localizedDescription)")
-                }
-                
-                for (recipientUserId, recipientGroupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                    if recipientUserId == descriptor.sharingInfo.sharedByUserIdentifier {
-                        continue
-                    }
-                    
-                    let recipientGroupInfo = descriptor.sharingInfo.groupInfoById[recipientGroupId]
-                    let recipientShareDate = recipientGroupInfo?.createdAt
-                    
-                    if recipientShareDate == nil {
-                        log.critical("No groupId info or creation date set for recipient \(recipientUserId) group id \(recipientGroupId)")
-                    }
-                    
-                    let key = [
-                        "receiver",
-                        recipientUserId,
-                        encryptedVersion.quality.rawValue,
-                        asset.globalIdentifier,
-                        recipientGroupId
-                    ].joined(separator: "::")
                     
                     let value = DBSecureSerializableAssetRecipientSharingDetails(
-                        groupId: recipientGroupId,
-                        groupCreationDate: recipientGroupInfo?.createdAt,
+                        groupId: senderUploadGroupId,
+                        groupCreationDate: descriptor.sharingInfo.groupInfoById[senderUploadGroupId]?.createdAt,
                         quality: encryptedVersion.quality,
-                        senderEncryptedSecret: nil,
-                        ephemeralPublicKey: nil,
-                        publicSignature: nil
+                        senderEncryptedSecret: encryptedVersion.encryptedSecret,
+                        ephemeralPublicKey: encryptedVersion.publicKeyData,
+                        publicSignature: encryptedVersion.publicSignatureData
                     )
                     
                     do {
@@ -1671,18 +1648,65 @@ struct LocalServer : SHServerAPI {
                     }
                 }
                 
-                if let groupInfo = senderGroupIdInfo,
-                   let threadId = groupInfo.createdFromThreadId {
-                    let threadAsset = DBSecureSerializableConversationThreadAsset(
-                        globalIdentifier: asset.globalIdentifier,
-                        addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
-                        addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
-                        groupId: senderUploadGroupId
-                    )
-                    if threadAssets[threadId] == nil {
-                        threadAssets[threadId] = [threadAsset]
-                    } else {
-                        threadAssets[threadId]!.append(threadAsset)
+                for (recipientUserId, recipientGroupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                    if recipientUserId == descriptor.sharingInfo.sharedByUserIdentifier {
+                        continue
+                    }
+                    
+                    for recipientGroupId in recipientGroupIds {
+                        
+                        let recipientGroupInfo = descriptor.sharingInfo.groupInfoById[recipientGroupId]
+                        let recipientShareDate = recipientGroupInfo?.createdAt
+                        
+                        if recipientShareDate == nil {
+                            log.critical("No groupId info or creation date set for recipient \(recipientUserId) group id \(recipientGroupId)")
+                        }
+                        
+                        let key = [
+                            "receiver",
+                            recipientUserId,
+                            encryptedVersion.quality.rawValue,
+                            asset.globalIdentifier,
+                            recipientGroupId
+                        ].joined(separator: "::")
+                        
+                        let value = DBSecureSerializableAssetRecipientSharingDetails(
+                            groupId: recipientGroupId,
+                            groupCreationDate: recipientGroupInfo?.createdAt,
+                            quality: encryptedVersion.quality,
+                            senderEncryptedSecret: nil,
+                            ephemeralPublicKey: nil,
+                            publicSignature: nil
+                        )
+                        
+                        do {
+                            let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                            
+                            writeBatch.set(
+                                value: serializedData,
+                                for: key
+                            )
+                        } catch {
+                            log.critical("failed to serialize recipient info for key \(key): \(value). \(error.localizedDescription)")
+                        }
+                    }
+                }
+                
+                for groupId in senderUploadGroupIds {
+                    if let senderGroupIdInfo = descriptor.sharingInfo.groupInfoById[groupId],
+                       let threadId = senderGroupIdInfo.createdFromThreadId
+                    {
+                        let threadAsset = DBSecureSerializableConversationThreadAsset(
+                            globalIdentifier: asset.globalIdentifier,
+                            addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
+                            addedAt: (senderGroupIdInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
+                            groupId: groupId
+                        )
+                        if threadAssets[threadId] == nil {
+                            threadAssets[threadId] = [threadAsset]
+                        } else {
+                            threadAssets[threadId]!.append(threadAsset)
+                        }
                     }
                 }
             }
@@ -1705,27 +1729,28 @@ struct LocalServer : SHServerAPI {
                 var serverAssets = [SHServerAsset]()
                 for asset in assets {
                     let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier]!
-                    let senderUploadGroupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[descriptor.sharingInfo.sharedByUserIdentifier]!
-                    var serverAssetVersions = [SHServerAssetVersion]()
-                    for encryptedVersion in asset.encryptedVersions.values {
-                        serverAssetVersions.append(
-                            SHServerAssetVersion(
-                                versionName: encryptedVersion.quality.rawValue,
-                                publicKeyData: encryptedVersion.publicKeyData,
-                                publicSignatureData: encryptedVersion.publicSignatureData,
-                                encryptedSecret: encryptedVersion.encryptedSecret,
-                                presignedURL: "",
-                                presignedURLExpiresInMinutes: 0
+                    for senderUploadGroupId in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[descriptor.sharingInfo.sharedByUserIdentifier]! {
+                        var serverAssetVersions = [SHServerAssetVersion]()
+                        for encryptedVersion in asset.encryptedVersions.values {
+                            serverAssetVersions.append(
+                                SHServerAssetVersion(
+                                    versionName: encryptedVersion.quality.rawValue,
+                                    publicKeyData: encryptedVersion.publicKeyData,
+                                    publicSignatureData: encryptedVersion.publicSignatureData,
+                                    encryptedSecret: encryptedVersion.encryptedSecret,
+                                    presignedURL: "",
+                                    presignedURLExpiresInMinutes: 0
+                                )
                             )
-                        )
+                        }
+                        
+                        let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
+                                                        localIdentifier: asset.localIdentifier,
+                                                        creationDate: asset.creationDate,
+                                                        groupId: senderUploadGroupId,
+                                                        versions: serverAssetVersions)
+                        serverAssets.append(serverAsset)
                     }
-                    
-                    let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
-                                                    localIdentifier: asset.localIdentifier,
-                                                    creationDate: asset.creationDate,
-                                                    groupId: senderUploadGroupId,
-                                                    versions: serverAssetVersions)
-                    serverAssets.append(serverAsset)
                 }
                 
                 completionHandler(.success(serverAssets))
@@ -1756,39 +1781,41 @@ struct LocalServer : SHServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         for (globalIdentifier, shareDiff) in userIdsToAddToAssetGids {
-            for (recipientUserId, groupId) in shareDiff.groupIdByRecipientId {
-                guard let groupInfo = shareDiff.groupInfoById[groupId] else {
-                    log.critical("group information missing for group \(groupId) when calling addAssetRecipients(basedOn:versions:completionHandler:)")
-                    continue
-                }
-                for version in versions {
-                    
-                    let key = [
-                        "receiver",
-                        recipientUserId,
-                        version.rawValue,
-                        globalIdentifier,
-                        groupId
-                    ].joined(separator: "::")
-                    
-                    let value = DBSecureSerializableAssetRecipientSharingDetails(
-                        groupId: groupId,
-                        groupCreationDate: groupInfo.createdAt,
-                        quality: version,
-                        senderEncryptedSecret: nil,
-                        ephemeralPublicKey: nil,
-                        publicSignature: nil
-                    )
-                    
-                    do {
-                        let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+            for (recipientUserId, groupIds) in shareDiff.groupIdsByRecipientId {
+                for groupId in groupIds {
+                    guard let groupInfo = shareDiff.groupInfoById[groupId] else {
+                        log.critical("group information missing for group \(groupId) when calling addAssetRecipients(basedOn:versions:completionHandler:)")
+                        continue
+                    }
+                    for version in versions {
                         
-                        writeBatch.set(
-                            value: serializedData,
-                            for: key
+                        let key = [
+                            "receiver",
+                            recipientUserId,
+                            version.rawValue,
+                            globalIdentifier,
+                            groupId
+                        ].joined(separator: "::")
+                        
+                        let value = DBSecureSerializableAssetRecipientSharingDetails(
+                            groupId: groupId,
+                            groupCreationDate: groupInfo.createdAt,
+                            quality: version,
+                            senderEncryptedSecret: nil,
+                            ephemeralPublicKey: nil,
+                            publicSignature: nil
                         )
-                    } catch {
-                        log.critical("failed to serialize recipient info for key \(key): \(value). \(error.localizedDescription)")
+                        
+                        do {
+                            let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                            
+                            writeBatch.set(
+                                value: serializedData,
+                                for: key
+                            )
+                        } catch {
+                            log.critical("failed to serialize recipient info for key \(key): \(value). \(error.localizedDescription)")
+                        }
                     }
                 }
             }
@@ -1821,15 +1848,17 @@ struct LocalServer : SHServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         for (globalIdentifier, shareDiff) in userIdsToRemoveFromAssetGid {
-            for (recipientUserId, groupId) in shareDiff.groupIdByRecipientId {
-                for version in versions {
-                    writeBatch.set(value: nil, for: [
-                        "receiver",
-                        recipientUserId,
-                        version.rawValue,
-                        globalIdentifier,
-                        groupId
-                    ].joined(separator: "::"))
+            for (recipientUserId, groupIds) in shareDiff.groupIdsByRecipientId {
+                for groupId in groupIds {
+                    for version in versions {
+                        writeBatch.set(value: nil, for: [
+                            "receiver",
+                            recipientUserId,
+                            version.rawValue,
+                            globalIdentifier,
+                            groupId
+                        ].joined(separator: "::"))
+                    }
                 }
             }
         }
@@ -2654,22 +2683,14 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    private func getGroupId(for userIdentifiers: [UserIdentifier], in descriptor: any SHAssetDescriptor) -> String? {
-        var groupId: String? = nil
+    private func getGroupIds(for userIdentifiers: [UserIdentifier], in descriptor: any SHAssetDescriptor) -> [String] {
+        var groupIds = Set<String>()
         for userIdentifier in userIdentifiers {
-            if let groupForUser = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[userIdentifier] {
-                if groupId == nil {
-                    groupId = groupForUser
-                } else if groupId != groupForUser {
-                    ///
-                    /// This asset should not be displayed in this thread
-                    /// cause it was shared with the thread's users via a different group id.
-                    ///
-                    return nil
-                }
+            if let groupsForUser = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[userIdentifier] {
+                groupsForUser.forEach { groupIds.insert($0) }
             }
         }
-        return groupId
+        return Array(groupIds)
     }
     
     func groupIdToThreadIdMapping() throws -> [String: String] {

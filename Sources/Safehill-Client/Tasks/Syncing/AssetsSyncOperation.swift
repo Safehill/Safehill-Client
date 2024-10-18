@@ -206,7 +206,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
                             assetsDelegates.forEach {
                                 $0.usersWereAddedToShare(
                                     of: globalIdentifier,
-                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId,
+                                    groupIdsByRecipientId: shareDiff.groupIdsByRecipientId,
                                     groupInfoById: shareDiff.groupInfoById
                                 )
                             }
@@ -236,7 +236,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
                             assetsDelegates.forEach {
                                 $0.usersWereRemovedFromShare(
                                     of: globalIdentifier,
-                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId
+                                    groupIdsByRecipientId: shareDiff.groupIdsByRecipientId
                                 )
                             }
                         }

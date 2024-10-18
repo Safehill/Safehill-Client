@@ -7,13 +7,13 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func usersWereAddedToShare(
         of: GlobalIdentifier,
-        groupIdByRecipientId: [UserIdentifier: String],
+        groupIdsByRecipientId: [UserIdentifier: [String]],
         groupInfoById: [String: SHAssetGroupInfo]
     )
     
     func usersWereRemovedFromShare(
         of: GlobalIdentifier,
-        groupIdByRecipientId: [UserIdentifier: String]
+        groupIdsByRecipientId: [UserIdentifier: [String]]
     )
     
     func groupsInfoWereUpdated(_: [String: SHAssetGroupInfo])

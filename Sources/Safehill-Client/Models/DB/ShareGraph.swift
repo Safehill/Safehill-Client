@@ -21,7 +21,7 @@ public struct SHKGQuery {
         // TODO: We need support for writebatch (transaction) in KGGraph. DB writes in a for loop is never a good idea
         for descriptor in descriptors {
             do {
-                var allReceivers = Set(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                var allReceivers = Set(descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys)
                 allReceivers.insert(receiverUserId)
                 try self.ingestShare(
                     of: descriptor.globalIdentifier,
@@ -187,7 +187,7 @@ public struct SHKGQuery {
                         try SHKGQuery.ingestShare(
                             of: assetIdentifier,
                             from: senderReceivers.from,
-                            to: Array(senderReceivers.groupIdByRecipientId.keys),
+                            to: Array(senderReceivers.groupIdsByRecipientId.keys),
                             in: graph
                         )
                     } catch {
@@ -651,7 +651,7 @@ public struct SHKGQuery {
     ) throws {
         var condition = KBTripleCondition(value: false)
         for (globalIdentifier, shareDiff) in diff {
-            for recipientId in shareDiff.groupIdByRecipientId.keys {
+            for recipientId in shareDiff.groupIdsByRecipientId.keys {
                 condition = condition.or(KBTripleCondition(
                     subject: globalIdentifier,
                     predicate: SHKGPredicate.sharedWith.rawValue,
@@ -667,7 +667,7 @@ public struct SHKGQuery {
             try graph.removeTriples(matching: condition)
             
             for (globalIdentifier, shareDiff) in diff {
-                for recipientId in shareDiff.groupIdByRecipientId.keys {
+                for recipientId in shareDiff.groupIdsByRecipientId.keys {
                     UserIdToAssetGidSharedWithCache[recipientId]?.remove(globalIdentifier)
                     if UserIdToAssetGidSharedWithCache[recipientId]?.isEmpty ?? false {
                         UserIdToAssetGidSharedWithCache.removeValue(forKey: recipientId)
