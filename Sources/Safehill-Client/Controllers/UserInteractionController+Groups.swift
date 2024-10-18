@@ -6,10 +6,12 @@ extension SHUserInteractionController {
     
     /// Creates the E2EE details for the group for all users involved, or updates such details if they already exist with the information for the missing users.
     /// - Parameters:
+    ///   - title: the message associated with the share group
     ///   - groupId: the share group identifier
     ///   - users: the users in the share
     ///   - completionHandler: the callback method
-    public func setupGroupEncryptionDetails(
+    public func setupGroup(
+        title: String?,
         groupId: String,
         with users: [SHServerUser],
         completionHandler: @escaping (Result<Void, Error>) -> ()
@@ -42,9 +44,28 @@ failed to fetch symmetric key for self user for existing group \(groupId): \(err
                 symmetricKey = createNewSecret()
             }
             
+            let encryptedTitle: String?
+            
             do {
-                self.serverProxy.setupGroupEncryptionDetails(
+                if let title {
+                    let data = title.data(using: .utf8)!
+                    let encryptedData = try SHEncryptedData(privateSecret: symmetricKey!, clearData: data)
+                    encryptedTitle = encryptedData.encryptedData.base64EncodedString()
+                } else {
+                    encryptedTitle = nil
+                }
+            } catch {
+                log.critical("""
+failed to encrypt group title for self user groupId=\(groupId): \(error.localizedDescription)
+""")
+                completionHandler(.failure(error))
+                return
+            }
+            
+            do {
+                self.serverProxy.setupGroup(
                     groupId: groupId,
+                    encryptedTitle: encryptedTitle,
                     recipientsEncryptionDetails: try self.newRecipientEncryptionDetails(
                         from: symmetricKey!,
                         for: users,

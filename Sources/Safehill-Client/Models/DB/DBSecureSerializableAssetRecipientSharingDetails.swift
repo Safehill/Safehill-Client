@@ -6,7 +6,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
     public static var supportsSecureCoding: Bool = true
     
     let groupId: String
-    let groupName: String?
     let groupCreationDate: Date?
     let quality: SHAssetQuality?
     let senderEncryptedSecret: Data?
@@ -15,7 +14,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
     
     enum CodingKeys: String, CodingKey {
         case groupId
-        case groupName
         case groupCreationDate
         case quality
         case senderEncryptedSecret
@@ -25,7 +23,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
     
     init(
         groupId: String,
-        groupName: String?,
         groupCreationDate: Date?,
         quality: SHAssetQuality?,
         senderEncryptedSecret: Data?,
@@ -33,7 +30,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
         publicSignature: Data?
     ) {
         self.groupId = groupId
-        self.groupName = groupName
         self.groupCreationDate = groupCreationDate
         self.quality = quality
         self.senderEncryptedSecret = senderEncryptedSecret
@@ -43,7 +39,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
     
     required convenience init?(coder decoder: NSCoder) {
         let groupId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupId.rawValue) as? String
-        let groupName = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupName.rawValue) as? String
         let groupCreationDateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupCreationDate.rawValue) as? String
         let qualityStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.quality.rawValue) as? String
         let senderEncryptedSecretBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderEncryptedSecret.rawValue) as? String
@@ -113,7 +108,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
         
         self.init(
             groupId: groupId,
-            groupName: groupName,
             groupCreationDate: groupCreationDate,
             quality: quality,
             senderEncryptedSecret: senderEncryptedSecret,
@@ -124,7 +118,6 @@ internal class DBSecureSerializableAssetRecipientSharingDetails: NSObject, NSSec
     
     func encode(with coder: NSCoder) {
         coder.encode(groupId, forKey: CodingKeys.groupId.rawValue)
-        coder.encode(groupName, forKey: CodingKeys.groupName.rawValue)
         coder.encode(groupCreationDate?.iso8601withFractionalSeconds, forKey: CodingKeys.groupCreationDate.rawValue)
         coder.encode(quality?.rawValue, forKey: CodingKeys.quality.rawValue)
         coder.encode(senderEncryptedSecret?.base64EncodedString(), forKey: CodingKeys.senderEncryptedSecret.rawValue)

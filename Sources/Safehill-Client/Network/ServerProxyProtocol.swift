@@ -38,8 +38,9 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
-    func setupGroupEncryptionDetails(
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
