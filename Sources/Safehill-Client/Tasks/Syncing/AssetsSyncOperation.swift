@@ -221,7 +221,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
         if diff.userGroupRemovalsByAssetGid.isEmpty == false {
             dispatchGroup.enter()
             self.serverProxy.localServer.removeAssetRecipients(
-                basedOn: diff.userGroupRemovalsByAssetGid
+                basedOn: diff.userGroupRemovalsByAssetGid.mapValues({ Array($0.keys) })
             ) { [weak self] result in
                 guard let self = self else {
                     return
@@ -231,11 +231,11 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
                 case .success:
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
-                        for (globalIdentifier, userIdsRemoved) in diff.userGroupRemovalsByAssetGid {
+                        for (globalIdentifier, userGroupRemovals) in diff.userGroupRemovalsByAssetGid {
                             assetsDelegates.forEach {
                                 $0.usersWereRemovedFromShare(
                                     of: globalIdentifier,
-                                    userIdsRemoved
+                                    userGroupRemovals
                                 )
                             }
                         }

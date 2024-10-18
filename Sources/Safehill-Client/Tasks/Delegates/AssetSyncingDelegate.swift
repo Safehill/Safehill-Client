@@ -12,7 +12,7 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func usersWereRemovedFromShare(
         of: GlobalIdentifier,
-        _ userIdentifiers: [UserIdentifier]
+        _ userIdentifiers: [UserIdentifier: [String]]
     )
     
     func groupsInfoWereUpdated(_: [String: SHAssetGroupInfo])

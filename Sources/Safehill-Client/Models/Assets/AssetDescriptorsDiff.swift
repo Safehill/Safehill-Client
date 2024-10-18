@@ -25,7 +25,7 @@ struct AssetDescriptorsDiff {
     let groupInfoDifferentOnRemote: [String: GroupInfoDiff]
     let groupInfoRemovedOnRemote: [String]
     let userGroupChangesByAssetGid: [GlobalIdentifier: any SHDescriptorSharingInfo]
-    let userGroupRemovalsByAssetGid: [GlobalIdentifier: [UserIdentifier]]
+    let userGroupRemovalsByAssetGid: [GlobalIdentifier: [UserIdentifier: [String]]]
     
     
     ///
@@ -107,7 +107,7 @@ struct AssetDescriptorsDiff {
         }
         
         var userGroupChangesByAssetGid = [GlobalIdentifier: any SHDescriptorSharingInfo]()
-        var userGroupRemovalsByAssetGid = [GlobalIdentifier: [UserIdentifier]]()
+        var userGroupRemovalsByAssetGid = [GlobalIdentifier: [UserIdentifier: [String]]]()
         var groupInfoToUpdate = [String: GroupInfoDiff]()
         var groupIdsToRemove = Set<String>()
         
@@ -205,9 +205,9 @@ struct AssetDescriptorsDiff {
                 continue
             }
             
-            for (userId, _) in localDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+            for (userId, groupIds) in localDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
                 if remoteDescriptor.sharingInfo.groupIdsByRecipientUserIdentifier[userId] == nil {
-                    userGroupRemovalsByAssetGid[localDescriptor.globalIdentifier] = [userId]
+                    userGroupRemovalsByAssetGid[localDescriptor.globalIdentifier] = [userId: groupIds]
                 }
             }
             
