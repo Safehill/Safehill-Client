@@ -374,6 +374,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 self.serverProxy.localServer.create(
                     assets: [encryptedAsset],
                     groupId: encryptionRequest.groupId,
+                    createdFromThreadId: encryptionRequest.asPhotoMessageInThreadId,
                     filterVersions: nil,
                     overwriteFileIfExists: true
                 ) { result in

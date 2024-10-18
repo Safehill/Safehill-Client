@@ -34,9 +34,15 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.state = SHMockServerProxyState(threads: threads)
     }
     
-    func setupGroupEncryptionDetails(groupId: String, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.setGroupEncryptionDetails(
+    func setupGroup(
+        groupId: String,
+        encryptedTitle: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.setupGroup(
             groupId: groupId,
+            encryptedTitle: encryptedTitle,
             recipientsEncryptionDetails: recipientsEncryptionDetails,
             completionHandler: completionHandler
         )

@@ -312,13 +312,19 @@ extension SHApplePhotoAsset {
 extension SHApplePhotoAsset {
     
     public func toUploadableAsset(
-        for versions: [SHAssetQuality]
+        for versions: [SHAssetQuality],
+        globalIdentifier: GlobalIdentifier? = nil
     ) async throws -> SHUploadableAsset {
-        let globalIdentifier = await self.generateGlobalIdentifier()
+        let globalId: GlobalIdentifier
+        if let globalIdentifier {
+            globalId = globalIdentifier
+        } else {
+            globalId = await self.generateGlobalIdentifier()
+        }
         
         return SHUploadableAsset(
             localIdentifier: self.phAsset.localIdentifier,
-            globalIdentifier: globalIdentifier,
+            globalIdentifier: globalId,
             creationDate: self.phAsset.creationDate,
             data: try await data(for: versions)
         )
