@@ -1081,78 +1081,52 @@ struct LocalServer : SHServerAPI {
             }
         }
         
-        let dispatchGroup = DispatchGroup()
-        
         for (groupId, diff) in groupInfoById {
             
-            dispatchGroup.enter()
-            
-            let assetGlobalIdsInGroup = diff.assetGlobalIdentifiers
-            
             if let threadId = diff.groupInfo.createdFromThreadId {
-                self.getAssetDescriptors(
-                    forAssetGlobalIdentifiers: assetGlobalIdsInGroup,
-                    useCache: false
-                ) { result in
-                    switch result {
-                    case .failure(let error):
-                        log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
-                        
-                    case .success(let descriptors):
-                        for descriptor in descriptors {
-                            guard let addedAt = diff.groupInfo.createdAt?.iso8601withFractionalSeconds else {
-                                log.error("Group information doesn't include creation data. Skipping")
-                                continue
-                            }
-                            
-                            let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(groupId)::\(descriptor.globalIdentifier)::photoMessage"
-                            let value = DBSecureSerializableConversationThreadAsset(
-                                globalIdentifier: descriptor.globalIdentifier,
-                                addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
-                                addedAt: addedAt,
-                                groupId: groupId
-                            )
-                            do {
-                                let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
-                                assetStoreWriteBatch.set(value: serializedData, for: key)
-                            } catch {
-                                log.critical("error serializing photoMessage in DB. \(error.localizedDescription)")
-                            }
-                        }
+                for descriptor in diff.descriptorByAssetId.values {
+                    guard let addedAt = diff.groupInfo.createdAt?.iso8601withFractionalSeconds else {
+                        log.error("Group information doesn't include creation data. Skipping")
+                        continue
                     }
-                    dispatchGroup.leave()
+                    
+                    let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(groupId)::\(descriptor.globalIdentifier)::photoMessage"
+                    let value = DBSecureSerializableConversationThreadAsset(
+                        globalIdentifier: descriptor.globalIdentifier,
+                        addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
+                        addedAt: addedAt,
+                        groupId: groupId
+                    )
+                    do {
+                        let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                        assetStoreWriteBatch.set(value: serializedData, for: key)
+                    } catch {
+                        log.critical("error serializing photoMessage in DB. \(error.localizedDescription)")
+                    }
                 }
             } else {
                 var condition = KBGenericCondition(value: false)
-                for assetId in assetGlobalIdsInGroup {
+                for assetId in diff.descriptorByAssetId.keys {
                     condition = condition.or(
                         KBGenericCondition(.endsWith, value: "\(groupId)::\(assetId)::photoMessage")
                     )
                 }
                 
-                assetStore.removeValues(forKeysMatching: condition) { result in
-                    switch result {
-                    case .failure(let error):
-                        log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
-                        
-                    case .success:
-                        break
-                    }
-                    
-                    dispatchGroup.leave()
+                do {
+                    let _ = try assetStore.removeValues(forKeysMatching: condition)
+                } catch {
+                    log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
                 }
             }
         }
         
-        dispatchGroup.notify(queue: .global()) {
-            do {
-                try assetStoreWriteBatch.write()
-            } catch {
-                log.error("failed to update groupIds from remote to local server. \(error.localizedDescription)")
-            }
-            
-            completionHandler(.success(()))
+        do {
+            try assetStoreWriteBatch.write()
+        } catch {
+            log.error("failed to update groupIds from remote to local server. \(error.localizedDescription)")
         }
+        
+        completionHandler(.success(()))
     }
     
     func removeGroupIds(_ groupIds: [String],
@@ -1760,71 +1734,86 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func addAssetRecipients(basedOn userIdsToAddToAssetGids: [GlobalIdentifier: ShareSenderReceivers],
-                            versions: [SHAssetQuality]? = nil,
-                            completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func updateUserGroupInfo(
+        basedOn sharingInfoByAssetId: [GlobalIdentifier: any SHDescriptorSharingInfo],
+        versions: [SHAssetQuality]? = nil,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
         
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        do {
-            try SHKGQuery.ingestShares(userIdsToAddToAssetGids)
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
-        let versions = versions ?? SHAssetQuality.all
-        
-        let writeBatch = assetStore.writeBatch()
-        
-        for (globalIdentifier, shareDiff) in userIdsToAddToAssetGids {
-            for (recipientUserId, groupIds) in shareDiff.groupIdsByRecipientId {
-                for groupId in groupIds {
-                    guard let groupInfo = shareDiff.groupInfoById[groupId] else {
-                        log.critical("group information missing for group \(groupId) when calling addAssetRecipients(basedOn:versions:completionHandler:)")
-                        continue
-                    }
-                    for version in versions {
-                        
-                        let key = [
-                            "receiver",
-                            recipientUserId,
-                            version.rawValue,
-                            globalIdentifier,
-                            groupId
-                        ].joined(separator: "::")
-                        
-                        let value = DBSecureSerializableAssetRecipientSharingDetails(
-                            groupId: groupId,
-                            groupCreationDate: groupInfo.createdAt,
-                            quality: version,
-                            senderEncryptedSecret: nil,
-                            ephemeralPublicKey: nil,
-                            publicSignature: nil
-                        )
-                        
-                        do {
-                            let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
-                            
-                            writeBatch.set(
-                                value: serializedData,
-                                for: key
-                            )
-                        } catch {
-                            log.critical("failed to serialize recipient info for key \(key): \(value). \(error.localizedDescription)")
+        self.removeAssetRecipients(
+            basedOn: sharingInfoByAssetId.mapValues({ Array($0.groupIdsByRecipientUserIdentifier.keys) }),
+            versions: versions
+        ) {
+            removeResult in
+            switch removeResult {
+            case .failure(let error):
+                completionHandler(.failure(error))
+                
+            case .success:
+            
+                do {
+                    try SHKGQuery.ingestShareChanges(sharingInfoByAssetId)
+                } catch {
+                    completionHandler(.failure(error))
+                    return
+                }
+                
+                let versions = versions ?? SHAssetQuality.all
+                
+                let writeBatch = assetStore.writeBatch()
+                
+                for (globalIdentifier, sharingInfo) in sharingInfoByAssetId {
+                    for (recipientUserId, groupIds) in sharingInfo.groupIdsByRecipientUserIdentifier {
+                        for groupId in groupIds {
+                            guard let groupInfo = sharingInfo.groupInfoById[groupId] else {
+                                log.critical("group information missing for group \(groupId) when calling addAssetRecipients(basedOn:versions:completionHandler:)")
+                                continue
+                            }
+                            for version in versions {
+                                
+                                let key = [
+                                    "receiver",
+                                    recipientUserId,
+                                    version.rawValue,
+                                    globalIdentifier,
+                                    groupId
+                                ].joined(separator: "::")
+                                
+                                let value = DBSecureSerializableAssetRecipientSharingDetails(
+                                    groupId: groupId,
+                                    groupCreationDate: groupInfo.createdAt,
+                                    quality: version,
+                                    senderEncryptedSecret: nil,
+                                    ephemeralPublicKey: nil,
+                                    publicSignature: nil
+                                )
+                                
+                                do {
+                                    let serializedData = try NSKeyedArchiver.archivedData(withRootObject: value, requiringSecureCoding: true)
+                                    
+                                    writeBatch.set(
+                                        value: serializedData,
+                                        for: key
+                                    )
+                                } catch {
+                                    log.critical("failed to serialize recipient info for key \(key): \(value). \(error.localizedDescription)")
+                                }
+                            }
                         }
                     }
                 }
+                
+                writeBatch.write(completionHandler: completionHandler)
             }
         }
-        
-        writeBatch.write(completionHandler: completionHandler)
     }
     
-    func removeAssetRecipients(basedOn userIdsToRemoveFromAssetGid: [GlobalIdentifier: ShareSenderReceivers],
+    func removeAssetRecipients(basedOn userIdsToRemoveFromAssetGid: [GlobalIdentifier: [UserIdentifier]],
                                versions: [SHAssetQuality]? = nil,
                                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -1839,31 +1828,30 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        ///
-        /// Only after the Graph is updated, remove the recipients from the DB
-        /// This ensures that if the graph update fails is attempted again (as the descriptors from local haven't been updated yet)
-        ///
-        let versions = versions ?? SHAssetQuality.all
+        var removeCondition = KBGenericCondition(value: false)
         
-        let writeBatch = assetStore.writeBatch()
-        
-        for (globalIdentifier, shareDiff) in userIdsToRemoveFromAssetGid {
-            for (recipientUserId, groupIds) in shareDiff.groupIdsByRecipientId {
-                for groupId in groupIds {
-                    for version in versions {
-                        writeBatch.set(value: nil, for: [
-                            "receiver",
-                            recipientUserId,
-                            version.rawValue,
-                            globalIdentifier,
-                            groupId
-                        ].joined(separator: "::"))
-                    }
+        for (globalIdentifier, recipientIds) in userIdsToRemoveFromAssetGid {
+            for recipientId in recipientIds {
+                for version in versions ?? SHAssetQuality.all {
+                    let partialKey = [
+                        "receiver",
+                        recipientId,
+                        version.rawValue,
+                        globalIdentifier
+                    ].joined(separator: "::")
+                    removeCondition = removeCondition.or(KBGenericCondition(.beginsWith, value: partialKey))
                 }
             }
         }
         
-        writeBatch.write(completionHandler: completionHandler)
+        assetStore.removeValues(forKeysMatching: removeCondition) { result in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     func uploadAsset(

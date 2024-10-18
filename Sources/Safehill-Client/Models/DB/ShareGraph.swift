@@ -171,28 +171,44 @@ public struct SHKGQuery {
         }
     }
     
-    internal static func ingestShares(
-        _ userIdsToAddToAssetGids: [GlobalIdentifier: ShareSenderReceivers]
+    internal static func ingestShareChanges(
+        _ sharingInfoByAssetId: [GlobalIdentifier: any SHDescriptorSharingInfo]
     ) throws {
         var errors = [Error]()
         
         do {
+            try SHKGQuery.removeSharingInformation(basedOn: sharingInfoByAssetId.mapValues({ Array($0.groupIdsByRecipientUserIdentifier.keys) }))
+            
             try readWriteGraphQueue.sync(flags: .barrier) {
                 guard let graph = SHDBManager.sharedInstance.graph else {
                     throw KBError.databaseNotReady
                 }
                 
-                for (assetIdentifier, senderReceivers) in userIdsToAddToAssetGids {
-                    do {
-                        try SHKGQuery.ingestShare(
-                            of: assetIdentifier,
-                            from: senderReceivers.from,
-                            to: Array(senderReceivers.groupIdsByRecipientId.keys),
-                            in: graph
-                        )
-                    } catch {
-                        log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
-                        errors.append(error)
+                for (assetIdentifier, sharingInfo) in sharingInfoByAssetId {
+                    
+                    var senderReceiverIds = [UserIdentifier: [UserIdentifier]]()
+                    
+                    for recipientId in sharingInfo.groupIdsByRecipientUserIdentifier.keys {
+                        let senderId = sharingInfo.sharedByUserIdentifier
+                        if senderReceiverIds[senderId] == nil {
+                            senderReceiverIds[senderId] = [recipientId]
+                        } else {
+                            senderReceiverIds[senderId]!.append(recipientId)
+                        }
+                    }
+                    
+                    for (senderId, recipientIds) in senderReceiverIds {
+                        do {
+                            try SHKGQuery.ingestShare(
+                                of: assetIdentifier,
+                                from: senderId,
+                                to: recipientIds,
+                                in: graph
+                            )
+                        } catch {
+                            log.critical("[KG] failed to ingest descriptor for assetGid=\(assetIdentifier) into the graph")
+                            errors.append(error)
+                        }
                     }
                 }
             }
@@ -647,11 +663,11 @@ public struct SHKGQuery {
     }
     
     static internal func removeSharingInformation(
-        basedOn diff: [GlobalIdentifier: ShareSenderReceivers]
+        basedOn usersToRemoveByAssetId: [GlobalIdentifier: [UserIdentifier]]
     ) throws {
         var condition = KBTripleCondition(value: false)
-        for (globalIdentifier, shareDiff) in diff {
-            for recipientId in shareDiff.groupIdsByRecipientId.keys {
+        for (globalIdentifier, recipientIds) in usersToRemoveByAssetId {
+            for recipientId in recipientIds {
                 condition = condition.or(KBTripleCondition(
                     subject: globalIdentifier,
                     predicate: SHKGPredicate.sharedWith.rawValue,
@@ -666,9 +682,8 @@ public struct SHKGQuery {
             }
             try graph.removeTriples(matching: condition)
             
-            for (globalIdentifier, shareDiff) in diff {
-                for recipientId in shareDiff.groupIdsByRecipientId.keys {
-                    UserIdToAssetGidSharedWithCache[recipientId]?.remove(globalIdentifier)
+            for recipientIds in usersToRemoveByAssetId.values {
+                for recipientId in recipientIds {
                     if UserIdToAssetGidSharedWithCache[recipientId]?.isEmpty ?? false {
                         UserIdToAssetGidSharedWithCache.removeValue(forKey: recipientId)
                     }

@@ -5,15 +5,14 @@ public protocol SHAssetSyncingDelegate: SHInboundAssetOperationDelegate {
     
     func assetsWereDeleted(_ assets: [SHBackedUpAssetIdentifier])
     
-    func usersWereAddedToShare(
-        of: GlobalIdentifier,
-        groupIdsByRecipientId: [UserIdentifier: [String]],
-        groupInfoById: [String: SHAssetGroupInfo]
+    func groupUserSharingInfoChanged(
+        forAssetWith globalIdentifier: GlobalIdentifier,
+        sharingInfo: any SHDescriptorSharingInfo
     )
     
     func usersWereRemovedFromShare(
         of: GlobalIdentifier,
-        groupIdsByRecipientId: [UserIdentifier: [String]]
+        _ userIdentifiers: [UserIdentifier]
     )
     
     func groupsInfoWereUpdated(_: [String: SHAssetGroupInfo])
