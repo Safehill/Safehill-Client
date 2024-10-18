@@ -24,52 +24,44 @@ public struct SHUploadPipeline {
     /// Once, the `.hiResolution` finishes uploading, it replaces the `.midResolution`.
     ///
     /// - Parameters:
-    ///   - localIdentifier: the Apple Photos local identifier
+    ///   - asset: the asset to upload
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - invitedUsers: the phone numbers invited to the share with groupId
     ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread, and if so which thread
     public static func enqueueUpload(
-        localIdentifier: String,
+        of asset: SHUploadableAsset,
         groupId: String,
         sender: any SHServerUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
         asPhotoMessageInThreadId: String?
     ) throws {
+        
+        let request = SHEncryptionRequestQueueItem(
+            asset: asset,
+            versions: [.lowResolution, .hiResolution],
+            groupId: groupId,
+            eventOriginator: sender,
+            sharedWith: recipients,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+            isBackground: false
+        )
+        
         do {
-            let queueItem = SHLocalFetchRequestQueueItem(
-                localIdentifier: localIdentifier,
-                groupId: groupId,
-                eventOriginator: sender,
-                sharedWith: recipients,
-                invitedUsers: invitedUsers,
-                shouldUpload: true,
-                asPhotoMessageInThreadId: asPhotoMessageInThreadId
-            )
-            try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
+            let queue = try BackgroundOperationQueue.of(type: .encryption)
+            try request.enqueue(in: queue, with: request.identifier)
         } catch {
-            let failedQueueItem = SHFailedUploadRequestQueueItem(
-                localIdentifier: localIdentifier,
-                groupId: groupId,
-                eventOriginator: sender,
-                sharedWith: recipients,
-                invitedUsers: invitedUsers,
-                asPhotoMessageInThreadId: asPhotoMessageInThreadId
-            )
-            try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedUpload))
+            if let failedUploadQueue = try? BackgroundOperationQueue.of(type: .failedUpload) {
+                try? request.enqueue(in: failedUploadQueue, with: request.identifier)
+            }
             
-            if recipients.count > 0 {
-                let failedQueueItem = SHFailedShareRequestQueueItem(
-                    localIdentifier: localIdentifier,
-                    groupId: groupId,
-                    eventOriginator: sender,
-                    sharedWith: recipients,
-                    invitedUsers: invitedUsers,
-                    asPhotoMessageInThreadId: asPhotoMessageInThreadId
-                )
-                try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
+            if request.isSharingWithOrInvitingOtherUsers {
+                if let failedShareQueue = try? BackgroundOperationQueue.of(type: .failedShare) {
+                    try? request.enqueue(in: failedShareQueue, with: request.identifier)
+                }
             }
             
             throw error
@@ -80,64 +72,37 @@ public struct SHUploadPipeline {
     /// Enqueue a sharing operation, for an asset that was already uploaded.
     /// In case of a force-retry, the asset upload will be re-attempted too.
     /// - Parameters:
-    ///   - localIdentifier: the Apple Photos local identifier
-    ///   - globalIdentifier: the global identifier, if available
+    ///   - asset: the asset to share
     ///   - groupId: the request unique identifier
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread, and if so which thread
     public static func enqueueShare(
-        localIdentifier: String,
-        globalIdentifier: String?,
+        of asset: SHUploadableAsset,
         groupId: String,
         sender: SHAuthenticatedLocalUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
         asPhotoMessageInThreadId: String?
     ) throws {
-        ///
-        /// First, check if the asset already exists in the local store.
-        /// If the hi resolution exists, share the `.hiResolution` directly,
-        /// without proxying through the `.midResolution`
-        ///
-        let locallyEncryptedVersions = SHLocalAssetStoreController(
-            user: sender
-        ).locallyEncryptedVersions(
-            forLocalIdentifier: localIdentifier
+        let request = SHEncryptionRequestQueueItem(
+            asset: asset,
+            versions: [.lowResolution, .hiResolution],
+            groupId: groupId,
+            eventOriginator: sender,
+            sharedWith: recipients,
+            invitedUsers: invitedUsers,
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+            isBackground: false
         )
         
-        let versions: [SHAssetQuality]
-        if locallyEncryptedVersions.contains(.hiResolution) {
-            versions = [.lowResolution, .hiResolution]
-        } else {
-            versions = [.lowResolution, .midResolution]
-        }
-        
         do {
-            let queueItem = SHLocalFetchRequestQueueItem(
-                localIdentifier: localIdentifier,
-                globalIdentifier: globalIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: sender,
-                sharedWith: recipients,
-                invitedUsers: invitedUsers,
-                shouldUpload: false,
-                asPhotoMessageInThreadId: asPhotoMessageInThreadId
-            )
-            try queueItem.enqueue(in: BackgroundOperationQueue.of(type: .fetch))
-            
+            let queue = try BackgroundOperationQueue.of(type: .share)
+            try request.enqueue(in: queue, with: request.identifier)
         } catch {
-            let failedQueueItem = SHFailedShareRequestQueueItem(
-                localIdentifier: localIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: sender,
-                sharedWith: recipients,
-                invitedUsers: invitedUsers,
-                asPhotoMessageInThreadId: asPhotoMessageInThreadId
-            )
-            try? failedQueueItem.enqueue(in: BackgroundOperationQueue.of(type: .failedShare))
+            if let failedShareQueue = try? BackgroundOperationQueue.of(type: .failedShare) {
+                try? request.enqueue(in: failedShareQueue, with: request.identifier)
+            }
             
             throw error
         }
@@ -146,9 +111,14 @@ public struct SHUploadPipeline {
 
 public extension SHUploadPipeline {
     
-    static func queueItemIdentifier(groupId: String, assetLocalIdentifier: String, versions: [SHAssetQuality], users: [SHServerUser]) -> String {
+    static func queueItemIdentifier(
+        groupId: String,
+        globalIdentifier: GlobalIdentifier,
+        versions: [SHAssetQuality],
+        users: [any SHServerUser]
+    ) -> String {
         var components = [
-            assetLocalIdentifier,
+            globalIdentifier,
             groupId
         ]
         if users.count > 0 {
@@ -164,7 +134,7 @@ public extension SHUploadPipeline {
         return components.joined(separator: "+")
     }
     
-    static func assetLocalIdentifier(fromItemIdentifier itemIdentifier: String) -> String? {
+    static func assetGlobalIdentifier(fromItemIdentifier itemIdentifier: String) -> GlobalIdentifier? {
         let components = itemIdentifier.components(separatedBy: "+")
         guard components.count >= 3 else {
             return nil

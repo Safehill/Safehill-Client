@@ -76,3 +76,18 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
                   receiverUserIdentifier: receiverUserIdentifier)
     }
 }
+
+
+extension SHDownloadRequestQueueItem {
+    public var isSharingWithOtherSafehillUsers: Bool {
+        return invitedUsers.count > 0
+    }
+    
+    public var isSharingWithOrInvitingOtherUsers: Bool {
+        return sharedWith.count + invitedUsers.count > 0
+    }
+    
+    public var isOnlyInvitingUsers: Bool {
+        return sharedWith.count == 0 && invitedUsers.count > 0
+    }
+}

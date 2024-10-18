@@ -26,11 +26,11 @@ public enum Asset: GenericAssetIdentifiable {
         case .fromApplePhotosLibrary(let asset):
             return asset.localIdentifier
         case .fromApplePhotosLibraryBackedUp(let asset):
-            return asset.phAsset.localIdentifier
+            return asset.globalIdentifier
         case .downloading(let assetDescriptor):
-            return assetDescriptor.localIdentifier ?? assetDescriptor.globalIdentifier
+            return assetDescriptor.globalIdentifier
         case .downloaded(let decryptedAsset):
-            return decryptedAsset.localIdentifier ?? decryptedAsset.globalIdentifier
+            return decryptedAsset.globalIdentifier
         }
     }
     

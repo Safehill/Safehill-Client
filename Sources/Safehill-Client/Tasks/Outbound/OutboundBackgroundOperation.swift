@@ -20,6 +20,34 @@ protocol SHOutboundBackgroundOperation {
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )
+    
+    func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem
+}
+
+
+extension SHOutboundBackgroundOperation {
+    
+    public func content(ofQueueItem item: KBQueueItem) throws -> SHSerializableQueueItem {
+        guard let data = item.content as? Data else {
+            throw SHBackgroundOperationError.unexpectedData(item.content)
+        }
+        
+        let unarchiver: NSKeyedUnarchiver
+        if #available(macOS 10.13, *) {
+            unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+        } else {
+            unarchiver = NSKeyedUnarchiver(forReadingWith: data)
+        }
+        
+        guard let deserialized = unarchiver.decodeObject(
+            of: SHGenericShareableGroupableQueueItem.self,
+            forKey: NSKeyedArchiveRootObjectKey
+        ) else {
+            throw SHBackgroundOperationError.unexpectedData(data)
+        }
+        
+        return deserialized
+    }
 }
 
 extension SHOutboundBackgroundOperation {

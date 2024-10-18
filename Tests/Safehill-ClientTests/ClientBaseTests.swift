@@ -113,7 +113,6 @@ final class Safehill_ClientBaseUnitTests: XCTestCase {
     }
         
     func testInitQueue() throws {
-        let _ = try BackgroundOperationQueue.of(type: .fetch)
         let _ = try BackgroundOperationQueue.of(type: .encryption)
         let _ = try BackgroundOperationQueue.of(type: .upload)
         let _ = try BackgroundOperationQueue.of(type: .share)

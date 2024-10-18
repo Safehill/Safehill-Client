@@ -13,14 +13,7 @@ protocol SHUploadStepBackgroundOperation {
     )
     
     func markAsFailed(
-        localIdentifier: String,
-        versions: [SHAssetQuality],
-        groupId: String,
-        eventOriginator: any SHServerUser,
-        sharedWith: [any SHServerUser],
-        invitedUsers: [String],
-        asPhotoMessageInThreadId: String?,
-        isBackground: Bool,
+        request: SHGenericShareableGroupableQueueItem,
         error: Error
     )
 }
@@ -51,61 +44,36 @@ extension SHUploadStepBackgroundOperation {
     }
     
     func markAsFailed(
-        localIdentifier: String,
-        versions: [SHAssetQuality],
-        groupId: String,
-        eventOriginator: any SHServerUser,
-        sharedWith users: [any SHServerUser],
-        invitedUsers: [String],
-        asPhotoMessageInThreadId: String?,
-        isBackground: Bool,
+        request: SHGenericShareableGroupableQueueItem,
         error: Error
     ) {
-        let failedUploadQueueItem = SHFailedUploadRequestQueueItem(
-            localIdentifier: localIdentifier,
-            versions: versions,
-            groupId: groupId,
-            eventOriginator: eventOriginator,
-            sharedWith: users,
-            invitedUsers: invitedUsers,
-            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-            isBackground: isBackground
-        )
+        let globalIdentifier = request.asset.globalIdentifier
+        let versions = request.versions
+        let users = request.sharedWith
         
         ///
         /// Enqueue to the FAILED UPLOAD queue
         ///
         do {
-            log.info("enqueueing upload request for asset \(localIdentifier) versions \(versions) to the UPLOAD FAILED queue")
+            log.info("enqueueing upload request for asset \(globalIdentifier) versions \(versions) to the UPLOAD FAILED queue")
             
             let failedUploadQueue = try BackgroundOperationQueue.of(type: .failedUpload)
-            try failedUploadQueueItem.enqueue(in: failedUploadQueue)
+            try request.enqueue(in: failedUploadQueue, with: request.identifier)
         }
         catch {
-            log.fault("asset \(localIdentifier) failed to upload but will never be recorded as 'failed to upload' because enqueueing to UPLOAD FAILED queue failed: \(error.localizedDescription)")
+            log.fault("asset \(globalIdentifier) failed to upload but will never be recorded as 'failed to upload' because enqueueing to UPLOAD FAILED queue failed: \(error.localizedDescription)")
         }
         
         if users.count > 0 {
             ///
             /// Enqueue to the FAILED SHARE queue if it was an upload in service of a share
             ///
-            let failedShare = SHFailedShareRequestQueueItem(
-                localIdentifier: localIdentifier,
-                versions: versions,
-                groupId: groupId,
-                eventOriginator: eventOriginator,
-                sharedWith: users,
-                invitedUsers: invitedUsers,
-                asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-                isBackground: isBackground
-            )
-            
             do {
                 let failedShareQueue = try BackgroundOperationQueue.of(type: .failedShare)
-                try failedShare.enqueue(in: failedShareQueue)
+                try request.enqueue(in: failedShareQueue, with: request.identifier)
             }
             catch {
-                log.fault("asset \(localIdentifier) failed to encrypt, hence it couldn't be shared, but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
+                log.fault("asset \(globalIdentifier) failed to encrypt, hence it couldn't be shared, but will never be recorded as 'failed to share' because enqueueing to SHARE FAILED queue failed: \(error.localizedDescription)")
             }
         }
     }
