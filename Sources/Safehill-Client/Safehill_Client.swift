@@ -57,8 +57,8 @@ public enum SHBackgroundOperationError : Error, CustomStringConvertible, Localiz
             return "Fatal error: \(errorString)"
         case .timedOut:
             return "The operation timed out"
-        case .globalIdentifierDisagreement(let localIdentifier):
-            return "The global identifier for local id \(localIdentifier) doesn't match the one previously computed"
+        case .globalIdentifierDisagreement(let gid1, let gid2):
+            return "The global identifier doesn't match the one previously computed: \(gid1) \(gid2)"
         case .unexpectedData(let data):
             return "unexpected data: \(String(describing: data))"
         case .alreadyProcessed:

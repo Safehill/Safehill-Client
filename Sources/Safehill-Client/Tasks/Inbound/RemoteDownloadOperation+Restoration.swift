@@ -158,62 +158,63 @@ extension SHRemoteDownloadOperation {
             
             var otherUserIdsSharedWithByGroupId = [String: [(with: any SHServerUser, at: Date)]]()
             
-            for (recipientUserId, groupId) in descriptor.sharingInfo.sharedWithUserIdentifiersInGroup {
-                
-                guard let groupInfo = descriptor.sharingInfo.groupInfoById[groupId] else {
-                    self.log.critical("[\(type(of: self))] no group info in descriptor for id \(groupId)")
-                    continue
-                }
-                
-                guard let groupCreationDate = groupInfo.createdAt else {
-                    self.log.critical("[\(type(of: self))] no group creation date in descriptor for id \(groupId)")
-                    continue
-                }
-                
-                if recipientUserId == self.user.identifier {
-                    let clearTitle: String?
-                    do {
-                        clearTitle = try await self.decryptTitle(groupInfo: groupInfo, groupId: groupId)
-                    } catch {
-                        self.log.critical("Unable to decrypt title for groupId=\(groupId): \(error.localizedDescription)")
+            for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
+                for groupId in groupIds {
+                    guard let groupInfo = descriptor.sharingInfo.groupInfoById[groupId] else {
+                        self.log.critical("[\(type(of: self))] no group info in descriptor for id \(groupId)")
                         continue
                     }
                     
-                    let item = SHUploadHistoryItem(
-                        asset: SHUploadableAsset(
-                            localIdentifier: descriptor.localIdentifier,
-                            globalIdentifier: descriptor.globalIdentifier,
-                            creationDate: descriptor.creationDate,
-                            data: [:]
-                        ),
-                        versions: [.lowResolution, .hiResolution],
-                        groupId: groupId,
-                        groupTitle: clearTitle,
-                        eventOriginator: senderUser,
-                        sharedWith: [],
-                        invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
-                        asPhotoMessageInThreadId: groupInfo.createdFromThreadId,
-                        isBackground: false
-                    )
-                    
-                    if groupIdToUploadItems[groupId] == nil {
-                        groupIdToUploadItems[groupId] = [(item, groupCreationDate)]
-                    } else {
-                        groupIdToUploadItems[groupId]!.append((item, groupCreationDate))
-                    }
-                    
-                } else {
-                    guard let recipient = usersDict[recipientUserId] else {
-                        self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(recipientUserId)")
+                    guard let groupCreationDate = groupInfo.createdAt else {
+                        self.log.critical("[\(type(of: self))] no group creation date in descriptor for id \(groupId)")
                         continue
                     }
-                    if otherUserIdsSharedWithByGroupId[groupId] == nil {
-                        otherUserIdsSharedWithByGroupId[groupId] = [(with: recipient, at: groupCreationDate)]
-                    } else {
-                        otherUserIdsSharedWithByGroupId[groupId]?.append(
-                            missingContentsFrom: [(with: recipient, at: groupCreationDate)],
-                            compareUsing: { $0.with.identifier == $1.with.identifier }
+                    
+                    if recipientUserId == self.user.identifier {
+                        let clearTitle: String?
+                        do {
+                            clearTitle = try await self.decryptTitle(groupInfo: groupInfo, groupId: groupId)
+                        } catch {
+                            self.log.critical("Unable to decrypt title for groupId=\(groupId): \(error.localizedDescription)")
+                            continue
+                        }
+                        
+                        let item = SHUploadHistoryItem(
+                            asset: SHUploadableAsset(
+                                localIdentifier: descriptor.localIdentifier,
+                                globalIdentifier: descriptor.globalIdentifier,
+                                creationDate: descriptor.creationDate,
+                                data: [:]
+                            ),
+                            versions: [.lowResolution, .hiResolution],
+                            groupId: groupId,
+                            groupTitle: clearTitle,
+                            eventOriginator: senderUser,
+                            sharedWith: [],
+                            invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
+                            asPhotoMessageInThreadId: groupInfo.createdFromThreadId,
+                            isBackground: false
                         )
+                        
+                        if groupIdToUploadItems[groupId] == nil {
+                            groupIdToUploadItems[groupId] = [(item, groupCreationDate)]
+                        } else {
+                            groupIdToUploadItems[groupId]!.append((item, groupCreationDate))
+                        }
+                        
+                    } else {
+                        guard let recipient = usersDict[recipientUserId] else {
+                            self.log.critical("[\(type(of: self))] inconsistency between user ids referenced in descriptors and user objects returned from server. No user for id \(recipientUserId)")
+                            continue
+                        }
+                        if otherUserIdsSharedWithByGroupId[groupId] == nil {
+                            otherUserIdsSharedWithByGroupId[groupId] = [(with: recipient, at: groupCreationDate)]
+                        } else {
+                            otherUserIdsSharedWithByGroupId[groupId]?.append(
+                                missingContentsFrom: [(with: recipient, at: groupCreationDate)],
+                                compareUsing: { $0.with.identifier == $1.with.identifier }
+                            )
+                        }
                     }
                 }
             }

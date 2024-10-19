@@ -526,7 +526,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         )
         
         let expectation1 = XCTestExpectation(description: "initialize the group")
-        controller.setupGroupEncryptionDetails(
+        controller.setupGroup(
+            title: nil,
             groupId: groupId,
             with: [
                 SHRemoteUser(
@@ -567,7 +568,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         XCTAssertEqual(kvs["\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails.encryptedSecret)
      
         let expectation2 = XCTestExpectation(description: "initialize the group")
-        controller.setupGroupEncryptionDetails(
+        controller.setupGroup(
+            title: nil,
             groupId: groupId,
             with: [
                 SHRemoteUser(
@@ -651,7 +653,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         )
         
         let expectation1 = XCTestExpectation(description: "initialize the group")
-        controller.setupGroupEncryptionDetails(
+        controller.setupGroup(
+            title: nil,
             groupId: groupId,
             with: [
                 SHRemoteUser(
