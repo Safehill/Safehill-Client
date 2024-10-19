@@ -135,6 +135,10 @@ struct RemoteServer : SHServerAPI {
                     let convertedString = String(data: data, encoding: String.Encoding.utf8)
                     log.warning("response body: \(convertedString ?? "")")
                 }
+                if let requestData = request.httpBody {
+                    let convertedString = String(data: requestData, encoding: String.Encoding.utf8)
+                    log.warning("request body: \(convertedString ?? "")")
+                }
             }
             
             switch httpResponse.statusCode {
