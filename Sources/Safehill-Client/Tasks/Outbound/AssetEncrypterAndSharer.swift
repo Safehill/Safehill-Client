@@ -44,6 +44,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         let versions = request.versions
         let groupId = request.groupId
         let users = request.sharedWith
+        let invitedUsers = request.invitedUsers
         
         do { _ = try BackgroundOperationQueue.of(type: .share).dequeue(item: queueItem) }
         catch {
@@ -67,17 +68,31 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             return
         }
         
+        /// Notify the delegates
         let assetsDelegates = self.assetsDelegates
         delegatesQueue.async {
-            /// Notify the delegates
-            for delegate in assetsDelegates {
-                if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didFailSharing(
-                        ofAsset: globalIdentifier,
-                        with: users,
-                        in: groupId,
-                        error: error
-                    )
+            if users.count > 0 {
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetSharerDelegate {
+                        delegate.didFailSharing(
+                            ofAsset: globalIdentifier,
+                            with: users,
+                            in: groupId,
+                            error: error
+                        )
+                    }
+                }
+            }
+            
+            if invitedUsers.count > 0 {
+                for delegate in assetsDelegates {
+                    if let delegate = delegate as? SHAssetSharerDelegate {
+                        delegate.didFailInviting(
+                            phoneNumbers: invitedUsers,
+                            to: groupId,
+                            error: error
+                        )
+                    }
                 }
             }
         }
@@ -121,59 +136,6 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
                     delegate.didCompleteSharing(ofAsset: globalIdentifier, with: request.sharedWith, in: groupId)
-                }
-            }
-        }
-    }
-    
-    private func shareAndInvite(
-        _ shareableEncryptedAsset: SHShareableEncryptedAsset,
-        from shareRequest: SHEncryptionForSharingRequestQueueItem,
-        queueItem item: KBQueueItem,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        self.serverProxy.share(
-            shareableEncryptedAsset,
-            asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,
-            suppressNotification: shareRequest.isBackground
-        ) { shareResult in
-            
-            switch shareResult {
-            case .failure(let err):
-                completionHandler(.failure(err))
-                
-            case .success:
-                if shareRequest.isBackground == false,
-                   shareRequest.invitedUsers.count > 0 {
-                    
-                    self.serverProxy.invite(
-                        shareRequest.invitedUsers,
-                        to: shareRequest.groupId
-                    ) { inviteResult in
-                        switch inviteResult {
-                        case.success:
-                            completionHandler(.success(()))
-                            
-                        case .failure(let error):
-                            let assetsDelegates = self.assetsDelegates
-                            self.delegatesQueue.async {
-                                /// Notify the delegates
-                                for delegate in assetsDelegates {
-                                    if let delegate = delegate as? SHAssetSharerDelegate {
-                                        delegate.didFailInviting(
-                                            phoneNumbers: shareRequest.invitedUsers,
-                                            to: shareRequest.groupId,
-                                            error: error
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            completionHandler(.failure(error))
-                        }
-                    }
-                } else {
-                    completionHandler(.success(()))
                 }
             }
         }
@@ -253,6 +215,9 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         }
         
         Task(priority: qos.toTaskPriority()) {
+            
+            let assetSharingController = SHAssetSharingController(localUser: self.user)
+            
             if shareRequest.isBackground == false {
                 ///
                 /// Create group encryption details and title
@@ -261,22 +226,11 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                 usersAndSelf.append(self.user)
                 
                 do {
-                    try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, any Error>) in
-                        self.log.debug("creating or updating group for request \(shareRequest.identifier)")
-                        self.interactionsController.setupGroup(
-                            title: shareRequest.groupTitle,
-                            groupId: shareRequest.groupId,
-                            with: usersAndSelf
-                        ) { result in
-                            switch result {
-                            case .failure(let error):
-                                self.log.error("failed to initialize group. \(error.localizedDescription)")
-                                continuation.resume(throwing: error)
-                            case .success:
-                                continuation.resume(returning: ())
-                            }
-                        }
-                    }
+                    try await assetSharingController.createGroupEncryptionDetails(
+                        for: usersAndSelf,
+                        in: shareRequest.groupId,
+                        updateGroupTitleTo: shareRequest.groupTitle
+                    )
                 } catch {
                     handleError(error)
                     return
@@ -290,93 +244,37 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                 /// no phone number to invite
                 ///
                 handleSuccess()
-            } else if shareRequest.isOnlyInvitingUsers {
-                ///
-                /// If only inviting other users take this shortcut,
-                /// only invite and end early.
-                /// If in background, don't invite, cause the previous non-background item
-                /// would have invited the users for this request
-                ///
-                if shareRequest.isBackground == false {
-                    self.serverProxy.invite(
-                        shareRequest.invitedUsers,
-                        to: shareRequest.groupId
-                    ) { result in
-                        switch result {
-                        case .success:
-                            handleSuccess()
-                        case .failure(let error):
-                            handleError(error)
-                        }
-                    }
-                } else {
-                    handleSuccess()
-                }
             } else {
                 ///
                 /// Otherwise start sharing and inviting
                 ///
                 
-                /// Generate sharing information from the locally encrypted asset
-                log.info("generating encrypted assets for asset with id \(globalIdentifier) for users \(shareRequest.sharedWith.map({ $0.identifier }))")
-                self.user.shareableEncryptedAsset(
-                    globalIdentifier: globalIdentifier,
-                    versions: shareRequest.versions,
-                    recipients: shareRequest.sharedWith,
-                    groupId: shareRequest.groupId
-                ) {
-                    result in
-                    
-                    switch result {
+                if shareRequest.isOnlyInvitingUsers == false {
+                    do {
+                        try await assetSharingController.shareAsset(
+                            globalIdentifier: globalIdentifier,
+                            versions: shareRequest.versions,
+                            with: shareRequest.sharedWith,
+                            via: shareRequest.groupId,
+                            asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,
+                            isBackground: shareRequest.isBackground
+                        )
+                    } catch {
+                        handleError(error)
+                        return
+                    }
+                }
+                
+                self.serverProxy.invite(
+                    shareRequest.invitedUsers,
+                    to: shareRequest.groupId
+                ) { inviteResult in
+                    switch inviteResult {
                     case .failure(let error):
                         handleError(error)
                         
-                    case .success(let shareableEncryptedAsset):
-                        self.log.info("successfully generated asset \(globalIdentifier) sharing information")
-                        
-                        /// Share using Safehill Server API
-#if DEBUG
-                        guard ErrorSimulator.percentageShareFailures == 0
-                                || arc4random() % (100 / ErrorSimulator.percentageShareFailures) != 0 else {
-                            self.log.debug("simulating SHARE failure")
-                            let error = SHBackgroundOperationError.fatalError("simulated share failed")
-                            handleError(error)
-                            return
-                        }
-#endif
-                        
-                        self.shareAndInvite(
-                            shareableEncryptedAsset,
-                            from: shareRequest,
-                            queueItem: item
-                        ) { result in
-                            switch result {
-                            case .success:
-                                if shareRequest.isBackground == false {
-                                    do {
-                                        // Ingest into the graph
-                                        try SHKGQuery.ingestShare(
-                                            of: globalIdentifier,
-                                            from: self.user.identifier,
-                                            to: shareRequest.sharedWith.map({ $0.identifier })
-                                        )
-                                    } catch {
-                                        self.log.warning("failed to update the local graph with sharing information")
-                                    }
-                                    
-                                    /// After remote sharing is successful, add `receiver::` rows in local server
-                                    self.serverProxy.shareAssetLocally(
-                                        shareableEncryptedAsset,
-                                        asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId
-                                    ) { _ in }
-                                }
-                                
-                                handleSuccess()
-                                
-                            case .failure(let error):
-                                handleError(error)
-                            }
-                        }
+                    case.success:
+                        handleSuccess()
                     }
                 }
             }

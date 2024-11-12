@@ -20,6 +20,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     private var websocketConnectionDelegates: [WebSocketDelegate]
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+    internal let userConversionDelegates: [SHUserConversionDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
@@ -29,13 +30,15 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
-        userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+        userConnectionsDelegates: [SHUserConnectionRequestDelegate],
+        userConversionDelegates: [SHUserConversionDelegate]
     ) throws {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
+        self.userConversionDelegates = userConversionDelegates
         self.socket = WebSocketAPI()
         
         super.init()
@@ -145,6 +148,40 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 Self.memberAccessQueue.sync {
                     Self.isWebSocketConnected = true
                 }
+                
+            case .userConversionManifest:
+                guard let encoded = try? JSONDecoder().decode(WebSocketMessage.UserConversionManifest.self, from: contentData) else {
+                    return
+                }
+                self.log.debug("[ws] CONVERSION-REQUEST: newUser=\(encoded.newUser.name) assetIdsByGroupId=\(encoded.assetIdsByGroupId), threadIds=\(encoded.threadIds)")
+                
+                Task {
+                    do {
+                        try await SHAssetSharingController(localUser: self.user)
+                            .convertUser(encoded.newUser,
+                                         assetIdsByGroupId: encoded.assetIdsByGroupId,
+                                         threadIds: encoded.threadIds)
+                    } catch {
+                        self.log.error("[ws] CONVERSION-REQUEST: failed to convert newUser=\(encoded.newUser.name) assetIdsByGroupId=\(encoded.assetIdsByGroupId), threadIds=\(encoded.threadIds). \(error.localizedDescription)")
+                    }
+                }
+                
+                self.userConversionDelegates.forEach({
+                    $0.didRequestUserConversion(
+                        assetIdsByGroupId: encoded.assetIdsByGroupId,
+                        threadIds: encoded.threadIds
+                    )
+                })
+                
+            case .threadUserConverted:
+                guard let threadIds = try? JSONDecoder().decode([String].self, from: contentData) else {
+                    return
+                }
+                self.log.debug("[ws] THREADS-USER-CONVERTED: threadIds=\(threadIds)")
+                
+                self.userConversionDelegates.forEach({
+                    $0.didConvertUserInThreads(with: threadIds)
+                })
                 
             case .connectionRequest:
                 guard let encoded = try? JSONDecoder().decode(WebSocketMessage.NewUserConnection.self, from: contentData) else {
