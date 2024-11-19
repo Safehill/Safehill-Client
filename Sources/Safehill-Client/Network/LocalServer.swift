@@ -558,18 +558,20 @@ struct LocalServer : SHServerAPI {
         }
         
         var descriptors = [SHGenericAssetDescriptor]()
-        var globalIdentifiersToFetch = Set(globalIdentifiers)
+        let globalIdentifiers = Array(Set(globalIdentifiers))
         
         if globalIdentifiers.isEmpty == false, useCache {
+            
+            var _globalIdentifiersToFetch = Set(globalIdentifiers)
             
             for globalIdentifier in globalIdentifiers {
                 if let cachedValue = assetDescriptorInMemoryCache.value(forKey: globalIdentifier) as? SHGenericAssetDescriptorClass {
                     descriptors.append(SHGenericAssetDescriptor.from(cachedValue))
-                    globalIdentifiersToFetch.remove(globalIdentifier)
+                    _globalIdentifiersToFetch.remove(globalIdentifier)
                 }
             }
             
-            guard globalIdentifiersToFetch.isEmpty == false else {
+            guard _globalIdentifiersToFetch.isEmpty == false else {
                 completionHandler(.success(descriptors))
                 return
             }
@@ -744,15 +746,20 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
+            /// If caller requested all assets or the retrieved asset is not in the set to retrieve, skip processing
+            guard globalIdentifiers.isEmpty || globalIdentifiers.contains(v.globalIdentifier) else {
+                continue
+            }
+            
+            /// If the descriptor for the asset was already pulled from the cache, skip processing
+            guard descriptors.contains(where: { $0.globalIdentifier == v.globalIdentifier }) == false else {
+                continue
+            }
+            
             if versionUploadStateByIdentifierQuality[v.globalIdentifier] == nil {
                 versionUploadStateByIdentifierQuality[v.globalIdentifier] = [v.quality: v.uploadState]
             } else {
                 versionUploadStateByIdentifierQuality[v.globalIdentifier]![v.quality] = v.uploadState
-            }
-            
-            /// If caller requested all assets or the retrieved asset is not in the set to retrieve
-            guard globalIdentifiers.isEmpty || globalIdentifiersToFetch.contains(v.globalIdentifier) else {
-                continue
             }
             
             localInfoByGlobalIdentifier[v.globalIdentifier] = (

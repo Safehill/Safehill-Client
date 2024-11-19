@@ -141,6 +141,11 @@ public struct SHLocalAssetStoreController {
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
         if let descriptor {
+            guard descriptor.globalIdentifier == encryptedAsset.globalIdentifier else {
+                completionHandler(.failure(SHBackgroundOperationError.globalIdentifierDisagreement(descriptor.globalIdentifier, encryptedAsset.globalIdentifier)))
+                return
+            }
+            
             self.decryptedAssetInternal(
                 encryptedAsset: encryptedAsset,
                 versions: versions,
@@ -158,6 +163,12 @@ public struct SHLocalAssetStoreController {
                         completionHandler(.failure(SHAssetStoreError.noEntries))
                         return
                     }
+                    
+                    guard foundDescriptor.globalIdentifier == encryptedAsset.globalIdentifier else {
+                        completionHandler(.failure(SHBackgroundOperationError.globalIdentifierDisagreement(foundDescriptor.globalIdentifier, encryptedAsset.globalIdentifier)))
+                        return
+                    }
+                    
                     self.decryptedAssetInternal(
                         encryptedAsset: encryptedAsset,
                         versions: versions,
