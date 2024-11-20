@@ -258,7 +258,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                             force: false
                         )
                 } catch {
-                    let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN")
+                    let error = SHBackgroundOperationError.fatalError("failed to create server asset or upload asset to the CDN: \(error.localizedDescription)")
                     handleError(error)
                     return
                 }
