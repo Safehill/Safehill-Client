@@ -3,7 +3,7 @@ import Foundation
 public protocol SHAssetGroupInfo {
     /// The name of the asset group (optional)
     var encryptedTitle: String? { get }
-    /// The name of the asset group (optional)
+    /// The identifier of the user that created the group (introduced in Nov 2024)
     var createdBy: UserIdentifier? { get }
     /// ISO8601 formatted datetime, representing the time the asset group was created
     var createdAt: Date? { get }

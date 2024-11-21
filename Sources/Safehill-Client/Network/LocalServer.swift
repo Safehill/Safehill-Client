@@ -1729,11 +1729,14 @@ struct LocalServer : SHServerAPI {
                             )
                         }
                         
-                        let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
-                                                        localIdentifier: asset.localIdentifier,
-                                                        creationDate: asset.creationDate,
-                                                        groupId: senderUploadGroupId,
-                                                        versions: serverAssetVersions)
+                        let serverAsset = SHServerAsset(
+                            globalIdentifier: asset.globalIdentifier,
+                            localIdentifier: asset.localIdentifier,
+                            createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
+                            creationDate: asset.creationDate,
+                            groupId: senderUploadGroupId,
+                            versions: serverAssetVersions
+                        )
                         serverAssets.append(serverAsset)
                     }
                 }
