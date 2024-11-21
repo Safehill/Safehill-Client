@@ -261,7 +261,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                     }
                     
                     for (gid, error) in errorsByAssetGlobalId {
-                        if case .missingAssetInLocalServer = error {
+                        if case SHBackgroundOperationError.missingAssetInLocalServer = error {
                             continue
                         }
                         
