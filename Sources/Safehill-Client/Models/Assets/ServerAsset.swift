@@ -4,7 +4,7 @@ import Foundation
 public struct SHServerAsset : Codable {
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
-    public let createdBy: UserIdentifier
+    public let createdBy: UserIdentifier? // optional for backward-compatibilty with old server. Can make it non-optional as soon as new server version is deployed
     public let creationDate: Date?
     public let groupId: String
     public let versions: [SHServerAssetVersion]
@@ -14,7 +14,7 @@ public struct SHServerAsset : Codable {
         
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
         localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
-        createdBy = try container.decode(String.self, forKey: .createdBy)
+        createdBy = try? container.decode(String.self, forKey: .createdBy) // optional for backward-compatibilty with old server. Can make it non-optional as soon as new server version is deployed
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
         groupId = try container.decode(String.self, forKey: .groupId)
