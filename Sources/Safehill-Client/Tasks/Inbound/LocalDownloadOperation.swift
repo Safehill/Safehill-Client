@@ -261,6 +261,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                     }
                     
                     for (gid, error) in errorsByAssetGlobalId {
+                        if case .missingAssetInLocalServer = error {
+                            continue
+                        }
+                        
                         guard let groupIds = descriptorsByGlobalIdentifier[gid]?.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                             self.log.warning("will not notify delegates about asset decryption error for asset \(gid)")
                             continue
@@ -276,7 +280,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                         }
                     }
                     
-                    self.log.warning("failed to decrypt the following assets: \(errorsByAssetGlobalId)")
+                    self.log.warning("failed to decrypt the following assets from local store: \(errorsByAssetGlobalId)")
                     
                     self.serverProxy.localServer.deleteAssets(
                         withGlobalIdentifiers: Array(errorsByAssetGlobalId.keys)
