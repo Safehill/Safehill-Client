@@ -63,47 +63,29 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         calculatedGlobalIdentifier
     }
     
+    /// Generates the global identifier of the asset based on EXIF metadata (if available),
+    /// or generates a UUID.
+    /// Caches the value if already calculated and retrurns the cached value if so.
+    ///
+    /// - Returns: the global identifier
     func generateGlobalIdentifier() async -> GlobalIdentifier {
         guard calculatedGlobalIdentifier == nil else {
             return calculatedGlobalIdentifier!
         }
         
-        let exifData = await self.getExifData()
-        
-        /// Global identifier is generated based on a combination of:
-        /// - media type and subtype (metadata)
-        /// - width and height (metadata)
-        /// - datetime it was taken (metadata)
-        /// - location (metadata)
-        /// - EXIF data, like aperture, shutterspeed, and iso (metadata)
-        ///
-        /// If any metadata such as datetime, location and EXIF data of the photo is missing
-        /// a UUID generated each time the identifier is generated is added for randomness.
-        /// If all the metadata values are present, then photos are equal when
-        /// - taken at a specific time (with milliseconds)
-        /// - in a specific location (with exact coordinates)
-        /// - with the specific settings (width, height, media type, EXIF data)
-        ///
-        
-        var seed = [
-            "\(self.phAsset.mediaType.rawValue)",
-            "\(self.phAsset.mediaSubtypes.rawValue)",
-            "\(self.phAsset.pixelWidth)",
-            "\(self.phAsset.pixelHeight)"
-        ]
-        
-        if self.phAsset.creationDate == nil || self.phAsset.location == nil || exifData == nil {
-            seed.append(UUID().uuidString)
-        } else {
-            seed.append(self.phAsset.creationDate!.iso8601withFractionalSeconds)
-            seed.append("\(self.phAsset.location!.coordinate.latitude)")
-            seed.append("\(self.phAsset.location!.coordinate.longitude)")
-            seed.append("\(exifData!.aperture)+\(exifData!.shutterSpeed)+\(exifData!.iso)")
+        let identifier = await SHHashingController.globalIdentifier(for: self)
+        calculatedGlobalIdentifier = identifier
+        return identifier
+    }
+    
+    /// Generate the perceptial hash of the `.lowResolution` image
+    /// - Returns: the hash
+    func generatePerceptiveHash() async throws -> SHAssetPerceptualHash {
+        guard let imageData = try await self.data(for: [.lowResolution])[.lowResolution]
+        else {
+            throw SHHashingController.Error.noImageData
         }
-        
-        let globalIdentifier = SHHash.stringDigest(for: seed.joined(separator: ":").data(using: .utf8)!)
-        self.calculatedGlobalIdentifier = globalIdentifier
-        return globalIdentifier
+        return try SHHashingController.perceptualHash(forImageData: imageData)
     }
     
     public func encode(with coder: NSCoder) {
