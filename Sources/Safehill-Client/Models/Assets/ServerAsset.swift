@@ -13,7 +13,7 @@ public struct SHServerAsset : Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
-        localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
+        localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
         createdBy = try container.decode(String.self, forKey: .createdBy)
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
