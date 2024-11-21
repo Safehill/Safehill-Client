@@ -1301,10 +1301,10 @@ struct LocalServer : SHServerAPI {
         
         if fileManager.fileExists(atPath: versionDataURL.path) {
             if overwriteIfExists {
-                log.warning("a file exists at \(versionDataURL.path). overwriting it")
+                log.debug("a file exists at \(versionDataURL.path). overwriting it")
                 try? fileManager.removeItem(at: versionDataURL)
             } else {
-                log.warning("a file exists at \(versionDataURL.path). returning it")
+                log.debug("a file exists at \(versionDataURL.path). returning it")
                 return versionDataURL
             }
         }
