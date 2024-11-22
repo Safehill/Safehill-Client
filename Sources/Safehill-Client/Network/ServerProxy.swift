@@ -242,7 +242,7 @@ extension SHServerProxy {
         var userIdsSet = Set<String>()
         for descriptor in descriptors {
             userIdsSet.insert(descriptor.sharingInfo.sharedByUserIdentifier)
-            descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys.forEach({ userIdsSet.insert($0) })
+            descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys.forEach({ userIdsSet.insert($0) })
         }
         userIdsSet.remove(self.remoteServer.requestor.identifier)
         let userIds = Array(userIdsSet)
@@ -362,7 +362,7 @@ extension SHServerProxy {
         }
     }
     
-    public func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    public func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.registerDevice(deviceId, token: token, completionHandler: completionHandler)
     }
 }
@@ -409,7 +409,7 @@ extension SHServerProxy {
         }
     }
     
-    func getAssetDescriptor(
+    public func getAssetDescriptor(
         for globalIdentifier: GlobalIdentifier,
         filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<(any SHAssetDescriptor)?, Error>) -> ()
@@ -608,11 +608,15 @@ extension SHServerProxy {
                         }
                     }
                     
+                    log.debug("""
+[asset-data] requested \(assetIdentifiers) versions \(requestedVersions). localDictionary=\(Array(localDictionary.keys)). assetVersionsToFetch=\(assetVersionsToFetch)
+""")
+                    
                     ///
                     /// If all could be found locally return success
                     ///
                     guard assetVersionsToFetch.isEmpty == false else {
-                        log.debug("[asset-data] \(Array(localDictionary.keys)) DB CACHE HIT")
+                        log.debug("[asset-data] DB CACHE HIT")
                         completionHandler(.success(localDictionary))
                         return
                     }
@@ -953,24 +957,27 @@ extension SHServerProxy {
     
     // - MARK: Groups, Threads and Interactions
     
-    func setupGroupEncryptionDetails(
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         log.trace("saving encryption details for group \(groupId) to local server")
         log.debug("[setupGroup] \(recipientsEncryptionDetails.map({ ($0.encryptedSecret, $0.ephemeralPublicKey, $0.secretPublicSignature) }))")
         /// Save the encryption details for this user on local
-        self.remoteServer.setGroupEncryptionDetails(
+        self.remoteServer.setupGroup(
             groupId: groupId,
+            encryptedTitle: encryptedTitle,
             recipientsEncryptionDetails: recipientsEncryptionDetails
         ) { remoteResult in
             switch remoteResult {
             case .success:
                 log.trace("encryption details for group \(groupId) saved to remote server. Updating local server")
                 /// Save the encryption details for all users on server
-                self.localServer.setGroupEncryptionDetails(
+                self.localServer.setupGroup(
                     groupId: groupId,
+                    encryptedTitle: encryptedTitle,
                     recipientsEncryptionDetails: recipientsEncryptionDetails,
                     completionHandler: completionHandler
                 )
@@ -979,6 +986,16 @@ extension SHServerProxy {
                 completionHandler(.failure(error))
             }
         }
+    }
+    
+    func setLocalGroupTitle(
+        encryptedTitle: String,
+        groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.localServer.setGroupTitle(encryptedTitle: encryptedTitle,
+                                       groupId: groupId,
+                                       completionHandler: completionHandler)
     }
     
     public func deleteGroup(
@@ -1040,6 +1057,14 @@ extension SHServerProxy {
                 }
             }
         }
+    }
+    
+    internal func updateThreadMembers(
+        for threadId: String,
+        _ update: ConversationThreadMembersUpdateDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.updateThreadMembers(for: threadId, update, completionHandler: completionHandler)
     }
     
     internal func listThreads() async throws -> [ConversationThreadOutputDTO] {
@@ -1104,19 +1129,19 @@ extension SHServerProxy {
     }
     
     internal func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        self.localServer.getThread(withUsers: users, and: phoneNumbers) { localResult in
+        self.localServer.getThread(withUserIds: userIds, and: phoneNumbers) { localResult in
             switch localResult {
             case .failure:
-                self.remoteServer.getThread(withUsers: users, and: phoneNumbers, completionHandler: completionHandler)
+                self.remoteServer.getThread(withUserIds: userIds, and: phoneNumbers, completionHandler: completionHandler)
             case .success(let maybeThread):
                 if let maybeThread {
                     completionHandler(.success(maybeThread))
                 } else {
-                    self.remoteServer.getThread(withUsers: users, and: phoneNumbers, completionHandler: completionHandler)
+                    self.remoteServer.getThread(withUserIds: userIds, and: phoneNumbers, completionHandler: completionHandler)
                 }
             }
         }
@@ -1163,26 +1188,37 @@ extension SHServerProxy {
         }
     }
     
+    internal func deleteLocalThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.deleteThread(
+            withId: threadId,
+            completionHandler: completionHandler
+        )
+    }
+    
     internal func retrieveUserEncryptionDetails(
         forGroup groupId: String,
         completionHandler: @escaping (Result<RecipientEncryptionDetailsDTO?, Error>) -> ()
     ) {
-        self.localServer.retrieveUserEncryptionDetails(forGroup: groupId) { localE2EEResult in
-            if case .success(let localSelfDetails) = localE2EEResult, let localSelfDetails {
-                completionHandler(.success(localSelfDetails))
+        self.localServer.retrieveUserEncryptionDetails(forGroup: groupId) { localResult in
+            if case .success(let localDetails) = localResult, let localDetails {
+                completionHandler(.success(localDetails))
             } else {
-                if case .failure(let error) = localE2EEResult {
-                    log.warning("failed to retrieve <SELF> E2EE details for group \(groupId) from local: \(error.localizedDescription)")
+                if case .failure(let error) = localResult {
+                    log.warning("failed to retrieve details for group \(groupId) from local: \(error.localizedDescription)")
                 }
-                self.remoteServer.retrieveUserEncryptionDetails(forGroup: groupId) { remoteE2EEResult in
-                    switch remoteE2EEResult {
-                    case .success(let remoteSelfDetails):
-                        if let remoteSelfDetails {
-                            self.localServer.setGroupEncryptionDetails(
+                self.remoteServer.retrieveGroupDetails(forGroup: groupId) { remoteResult in
+                    switch remoteResult {
+                    case .success(let remoteDetails):
+                        if let remoteDetails {
+                            self.localServer.setupGroup(
                                 groupId: groupId,
-                                recipientsEncryptionDetails: [remoteSelfDetails]
+                                encryptedTitle: remoteDetails.encryptedTitle,
+                                recipientsEncryptionDetails: [remoteDetails.encryptionDetails]
                             ) { _ in
-                                completionHandler(.success(remoteSelfDetails))
+                                completionHandler(.success(remoteDetails.encryptionDetails))
                             }
                         } else {
                             completionHandler(.success(nil))
@@ -1609,6 +1645,26 @@ extension SHServerProxy {
         }
     }
     
+    /// Update the last updated at based on the value in the provided threads
+    /// - Parameter threads: the threads
+    internal func updateLocalThread(
+        from threadUpdate: WebSocketMessage.ThreadUpdate
+    ) async throws {
+        
+        return try await withUnsafeThrowingContinuation { continuation in
+            self.localServer.updateThreads(
+                from: [threadUpdate]
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+    
     func addLocalInteractions(
         _ remoteInteractions: InteractionsGroupDTO,
         inAnchor anchor: SHInteractionAnchor,
@@ -1964,5 +2020,19 @@ extension SHServerProxy {
                 completionHandler(.failure(error))
             }
         }
+    }
+    
+    public func requestAccess(
+        toGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.requestAccess(toGroupId: toGroupId, completionHandler: completionHandler)
+    }
+    
+    public func requestAccess(
+        toThreadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.requestAccess(toThreadId: toThreadId, completionHandler: completionHandler)
     }
 }

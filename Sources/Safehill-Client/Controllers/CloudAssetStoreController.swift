@@ -47,11 +47,14 @@ struct SHAssetStoreController {
             force: force
         )
         
-        do {
-            try self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
-        } catch {
-            try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
-            throw error
+        /// Only upload if the asset wasn't already uploaded by someone else
+        if serverAsset.createdBy == self.user.identifier {
+            do {
+                try self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
+            } catch {
+                try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
+                throw error
+            }
         }
         
         return serverAsset

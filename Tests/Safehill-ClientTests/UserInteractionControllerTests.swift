@@ -34,9 +34,15 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.state = SHMockServerProxyState(threads: threads)
     }
     
-    func setupGroupEncryptionDetails(groupId: String, recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO], completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.localServer.setGroupEncryptionDetails(
+    func setupGroup(
+        groupId: String,
+        encryptedTitle: String?,
+        recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.setupGroup(
             groupId: groupId,
+            encryptedTitle: encryptedTitle,
             recipientsEncryptionDetails: recipientsEncryptionDetails,
             completionHandler: completionHandler
         )
@@ -314,7 +320,19 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         self.localServer.updateThread(threadId, newName: newName, completionHandler: completionHandler)
     }
     
+    func updateThreadMembers(
+        for threadId: String,
+        _ update: ConversationThreadMembersUpdateDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.localServer.updateThreadMembers(for: threadId, update, completionHandler: completionHandler)
+    }
+    
     func deleteThread(withId threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+        self.localServer.deleteThread(withId: threadId, completionHandler: completionHandler)
+    }
+    
+    func deleteLocalThread(withId threadId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.deleteThread(withId: threadId, completionHandler: completionHandler)
     }
     
@@ -330,11 +348,43 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     }
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withId threadId: String,
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    ) {
+        guard let threads = self.state.threads,
+              let matchingThread = threads.first(where: { $0.threadId == threadId })
+        else {
+            completionHandler(.success(nil))
+            return
+        }
+        
+        guard let selfEncryptionDetails = matchingThread.encryptionDetails.first(where: { $0.recipientUserIdentifier == self.localServer.requestor.identifier }) else {
+            completionHandler(.success(nil))
+            return
+        }
+        
+        let serverThread = ConversationThreadOutputDTO(
+            threadId: matchingThread.threadId,
+            name: matchingThread.name,
+            creatorPublicIdentifier: matchingThread.creatorId,
+            membersPublicIdentifier: matchingThread.userIds,
+            invitedUsersPhoneNumbers: matchingThread.invitedPhoneNumbers.reduce([:], { partialResult, number in
+                var result = partialResult
+                result[number] = Date().iso8601withFractionalSeconds
+                return result
+            }),
+            createdAt: Date().iso8601withFractionalSeconds,
+            lastUpdatedAt: Date().iso8601withFractionalSeconds,
+            encryptionDetails: selfEncryptionDetails
+        )
+        completionHandler(.success(serverThread))
+    }
+    
+    func getThread(
+        withUserIds threadMembersId: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
-        let threadMembersId = users.map({ $0.identifier })
         guard let threads = self.state.threads,
               let matchingThread = threads.first(where: {
                   Set($0.userIds) == Set(threadMembersId)
@@ -476,7 +526,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         )
         
         let expectation1 = XCTestExpectation(description: "initialize the group")
-        controller.setupGroupEncryptionDetails(
+        controller.setupGroup(
+            title: nil,
             groupId: groupId,
             with: [
                 SHRemoteUser(
@@ -517,7 +568,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         XCTAssertEqual(kvs["\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedSecret"] as! String, recipientEncryptionDetails.encryptedSecret)
      
         let expectation2 = XCTestExpectation(description: "initialize the group")
-        controller.setupGroupEncryptionDetails(
+        controller.setupGroup(
+            title: nil,
             groupId: groupId,
             with: [
                 SHRemoteUser(
@@ -601,7 +653,8 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         )
         
         let expectation1 = XCTestExpectation(description: "initialize the group")
-        controller.setupGroupEncryptionDetails(
+        controller.setupGroup(
+            title: nil,
             groupId: groupId,
             with: [
                 SHRemoteUser(
@@ -1507,7 +1560,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
         
         let expectation4 = XCTestExpectation(description: "retrieve the thread with users and with users and invited phone numbers")
         
-        controller1.getExistingThread(with: threadUsers, and: []) { result in
+        controller1.getExistingThread(with: threadUsers.map({ $0.identifier }), and: []) { result in
             switch result {
             case .failure(let error):
                 XCTFail(error.localizedDescription)
@@ -1524,7 +1577,7 @@ final class Safehill_UserInteractionControllerTests: XCTestCase {
                 XCTAssertEqual(Set(threadWithNoInvitations.membersPublicIdentifier), Set(threadUsers.map({ $0.identifier })))
                 XCTAssertEqual(threadWithNoInvitations.invitedUsersPhoneNumbers.count, 0)
                 
-                controller1.getExistingThread(with: threadUsers, and: threadPhoneNumbers) { result in
+                controller1.getExistingThread(with: threadUsers.map({ $0.identifier }), and: threadPhoneNumbers) { result in
                     switch result {
                     case .failure(let error):
                         XCTFail(error.localizedDescription)

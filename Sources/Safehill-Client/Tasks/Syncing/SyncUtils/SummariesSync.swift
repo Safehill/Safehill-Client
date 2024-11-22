@@ -260,26 +260,12 @@ extension SHWebsocketSyncOperation {
                 }
             }
             
-            if let firstMessage = groupSummary.firstEncryptedMessage {
-                
+            if let encryptedTitle = groupSummary.encryptedTitle {
                 dispatchGroup.enter()
-                
-                self.serverProxy.addLocalMessages(
-                    [firstMessage],
-                    toGroup: groupId
+                self.serverProxy.setLocalGroupTitle(
+                    encryptedTitle: encryptedTitle,
+                    groupId: groupId
                 ) { result in
-                    guard case .success(let messages) = result else {
-                        dispatchGroup.leave()
-                        return
-                    }
-                    
-                    let interactionsSyncDelegates = self.interactionsSyncDelegates
-                    self.delegatesQueue.async {
-                        interactionsSyncDelegates.forEach({ delegate in
-                            delegate.didReceiveTextMessages(messages, inGroup: groupId)
-                        })
-                    }
-                    
                     dispatchGroup.leave()
                 }
             }

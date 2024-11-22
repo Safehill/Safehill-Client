@@ -8,9 +8,13 @@ public struct WebSocketMessage: Codable {
         case reactionAdd = "reaction-add"
         case reactionRemove = "reaction-remove"
         case threadAdd = "thread-add"
+        case threadUpdate = "thread-update"
+        case threadRemove = "thread-remove"
         case threadAssetsShare = "thread-assets-share"
         case groupAssetsShare = "group-assets-share"
         case connectionRequest = "connection-request"
+        case userConversionManifest = "user-conversion-manifest"
+        case threadUserConverted = "thread-user-converted"
     }
     
     let type: MessageType
@@ -44,6 +48,14 @@ public struct WebSocketMessage: Codable {
         let updatedAt: String // ISO8601 formatted datetime
     }
     
+    struct ThreadUpdate: ConversationThreadUpdate, Codable {
+        let threadId: String
+        let name: String?
+        let membersPublicIdentifier: [String]
+        let invitedUsersPhoneNumbers: [String: String]
+        let lastUpdatedAt: String?
+    }
+    
     struct ThreadAssets: Codable {
         let threadId: String
         let assets: [ConversationThreadAssetDTO]
@@ -51,5 +63,11 @@ public struct WebSocketMessage: Codable {
     
     struct NewUserConnection: Codable {
         let requestor: SHRemoteUser
+    }
+    
+    struct UserConversionManifest: Codable {
+        let newUser: SHRemoteUser
+        let threadIds: [String]
+        let assetIdsByGroupId: [String: [String]]
     }
 }

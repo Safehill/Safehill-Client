@@ -16,7 +16,7 @@ import Photos
 ///     - for the ones not in the photos library shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
 /// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt their low resolution
 ///
-public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
+public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
     
     internal static var lastFetchDate: Date? = nil
     internal static var incompleteBeforeLastFetch = Set<GlobalIdentifier>()
@@ -202,7 +202,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             /// Fetch from server users information (`SHServerUser` objects)
             /// for all user identifiers found in all descriptors shared by OTHER known users
             ///
-            var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.groupIdsByRecipientUserIdentifier.keys })
             userIdentifiers.formUnion(filteredDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier })
             
             self.getUsers(withIdentifiers: Array(userIdentifiers)) { result in
@@ -223,9 +223,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                                 return nil
                             }
                             
-                            var newSharedWith = desc.sharingInfo.sharedWithUserIdentifiersInGroup
+                            var newSharedWith = desc.sharingInfo.groupIdsByRecipientUserIdentifier
                             
-                            for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                            for sharedWithUserId in desc.sharingInfo.groupIdsByRecipientUserIdentifier.keys {
                                 if usersDict[sharedWithUserId] == nil {
                                     newSharedWith.removeValue(forKey: sharedWithUserId)
                                 }
@@ -238,7 +238,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                                 uploadState: desc.uploadState,
                                 sharingInfo: SHGenericDescriptorSharingInfo(
                                     sharedByUserIdentifier: desc.sharingInfo.sharedByUserIdentifier,
-                                    sharedWithUserIdentifiersInGroup: newSharedWith,
+                                    groupIdsByRecipientUserIdentifier: newSharedWith,
                                     groupInfoById: desc.sharingInfo.groupInfoById
                                 )
                             )
@@ -500,7 +500,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             
             for descriptor in descriptors {
                 
-                guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                     log.critical("[\(type(of: self))] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
                     completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
                     continue
@@ -512,7 +512,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         $0.didStartDownloadOfAsset(
                             withGlobalIdentifier: descriptor.globalIdentifier,
                             descriptor: descriptor,
-                            in: groupId
+                            in: groupIds
                         )
                     })
                 }
@@ -526,7 +526,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         downloaderDelegates.forEach({
                             $0.didCompleteDownload(
                                 of: decryptedAsset,
-                                in: groupId
+                                in: groupIds
                             )
                         })
                     }
@@ -540,7 +540,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                         downloaderDelegates.forEach({
                             $0.didFailDownloadOfAsset(
                                 withGlobalIdentifier: descriptor.globalIdentifier,
-                                in: groupId,
+                                in: groupIds,
                                 with: error
                             )
                         })

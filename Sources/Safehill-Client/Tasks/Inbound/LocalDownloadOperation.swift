@@ -27,7 +27,7 @@ import os
 ///
 /// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
 ///
-public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
+public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sendable {
     
     private static var alreadyProcessed = Set<GlobalIdentifier>()
     
@@ -183,7 +183,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     
                     dispatchGroup.enter()
                     
-                    guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                    guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                         errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.unexpectedData(descriptor.sharingInfo)
                         dispatchGroup.leave()
                         continue
@@ -192,9 +192,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     if let encryptedAsset = encryptedAssets[globalAssetId] {
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
-                                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                                           descriptor: descriptor,
-                                                           in: groupId)
+                                $0.didStartDownloadOfAsset(
+                                    withGlobalIdentifier: globalAssetId,
+                                    descriptor: descriptor,
+                                    in: groupIds
+                                )
                             })
                         }
                         
@@ -220,7 +222,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     downloaderDelegates.forEach({
                                         $0.didCompleteDownload(
                                             of: decryptedAsset,
-                                            in: groupId
+                                            in: groupIds
                                         )
                                     })
                                 }
@@ -259,7 +261,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     }
                     
                     for (gid, error) in errorsByAssetGlobalId {
-                        guard let groupId = descriptorsByGlobalIdentifier[gid]?.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                        if case SHBackgroundOperationError.missingAssetInLocalServer = error {
+                            continue
+                        }
+                        
+                        guard let groupIds = descriptorsByGlobalIdentifier[gid]?.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                             self.log.warning("will not notify delegates about asset decryption error for asset \(gid)")
                             continue
                         }
@@ -267,14 +273,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             downloaderDelegates.forEach({
                                 $0.didFailDownloadOfAsset(
                                     withGlobalIdentifier: gid,
-                                    in: groupId,
+                                    in: groupIds,
                                     with: error
                                 )
                             })
                         }
                     }
                     
-                    self.log.warning("failed to decrypt the following assets: \(errorsByAssetGlobalId)")
+                    self.log.warning("failed to decrypt the following assets from local store: \(errorsByAssetGlobalId)")
                     
                     self.serverProxy.localServer.deleteAssets(
                         withGlobalIdentifiers: Array(errorsByAssetGlobalId.keys)

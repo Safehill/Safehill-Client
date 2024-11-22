@@ -143,7 +143,6 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 log.error("failed to remove invalid keys \(invalidKeys) from DB. \(error.localizedDescription)")
             }
         }
-        invalidKeys.removeAll()
         
         return encryptedAssetById
     }
