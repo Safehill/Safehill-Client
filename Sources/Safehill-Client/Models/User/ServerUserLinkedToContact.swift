@@ -13,7 +13,7 @@ public struct SHRemoteUserLinkedToContact: SHServerUser, Codable {
          name: String,
          publicKeyData: Data,
          publicSignatureData: Data,
-         phoneNumber: String,
+         phoneNumber: String?,
          linkedSystemContactId: String) {
         self.identifier = identifier
         self.name = name
@@ -31,7 +31,7 @@ public struct SHRemoteUserLinkedToContact: SHServerUser, Codable {
         self.publicKeyData = Data(base64Encoded: publicKeyDataBase64)!
         let publicSignatureDataBase64 = try container.decode(String.self, forKey: .publicSignatureData)
         self.publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
-        self.phoneNumber = try container.decode(String.self, forKey: .phoneNumber)
+        self.phoneNumber = try container.decodeIfPresent(String.self, forKey: .phoneNumber)
         self.linkedSystemContactId = try container.decode(String.self, forKey: .linkedSystemContactId)
     }
 }
