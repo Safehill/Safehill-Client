@@ -16,7 +16,7 @@ import Photos
 ///     - for the ones not in the photos library shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
 /// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt their low resolution
 ///
-public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation {
+public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
     
     internal static var lastFetchDate: Date? = nil
     internal static var incompleteBeforeLastFetch = Set<GlobalIdentifier>()
@@ -202,7 +202,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             /// Fetch from server users information (`SHServerUser` objects)
             /// for all user identifiers found in all descriptors shared by OTHER known users
             ///
-            var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.sharedWithUserIdentifiersInGroup.keys })
+            var userIdentifiers = Set(filteredDescriptors.flatMap { $0.sharingInfo.groupIdsByRecipientUserIdentifier.keys })
             userIdentifiers.formUnion(filteredDescriptors.compactMap { $0.sharingInfo.sharedByUserIdentifier })
             
             self.getUsers(withIdentifiers: Array(userIdentifiers)) { result in
@@ -223,9 +223,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                                 return nil
                             }
                             
-                            var newSharedWith = desc.sharingInfo.sharedWithUserIdentifiersInGroup
+                            var newSharedWith = desc.sharingInfo.groupIdsByRecipientUserIdentifier
                             
-                            for sharedWithUserId in desc.sharingInfo.sharedWithUserIdentifiersInGroup.keys {
+                            for sharedWithUserId in desc.sharingInfo.groupIdsByRecipientUserIdentifier.keys {
                                 if usersDict[sharedWithUserId] == nil {
                                     newSharedWith.removeValue(forKey: sharedWithUserId)
                                 }
@@ -238,7 +238,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                                 uploadState: desc.uploadState,
                                 sharingInfo: SHGenericDescriptorSharingInfo(
                                     sharedByUserIdentifier: desc.sharingInfo.sharedByUserIdentifier,
-                                    sharedWithUserIdentifiersInGroup: newSharedWith,
+                                    groupIdsByRecipientUserIdentifier: newSharedWith,
                                     groupInfoById: desc.sharingInfo.groupInfoById
                                 )
                             )
@@ -472,7 +472,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     func downloadAssets(
         for descriptors: [any SHAssetDescriptor],
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+        completionHandler: @escaping (Result<[AssetAndDescriptor], Error>) -> Void
     ) {
         guard !self.isCancelled else {
             log.info("[\(type(of: self))] download task cancelled. Finishing")
@@ -494,75 +494,68 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download
         ///
-        var successfullyDownloadedAssetsAndDescriptors = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
-        let dispatchGroup = DispatchGroup()
         
-        for descriptor in descriptors {
+        Task {
+            let successfullyDownloadedAssetsAndDescriptors = ThreadSafeAssetAndDescriptors(list: [])
             
-            guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
-                log.critical("[\(type(of: self))] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
-                completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
-                return
-            }
-            
-            let downloaderDelegates = self.downloaderDelegates
-            self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didStartDownloadOfAsset(
-                        withGlobalIdentifier: descriptor.globalIdentifier,
-                        descriptor: descriptor,
-                        in: groupId
-                    )
-                })
-            }
-            
-            dispatchGroup.enter()
-            SHAssetsDownloadManager(user: authedUser).downloadAsset(for: descriptor) {
-                result in
+            for descriptor in descriptors {
                 
-                switch result {
+                guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
+                    log.critical("[\(type(of: self))] malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")
+                    completionHandler(.failure(SHBackgroundOperationError.fatalError("malformed descriptor. Missing groupId for user \(self.user.identifier) for assetId \(descriptor.globalIdentifier)")))
+                    continue
+                }
                 
-                case .failure(let error):
+                let downloaderDelegates = self.downloaderDelegates
+                self.delegatesQueue.async {
+                    downloaderDelegates.forEach({
+                        $0.didStartDownloadOfAsset(
+                            withGlobalIdentifier: descriptor.globalIdentifier,
+                            descriptor: descriptor,
+                            in: groupIds
+                        )
+                    })
+                }
+                
+                do {
+                    let decryptedAsset = try await SHAssetsDownloadManager(user: authedUser)
+                        .downloadAsset(for: descriptor)
+                    
+                    let downloaderDelegates = self.downloaderDelegates
+                    self.delegatesQueue.async {
+                        downloaderDelegates.forEach({
+                            $0.didCompleteDownload(
+                                of: decryptedAsset,
+                                in: groupIds
+                            )
+                        })
+                    }
+                    
+                    let assetAndDescriptor = AssetAndDescriptor(asset: decryptedAsset, descriptor: descriptor)
+                    await successfullyDownloadedAssetsAndDescriptors.add(assetAndDescriptor)
+                } catch {
                     self.log.error("[\(type(of: self))] failed to download asset \(descriptor.globalIdentifier)")
                     let downloaderDelegates = self.downloaderDelegates
                     self.delegatesQueue.async {
                         downloaderDelegates.forEach({
                             $0.didFailDownloadOfAsset(
                                 withGlobalIdentifier: descriptor.globalIdentifier,
-                                in: groupId,
+                                in: groupIds,
                                 with: error
                             )
                         })
                     }
-                    
-                case .success(let decryptedAsset):
-                    let downloaderDelegates = self.downloaderDelegates
-                    self.delegatesQueue.async {
-                        downloaderDelegates.forEach({
-                            $0.didCompleteDownload(
-                                of: decryptedAsset,
-                                in: groupId
-                            )
-                        })
-                    }
-                    
-                    // TODO: Is this thread safe?
-                    successfullyDownloadedAssetsAndDescriptors.append((decryptedAsset, descriptor))
                 }
-                
-                dispatchGroup.leave()
             }
-        }
-        
-        dispatchGroup.notify(queue: .global()) {
-            completionHandler(.success(successfullyDownloadedAssetsAndDescriptors))
+            
+            completionHandler(.success(await successfullyDownloadedAssetsAndDescriptors.list))
         }
     }
     
     private func process(
         _ descriptorsForItemsToDownload: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+        completionHandler: @escaping (Result<[AssetAndDescriptor], Error>) -> Void
     ) {
         guard !self.isCancelled else {
             log.info("[\(type(of: self))] download task cancelled. Finishing")
@@ -651,11 +644,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         filteringGroups groupIds: [String]?,
         startingFrom date: Date?,
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+        completionHandler: @escaping (Result<[AssetAndDescriptor], Error>) -> Void
     ) {
         let fetchStartedAt = Date()
         
-        let handleResult = { (result: Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) in
+        let handleResult = { (result: Result<[AssetAndDescriptor], Error>) in
             let downloaderDelegates = self.downloaderDelegates
             
             switch result {

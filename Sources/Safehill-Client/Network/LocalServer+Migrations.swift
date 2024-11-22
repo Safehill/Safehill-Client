@@ -1,6 +1,9 @@
 import Foundation
 import KnowledgeBase
 
+let kSHDBMigrationsUDStoreName = "com.gf.safehill.snoog.migrations"
+let kSHLastBuildMigratedToKey = "lastBuildMigratedTo"
+
 public extension Array {
     func chunked(into size: Int) -> [[Element]] {
         guard !isEmpty && size > 0 else {
@@ -42,82 +45,10 @@ public extension Array {
 
 extension LocalServer {
     
-    public func syncLocalGraphWithServer(
-        dryRun: Bool = true,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        self.requestor.serverProxy.getRemoteAssetDescriptors(after: nil) { remoteResult in
-            switch remoteResult {
-            case .success(let remoteDescriptors):
-                var uniqueAssetGids = Set<GlobalIdentifier>()
-                for remoteDescriptor in remoteDescriptors {
-                    uniqueAssetGids.insert(remoteDescriptor.globalIdentifier)
-                }
-                
-                do {
-                    for uniqueAssetGidsChunk in Array(uniqueAssetGids).chunked(into: 30) {
-                        let assetToUsers: [GlobalIdentifier: [(SHKGPredicate, UserIdentifier)]]
-                        assetToUsers = try SHKGQuery.usersConnectedTo(assets: Array(uniqueAssetGidsChunk))
-                        
-                        let relevantRemoteDescriptors = remoteDescriptors.filter({ uniqueAssetGidsChunk.contains($0.globalIdentifier) })
-                        
-                        let sendersInBatch = Array(Set(relevantRemoteDescriptors.map({ $0.sharingInfo.sharedByUserIdentifier })))
-                        
-                        ///
-                        /// Additions and Edits
-                        ///
-                        for remoteDescriptor in relevantRemoteDescriptors {
-                            let sender = remoteDescriptor.sharingInfo.sharedByUserIdentifier
-                            
-                            let assetGid = remoteDescriptor.globalIdentifier
-                            
-                            if assetToUsers[assetGid] == nil {
-                                let recipients = Array(remoteDescriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
-                                log.info("[graph-sync] missing triples from <asset:\(assetGid)> <from:\(sender)> <to:\(recipients)>")
-                                if dryRun == false {
-                                    try SHKGQuery.ingestShare(
-                                        of: assetGid,
-                                        from: sender,
-                                        to: recipients
-                                    )
-                                }
-                            } else {
-                                // TODO: Edits
-                            }
-                        }
-                        
-                        usleep(useconds_t(10 * 1000)) // sleep 10ms
-                    }
-                    
-                    ///
-                    /// Removals
-                    ///
-                    // TODO: Removals
-                    
-                    let extraAssetIdsInGraph = try SHKGQuery.assetGlobalIdentifiers(notIn: Array(uniqueAssetGids))
-                    log.info("[graph-sync] extra assets in graph \(extraAssetIdsInGraph)")
-                    if dryRun == false {
-                        try SHKGQuery.removeAssets(with: extraAssetIdsInGraph)
-                    }
-                    
-                    completionHandler(.success(()))
-                }
-                catch {
-                    completionHandler(.failure(error))
-                    return
-                }
-            case .failure(let err):
-                log.info("[graph-sync] failed to sync with remote server: \(err.localizedDescription)")
-                completionHandler(.failure(err))
-            }
-        }
-    }
-    
     ///
     /// Data used to be stored along with the descriptor in the local store, which is inefficient. Translate them to the new format
     ///
     private func runAssetDataMigration(
-        currentBuild: Int?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -126,7 +57,18 @@ extension LocalServer {
             return
         }
         
-        completionHandler(.success(()))
+        let condition = KBGenericCondition(
+            .beginsWith,
+            value: "data::data::"
+        )
+        assetStore.removeValues(forKeysMatching: condition) { result in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
     
     ///
@@ -137,7 +79,6 @@ extension LocalServer {
     /// Simply remove the old cache under the old keys.
     ///
     func runAssetThreadsMigration(
-        currentBuild: Int?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
         guard let userStore = SHDBManager.sharedInstance.userStore else {
@@ -171,14 +112,43 @@ extension LocalServer {
             }
         }
     }
+    
+    func runVersionMigration(
+        to: Int,
+        from: Int?,
+        completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            log.warning("failed to connect to the local user store")
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
         
+        if to == 13 { // 1.3.0 migrations
+            let condition = KBGenericCondition(
+                .beginsWith,
+                value: "invitations::"
+            )
+            
+            userStore.removeValues(forKeysMatching: condition) { result in
+                switch result {
+                case .success:
+                    completionHandler(.success(()))
+                case .failure(let error):
+                    completionHandler(.failure(error))
+                }
+            }
+        } else {
+            completionHandler(.success(()))
+        }
+    }
     
     /// Run migration of data in local databases
     /// - Parameters:
     ///   - currentBuild: the current client build, if available
     ///   - completionHandler: the callback
     public func runDataMigrations(
-        currentBuild: Int?,
+        currentBuild: String?,
         completionHandler: @escaping (Swift.Result<Void, Error>) -> ()
     ) {
         dispatchPrecondition(condition: .notOnQueue(DispatchQueue.main))
@@ -188,12 +158,12 @@ extension LocalServer {
         let group = DispatchGroup()
         
         group.enter()
-        self.runAssetDataMigration(currentBuild: currentBuild) { result1 in
+        self.runAssetDataMigration { result1 in
             if case .failure(let error) = result1 {
                 errors.append(error)
             }
             
-            self.runAssetThreadsMigration(currentBuild: currentBuild) { result2 in
+            self.runAssetThreadsMigration { result2 in
                 if case .failure(let error) = result2 {
                     errors.append(error)
                 }
@@ -208,7 +178,43 @@ extension LocalServer {
                 return
             }
             
-            completionHandler(.success(()))
+            if let currentBuild,
+               let currentNumericVersion = Int(currentBuild.prefix(3).split(separator: ".").joined()) {
+                
+                let migrationUserDefaults = UserDefaults(suiteName: kSHDBMigrationsUDStoreName)!
+                let lastMigrationRunForVersion = migrationUserDefaults.value(forKey: kSHLastBuildMigratedToKey) as? String
+                
+                let lastRunNumericVersion: Int?
+                if let lastMigrationRunForVersion {
+                    lastRunNumericVersion = Int(lastMigrationRunForVersion.prefix(3).split(separator: ".").joined())
+                } else {
+                    lastRunNumericVersion = nil
+                }
+            
+                if lastRunNumericVersion == nil || currentNumericVersion > lastRunNumericVersion! {
+                    
+                    group.enter()
+                    
+                    self.runVersionMigration(to: currentNumericVersion, from: lastRunNumericVersion) { result3 in
+                        if case .failure(let error) = result3 {
+                            errors.append(error)
+                        } else {
+                            migrationUserDefaults.set(currentBuild, forKey: kSHLastBuildMigratedToKey)
+                        }
+                        
+                        group.leave()
+                    }
+                }
+            }
+            
+            group.notify(queue: .global()) {
+                guard errors.isEmpty == true else {
+                    completionHandler(.failure(errors.first!))
+                    return
+                }
+                
+                completionHandler(.success(()))
+            }
         }
     }
 }

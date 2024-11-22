@@ -8,7 +8,7 @@ struct DummyRestorationDelegate: SHAssetActivityRestorationDelegate {
     func restoreShareHistoryItems(from: [String : [(SHShareHistoryItem, Date)]]) {}
 }
 
-class DummyOperation: Operation, SHBackgroundOperationProtocol {
+class DummyOperation: Operation, @unchecked Sendable, SHBackgroundOperationProtocol {
     typealias OperationResult = Result<Void, Error>
     
     var log = Logger(subsystem: "com.gf.safehill.tests", category: "DummyOperation")

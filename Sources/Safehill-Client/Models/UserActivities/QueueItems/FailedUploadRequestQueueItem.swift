@@ -1,1 +1,1 @@
-public typealias SHFailedUploadRequestQueueItem = SHFailedQueueItem
+public typealias SHFailedUploadRequestQueueItem = SHGenericShareableGroupableQueueItem

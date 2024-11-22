@@ -3,7 +3,7 @@ import KnowledgeBase
 import os
 
 
-public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-LP-SYNC")
     
@@ -155,7 +155,7 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol {
                 let assetIdToUserIds = allRemoteDescriptors
                     .reduce([GlobalIdentifier: [any SHServerUser]]()) { partialResult, descriptor in
                         var result = partialResult
-                        var userIdList = Array(descriptor.sharingInfo.sharedWithUserIdentifiersInGroup.keys)
+                        var userIdList = Array(descriptor.sharingInfo.groupIdsByRecipientUserIdentifier.keys)
                         userIdList.append(descriptor.sharingInfo.sharedByUserIdentifier)
                         result[descriptor.globalIdentifier] = userIdList.compactMap({ remoteUsersById[$0] })
                         return result

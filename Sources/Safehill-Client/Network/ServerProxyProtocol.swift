@@ -18,7 +18,13 @@ internal protocol SHServerProxyProtocol {
     
     func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func updateThreadMembers(
+        for threadId: String,
+        _: ConversationThreadMembersUpdateDTO,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
@@ -27,8 +33,14 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
-    func setupGroupEncryptionDetails(
+    func deleteLocalThread(
+        withId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
@@ -200,8 +212,13 @@ internal protocol SHServerProxyProtocol {
     func topLevelLocalInteractionsSummary(for groupId: String) async throws -> InteractionsGroupSummaryDTO
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
+        completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
+    )
+    
+    func getThread(
+        withId threadId: String,
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
     

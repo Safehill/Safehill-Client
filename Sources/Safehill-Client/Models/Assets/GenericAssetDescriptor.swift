@@ -27,9 +27,9 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
-        localIdentifier = try container.decode(String.self, forKey: .localIdentifier)
-        let dateString = try container.decode(String.self, forKey: .creationDate)
-        creationDate = dateString.iso8601withFractionalSeconds
+        localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
+        let dateString = try? container.decode(String.self, forKey: .creationDate)
+        creationDate = dateString?.iso8601withFractionalSeconds
         let uploadStateString = try container.decode(String.self, forKey: .uploadState)
         guard let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateString) else {
             throw DecodingError.dataCorrupted(.init(codingPath: [CodingKeys.uploadState],
@@ -60,7 +60,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
             uploadState: self.uploadState,
             sharingInfo: SHGenericDescriptorSharingInfo(
                 sharedByUserIdentifier: self.sharingInfo.sharedByUserIdentifier,
-                sharedWithUserIdentifiersInGroup: self.sharingInfo.sharedWithUserIdentifiersInGroup,
+                groupIdsByRecipientUserIdentifier: self.sharingInfo.groupIdsByRecipientUserIdentifier,
                 groupInfoById: self.sharingInfo.groupInfoById
             )
         )

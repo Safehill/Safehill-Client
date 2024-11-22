@@ -135,6 +135,10 @@ struct RemoteServer : SHServerAPI {
                     let convertedString = String(data: data, encoding: String.Encoding.utf8)
                     log.warning("response body: \(convertedString ?? "")")
                 }
+                if let requestData = request.httpBody {
+                    let convertedString = String(data: requestData, encoding: String.Encoding.utf8)
+                    log.warning("request body: \(convertedString ?? "")")
+                }
             }
             
             switch httpResponse.statusCode {
@@ -267,7 +271,7 @@ struct RemoteServer : SHServerAPI {
         
         if let parameters = parameters {
             do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: parameters, options: .prettyPrinted)
+                request.httpBody = try JSONSerialization.data(withJSONObject: parameters)
             } catch {
                 return completionHandler(.failure(error))
             }
@@ -279,6 +283,43 @@ struct RemoteServer : SHServerAPI {
             decodingResponseAs: T.self,
             completionHandler: completionHandler
         )
+    }
+    
+    private func route<Request: Encodable, Response: Decodable>(
+        _ route: String,
+        method: String,
+        parameters: Request,
+        requiresAuthentication: Bool,
+        completionHandler: @escaping (Result<Response, Error>) -> Void
+    ) {
+        let url = requestURL(route: route)
+        
+        var request = URLRequest(url: url, timeoutInterval: 90)
+        request.httpMethod = method
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if requiresAuthentication {
+            guard let authedUser = self.requestor as? SHAuthenticatedLocalUser else {
+                completionHandler(.failure(SHLocalUserError.notAuthenticated))
+                return
+            }
+            request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
+        }
+        
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(parameters)
+            request.httpBody = data
+            
+            RemoteServer.makeRequest(
+                request: request,
+                usingSession: Self.safehillURLSession,
+                decodingResponseAs: Response.self,
+                completionHandler: completionHandler
+            )
+        } catch {
+            completionHandler(.failure(error))
+        }
     }
     
     func post<T: Decodable>(_ route: String,
@@ -403,12 +444,12 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
+    func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
         var parameters: [String: Any] = [
             "identifier": self.requestor.identifier
         ]
         if let clientBuild = clientBuild {
-            parameters["clientBuild"] = clientBuild
+            parameters["clientBuildString"] = clientBuild
         }
         self.post("signin/challenge/start", parameters: parameters, requiresAuthentication: false) {
             (result: Result<SHAuthChallenge, Error>) in
@@ -513,7 +554,7 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func registerDevice(_ deviceId: String, token: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
+    func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "deviceId": deviceId,
             "token": token
@@ -747,7 +788,7 @@ struct RemoteServer : SHServerAPI {
     }
     
     func share(asset: SHShareableEncryptedAsset,
-               asPhotoMessageInThreadId: String? = nil,
+               asPhotoMessageInThreadId: String?,
                suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
@@ -981,12 +1022,32 @@ struct RemoteServer : SHServerAPI {
     
     func updateThread(
         _ threadId: String,
-        newName: String,
+        newName: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.post("threads/update/\(threadId)",
                   parameters: ["name": newName],
                   requiresAuthentication: true) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let err):
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func updateThreadMembers(
+        for threadId: String,
+        _ update: ConversationThreadMembersUpdateDTO,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.route(
+            "threads/update/\(threadId)/members",
+            method: "POST",
+            parameters: update,
+            requiresAuthentication: true
+        ) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
                 completionHandler(.success(()))
@@ -1005,12 +1066,13 @@ struct RemoteServer : SHServerAPI {
                   completionHandler: completionHandler)
     }
     
-    func setGroupEncryptionDetails(
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
-        let parameters = [
+        var parameters = [
             "recipients": recipientsEncryptionDetails.map({ encryptionDetails in
                 return [
                     "encryptedSecret": encryptionDetails.encryptedSecret,
@@ -1019,9 +1081,11 @@ struct RemoteServer : SHServerAPI {
                     "senderPublicSignature": encryptionDetails.senderPublicSignature,
                     "recipientUserIdentifier": encryptionDetails.recipientUserIdentifier
                 ]
-            }),
-            "overwrite": false
+            })
         ] as [String: Any]
+        if let encryptedTitle {
+            parameters["encryptedTitle"] = encryptedTitle
+        }
         
         self.post("groups/setup/\(groupId)", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
@@ -1043,6 +1107,27 @@ struct RemoteServer : SHServerAPI {
                 completionHandler(.success(()))
             case .failure(let err):
                 completionHandler(.failure(err))
+            }
+        }
+    }
+    
+    func retrieveGroupDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDetailsResponseDTO?, Error>) -> ()
+    ) {
+        self.post("groups/retrieve-details/\(groupId)", parameters: nil, requiresAuthentication: true) { (result: Result<InteractionsGroupDetailsResponseDTO, Error>) in
+            switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success(let groupDetails):
+                completionHandler(.success(groupDetails))
             }
         }
     }
@@ -1090,22 +1175,29 @@ struct RemoteServer : SHServerAPI {
     }
     
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     ) {
         let parameters = [
-            "byUsersPublicIdentifiers": users.map({ $0.identifier }),
+            "byUsersPublicIdentifiers": userIds,
             "byInvitedPhoneNumbers": phoneNumbers
         ] as [String: Any]
         
         self.post("threads/retrieve", parameters: parameters, requiresAuthentication: true) {
             (result: Result<[ConversationThreadOutputDTO], Error>) in
             switch result {
+            case .failure(let error as SHHTTPError.ClientError):
+                switch error {
+                case .notFound:
+                    completionHandler(.success(nil))
+                default:
+                    completionHandler(.failure(error))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
             case .success(let listOfThreads):
                 completionHandler(.success(listOfThreads.first))
-            case .failure(let failure):
-                completionHandler(.failure(failure))
             }
         }
     }
@@ -1168,6 +1260,10 @@ struct RemoteServer : SHServerAPI {
                 completionHandler(.failure(error))
             }
         }
+    }
+    
+    func topLevelInteractionsSummary(inGroup groupId: String, completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func addReactions(
@@ -1433,29 +1529,31 @@ struct RemoteServer : SHServerAPI {
             }
         }
     }
-    
-    func requestAccessToGroup(with groupId: String) async throws {
-        try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
-            self.post("groups/invitees/\(groupId)/access", parameters: nil) {  (result: Result<NoReply, Error>) in
-                switch result {
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                case .success:
-                    continuation.resume(returning: ())
-                }
+
+    func requestAccess(
+        toThreadId threadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("threads/invitees/\(threadId)/access", parameters: nil) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
             }
         }
     }
     
-    func requestAccessToThread(with threadId: String) async throws {
-        try await withUnsafeThrowingContinuation { (continuation: UnsafeContinuation<Void, Error>) in
-            self.post("threads/invitees/\(threadId)/access", parameters: nil) {  (result: Result<NoReply, Error>) in
-                switch result {
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                case .success:
-                    continuation.resume(returning: ())
-                }
+    func requestAccess(
+        toGroupId groupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("groups/invitees/\(groupId)/access", parameters: nil) { (result: Result<NoReply, Error>) in
+            switch result {
+            case .failure(let error):
+                completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(()))
             }
         }
     }

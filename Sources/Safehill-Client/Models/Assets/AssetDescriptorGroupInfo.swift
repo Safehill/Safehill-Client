@@ -2,7 +2,9 @@ import Foundation
 
 public protocol SHAssetGroupInfo {
     /// The name of the asset group (optional)
-    var name: String? { get }
+    var encryptedTitle: String? { get }
+    /// The identifier of the user that created the group (introduced in Nov 2024)
+    var createdBy: UserIdentifier? { get }
     /// ISO8601 formatted datetime, representing the time the asset group was created
     var createdAt: Date? { get }
     /// Whether or not the share group was created from a thread (namely is a photo message)

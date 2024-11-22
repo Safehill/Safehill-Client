@@ -8,6 +8,8 @@ public struct WebSocketMessage: Codable {
         case reactionAdd = "reaction-add"
         case reactionRemove = "reaction-remove"
         case threadAdd = "thread-add"
+        case threadUpdate = "thread-update"
+        case threadRemove = "thread-remove"
         case threadAssetsShare = "thread-assets-share"
         case groupAssetsShare = "group-assets-share"
         case connectionRequest = "connection-request"
@@ -44,6 +46,14 @@ public struct WebSocketMessage: Codable {
         let senderPublicIdentifier: String
         let reactionType: ReactionType.RawValue // Int
         let updatedAt: String // ISO8601 formatted datetime
+    }
+    
+    struct ThreadUpdate: ConversationThreadUpdate, Codable {
+        let threadId: String
+        let name: String?
+        let membersPublicIdentifier: [String]
+        let invitedUsersPhoneNumbers: [String: String]
+        let lastUpdatedAt: String?
     }
     
     struct ThreadAssets: Codable {

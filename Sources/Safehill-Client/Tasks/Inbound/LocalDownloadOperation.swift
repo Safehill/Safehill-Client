@@ -27,7 +27,7 @@ import os
 ///
 /// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
 ///
-public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
+public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sendable {
     
     private static var alreadyProcessed = Set<GlobalIdentifier>()
     
@@ -140,7 +140,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
         descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
         filteringKeys: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[(any SHDecryptedAsset, any SHAssetDescriptor)], Error>) -> Void
+        completionHandler: @escaping (Result<[AssetAndDescriptor], Error>) -> Void
     ) {
         guard original.count > 0 else {
             completionHandler(.success([]))
@@ -176,14 +176,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
             case .success(let encryptedAssets):
                 var errorsByAssetGlobalId = [GlobalIdentifier: Error]()
-                var successfullyDecrypted = [(any SHDecryptedAsset, any SHAssetDescriptor)]()
+                let successfullyDecrypted = ThreadSafeAssetAndDescriptors(list: [])
                 let dispatchGroup = DispatchGroup()
                 
                 for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
                     
                     dispatchGroup.enter()
                     
-                    guard let groupId = descriptor.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                    guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                         errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.unexpectedData(descriptor.sharingInfo)
                         dispatchGroup.leave()
                         continue
@@ -192,9 +192,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     if let encryptedAsset = encryptedAssets[globalAssetId] {
                         self.delegatesQueue.async {
                             downloaderDelegates.forEach({
-                                $0.didStartDownloadOfAsset(withGlobalIdentifier: globalAssetId,
-                                                           descriptor: descriptor,
-                                                           in: groupId)
+                                $0.didStartDownloadOfAsset(
+                                    withGlobalIdentifier: globalAssetId,
+                                    descriptor: descriptor,
+                                    in: groupIds
+                                )
                             })
                         }
                         
@@ -213,21 +215,24 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                 /// So make sure the metadata isn't present.
                                 ///
                                 errorsByAssetGlobalId[globalAssetId] = error
+                                dispatchGroup.leave()
                                 
                             case .success(let decryptedAsset):
                                 self.delegatesQueue.async {
                                     downloaderDelegates.forEach({
                                         $0.didCompleteDownload(
                                             of: decryptedAsset,
-                                            in: groupId
+                                            in: groupIds
                                         )
                                     })
                                 }
                                 
-                                successfullyDecrypted.append((decryptedAsset, descriptor))
+                                Task {
+                                    let assetAndDescriptor = AssetAndDescriptor(asset: decryptedAsset, descriptor: descriptor)
+                                    await successfullyDecrypted.add(assetAndDescriptor)
+                                    dispatchGroup.leave()
+                                }
                             }
-                            
-                            dispatchGroup.leave()
                         }
                     } else {
                         self.log.error("[\(type(of: self))] unable to find asset \(globalAssetId) locally")
@@ -245,7 +250,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                 
                 dispatchGroup.notify(queue: .global(qos: qos)) { [weak self] in
                     
-                    completionHandler(.success(successfullyDecrypted))
+                    Task {
+                        completionHandler(.success(await successfullyDecrypted.list))
+                    }
                     
                     guard let self = self else { return }
                     
@@ -254,7 +261,11 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                     }
                     
                     for (gid, error) in errorsByAssetGlobalId {
-                        guard let groupId = descriptorsByGlobalIdentifier[gid]?.sharingInfo.sharedWithUserIdentifiersInGroup[self.user.identifier] else {
+                        if case SHBackgroundOperationError.missingAssetInLocalServer = error {
+                            continue
+                        }
+                        
+                        guard let groupIds = descriptorsByGlobalIdentifier[gid]?.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
                             self.log.warning("will not notify delegates about asset decryption error for asset \(gid)")
                             continue
                         }
@@ -262,14 +273,14 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                             downloaderDelegates.forEach({
                                 $0.didFailDownloadOfAsset(
                                     withGlobalIdentifier: gid,
-                                    in: groupId,
+                                    in: groupIds,
                                     with: error
                                 )
                             })
                         }
                     }
                     
-                    self.log.warning("failed to decrypt the following assets: \(errorsByAssetGlobalId)")
+                    self.log.warning("failed to decrypt the following assets from local store: \(errorsByAssetGlobalId)")
                     
                     self.serverProxy.localServer.deleteAssets(
                         withGlobalIdentifiers: Array(errorsByAssetGlobalId.keys)
@@ -366,7 +377,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation {
                                     
                                     if case .success(let decryptedAssetsAndDescriptors) = decryptionResult,
                                        decryptedAssetsAndDescriptors.count > 0 {
-                                        Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.1.globalIdentifier }))
+                                        Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.asset.globalIdentifier }))
                                     }
                                     
                                     completionHandler(.success(()))

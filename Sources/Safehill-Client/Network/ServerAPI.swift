@@ -46,7 +46,7 @@ public protocol SHServerAPI {
     func deleteAccount(completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Logs the current user, aka the requestor
-    func signIn(clientBuild: Int?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
+    func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ())
     
     /// Get a User's public key and public signature
     /// - Parameters:
@@ -222,11 +222,22 @@ public protocol SHServerAPI {
     /// Updates the thread name
     /// - Parameters:
     ///   - threadId: the thread identifier
-    ///   - newName: thre new name
+    ///   - newName: the new name. nil for clearing an existing name
     ///   - completionHandler: the callback
     func updateThread(
        _ threadId: String,
-       newName: String,
+       newName: String?,
+       completionHandler: @escaping (Result<Void, Error>) -> ()
+   )
+    
+    /// Updates the thread name
+    /// - Parameters:
+    ///   - threadId: the thread identifier
+    ///   - update: the updates to the members
+    ///   - completionHandler: the callback
+    func updateThreadMembers(
+       for threadId: String,
+       _ update: ConversationThreadMembersUpdateDTO,
        completionHandler: @escaping (Result<Void, Error>) -> ()
    )
     
@@ -256,11 +267,11 @@ public protocol SHServerAPI {
     
     /// Retrieve the thread with the specified users, if one exists
     /// - Parameters:
-    ///   - users: the users to match
+    ///   - userIds: the users to match
     ///   - phoneNumbers: the phone numbers invited to the thread to match
     ///   - completionHandler: the callback method
     func getThread(
-        withUsers users: [any SHServerUser],
+        withUserIds userIds: [UserIdentifier],
         and phoneNumbers: [String],
         completionHandler: @escaping (Result<ConversationThreadOutputDTO?, Error>) -> ()
     )
@@ -280,10 +291,12 @@ public protocol SHServerAPI {
     /// This method needs to be called every time a share (group) is created so that reactions and comments can be added to it.
     /// - Parameters:
     ///   - groupId: the group identifier
+    ///   - encryptedTitle: the message accompanying the group, if any, encrypted with the group E2EE details
     ///   - recipientsEncryptionDetails: the encryption details for each reciepient
     ///   - completionHandler: the callback method
-    func setGroupEncryptionDetails(
+    func setupGroup(
         groupId: String,
+        encryptedTitle: String?,
         recipientsEncryptionDetails: [RecipientEncryptionDetailsDTO],
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
@@ -295,6 +308,15 @@ public protocol SHServerAPI {
     func deleteGroup(
         groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// Retrieves the title and the encryption details for the group
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - completionHandler: the callback method
+    func retrieveGroupDetails(
+        forGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupDetailsResponseDTO?, Error>) -> Void
     )
     
     /// Retrieved the E2EE details for a group, if one exists
@@ -324,6 +346,15 @@ public protocol SHServerAPI {
     /// - Parameter completionHandler: the callback method
     func topLevelGroupsInteractionsSummary(
         completionHandler: @escaping (Result<[String: InteractionsGroupSummaryDTO], Error>) -> ()
+    )
+    
+    /// Retrieve an overall summary of all interactions in a specific group
+    /// - Parameters:
+    ///   - groupId:  the group identifier
+    ///   - completionHandler: the callback method
+    func topLevelInteractionsSummary(
+        inGroup groupId: String,
+        completionHandler: @escaping (Result<InteractionsGroupSummaryDTO, Error>) -> ()
     )
     
     /// Adds reactions to a share (group)
@@ -460,18 +491,19 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
-    /// If a share group could not be downloaded, the user can request the originator of that share for access.
-    /// This will trigger a push notification to the originator asking to grant access to this user.
-    /// - Parameter groupId: the groupId
-    func requestAccessToGroup(
-        with groupId: String
-    ) async throws
-    
-    
     /// If a thread not be fetched, the user can request the originator of that share for access.
     /// This will trigger a push notification to the originator asking to grant access to this user.
     /// - Parameter groupId: the groupId
-    func requestAccessToThread(
-        with threadId: String
-    ) async throws
+    func requestAccess(
+        toThreadId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    /// If a share group could not be downloaded, the user can request the originator of that share for access.
+    /// This will trigger a push notification to the originator asking to grant access to this user.
+    /// - Parameter groupId: the groupId
+    func requestAccess(
+        toGroupId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
 }

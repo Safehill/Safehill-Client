@@ -1,6 +1,5 @@
 import Foundation
 
-
 public struct InteractionsGroupDTO {
     let messages: [MessageOutputDTO]
     let reactions: [ReactionOutputDTO]

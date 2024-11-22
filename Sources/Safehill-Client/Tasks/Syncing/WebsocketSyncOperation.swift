@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-public class SHWebsocketSyncOperation: Operation {
+public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     
     public typealias OperationResult = Result<Void, Error>
     
@@ -17,9 +17,10 @@ public class SHWebsocketSyncOperation: Operation {
     
     let socket: WebSocketAPI
     
-    let websocketConnectionDelegates: [WebSocketDelegate]
-    let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
-    let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+    private var websocketConnectionDelegates: [WebSocketDelegate]
+    internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
+    private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+    internal let userConversionDelegates: [SHUserConversionDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
@@ -29,14 +30,20 @@ public class SHWebsocketSyncOperation: Operation {
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
-        userConnectionsDelegates: [SHUserConnectionRequestDelegate]
+        userConnectionsDelegates: [SHUserConnectionRequestDelegate],
+        userConversionDelegates: [SHUserConversionDelegate]
     ) throws {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
+        self.userConversionDelegates = userConversionDelegates
         self.socket = WebSocketAPI()
+        
+        super.init()
+        
+        self.websocketConnectionDelegates.append(self)
     }
     
     deinit {
@@ -141,6 +148,40 @@ public class SHWebsocketSyncOperation: Operation {
                 Self.memberAccessQueue.sync {
                     Self.isWebSocketConnected = true
                 }
+                
+            case .userConversionManifest:
+                guard let encoded = try? JSONDecoder().decode(WebSocketMessage.UserConversionManifest.self, from: contentData) else {
+                    return
+                }
+                self.log.debug("[ws] CONVERSION-REQUEST: newUser=\(encoded.newUser.name) assetIdsByGroupId=\(encoded.assetIdsByGroupId), threadIds=\(encoded.threadIds)")
+                
+                Task {
+                    do {
+                        try await SHAssetSharingController(localUser: self.user)
+                            .convertUser(encoded.newUser,
+                                         assetIdsByGroupId: encoded.assetIdsByGroupId,
+                                         threadIds: encoded.threadIds)
+                    } catch {
+                        self.log.error("[ws] CONVERSION-REQUEST: failed to convert newUser=\(encoded.newUser.name) assetIdsByGroupId=\(encoded.assetIdsByGroupId), threadIds=\(encoded.threadIds). \(error.localizedDescription)")
+                    }
+                }
+                
+                self.userConversionDelegates.forEach({
+                    $0.didRequestUserConversion(
+                        assetIdsByGroupId: encoded.assetIdsByGroupId,
+                        threadIds: encoded.threadIds
+                    )
+                })
+                
+            case .threadUserConverted:
+                guard let threadIds = try? JSONDecoder().decode([String].self, from: contentData) else {
+                    return
+                }
+                self.log.debug("[ws] THREADS-USER-CONVERTED: threadIds=\(threadIds)")
+                
+                self.userConversionDelegates.forEach({
+                    $0.didConvertUserInThreads(with: threadIds)
+                })
                 
             case .connectionRequest:
                 guard let encoded = try? JSONDecoder().decode(WebSocketMessage.NewUserConnection.self, from: contentData) else {
@@ -293,6 +334,50 @@ public class SHWebsocketSyncOperation: Operation {
                 
                 interactionsSyncDelegates.forEach {
                     $0.didAddThread(threadOutputDTO)
+                }
+                
+            case .threadRemove:
+                
+                guard let threadId = try? JSONDecoder().decode(String.self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] REMOVE-THREAD: thread id \(threadId)")
+                
+                self.serverProxy.deleteLocalThread(withId: threadId) { res in
+                    if case .failure(let failure) = res {
+                        self.log.error("failed to remove thread from local server. Thread sync will attempt this again. \(failure.localizedDescription)")
+                    }
+                }
+                
+                interactionsSyncDelegates.forEach {
+                    $0.didRemoveThread(with: threadId)
+                }
+                
+            case .threadUpdate:
+                
+                guard let threadUpdateWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadUpdate.self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                Task {
+                    do {
+                        try await self.serverProxy.updateLocalThread(from: threadUpdateWsMessage)
+                        
+                        self.serverProxy.getThread(withId: threadUpdateWsMessage.threadId) { result in
+                            if case .success(let threadOutputDTO) = result, let threadOutputDTO {
+                                interactionsSyncDelegates.forEach {
+                                    $0.didAddThread(threadOutputDTO)
+                                }
+                            } else {
+                                self.log.critical("[ws] error retrieving thread from DB after \(message.type.rawValue) message via WebSockets")
+                            }
+                        }
+                    } catch {
+                        self.log.critical("[ws] error updating DB after \(message.type.rawValue) message via WebSockets. \(error.localizedDescription)")
+                    }
                 }
                 
             case .threadAssetsShare, .groupAssetsShare:

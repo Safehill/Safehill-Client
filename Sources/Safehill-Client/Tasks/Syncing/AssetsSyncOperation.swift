@@ -5,7 +5,7 @@ import os
 
 // MARK: - Sync Operation
 
-public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
+public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-ASSETS-SYNC")
     
@@ -171,7 +171,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
                         assetsDelegates.forEach {
-                            $0.groupsInfoWereUpdated(diff.groupInfoDifferentOnRemote)
+                            $0.groupsInfoWereUpdated(diff.groupInfoDifferentOnRemote.mapValues({ $0.groupInfo }))
                         }
                     }
                     
@@ -187,10 +187,10 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
         /// Add users to the shares in the local server, in the graph
         /// and notify the delegates so that the UI gets updated
         ///
-        if diff.userIdsAddedToTheShareOfAssetGid.isEmpty == false {
+        if diff.userGroupChangesByAssetGid.isEmpty == false {
             dispatchGroup.enter()
-            self.serverProxy.localServer.addAssetRecipients(
-                basedOn: diff.userIdsAddedToTheShareOfAssetGid
+            self.serverProxy.localServer.updateUserGroupInfo(
+                basedOn: diff.userGroupChangesByAssetGid
             ) { [weak self] result in
                 
                 guard let self = self else {
@@ -202,12 +202,11 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                 case .success:
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
-                        for (globalIdentifier, shareDiff) in diff.userIdsAddedToTheShareOfAssetGid {
+                        for (globalIdentifier, sharingInfo) in diff.userGroupChangesByAssetGid {
                             assetsDelegates.forEach {
-                                $0.usersWereAddedToShare(
-                                    of: globalIdentifier,
-                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId,
-                                    groupInfoById: shareDiff.groupInfoById
+                                $0.groupUserSharingInfoChanged(
+                                    forAssetWith: globalIdentifier,
+                                    sharingInfo: sharingInfo
                                 )
                             }
                         }
@@ -219,10 +218,10 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
             }
         }
         
-        if diff.userIdsRemovedFromTheSharesOfAssetGid.isEmpty == false {
+        if diff.userGroupRemovalsByAssetGid.isEmpty == false {
             dispatchGroup.enter()
             self.serverProxy.localServer.removeAssetRecipients(
-                basedOn: diff.userIdsRemovedFromTheSharesOfAssetGid
+                basedOn: diff.userGroupRemovalsByAssetGid.mapValues({ Array($0.keys) })
             ) { [weak self] result in
                 guard let self = self else {
                     return
@@ -232,11 +231,11 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol {
                 case .success:
                     let assetsDelegates = self.assetsDelegates
                     self.delegatesQueue.async {
-                        for (globalIdentifier, shareDiff) in diff.userIdsRemovedFromTheSharesOfAssetGid {
+                        for (globalIdentifier, userGroupRemovals) in diff.userGroupRemovalsByAssetGid {
                             assetsDelegates.forEach {
                                 $0.usersWereRemovedFromShare(
                                     of: globalIdentifier,
-                                    groupIdByRecipientId: shareDiff.groupIdByRecipientId
+                                    userGroupRemovals
                                 )
                             }
                         }

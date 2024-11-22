@@ -21,7 +21,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter downloadRequest: the request
     func didStartDownloadOfAsset(withGlobalIdentifier globalIdentifier: GlobalIdentifier,
                                  descriptor: any SHAssetDescriptor,
-                                 in groupId: String)
+                                 in groupIds: [String])
     
     /// Notify about a failed attempt to download some assets
     /// - Parameters:
@@ -29,7 +29,7 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     ///   - groupId: the group id of the request it belongs to
     ///   - error: the error
     func didFailDownloadOfAsset(withGlobalIdentifier: GlobalIdentifier,
-                                in groupId: String,
+                                in groupIds: [String],
                                 with error: Error)
     
     /// Notifies about assets in the local library that are linked to one on the server (backed up)
@@ -42,19 +42,19 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     /// - Parameter groupId: the group id of the request it belongs to
     func didCompleteDownload(
         of decryptedAsset: any SHDecryptedAsset,
-        in groupId: String
+        in groupIds: [String]
     )
     
     /// One cycle of downloads has finished from local server
     /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
     func didCompleteDownloadCycle(
-        localAssetsAndDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+        localAssetsAndDescriptors: [AssetAndDescriptor]
     )
     
     /// One cycle of downloads has finished from remote server
     /// - Parameter localDescriptors: The descriptors for the assets downloaded from local server
     func didCompleteDownloadCycle(
-        remoteAssetsAndDescriptors: [(any SHDecryptedAsset, any SHAssetDescriptor)]
+        remoteAssetsAndDescriptors: [AssetAndDescriptor]
     )
     
     /// The download cycle failed
