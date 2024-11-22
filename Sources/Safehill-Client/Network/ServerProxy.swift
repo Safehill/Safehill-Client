@@ -409,7 +409,7 @@ extension SHServerProxy {
         }
     }
     
-    func getAssetDescriptor(
+    public func getAssetDescriptor(
         for globalIdentifier: GlobalIdentifier,
         filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<(any SHAssetDescriptor)?, Error>) -> ()

@@ -83,6 +83,7 @@ extension SHLocalUserProtocol {
 }
 
 extension SHLocalUserProtocol {
+    
     public func createShareablePayload(
         from data: Data,
         toShareWith user: SHCryptoUser
@@ -90,24 +91,28 @@ extension SHLocalUserProtocol {
         guard let salt = self.maybeEncryptionProtocolSalt else {
             throw SHLocalUserError.missingProtocolSalt
         }
-        return try SHUserContext(user: self.shUser)
-            .shareable(data: data,
-                       protocolSalt: salt,
-                       with: user)
+        return try SHUserContext(user: self.shUser).shareable(
+            data: data,
+            protocolSalt: salt,
+            with: user
+        )
     }
     
-    public func decrypt(data: Data,
-                 encryptedSecret: SHShareablePayload,
-                 receivedFrom user: SHCryptoUser
+    public func decrypt(
+        data: Data,
+        encryptedSecret: SHShareablePayload,
+        receivedFrom user: SHCryptoUser
     ) throws -> Data {
         guard let salt = self.maybeEncryptionProtocolSalt else {
             throw SHLocalUserError.missingProtocolSalt
         }
-        return try SHUserContext(user: self.shUser)
-            .decrypt(data, usingEncryptedSecret: encryptedSecret,
-                     protocolSalt: salt,
-                     receivedFrom: user
-            )
+        log.debug("[crypto] decrypting es=\(encryptedSecret.cyphertext.base64EncodedString()), epc=\(encryptedSecret.ephemeralPublicKeyData.base64EncodedString()), sps=\(encryptedSecret.signature.base64EncodedString()) salt=\(salt.base64EncodedString()), senderSig=\(user.publicSignatureData.base64EncodedString())")
+        return try SHUserContext(user: self.shUser).decrypt(
+            data,
+            usingEncryptedSecret: encryptedSecret,
+            protocolSalt: salt,
+            receivedFrom: user
+        )
     }
 }
 

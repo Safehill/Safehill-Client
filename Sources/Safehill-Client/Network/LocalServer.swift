@@ -558,18 +558,20 @@ struct LocalServer : SHServerAPI {
         }
         
         var descriptors = [SHGenericAssetDescriptor]()
-        var globalIdentifiersToFetch = Set(globalIdentifiers)
+        let globalIdentifiers = Array(Set(globalIdentifiers))
         
         if globalIdentifiers.isEmpty == false, useCache {
+            
+            var _globalIdentifiersToFetch = Set(globalIdentifiers)
             
             for globalIdentifier in globalIdentifiers {
                 if let cachedValue = assetDescriptorInMemoryCache.value(forKey: globalIdentifier) as? SHGenericAssetDescriptorClass {
                     descriptors.append(SHGenericAssetDescriptor.from(cachedValue))
-                    globalIdentifiersToFetch.remove(globalIdentifier)
+                    _globalIdentifiersToFetch.remove(globalIdentifier)
                 }
             }
             
-            guard globalIdentifiersToFetch.isEmpty == false else {
+            guard _globalIdentifiersToFetch.isEmpty == false else {
                 completionHandler(.success(descriptors))
                 return
             }
@@ -744,15 +746,20 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
+            /// If caller requested all assets or the retrieved asset is not in the set to retrieve, skip processing
+            guard globalIdentifiers.isEmpty || globalIdentifiers.contains(v.globalIdentifier) else {
+                continue
+            }
+            
+            /// If the descriptor for the asset was already pulled from the cache, skip processing
+            guard descriptors.contains(where: { $0.globalIdentifier == v.globalIdentifier }) == false else {
+                continue
+            }
+            
             if versionUploadStateByIdentifierQuality[v.globalIdentifier] == nil {
                 versionUploadStateByIdentifierQuality[v.globalIdentifier] = [v.quality: v.uploadState]
             } else {
                 versionUploadStateByIdentifierQuality[v.globalIdentifier]![v.quality] = v.uploadState
-            }
-            
-            /// If caller requested all assets or the retrieved asset is not in the set to retrieve
-            guard globalIdentifiers.isEmpty || globalIdentifiersToFetch.contains(v.globalIdentifier) else {
-                continue
             }
             
             localInfoByGlobalIdentifier[v.globalIdentifier] = (
@@ -1294,10 +1301,10 @@ struct LocalServer : SHServerAPI {
         
         if fileManager.fileExists(atPath: versionDataURL.path) {
             if overwriteIfExists {
-                log.warning("a file exists at \(versionDataURL.path). overwriting it")
+                log.debug("a file exists at \(versionDataURL.path). overwriting it")
                 try? fileManager.removeItem(at: versionDataURL)
             } else {
-                log.warning("a file exists at \(versionDataURL.path). returning it")
+                log.debug("a file exists at \(versionDataURL.path). returning it")
                 return versionDataURL
             }
         }
@@ -1722,11 +1729,14 @@ struct LocalServer : SHServerAPI {
                             )
                         }
                         
-                        let serverAsset = SHServerAsset(globalIdentifier: asset.globalIdentifier,
-                                                        localIdentifier: asset.localIdentifier,
-                                                        creationDate: asset.creationDate,
-                                                        groupId: senderUploadGroupId,
-                                                        versions: serverAssetVersions)
+                        let serverAsset = SHServerAsset(
+                            globalIdentifier: asset.globalIdentifier,
+                            localIdentifier: asset.localIdentifier,
+                            createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
+                            creationDate: asset.creationDate,
+                            groupId: senderUploadGroupId,
+                            versions: serverAssetVersions
+                        )
                         serverAssets.append(serverAsset)
                     }
                 }
