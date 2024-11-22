@@ -157,10 +157,11 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 
                 Task {
                     do {
-                        try await SHAssetSharingController(localUser: self.user)
-                            .convertUser(encoded.newUser,
-                                         assetIdsByGroupId: encoded.assetIdsByGroupId,
-                                         threadIds: encoded.threadIds)
+                        try await SHAssetSharingController(localUser: self.user).convertUser(
+                            encoded.newUser,
+                            assetIdsByGroupId: encoded.assetIdsByGroupId,
+                            threadIds: encoded.threadIds
+                        )
                     } catch {
                         self.log.error("[ws] CONVERSION-REQUEST: failed to convert newUser=\(encoded.newUser.name) assetIdsByGroupId=\(encoded.assetIdsByGroupId), threadIds=\(encoded.threadIds). \(error.localizedDescription)")
                     }
@@ -299,23 +300,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                         self.log.critical("[ws] invalid anchor type from server: \(reaction.anchorType)")
                     }
                 })
-                
-            case .userConversionManifest:
-                
-                guard let conversionManifest = try? JSONDecoder().decode(WebSocketMessage.UserConversionManifest.self, from: contentData),
-                      let phoneNumber = conversionManifest.newUser.phoneNumber
-                else {
-                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
-                    return
-                }
-                
-                self.log.debug("[ws] CONVERSION-MANIFEST for threads \(conversionManifest.threadIds) assets \(conversionManifest.assetIdsByGroupId)")
-                
-            case .threadUserConverted:
-                
-                self.log.debug("[ws] THREAD-USER-CONVERTED")
-                
-                break
                 
             case .threadAdd:
                 

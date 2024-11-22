@@ -230,13 +230,16 @@ struct LocalServer : SHServerAPI {
         let writeBatch = userStore.writeBatch()
         
         for user in users {
-            let value = [
+            var value = [
                 "identifier": user.identifier,
                 "name": user.name,
-                "phoneNumber": user.phoneNumber,
                 "publicKey": user.publicKeyData,
                 "publicSignature": user.publicSignatureData
             ] as [String : Any]
+            
+            if let phoneNumber = user.phoneNumber {
+                value["phoneNumber"] = phoneNumber
+            }
             
             writeBatch.set(value: value, for: user.identifier)
         }
