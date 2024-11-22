@@ -234,6 +234,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                             return SHGenericAssetDescriptor(
                                 globalIdentifier: desc.globalIdentifier,
                                 localIdentifier: desc.localIdentifier,
+                                perceptualHash: desc.perceptualHash,
                                 creationDate: desc.creationDate,
                                 uploadState: desc.uploadState,
                                 sharingInfo: SHGenericDescriptorSharingInfo(

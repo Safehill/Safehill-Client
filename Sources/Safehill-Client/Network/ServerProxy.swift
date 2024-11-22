@@ -714,6 +714,7 @@ extension SHServerProxy {
                                                 let updatedValue = SHGenericEncryptedAsset(
                                                     globalIdentifier: existing.globalIdentifier,
                                                     localIdentifier: existing.localIdentifier,
+                                                    perceptualHash: existing.perceptualHash,
                                                     creationDate: existing.creationDate,
                                                     encryptedVersions: updatedVersions
                                                 )

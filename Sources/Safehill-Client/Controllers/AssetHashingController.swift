@@ -2,8 +2,8 @@ import CocoaImageHashing
 import Photos
 import Safehill_Crypto
 
-public typealias SHAssetPerceptualHash = String
-public typealias SHPerceptualHashDistance = Int64
+public typealias PerceptualHash = String
+public typealias PerceptualHashDistance = Int64
 
 public class SHHashingController {
     
@@ -63,7 +63,7 @@ public class SHHashingController {
         return globalIdentifier
     }
     
-    static func perceptualHash(forImageData imageData: Data) throws -> SHAssetPerceptualHash {
+    static func perceptualHash(forImageData imageData: Data) throws -> PerceptualHash {
         guard imageData.count > 0 else {
             throw Error.noImageData
         }
@@ -78,8 +78,8 @@ public class SHHashingController {
     }
     
     static func calculateDistanceBetween(
-        lhsPerceptualHash: SHAssetPerceptualHash,
-        rhsPerceptualHash: SHAssetPerceptualHash
+        lhsPerceptualHash: PerceptualHash,
+        rhsPerceptualHash: PerceptualHash
     ) throws -> OSHashDistanceType {
         guard let lhs = OSHashType(lhsPerceptualHash),
               let rhs = OSHashType(rhsPerceptualHash)

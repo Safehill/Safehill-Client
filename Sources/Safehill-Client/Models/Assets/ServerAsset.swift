@@ -4,6 +4,7 @@ import Foundation
 public struct SHServerAsset : Codable {
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
+    public let perceptualHash: PerceptualHash?
     public let createdBy: UserIdentifier? // optional for backward-compatibilty with old server. Can make it non-optional as soon as new server version is deployed
     public let creationDate: Date?
     public let groupId: String
@@ -14,6 +15,7 @@ public struct SHServerAsset : Codable {
         
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
         localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
+        perceptualHash = try? container.decode(String.self, forKey: .perceptualHash)
         createdBy = try? container.decode(String.self, forKey: .createdBy) // optional for backward-compatibilty with old server. Can make it non-optional as soon as new server version is deployed
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
@@ -21,14 +23,16 @@ public struct SHServerAsset : Codable {
         versions = try container.decode([SHServerAssetVersion].self, forKey: .versions)
     }
     
-    public init(globalIdentifier: String,
-                localIdentifier: String?,
+    public init(globalIdentifier: GlobalIdentifier,
+                localIdentifier: LocalIdentifier?,
+                perceptualHash: PerceptualHash?,
                 createdBy: UserIdentifier,
                 creationDate: Date?,
                 groupId: String,
                 versions: [SHServerAssetVersion]) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
+        self.perceptualHash = perceptualHash
         self.createdBy = createdBy
         self.creationDate = creationDate
         self.groupId = groupId

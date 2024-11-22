@@ -80,7 +80,7 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     
     /// Generate the perceptial hash of the `.lowResolution` image
     /// - Returns: the hash
-    func generatePerceptiveHash() async throws -> SHAssetPerceptualHash {
+    func generatePerceptualHash() async throws -> PerceptualHash {
         guard let imageData = try await self.data(for: [.lowResolution])[.lowResolution]
         else {
             throw SHHashingController.Error.noImageData
@@ -295,7 +295,8 @@ extension SHApplePhotoAsset {
     
     public func toUploadableAsset(
         for versions: [SHAssetQuality],
-        globalIdentifier: GlobalIdentifier? = nil
+        globalIdentifier: GlobalIdentifier? = nil,
+        perceptualHash: PerceptualHash? = nil
     ) async throws -> SHUploadableAsset {
         let globalId: GlobalIdentifier
         if let globalIdentifier {
@@ -304,9 +305,17 @@ extension SHApplePhotoAsset {
             globalId = await self.generateGlobalIdentifier()
         }
         
+        let perceptual: PerceptualHash
+        if let perceptualHash {
+            perceptual = perceptualHash
+        } else {
+            perceptual = try await self.generatePerceptualHash()
+        }
+        
         return SHUploadableAsset(
             localIdentifier: self.phAsset.localIdentifier,
             globalIdentifier: globalId,
+            perceptualHash: perceptual,
             creationDate: self.phAsset.creationDate,
             data: try await data(for: versions)
         )

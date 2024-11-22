@@ -857,6 +857,7 @@ struct LocalServer : SHServerAPI {
             let descriptor = SHGenericAssetDescriptor(
                 globalIdentifier: globalIdentifier,
                 localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
+                perceptualHash: nil,
                 creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
                 uploadState: combinedUploadState,
                 sharingInfo: sharingInfo
@@ -1356,6 +1357,7 @@ struct LocalServer : SHServerAPI {
                 return SHGenericEncryptedAsset(
                     globalIdentifier: $0.globalIdentifier,
                     localIdentifier: $0.localIdentifier,
+                    perceptualHash: $0.perceptualHash,
                     creationDate: $0.creationDate,
                     encryptedVersions: newVersions
                 )
@@ -1367,6 +1369,7 @@ struct LocalServer : SHServerAPI {
             let phantomAssetDescriptor = SHGenericAssetDescriptor(
                 globalIdentifier: encryptedAsset.globalIdentifier,
                 localIdentifier: encryptedAsset.localIdentifier,
+                perceptualHash: nil,
                 creationDate: encryptedAsset.creationDate,
                 uploadState: .started,
                 sharingInfo: SHGenericDescriptorSharingInfo(
@@ -1554,6 +1557,7 @@ struct LocalServer : SHServerAPI {
                 let versionMetadata = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: asset.globalIdentifier,
                     localIdentifier: asset.localIdentifier,
+                    perceptualHash: asset.perceptualHash,
                     quality: encryptedVersion.quality,
                     senderEncryptedSecret: encryptedVersion.encryptedSecret,
                     publicKey: encryptedVersion.publicKeyData,
@@ -1732,6 +1736,7 @@ struct LocalServer : SHServerAPI {
                         let serverAsset = SHServerAsset(
                             globalIdentifier: asset.globalIdentifier,
                             localIdentifier: asset.localIdentifier,
+                            perceptualHash: asset.perceptualHash,
                             createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
                             creationDate: asset.creationDate,
                             groupId: senderUploadGroupId,
@@ -1936,6 +1941,7 @@ struct LocalServer : SHServerAPI {
                 let newValue = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: value.globalIdentifier,
                     localIdentifier: value.localIdentifier,
+                    perceptualHash: value.perceptualHash,
                     quality: value.quality,
                     senderEncryptedSecret: value.senderEncryptedSecret,
                     publicKey: value.publicKey,
