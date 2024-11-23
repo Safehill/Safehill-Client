@@ -1,7 +1,7 @@
 import SwiftUI
 import Foundation
 
-struct SHDownloadedAsset {
+public struct SHDownloadedAsset {
     public let globalIdentifier: String
     public var localIdentifier: String?
     public var decryptedVersions: [SHAssetQuality: NSUIImage]
