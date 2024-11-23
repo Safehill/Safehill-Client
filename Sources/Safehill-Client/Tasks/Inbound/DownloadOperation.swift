@@ -29,7 +29,6 @@ protocol SHDownloadOperation {
     
     func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,

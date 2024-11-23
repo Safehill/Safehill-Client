@@ -1,6 +1,5 @@
 import Foundation
 import KnowledgeBase
-import Photos
 import os
 
 open class SHFullUploadPipelineOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {

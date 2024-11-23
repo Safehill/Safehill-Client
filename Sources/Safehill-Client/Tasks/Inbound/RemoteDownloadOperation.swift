@@ -1,7 +1,6 @@
 import Foundation
 import KnowledgeBase
 import os
-import Photos
 
 ///
 /// This pipeline operation is responsible for keeping assets in the remote server and local server in sync.
@@ -12,8 +11,8 @@ import Photos
 /// The steps are:
 /// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote. The incompletes (with upload state `.notStarted`) are carried over in each iteration, otherwise they would be filtered out by the  `afterDate` filter and missed forever
 /// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : all user referenced in the descriptor that can't be retrived from server are filtered out. If sender can't be retrieved the whole descriptor is filtered out
-/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`).
-///     - for the ones not in the photos library shared by _this_ user, local server assets and queue items are created when missing, and the restoration delegate is called
+/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
+///     - local server assets and queue items are created when missing, and the restoration delegate is called
 /// 4. `downloadAssets(for:completionHandler:)`  : for the remainder, download and decrypt their low resolution
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
@@ -297,76 +296,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     }
     
     ///
-    /// Notifies the delegates about matches between the assets on the server and the local library.
-    ///
-    ///
-    /// It retrieves apple photos identifiers in the local library corresponding to the assets in the descriptors having a local identifier.
-    /// - If they exist, then do not decrypt them but just serve the local asset.
-    /// - If they don't, return them in the callback method so they can be decrypted.
-    ///
-    /// - Parameters:
-    ///   - descriptorsByGlobalIdentifier: all the descriptors by local identifier
-    ///   - completionHandler: the callback method
-    internal func filterOutMatchesInPhotoLibrary(
-        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
-        completionHandler: @escaping (Result<[GlobalIdentifier], Error>) -> Void
-    ) {
-        guard !self.isCancelled else {
-            log.info("[\(type(of: self))] download task cancelled. Finishing")
-            completionHandler(.success([]))
-            return
-        }
-        guard original.count > 0 else {
-            completionHandler(.success([]))
-            return
-        }
-        
-        let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
-        
-        guard descriptorsByGlobalIdentifier.count > 0 else {
-            completionHandler(.success([]))
-            return
-        }
-        
-        let localIdentifiersInDescriptors = descriptorsByGlobalIdentifier.values.compactMap({ $0.localIdentifier })
-        var phAssetsByLocalIdentifier = [LocalIdentifier: PHAsset]()
-        
-        self.photoIndexer.fetchAllAssets(withFilters: [.withLocalIdentifiers(localIdentifiersInDescriptors)]) {
-            result in
-            switch result {
-            case .failure(let error):
-                completionHandler(.failure(error))
-                return
-            case .success(let fetchResult):
-                fetchResult?.enumerateObjects { phAsset, _, _ in
-                    phAssetsByLocalIdentifier[phAsset.localIdentifier] = phAsset
-                }
-                
-                var filteredGlobalIdentifiers = [GlobalIdentifier]()
-                var globalToPHAsset = [GlobalIdentifier: PHAsset]()
-                for descriptor in descriptorsByGlobalIdentifier.values {
-                    if let localId = descriptor.localIdentifier,
-                       let phAsset = phAssetsByLocalIdentifier[localId] {
-                        globalToPHAsset[descriptor.globalIdentifier] = phAsset
-                    } else {
-                        filteredGlobalIdentifiers.append(descriptor.globalIdentifier)
-                    }
-                }
-                
-                let downloaderDelegates = self.downloaderDelegates
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didIdentify(globalToLocalAssets: globalToPHAsset)
-                    })
-                }
-                
-                completionHandler(.success(filteredGlobalIdentifiers))
-            }
-        }
-    }
-    
-    ///
     /// Recreate the assets and call the restoration delegate to recreate the successful upload/share items.
     /// At this point we only deal with assets that:
     /// - are shared by THIS user
@@ -374,7 +303,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///
     internal func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
@@ -429,43 +357,17 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             }
         }
         
-        ///
-        /// Handle the assets that are present in the local library differently
-        /// These don't need to be downloaded.
-        /// The delegate needs to be notified that they should be marked as "uploaded on the server"
-        ///
-        self.filterOutMatchesInPhotoLibrary(
+        self.restore(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: sharedBySelfGlobalIdentifiers
-        ) { result in
-            switch result {
-            case .success(let nonLocalPhotoLibraryGlobalIdentifiers):
-                self.restore(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: nonLocalPhotoLibraryGlobalIdentifiers,
-                    sharedBySelfGlobalIdentifiers: sharedBySelfGlobalIdentifiers,
-                    sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers,
-                    qos: qos
-                ) { restoreResult in
-                    switch restoreResult {
-                    case .failure(let error):
-                        completionHandler(.failure(error))
-                    case .success:
-                        /// 
-                        /// Collect all items ready to download
-                        ///
-                        var descriptorsReadyToDownload = nonLocalPhotoLibraryGlobalIdentifiers.compactMap({ descriptorsByGlobalIdentifier[$0] })
-                        descriptorsReadyToDownload.append(
-                            contentsOf: sharedByOthersGlobalIdentifiers.compactMap {
-                                descriptorsByGlobalIdentifier[$0]
-                            }
-                        )
-                        
-                        completionHandler(.success(descriptorsReadyToDownload))
-                    }
-                }
+            sharedBySelfGlobalIdentifiers: sharedBySelfGlobalIdentifiers,
+            sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers,
+            qos: qos
+        ) { restoreResult in
+            switch restoreResult {
             case .failure(let error):
                 completionHandler(.failure(error))
+            case .success:
+                completionHandler(.success(Array(descriptorsByGlobalIdentifier.values)))
             }
         }
     }

@@ -1,5 +1,4 @@
 import Foundation
-import Photos
 
 public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     
@@ -31,11 +30,6 @@ public protocol SHAssetDownloaderDelegate: SHInboundAssetOperationDelegate {
     func didFailDownloadOfAsset(withGlobalIdentifier: GlobalIdentifier,
                                 in groupIds: [String],
                                 with error: Error)
-    
-    /// Notifies about assets in the local library that are linked to one on the server (backed up)
-    /// - Parameters:
-    ///   - localToGlobal: The global identifier of the remote asset to the corresponding local `PHAsset` from the Apple Photos Library
-    func didIdentify(globalToLocalAssets: [GlobalIdentifier: PHAsset])
     
     /// Notifies about the successful download operation for a specific asset.
     /// - Parameter decryptedAsset: the decrypted asset

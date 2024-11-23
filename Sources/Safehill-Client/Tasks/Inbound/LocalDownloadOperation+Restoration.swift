@@ -33,7 +33,6 @@ extension SHLocalDownloadOperation {
         
         let descriptors = original.values.filter({
             globalIdentifiersSharedBySelf.contains($0.globalIdentifier)
-            && $0.localIdentifier != nil
         })
         
         guard descriptors.count > 0 else {

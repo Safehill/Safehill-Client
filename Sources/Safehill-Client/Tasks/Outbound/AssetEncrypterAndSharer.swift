@@ -1,8 +1,6 @@
 import Foundation
 import os
 import KnowledgeBase
-import Photos
-
 
 internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sendable {
     

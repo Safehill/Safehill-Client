@@ -1,4 +1,4 @@
-import Photos.PHImageManager
+import Foundation
 import os
 
 internal let log = Logger(subsystem: "com.gf.safehill", category: "SafehillClient")

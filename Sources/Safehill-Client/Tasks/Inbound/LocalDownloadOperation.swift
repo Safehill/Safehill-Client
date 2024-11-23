@@ -17,7 +17,7 @@ import os
 ///     - the referenced asset is blacklisted (attemtped to download too many times),
 ///     - any user referenced in the descriptor is not "retrievabile", or
 ///     - the asset hasn't finished uploaing (upload status is neither `.notStarted` nor `.failed`)
-/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
+/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
 ///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
 ///     - the assets shared by from _other_ users are returned so they can be decrypted
 /// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted low resolution asset to the delegates
@@ -99,7 +99,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
     
     override internal func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
