@@ -21,7 +21,7 @@ public enum NSUIImage {
 #if os(iOS)
     case uiKit(UIImage)
     
-    var platformImage: UIImage {
+    public var platformImage: UIImage {
         guard case .uiKit(let uiImage) = self else {
             fatalError("platform inconsistency")
         }
@@ -30,7 +30,7 @@ public enum NSUIImage {
 #elseif os(macOS)
     case appKit(NSImage)
     
-    var platformImage: NSImage {
+    public var platformImage: NSImage {
         guard case .appKit(let nsImage) = self else {
             fatalError("platform inconsistency")
         }

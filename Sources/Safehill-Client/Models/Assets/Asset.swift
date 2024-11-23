@@ -29,8 +29,8 @@ public enum Asset: GenericAssetIdentifiable {
             return asset.globalIdentifier
         case .downloading(let assetDescriptor):
             return assetDescriptor.globalIdentifier
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.globalIdentifier
+        case .downloaded(let downloadedAsset):
+            return downloadedAsset.globalIdentifier
         }
     }
     
@@ -42,8 +42,8 @@ public enum Asset: GenericAssetIdentifiable {
             return asset.phAsset.localIdentifier
         case .downloading(let assetDescriptor):
             return assetDescriptor.localIdentifier
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.localIdentifier
+        case .downloaded(let downloadedAsset):
+            return downloadedAsset.localIdentifier
         }
     }
     
@@ -55,8 +55,8 @@ public enum Asset: GenericAssetIdentifiable {
             return asset.globalIdentifier
         case .downloading(let assetDescriptor):
             return assetDescriptor.globalIdentifier
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.globalIdentifier
+        case .downloaded(let downloadedAsset):
+            return downloadedAsset.globalIdentifier
         }
     }
     
@@ -68,8 +68,8 @@ public enum Asset: GenericAssetIdentifiable {
             return asset.phAsset.creationDate
         case .downloading(let assetDescriptor):
             return assetDescriptor.creationDate
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.creationDate
+        case .downloaded(let downloadedAsset):
+            return downloadedAsset.creationDate
         }
     }
     
