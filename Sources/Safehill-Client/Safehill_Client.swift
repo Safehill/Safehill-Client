@@ -5,7 +5,7 @@ internal let log = Logger(subsystem: "com.gf.safehill", category: "SafehillClien
 
 public let LowResPictureSize = CGSize(width: 480.0, height: 480.0)
 let kSHMidResPictureSize = CGSize(width: 1440.0, height: 1440.0)
-let kSHHiResPictureSize = CGSize(width: 4800.0, height: 4800.0)
+public let HiResPictureSize = CGSize(width: 4800.0, height: 4800.0)
 let kSHFullResPictureSize: CGSize? = nil
 
 // TODO: This should change to `kSHFullResPictureSize` for premium accounts
