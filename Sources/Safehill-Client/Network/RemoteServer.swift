@@ -1529,7 +1529,7 @@ struct RemoteServer : SHServerAPI {
             }
         }
     }
-    
+
     func requestAccess(
         toThreadId threadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()

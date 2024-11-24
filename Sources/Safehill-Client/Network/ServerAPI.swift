@@ -491,11 +491,17 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    /// If a thread not be fetched, the user can request the originator of that share for access.
+    /// This will trigger a push notification to the originator asking to grant access to this user.
+    /// - Parameter groupId: the groupId
     func requestAccess(
         toThreadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    /// If a share group could not be downloaded, the user can request the originator of that share for access.
+    /// This will trigger a push notification to the originator asking to grant access to this user.
+    /// - Parameter groupId: the groupId
     func requestAccess(
         toGroupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()

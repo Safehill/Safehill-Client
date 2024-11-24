@@ -317,6 +317,7 @@ final class Safehill_SerializationTests: XCTestCase {
         let authedUser = SHAuthenticatedLocalUser(
             localUser: user,
             name: "testUser",
+            phoneNumber: nil,
             encryptionProtocolSalt: kTestStaticProtocolSalt,
             authToken: "token"
         )

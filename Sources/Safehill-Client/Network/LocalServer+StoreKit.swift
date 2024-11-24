@@ -94,7 +94,7 @@ struct ValidateReceiptResponse: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         status = try container.decode(Int.self, forKey: .status)
-        environment = try? container.decode(String.self, forKey: .environment)
+        environment = try? container.decodeIfPresent(String.self, forKey: .environment)
         guard status != 21007 else {
             latestReceiptInfo = []
             pendingRenewalInfo = []

@@ -14,7 +14,7 @@ public struct SHServerAsset : Codable {
         
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
         localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
-        createdBy = try? container.decode(String.self, forKey: .createdBy) // optional for backward-compatibilty with old server. Can make it non-optional as soon as new server version is deployed
+        createdBy = try? container.decodeIfPresent(String.self, forKey: .createdBy) // optional for backward-compatibilty with old server. Can make it non-optional as soon as new server version is deployed
         let dateString = try container.decode(String.self, forKey: .creationDate)
         creationDate = dateString.iso8601withFractionalSeconds
         groupId = try container.decode(String.self, forKey: .groupId)

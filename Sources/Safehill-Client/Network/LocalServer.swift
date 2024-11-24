@@ -230,13 +230,16 @@ struct LocalServer : SHServerAPI {
         let writeBatch = userStore.writeBatch()
         
         for user in users {
-            let value = [
+            var value = [
                 "identifier": user.identifier,
                 "name": user.name,
-                "phoneNumber": user.phoneNumber,
                 "publicKey": user.publicKeyData,
                 "publicSignature": user.publicSignatureData
             ] as [String : Any]
+            
+            if let phoneNumber = user.phoneNumber {
+                value["phoneNumber"] = phoneNumber
+            }
             
             writeBatch.set(value: value, for: user.identifier)
         }
@@ -415,10 +418,11 @@ struct LocalServer : SHServerAPI {
                let name = res["name"] as? String,
                let publicKeyData = res["publicKey"] as? Data,
                let publicSignatureData = res["publicSignature"] as? Data {
+
+                let phoneNumber = res["phoneNumber"] as? String
                 
                 let remoteUser: SHServerUser
-                if let phoneNumber = res["phoneNumber"] as? String,
-                   let systemContactId = res["systemContactId"] as? String {
+                if let systemContactId = res["systemContactId"] as? String {
                     remoteUser = SHRemoteUserLinkedToContact(
                         identifier: identifier,
                         name: name,
@@ -431,6 +435,7 @@ struct LocalServer : SHServerAPI {
                     remoteUser = SHRemoteUser(
                         identifier: identifier,
                         name: name,
+                        phoneNumber: phoneNumber,
                         publicKeyData: publicKeyData,
                         publicSignatureData: publicSignatureData
                     )
