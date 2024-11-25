@@ -623,11 +623,14 @@ extension SHServerProxy {
                     
                     log.debug("[asset-data] \(Array(assetVersionsToFetch)) DB CACHE MISS")
                     
+                    var intermediateResultReturned = false
+                    
                     ///
                     /// For asynchronous fetch, return the intermediate result from local, unless it's empty
                     ///
                     if synchronousFetch == false, localDictionary.isEmpty == false {
                         completionHandler(.success(localDictionary))
+                        intermediateResultReturned = true
                     }
                     
                     let threadSafeAssetVersionsToFetchByGid = ThreadSafeDictionary<GlobalIdentifier, [SHAssetQuality]>()
@@ -681,7 +684,7 @@ extension SHServerProxy {
                                     /// Call the completion handler with what could be retrieved locally if
                                     /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
                                     /// - `synchronousFetch` is `false` and the `localDictionary` is empty
-                                    if synchronousFetch || localDictionary.isEmpty {
+                                    if !intermediateResultReturned {
                                         completionHandler(.success(localDictionary))
                                     }
                                     return
@@ -723,12 +726,6 @@ extension SHServerProxy {
                                                 await threadSafeRemoteDictionary.setValue(remoteEncryptedAsset, forKey: assetId)
                                             }
                                             
-                                            if synchronousFetch == false {
-                                                completionHandler(.success([
-                                                    assetId: remoteEncryptedAsset
-                                                ]))
-                                            }
-                                            
                                         } else {
                                             log.warning("[asset-data] failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping")
                                         }
@@ -739,30 +736,30 @@ extension SHServerProxy {
                                 }
                                 
                                 let remoteDictionary = await threadSafeRemoteDictionary.allKeyValues()
+                                completionHandler(.success(remoteDictionary))
                                 
-                                if synchronousFetch {
-                                    completionHandler(.success(remoteDictionary))
-                                }
-                                
-                                ///
-                                /// Create a copy of the assets just fetched from the server in the local server (cache)
-                                ///
-                                
-                                var encryptedAssetsToCreate = [any SHEncryptedAsset]()
-                                for assetId in assetVersionsToFetch.keys {
-                                    if let remoteEncryptedAsset = remoteDictionary[assetId] {
-                                        encryptedAssetsToCreate.append(remoteEncryptedAsset)
+                                Task(priority: .low) {
+                                    
+                                    ///
+                                    /// Create a copy of the assets just fetched from the server in the local server (cache)
+                                    ///
+                                    
+                                    var encryptedAssetsToCreate = [any SHEncryptedAsset]()
+                                    for assetId in assetVersionsToFetch.keys {
+                                        if let remoteEncryptedAsset = remoteDictionary[assetId] {
+                                            encryptedAssetsToCreate.append(remoteEncryptedAsset)
+                                        }
                                     }
-                                }
-                                
-                                self.localServer.create(
-                                    assets: Array(encryptedAssetsToCreate),
-                                    descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                                    uploadState: .completed,
-                                    overwriteFileIfExists: false
-                                ) { result in
-                                    if case .failure(let err) = result {
-                                        log.warning("[asset-data] could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                                    
+                                    self.localServer.create(
+                                        assets: Array(encryptedAssetsToCreate),
+                                        descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
+                                        uploadState: .completed,
+                                        overwriteFileIfExists: false
+                                    ) { result in
+                                        if case .failure(let err) = result {
+                                            log.warning("[asset-data] could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
+                                        }
                                     }
                                 }
                             }
@@ -773,7 +770,7 @@ extension SHServerProxy {
                             /// Call the completion handler with what could be retrieved locally if
                             /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
                             /// - `synchronousFetch` is `false` and the `localDictionary` is empty
-                            if synchronousFetch || localDictionary.isEmpty {
+                            if !intermediateResultReturned {
                                 completionHandler(.success(localDictionary))
                             }
                             return
