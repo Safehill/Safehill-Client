@@ -24,7 +24,7 @@ protocol SHDownloadOperation {
     func processAssetsInDescriptors(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
+        completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     )
     
     func restore(
