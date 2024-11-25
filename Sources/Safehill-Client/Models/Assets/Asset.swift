@@ -6,7 +6,7 @@ public enum Asset: GenericAssetIdentifiable {
     case fromApplePhotosLibrary(PHAsset)
     case fromApplePhotosLibraryBackedUp(BackedUpAsset)
     case downloading(any SHAssetDescriptor)
-    case downloaded(SHDownloadedAsset)
+    case downloaded(any SHDecryptedAsset)
     
     public var debugType: String {
         switch self {
