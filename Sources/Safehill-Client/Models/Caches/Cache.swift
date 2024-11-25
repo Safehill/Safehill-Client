@@ -14,13 +14,13 @@ class CacheItem<Value> {
     }
 }
 
-class ThreadSafeCache<Key: Hashable, Value: AnyObject> {
+public class ThreadSafeCache<Key: Hashable, Value: AnyObject> {
     private let cache = NSCache<WrappedKey, Entry>()
     private let expirationTime: TimeInterval
     private let evictionInterval: TimeInterval
     private var evictionTimer: Timer?
     
-    init(
+    public init(
         expirationTime: TimeInterval = 300,
         evictionInterval: TimeInterval = 60
     ) {
@@ -29,12 +29,12 @@ class ThreadSafeCache<Key: Hashable, Value: AnyObject> {
         startEvictionTimer()
     }
     
-    func set(_ value: Value, forKey key: Key) {
+    public func set(_ value: Value, forKey key: Key) {
         let entry = Entry(value: value, expiration: expirationTime)
         cache.setObject(entry, forKey: WrappedKey(key))
     }
     
-    func value(forKey key: Key) -> AnyObject? {
+    public func value(forKey key: Key) -> AnyObject? {
         guard let entry = cache.object(forKey: WrappedKey(key)) else {
             return nil
         }
@@ -47,11 +47,11 @@ class ThreadSafeCache<Key: Hashable, Value: AnyObject> {
         return entry.value
     }
     
-    func removeValue(forKey key: Key) {
+    public func removeValue(forKey key: Key) {
         cache.removeObject(forKey: WrappedKey(key))
     }
     
-    func removeAll() {
+    public func removeAll() {
         for key in cache.allKeys {
             cache.removeObject(forKey: WrappedKey(key))
         }
