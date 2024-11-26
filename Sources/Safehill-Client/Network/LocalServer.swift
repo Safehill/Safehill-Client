@@ -584,7 +584,7 @@ struct LocalServer : SHServerAPI {
         
         var senderInfoDict = [GlobalIdentifier: UserIdentifier]()
         var groupInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetGroupInfo]]()
-        var sharedWithUsersInGroupByAssetGid = [GlobalIdentifier: [UserIdentifier: [String]]]()
+        var groupIdsByRecipientUserIdentifierByAssetId = [GlobalIdentifier: [UserIdentifier: [String]]]()
         
         ///
         /// Retrieve all information from the asset store for all assets and `.lowResolution` versions.
@@ -686,13 +686,13 @@ struct LocalServer : SHServerAPI {
                 if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
                     let receiverUser = components[1]
                     
-                    if sharedWithUsersInGroupByAssetGid[assetGid] == nil {
-                        sharedWithUsersInGroupByAssetGid[assetGid] = [receiverUser: [groupId]]
+                    if groupIdsByRecipientUserIdentifierByAssetId[assetGid] == nil {
+                        groupIdsByRecipientUserIdentifierByAssetId[assetGid] = [receiverUser: [groupId]]
                     } else {
-                        if sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] == nil {
-                            sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser] = [groupId]
+                        if groupIdsByRecipientUserIdentifierByAssetId[assetGid]![receiverUser] == nil {
+                            groupIdsByRecipientUserIdentifierByAssetId[assetGid]![receiverUser] = [groupId]
                         } else {
-                            sharedWithUsersInGroupByAssetGid[assetGid]![receiverUser]!.append(groupId)
+                            groupIdsByRecipientUserIdentifierByAssetId[assetGid]![receiverUser]!.append(groupId)
                         }
                     }
                 }
@@ -794,7 +794,7 @@ struct LocalServer : SHServerAPI {
             }
             
             guard let groupInfoById = groupInfoByIdByAssetGid[globalIdentifier],
-                  let sharedWithUsersInGroups = sharedWithUsersInGroupByAssetGid[globalIdentifier]
+                  let sharedWithUsersInGroups = groupIdsByRecipientUserIdentifierByAssetId[globalIdentifier]
             else {
                 log.error("failed to retrieve group information for asset \(globalIdentifier)")
                 invalidGlobalIdentifiersInDB.insert(globalIdentifier)
@@ -1466,11 +1466,13 @@ struct LocalServer : SHServerAPI {
                             for: "data::" + "\(quality)::" + asset.globalIdentifier
                         )
                         for groupId in senderUploadGroupIds {
+                            let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+                            let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
                             writeBatch.set(
                                 value: nil,
                                 for: [
                                     "sender",
-                                    descriptor.sharingInfo.sharedByUserIdentifier,
+                                    groupCreatorId ?? assetCreatorId,
                                     quality.rawValue,
                                     asset.globalIdentifier,
                                     groupId
@@ -1522,11 +1524,13 @@ struct LocalServer : SHServerAPI {
                         for: "data::" + "\(SHAssetQuality.midResolution.rawValue)::" + asset.globalIdentifier
                     )
                     for senderUploadGroupId in senderUploadGroupIds {
+                        let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+                        let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
                         writeBatch.set(
                             value: nil,
                             for: [
                                 "sender",
-                                descriptor.sharingInfo.sharedByUserIdentifier,
+                                groupCreatorId ?? assetCreatorId,
                                 SHAssetQuality.midResolution.rawValue,
                                 asset.globalIdentifier,
                                 senderUploadGroupId
