@@ -139,6 +139,37 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         }
     }
     
+    ///
+    /// Retrieve the asset creator from the asset descriptor on the server.
+    /// If can't be retrieved assumes the creator is the local user.
+    /// If the local user isn't the creator, the process will fail downstream when retrieving the common encryption key for the asset
+    /// as it will be signed by someone else.
+    ///
+    private func getAssetCreator(for globalIdentifier: GlobalIdentifier) async -> any SHServerUser{
+        return await withUnsafeContinuation { continuation in
+            self.serverProxy.getAssetDescriptor(for: globalIdentifier) {
+                descriptorResult in
+                
+                if case .success(let maybeDescriptor) = descriptorResult,
+                   let descriptor = maybeDescriptor {
+                    
+                    let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+                    SHUsersController(localUser: self.user).getUsers(withIdentifiers: [assetCreatorId]) {
+                        userResult in
+                        if case .success(let usersDict) = userResult,
+                           let creatorUser = usersDict[assetCreatorId] {
+                            continuation.resume(returning: creatorUser)
+                        } else {
+                            continuation.resume(returning: self.user)
+                        }
+                    }
+                } else {
+                    continuation.resume(returning: self.user)
+                }
+            }
+        }
+    }
+    
     internal override func process(
         _ item: KBQueueItem,
         qos: DispatchQoS.QoSClass,
@@ -248,10 +279,12 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                 ///
                 
                 if shareRequest.isOnlyInvitingUsers == false {
+                    let assetCreator = await self.getAssetCreator(for: globalIdentifier)
                     do {
                         try await assetSharingController.shareAsset(
                             globalIdentifier: globalIdentifier,
                             versions: shareRequest.versions,
+                            createdBy: assetCreator,
                             with: shareRequest.sharedWith,
                             via: shareRequest.groupId,
                             asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,

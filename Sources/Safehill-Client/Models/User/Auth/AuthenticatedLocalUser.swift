@@ -73,13 +73,17 @@ extension SHAuthenticatedLocalUser {
     func shareableEncryptedAsset(
         globalIdentifier: String,
         versions: [SHAssetQuality],
-        recipients: [any SHServerUser],
+        createdBy: any SHServerUser,
+        with recipients: [any SHServerUser],
         groupId: String,
         completionHandler: @escaping (Result<any SHShareableEncryptedAsset, Error>) -> Void
     ) {
         let localAssetStoreController = SHLocalAssetStoreController(user: self)
         
-        localAssetStoreController.retrieveCommonEncryptionKey(for: globalIdentifier) {
+        localAssetStoreController.retrieveCommonEncryptionKey(
+            for: globalIdentifier,
+            signedBy: createdBy
+        ) {
             result in
             switch result {
             case .failure(let error):

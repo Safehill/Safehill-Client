@@ -321,7 +321,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         
         dispatchGroup.enter()
         SHLocalAssetStoreController(user: self.user).retrieveCommonEncryptionKey(
-            for: asset.globalIdentifier
+            for: asset.globalIdentifier,
+            signedBy: self.user
         ) {
             result in
             switch result {

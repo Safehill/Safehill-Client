@@ -186,6 +186,7 @@ public struct SHLocalAssetStoreController {
 
 
 extension SHLocalAssetStoreController {
+    
     ///
     /// Get the private secret for the asset.
     /// The same secret should be used when encrypting for sharing with other users.
@@ -196,11 +197,17 @@ extension SHLocalAssetStoreController {
     ///
     /// Note that secrets are encrypted at rest, wheres the in-memory data is its decrypted (clear) version.
     ///
+    /// - Parameters:
+    ///   - globalIdentifier: the asset identifier
+    ///   - signedBy: the user creating the secret
+    ///   - completionHandler: the completion handler
+    ///
     /// - Returns: the decrypted shared secret for this asset
     /// - Throws: SHBackgroundOperationError if the shared secret couldn't be retrieved, other errors if the asset couldn't be retrieved from the Photos library
     ///
     func retrieveCommonEncryptionKey(
         for globalIdentifier: String,
+        signedBy: any SHServerUser,
         completionHandler: @escaping (Result<Data, Error>) -> Void
     ) {
         guard let encryptionProtocolSalt = self.user.maybeEncryptionProtocolSalt else {
@@ -237,7 +244,7 @@ extension SHLocalAssetStoreController {
                     let encryptionKey = try SHUserContext(user: self.user.shUser).decryptSecret(
                         usingEncryptedSecret: encryptedSecret,
                         protocolSalt: encryptionProtocolSalt,
-                        signedWith: self.user.publicSignatureData
+                        signedWith: signedBy.publicSignatureData
                     )
                     
                     completionHandler(.success(encryptionKey))
