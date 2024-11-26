@@ -140,6 +140,14 @@ extension SHServerProxy {
         }
     }
     
+    public func avatarImage() throws -> Data {
+        return try self.localServer.avatarImage()
+    }
+    
+    public func saveAvatarImage(data: Data) throws {
+        let _ = try self.localServer.saveAvatarImage(data: data)
+    }
+    
     public func getUsers(
         withIdentifiers userIdentifiersToFetch: [UserIdentifier]?,
         completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()

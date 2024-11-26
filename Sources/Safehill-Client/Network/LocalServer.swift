@@ -1333,6 +1333,55 @@ struct LocalServer : SHServerAPI {
         return versionDataURL
     }
     
+    internal func avatarImage() throws -> Data {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            let fullURL = Self.dataFolderURL
+                .appending(path: self.requestor.identifier)
+                .appending(path: "avatar")
+            return try Data(contentsOf: fullURL, options: .mappedIfSafe)
+        } else {
+            let fullURL = Self.dataFolderURL
+                .appendingPathComponent(self.requestor.identifier)
+                .appendingPathComponent("avatar")
+            return try Data(contentsOf: fullURL, options: .mappedIfSafe)
+        }
+    }
+    
+    internal func saveAvatarImage(data: Data) throws -> URL {
+        let (folderURL, fullURL): (URL, URL)
+        if #available(iOS 16.0, macOS 13.0, *) {
+            folderURL = Self.dataFolderURL
+                .appending(path: self.requestor.identifier)
+            fullURL = folderURL.appending(path: "avatar")
+        } else {
+            folderURL = Self.dataFolderURL
+                .appendingPathComponent(self.requestor.identifier)
+            fullURL = folderURL.appendingPathComponent("avatar")
+        }
+        
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: fullURL)
+        
+        do {
+            try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        } catch {
+            log.error("failed to create directory at \(folderURL.path). \(error.localizedDescription)")
+            throw error
+        }
+        
+        let created = fileManager.createFile(
+            atPath: fullURL.path,
+            contents: data
+        )
+        
+        guard created else {
+            log.error("failed to create file at \(fullURL.path)")
+            throw SHLocalServerError.failedToCreateFile
+        }
+        
+        return fullURL
+    }
+    
     @available(*, deprecated, message: "force create only makes sense for Remote server")
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
