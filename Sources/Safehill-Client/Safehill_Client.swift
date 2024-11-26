@@ -1,9 +1,9 @@
-import Photos.PHImageManager
+import Foundation
 import os
 
 internal let log = Logger(subsystem: "com.gf.safehill", category: "SafehillClient")
 
-public let LowResPictureSize = CGSize(width: 480.0, height: 480.0)
+let kSHLowResPictureSize = CGSize(width: 480.0, height: 480.0)
 let kSHMidResPictureSize = CGSize(width: 1440.0, height: 1440.0)
 let kSHHiResPictureSize = CGSize(width: 4800.0, height: 4800.0)
 let kSHFullResPictureSize: CGSize? = nil
@@ -14,7 +14,7 @@ let kSHMaxPictureSize = (quality: SHAssetQuality.hiResolution, size: kSHHiResPic
 public func SHSizeForQuality(quality: SHAssetQuality) -> CGSize {
     switch quality {
     case .lowResolution:
-        return LowResPictureSize
+        return kSHLowResPictureSize
     case .midResolution:
         return kSHMidResPictureSize
     case .hiResolution:

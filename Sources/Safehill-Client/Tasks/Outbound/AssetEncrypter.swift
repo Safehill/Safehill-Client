@@ -1,7 +1,6 @@
 import Foundation
 import Safehill_Crypto
 import KnowledgeBase
-import Photos
 import os
 import CryptoKit
 #if os(iOS)

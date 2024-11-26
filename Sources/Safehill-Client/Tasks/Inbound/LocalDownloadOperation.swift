@@ -17,10 +17,9 @@ import os
 ///     - the referenced asset is blacklisted (attemtped to download too many times),
 ///     - any user referenced in the descriptor is not "retrievabile", or
 ///     - the asset hasn't finished uploaing (upload status is neither `.notStarted` nor `.failed`)
-/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` : descriptors are merged with the local photos library based on localIdentifier, calling the delegate for the matches (`didIdentify(globalToLocalAssets:`). Then for the ones not in the photos library:
+/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
 ///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
 ///     - the assets shared by from _other_ users are returned so they can be decrypted
-/// 4. `decryptFromLocalStore` : for the remainder, the decryption step runs and passes the decrypted low resolution asset to the delegates
 ///
 /// Ideally in the lifecycle of the application, the decryption of the low resolution happens only once.
 /// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if they are disposed.
@@ -99,7 +98,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
     
     override internal func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        nonApplePhotoLibrarySharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
         sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
@@ -133,164 +131,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
             }
             
             completionHandler(.success(()))
-        }
-    }
-    
-    internal func decryptFromLocalStore(
-        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[AssetAndDescriptor], Error>) -> Void
-    ) {
-        guard original.count > 0 else {
-            completionHandler(.success([]))
-            return
-        }
-        
-        let descriptorsByGlobalIdentifier = original.filter({ filteringKeys.contains($0.key) })
-        
-        guard descriptorsByGlobalIdentifier.count > 0 else {
-            completionHandler(.success([]))
-            return
-        }
-        
-        self.log.debug("[\(type(of: self))] attempting to decrypt following assets from local store: \(Array(descriptorsByGlobalIdentifier.keys))")
-        
-        let localAssetsStore = SHLocalAssetStoreController(user: self.user)
-        
-        localAssetsStore.encryptedAssets(
-            with: Array(descriptorsByGlobalIdentifier.keys),
-            versions: [.lowResolution],
-            synchronousFetch: true,
-            qos: qos
-        ) {
-            [weak self] result in
-            
-            guard let self = self else { return }
-            
-            let downloaderDelegates = self.downloaderDelegates
-            
-            switch result {
-            case .failure(let error):
-                self.log.error("[\(type(of: self))] unable to fetch local assets: \(error.localizedDescription)")
-                completionHandler(.failure(SHBackgroundOperationError.fatalError("unable to fetch local assets")))
-            case .success(let encryptedAssets):
-                var errorsByAssetGlobalId = [GlobalIdentifier: Error]()
-                let successfullyDecrypted = ThreadSafeAssetAndDescriptors(list: [])
-                let dispatchGroup = DispatchGroup()
-                
-                for (globalAssetId, descriptor) in descriptorsByGlobalIdentifier {
-                    
-                    dispatchGroup.enter()
-                    
-                    guard let groupIds = descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
-                        errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.unexpectedData(descriptor.sharingInfo)
-                        dispatchGroup.leave()
-                        continue
-                    }
-                    
-                    if let encryptedAsset = encryptedAssets[globalAssetId] {
-                        self.delegatesQueue.async {
-                            downloaderDelegates.forEach({
-                                $0.didStartDownloadOfAsset(
-                                    withGlobalIdentifier: globalAssetId,
-                                    descriptor: descriptor,
-                                    in: groupIds
-                                )
-                            })
-                        }
-                        
-                        localAssetsStore.decryptedAsset(
-                            encryptedAsset: encryptedAsset,
-                            versions: [.lowResolution],
-                            descriptor: descriptor
-                        ) { result in
-                            switch result {
-                                
-                            case .failure(let error):
-                                self.log.error("[\(type(of: self))] unable to decrypt local asset \(globalAssetId): \(error.localizedDescription)")
-                                ///
-                                /// Asset could not be decrypted, remove data and metadata from the local asset store.
-                                /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
-                                /// So make sure the metadata isn't present.
-                                ///
-                                errorsByAssetGlobalId[globalAssetId] = error
-                                dispatchGroup.leave()
-                                
-                            case .success(let decryptedAsset):
-                                self.delegatesQueue.async {
-                                    downloaderDelegates.forEach({
-                                        $0.didCompleteDownload(
-                                            of: decryptedAsset,
-                                            in: groupIds
-                                        )
-                                    })
-                                }
-                                
-                                Task {
-                                    let assetAndDescriptor = AssetAndDescriptor(asset: decryptedAsset, descriptor: descriptor)
-                                    await successfullyDecrypted.add(assetAndDescriptor)
-                                    dispatchGroup.leave()
-                                }
-                            }
-                        }
-                    } else {
-                        self.log.error("[\(type(of: self))] unable to find asset \(globalAssetId) locally")
-                        ///
-                        /// Asset encrypted data could not be retrieved, so remove the metadata too
-                        /// so that the asset can be fetched from server again.
-                        /// if the metadata is present in the local asset store, the RemoteDownloadOperation will ignore it.
-                        /// So make sure the metadata isn't present.
-                        ///
-                        errorsByAssetGlobalId[globalAssetId] = SHBackgroundOperationError.missingAssetInLocalServer(globalAssetId)
-                        
-                        dispatchGroup.leave()
-                    }
-                }
-                
-                dispatchGroup.notify(queue: .global(qos: qos)) { [weak self] in
-                    
-                    Task {
-                        completionHandler(.success(await successfullyDecrypted.list))
-                    }
-                    
-                    guard let self = self else { return }
-                    
-                    guard errorsByAssetGlobalId.isEmpty == false else {
-                        return
-                    }
-                    
-                    for (gid, error) in errorsByAssetGlobalId {
-                        if case SHBackgroundOperationError.missingAssetInLocalServer = error {
-                            continue
-                        }
-                        
-                        guard let groupIds = descriptorsByGlobalIdentifier[gid]?.sharingInfo.groupIdsByRecipientUserIdentifier[self.user.identifier] else {
-                            self.log.warning("will not notify delegates about asset decryption error for asset \(gid)")
-                            continue
-                        }
-                        self.delegatesQueue.async {
-                            downloaderDelegates.forEach({
-                                $0.didFailDownloadOfAsset(
-                                    withGlobalIdentifier: gid,
-                                    in: groupIds,
-                                    with: error
-                                )
-                            })
-                        }
-                    }
-                    
-                    self.log.warning("failed to decrypt the following assets from local store: \(errorsByAssetGlobalId)")
-                    
-                    self.serverProxy.localServer.deleteAssets(
-                        withGlobalIdentifiers: Array(errorsByAssetGlobalId.keys)
-                    ) { [weak self] deleteResult in
-                        if case .failure(let failure) = deleteResult {
-                            self?.log.error("failed to delete fail-to-decrypt assets from the local server. The remote download operation will not attempt to re-download them as long as their metadata is stored locally. \(failure.localizedDescription)")
-                        }
-                    }
-                }
-            }
         }
     }
     
@@ -340,48 +180,27 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                         self.processAssetsInDescriptors(
                             descriptorsByGlobalIdentifier: filteredDescriptors,
                             qos: qos
-                        ) { processedAssetsResult in
+                        ) { result in
                             
-                            switch processedAssetsResult {
-                            case .success(let descriptorsReadyToDecrypt):
+                            switch result {
+                            case .success(let descriptorsReadyToDecryptById):
+                                
 #if DEBUG
-                                let delta1 = Set(filteredDescriptors.keys).subtracting(descriptorsReadyToDecrypt.map({ $0.globalIdentifier }))
-                                let delta2 = Set(descriptorsReadyToDecrypt.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
-                                self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsReadyToDecrypt.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
+                                let delta1 = Set(filteredDescriptors.keys).subtracting(descriptorsReadyToDecryptById.map({ $0.value.globalIdentifier }))
+                                let delta2 = Set(descriptorsReadyToDecryptById.map({ $0.value.globalIdentifier })).subtracting(filteredDescriptors.keys)
+                                self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsReadyToDecryptById.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
                                 
-                                self.decryptFromLocalStore(
-                                    descriptorsByGlobalIdentifier: filteredDescriptors,
-                                    filteringKeys: descriptorsReadyToDecrypt.map({ $0.globalIdentifier }),
-                                    qos: qos
-                                ) {
-                                    decryptionResult in
-                                 
-                                    let downloaderDelegates = self.downloaderDelegates
-                                    self.delegatesQueue.async {
-                                        switch decryptionResult {
-                                            
-                                        case .failure(let error):
-                                            downloaderDelegates.forEach({
-                                                $0.didFailDownloadCycle(with: error)
-                                            })
-                                            
-                                        case .success(let decryptedAssetsAndDescriptors):
-                                            downloaderDelegates.forEach({
-                                                $0.didCompleteDownloadCycle(
-                                                    localAssetsAndDescriptors: decryptedAssetsAndDescriptors
-                                                )
-                                            })
-                                        }
-                                    }
-                                    
-                                    if case .success(let decryptedAssetsAndDescriptors) = decryptionResult,
-                                       decryptedAssetsAndDescriptors.count > 0 {
-                                        Self.markAsAlreadyProcessed(decryptedAssetsAndDescriptors.map({ $0.asset.globalIdentifier }))
-                                    }
-                                    
-                                    completionHandler(.success(()))
-                                }
+                                Self.markAsAlreadyProcessed(Array(descriptorsReadyToDecryptById.keys))
+                                
+                                let downloaderDelegates = self.downloaderDelegates
+                                downloaderDelegates.forEach({
+                                    $0.didCompleteDownloadCycle(
+                                        forLocalDescriptors: descriptorsReadyToDecryptById
+                                    )
+                                })
+                                
+                                completionHandler(.success(()))
                                 
                             case .failure(let error):
                                 handleFailure(error)
