@@ -737,31 +737,6 @@ extension SHServerProxy {
                                 
                                 let remoteDictionary = await threadSafeRemoteDictionary.allKeyValues()
                                 completionHandler(.success(remoteDictionary))
-                                
-                                Task(priority: .low) {
-                                    
-                                    ///
-                                    /// Create a copy of the assets just fetched from the server in the local server (cache)
-                                    ///
-                                    
-                                    var encryptedAssetsToCreate = [any SHEncryptedAsset]()
-                                    for assetId in assetVersionsToFetch.keys {
-                                        if let remoteEncryptedAsset = remoteDictionary[assetId] {
-                                            encryptedAssetsToCreate.append(remoteEncryptedAsset)
-                                        }
-                                    }
-                                    
-                                    self.localServer.create(
-                                        assets: Array(encryptedAssetsToCreate),
-                                        descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                                        uploadState: .completed,
-                                        overwriteFileIfExists: false
-                                    ) { result in
-                                        if case .failure(let err) = result {
-                                            log.warning("[asset-data] could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
-                                        }
-                                    }
-                                }
                             }
                             
                         case .failure(let error):
