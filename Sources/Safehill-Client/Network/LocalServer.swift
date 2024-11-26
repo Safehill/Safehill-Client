@@ -389,7 +389,7 @@ struct LocalServer : SHServerAPI {
             group.leave()
         }
         
-        try? self.deleteAvatarImage()
+        try? self.deleteAvatarImages()
         
         group.notify(queue: .global()) {
             guard userRemovalError == nil else {
@@ -1335,30 +1335,30 @@ struct LocalServer : SHServerAPI {
         return versionDataURL
     }
     
-    private func avatarImageURL() -> (folder: URL, full: URL) {
+    private func avatarImageURL(for userId: UserIdentifier) -> (folder: URL, full: URL) {
         let (folderURL, fullURL): (URL, URL)
         if #available(iOS 16.0, macOS 13.0, *) {
             folderURL = Self.dataFolderURL
-                .appending(path: self.requestor.identifier)
-            fullURL = folderURL.appending(path: "avatar")
+                .appending(path: "avatars")
+            fullURL = folderURL.appending(path: userId)
         } else {
             folderURL = Self.dataFolderURL
-                .appendingPathComponent(self.requestor.identifier)
-            fullURL = folderURL.appendingPathComponent("avatar")
+                .appendingPathComponent("avatars")
+            fullURL = folderURL.appendingPathComponent(userId)
         }
         return (folder: folderURL, full: fullURL)
     }
     
-    internal func avatarImage() throws -> Data {
-        let urls = self.avatarImageURL()
-        return try Data(contentsOf: urls.full, options: .mappedIfSafe)
+    internal func avatarImage(for user: any SHServerUser) async throws -> Data? {
+        let urls = self.avatarImageURL(for: user.identifier)
+        return try? Data(contentsOf: urls.full, options: .mappedIfSafe)
     }
     
-    internal func saveAvatarImage(data: Data) throws -> URL {
-        let urls = self.avatarImageURL()
+    internal func saveAvatarImage(data: Data, for user: any SHServerUser) async throws {
+        let urls = self.avatarImageURL(for: user.identifier)
         
         let fileManager = FileManager.default
-        try? self.deleteAvatarImage()
+        try? await self.deleteAvatarImage(for: user)
         
         do {
             try fileManager.createDirectory(at: urls.folder, withIntermediateDirectories: true)
@@ -1376,12 +1376,21 @@ struct LocalServer : SHServerAPI {
             log.error("failed to create file at \(urls.full.path)")
             throw SHLocalServerError.failedToCreateFile
         }
-        
-        return urls.full
     }
     
-    internal func deleteAvatarImage() throws {
-        let urls = self.avatarImageURL()
+    internal func deleteAvatarImages() throws {
+        let folderURL: URL
+        if #available(iOS 16.0, macOS 13.0, *) {
+            folderURL = Self.dataFolderURL.appending(path: "avatars")
+        } else {
+            folderURL = Self.dataFolderURL.appendingPathComponent("avatars")
+        }
+        
+        try FileManager.default.removeItem(at: folderURL)
+    }
+    
+    internal func deleteAvatarImage(for user: any SHServerUser) async throws {
+        let urls = self.avatarImageURL(for: user.identifier)
         
         let fileManager = FileManager.default
         try fileManager.removeItem(at: urls.full)

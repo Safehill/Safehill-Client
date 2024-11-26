@@ -1557,4 +1557,90 @@ struct RemoteServer : SHServerAPI {
             }
         }
     }
+    
+    func avatarImage(for user: any SHServerUser) async throws -> Data? {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.post("users/avatar/get/\(user.identifier)", parameters: nil) { (result: Result<PresignedURLDTO, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let presignedURLObj):
+                    let url = presignedURLObj.url
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "GET"
+                    
+                    RemoteServer.makeRequest(
+                        request: request,
+                        usingSession: S3Proxy.S3URLSession,
+                        decodingResponseAs: Data.self
+                    ) { result in
+                        switch result {
+                        case .success(let data):
+                            log.info("successfully retrieved avatar for user \(user.identifier)")
+                            continuation.resume(returning: data)
+                        case .failure(let error):
+                            if case SHHTTPError.ClientError.notFound = error {
+                                continuation.resume(returning: nil)
+                                return
+                            }
+                            log.error("error retrieving avatar from \(url): \(error.localizedDescription)")
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    func saveAvatarImage(data: Data, for: any SHServerUser) async throws {
+        try await self.saveAvatarImage(data: data)
+    }
+    
+    func saveAvatarImage(data: Data) async throws {
+        try await withUnsafeThrowingContinuation {
+            (continuation: UnsafeContinuation<Void, any Error>) in
+            self.post("users/avatar/upload", parameters: nil) { (result: Result<PresignedURLDTO, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let presignedURLObj):
+                    let url = presignedURLObj.url
+                    let request = S3Proxy.urlRequest(data, usingPresignedURL: url)
+                    
+                    RemoteServer.makeRequest(
+                        request: request,
+                        usingSession: S3Proxy.S3URLSession,
+                        decodingResponseAs: NoReply.self
+                    ) { result in
+                        switch result {
+                        case .success(_):
+                            log.info("successfully uploaded to \(url)")
+                            continuation.resume(returning: ())
+                        case .failure(let error):
+                            log.error("error uploading to \(url): \(error.localizedDescription)")
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    func deleteAvatarImage(for: any SHServerUser) async throws {
+        try await self.deleteAvatarImage()
+    }
+    
+    func deleteAvatarImage() async throws {
+        try await withUnsafeThrowingContinuation {
+            (continuation: UnsafeContinuation<Void, any Error>) in
+            self.post("users/avatar/delete", parameters: nil) { (result: Result<NoReply, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
 }

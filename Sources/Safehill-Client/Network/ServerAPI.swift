@@ -506,4 +506,14 @@ public protocol SHServerAPI {
         toGroupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
+
+    func avatarImage(for user: any SHServerUser) async throws -> Data?
+    
+    /// Save the user avatar image
+    /// - Parameter data: the image data
+    /// - Returns: the URL the image has been saved to
+    func saveAvatarImage(data: Data, for user: any SHServerUser) async throws
+    
+    /// Delete the user avatar image, if any exists
+    func deleteAvatarImage(for user: any SHServerUser) async throws
 }

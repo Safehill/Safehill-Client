@@ -140,12 +140,29 @@ extension SHServerProxy {
         }
     }
     
-    public func avatarImage() throws -> Data {
-        return try self.localServer.avatarImage()
+    public func avatarImage(for user: any SHServerUser) async throws -> Data? {
+        if let data = try await self.localServer.avatarImage(for: user) {
+            return data
+        }
+        if let remoteData = try await self.remoteServer.avatarImage(for: user) {
+            try await self.localServer.saveAvatarImage(data: remoteData, for: user)
+            return remoteData
+        }
+        return nil
     }
     
-    public func saveAvatarImage(data: Data) throws {
-        let _ = try self.localServer.saveAvatarImage(data: data)
+    public func saveAvatarImage(data: Data, for user: any SHServerUser) async throws {
+        if user.identifier == self.remoteServer.requestor.identifier {
+            try await self.remoteServer.saveAvatarImage(data: data, for: user)
+        }
+        try await self.localServer.saveAvatarImage(data: data, for: user)
+    }
+    
+    public func deleteAvatarImage(for user: any SHServerUser) async throws {
+        if user.identifier == self.remoteServer.requestor.identifier {
+            try await self.remoteServer.deleteAvatarImage(for: user)
+        }
+        try await self.localServer.deleteAvatarImage(for: user)
     }
     
     public func getUsers(
