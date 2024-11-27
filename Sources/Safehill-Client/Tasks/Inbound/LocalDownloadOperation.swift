@@ -28,14 +28,6 @@ import os
 ///
 public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sendable {
     
-    private static var alreadyProcessed = Set<GlobalIdentifier>()
-    
-    static func markAsAlreadyProcessed(_ gids: [GlobalIdentifier]) {
-        for gid in gids {
-            SHLocalDownloadOperation.alreadyProcessed.insert(gid)
-        }
-    }
-    
     public override init(
         user: SHLocalUserProtocol,
         downloaderDelegates: [SHAssetDownloaderDelegate],
@@ -66,16 +58,9 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
         serverProxy.getLocalAssetDescriptors(after: date) { result in
             switch result {
             case .success(let descs):
-                
                 self.log.debug("[\(type(of: self))] fetched descriptors for gids \(descs.map({ $0.globalIdentifier }))")
+                completionHandler(.success(descs))
                 
-                let unprocessed = descs.filter({
-                    SHLocalDownloadOperation.alreadyProcessed.contains($0.globalIdentifier) == false
-                })
-                
-                self.log.debug("[\(type(of: self))] unprocessed gids \(unprocessed.map({ $0.globalIdentifier }))")
-                
-                completionHandler(.success(unprocessed))
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -190,8 +175,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                                 let delta2 = Set(descriptorsReadyToDecryptById.map({ $0.value.globalIdentifier })).subtracting(filteredDescriptors.keys)
                                 self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsReadyToDecryptById.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
-                                
-                                Self.markAsAlreadyProcessed(Array(descriptorsReadyToDecryptById.keys))
                                 
                                 let downloaderDelegates = self.downloaderDelegates
                                 downloaderDelegates.forEach({
