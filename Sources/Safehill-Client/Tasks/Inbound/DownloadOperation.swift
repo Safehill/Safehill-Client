@@ -29,8 +29,7 @@ protocol SHDownloadOperation {
     
     func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
-        sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        filteringKeys: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )

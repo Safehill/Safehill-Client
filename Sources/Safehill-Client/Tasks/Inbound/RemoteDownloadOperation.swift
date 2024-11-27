@@ -47,7 +47,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        let afterDate = date ?? Self.lastFetchDate
+        let afterDate = date ?? SHRemoteDownloadOperation.lastFetchDate
         
         self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(afterDate?.iso8601withFractionalSeconds ?? "nil")")
         ///
@@ -274,8 +274,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///
     internal func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
-        sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        filteringKeys: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
@@ -287,7 +286,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         
         self.recreateLocalAssets(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: sharedBySelfGlobalIdentifiers,
+            filteringKeys: filteringKeys,
             qos: qos,
             completionHandler: completionHandler
         )
@@ -318,20 +317,16 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         /// - one for assets uploaded/shared by THIS user
         /// - one for assets shared by OTHER users
         ///
-        var sharedBySelfGlobalIdentifiers = [GlobalIdentifier]()
-        var sharedByOthersGlobalIdentifiers = [GlobalIdentifier]()
-        for (globalIdentifier, descriptor) in descriptorsByGlobalIdentifier {
-            if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-                sharedBySelfGlobalIdentifiers.append(globalIdentifier)
-            } else {
-                sharedByOthersGlobalIdentifiers.append(globalIdentifier)
+        let sharedBySelfGlobalIdentifiers: [GlobalIdentifier] = descriptorsByGlobalIdentifier
+            .filter { dict in
+                dict.value.sharingInfo.sharedByUserIdentifier == self.user.identifier
             }
-        }
+            .keys
+            .map({ $0 })
         
         self.restore(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            sharedBySelfGlobalIdentifiers: sharedBySelfGlobalIdentifiers,
-            sharedByOthersGlobalIdentifiers: sharedByOthersGlobalIdentifiers,
+            filteringKeys: sharedBySelfGlobalIdentifiers,
             qos: qos
         ) { restoreResult in
             switch restoreResult {
@@ -443,7 +438,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 }
                 
             case .success(let dict):
-                Self.lastFetchDate = fetchStartedAt
+                SHRemoteDownloadOperation.lastFetchDate = fetchStartedAt
                 self.delegatesQueue.async {
                     downloaderDelegates.forEach({
                         $0.didCompleteDownloadCycle(

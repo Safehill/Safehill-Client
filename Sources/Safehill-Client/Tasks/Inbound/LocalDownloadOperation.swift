@@ -32,7 +32,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
     
     static func markAsAlreadyProcessed(_ gids: [GlobalIdentifier]) {
         for gid in gids {
-            Self.alreadyProcessed.insert(gid)
+            SHLocalDownloadOperation.alreadyProcessed.insert(gid)
         }
     }
     
@@ -70,7 +70,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                 self.log.debug("[\(type(of: self))] fetched descriptors for gids \(descs.map({ $0.globalIdentifier }))")
                 
                 let unprocessed = descs.filter({
-                    Self.alreadyProcessed.contains($0.globalIdentifier) == false
+                    SHLocalDownloadOperation.alreadyProcessed.contains($0.globalIdentifier) == false
                 })
                 
                 self.log.debug("[\(type(of: self))] unprocessed gids \(unprocessed.map({ $0.globalIdentifier }))")
@@ -98,8 +98,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
     
     override internal func restore(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        sharedBySelfGlobalIdentifiers: [GlobalIdentifier],
-        sharedByOthersGlobalIdentifiers: [GlobalIdentifier],
+        filteringKeys: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
@@ -121,16 +120,17 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
         ///
         self.restoreQueueItems(
             descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: sharedBySelfGlobalIdentifiers
+            filteringKeys: filteringKeys
         ) { restoreResult in
             
-            if case .failure(let err) = restoreResult {
-                self.log.critical("failure while restoring queue items \(sharedBySelfGlobalIdentifiers): \(err.localizedDescription)")
-            } else {
-                Self.markAsAlreadyProcessed(sharedBySelfGlobalIdentifiers)
+            switch restoreResult {
+            case .success:
+                completionHandler(.success(()))
+
+            case .failure(let error):
+                self.log.critical("failure while restoring queue items \(filteringKeys): \(error.localizedDescription)")
+                completionHandler(.failure(error))
             }
-            
-            completionHandler(.success(()))
         }
     }
     
