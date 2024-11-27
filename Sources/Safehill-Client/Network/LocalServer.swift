@@ -1675,7 +1675,7 @@ struct LocalServer : SHServerAPI {
                         let key = [
                             "receiver",
                             recipientUserId,
-                            SHAssetQuality.midResolution.rawValue,
+                            encryptedVersion.quality.rawValue,
                             asset.globalIdentifier,
                             groupId
                         ].joined(separator: "::")
