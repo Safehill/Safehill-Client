@@ -140,6 +140,31 @@ extension SHServerProxy {
         }
     }
     
+    public func avatarImage(for user: any SHServerUser) async throws -> Data? {
+        if let data = try await self.localServer.avatarImage(for: user) {
+            return data
+        }
+        if let remoteData = try await self.remoteServer.avatarImage(for: user) {
+            try await self.localServer.saveAvatarImage(data: remoteData, for: user)
+            return remoteData
+        }
+        return nil
+    }
+    
+    public func saveAvatarImage(data: Data, for user: any SHServerUser) async throws {
+        if user.identifier == self.remoteServer.requestor.identifier {
+            try await self.remoteServer.saveAvatarImage(data: data, for: user)
+        }
+        try await self.localServer.saveAvatarImage(data: data, for: user)
+    }
+    
+    public func deleteAvatarImage(for user: any SHServerUser) async throws {
+        if user.identifier == self.remoteServer.requestor.identifier {
+            try await self.remoteServer.deleteAvatarImage(for: user)
+        }
+        try await self.localServer.deleteAvatarImage(for: user)
+    }
+    
     public func getUsers(
         withIdentifiers userIdentifiersToFetch: [UserIdentifier]?,
         completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ()
@@ -737,31 +762,6 @@ extension SHServerProxy {
                                 
                                 let remoteDictionary = await threadSafeRemoteDictionary.allKeyValues()
                                 completionHandler(.success(remoteDictionary))
-                                
-                                Task(priority: .low) {
-                                    
-                                    ///
-                                    /// Create a copy of the assets just fetched from the server in the local server (cache)
-                                    ///
-                                    
-                                    var encryptedAssetsToCreate = [any SHEncryptedAsset]()
-                                    for assetId in assetVersionsToFetch.keys {
-                                        if let remoteEncryptedAsset = remoteDictionary[assetId] {
-                                            encryptedAssetsToCreate.append(remoteEncryptedAsset)
-                                        }
-                                    }
-                                    
-                                    self.localServer.create(
-                                        assets: Array(encryptedAssetsToCreate),
-                                        descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                                        uploadState: .completed,
-                                        overwriteFileIfExists: false
-                                    ) { result in
-                                        if case .failure(let err) = result {
-                                            log.warning("[asset-data] could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
-                                        }
-                                    }
-                                }
                             }
                             
                         case .failure(let error):

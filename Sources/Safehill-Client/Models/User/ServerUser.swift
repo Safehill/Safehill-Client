@@ -27,7 +27,8 @@ public struct SHRemoteUser : SHServerUser, Codable {
          name: String,
          phoneNumber: String?,
          publicKeyData: Data,
-         publicSignatureData: Data) {
+         publicSignatureData: Data
+    ) {
         self.identifier = identifier
         self.publicKeyData = publicKeyData
         self.publicSignatureData = publicSignatureData
