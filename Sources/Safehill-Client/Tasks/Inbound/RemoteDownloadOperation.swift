@@ -62,6 +62,11 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             switch remoteResult {
             case .success(let remoteDescriptors):
                 
+                guard remoteDescriptors.isEmpty == false else {
+                    completionHandler(.success([]))
+                    return
+                }
+                
                 ///
                 /// Get all the corresponding local descriptors.
                 /// The extra ones (to be DELETED) will be removed by the sync operation
