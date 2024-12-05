@@ -637,7 +637,7 @@ struct LocalServer : SHServerAPI {
             .beginsWith, value: "receiver::"
         ).and(KBGenericCondition(
             .contains, value: "::low::") // Can safely assume all versions are shared using the same group id
-        ).and(gidsCondition))
+        ).and(gidsCondition)
         
         let recipientDetailsDict: [String: DBSecureSerializableAssetRecipientSharingDetails?]
         let groupPhoneNumberInvitations: [String: [String: String]]
