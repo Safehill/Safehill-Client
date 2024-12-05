@@ -566,6 +566,7 @@ struct LocalServer : SHServerAPI {
         
         var descriptors = [SHGenericAssetDescriptor]()
         let globalIdentifiers = Array(Set(globalIdentifiers))
+        var gidsCondition = KBGenericCondition(value: true)
         
         if globalIdentifiers.isEmpty == false, useCache {
             
@@ -582,6 +583,10 @@ struct LocalServer : SHServerAPI {
                 completionHandler(.success(descriptors))
                 return
             }
+            
+            globalIdentifiers.forEach({ gid in
+                gidsCondition = gidsCondition.or(KBGenericCondition(.contains, value: gid))
+            })
         }
         
         var senderInfoDict = [GlobalIdentifier: UserIdentifier]()
@@ -596,7 +601,7 @@ struct LocalServer : SHServerAPI {
             .beginsWith, value: "sender::"
         ).and(KBGenericCondition(
             .contains, value: "::low::"
-        ))
+        ).and(gidsCondition))
         
         let senderKeys: [String]
         do {
@@ -632,7 +637,7 @@ struct LocalServer : SHServerAPI {
             .beginsWith, value: "receiver::"
         ).and(KBGenericCondition(
             .contains, value: "::low::") // Can safely assume all versions are shared using the same group id
-        )
+        ).and(gidsCondition))
         
         let recipientDetailsDict: [String: DBSecureSerializableAssetRecipientSharingDetails?]
         let groupPhoneNumberInvitations: [String: [String: String]]
