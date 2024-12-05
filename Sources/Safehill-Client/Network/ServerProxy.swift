@@ -811,7 +811,7 @@ extension SHServerProxy {
         serverAsset: SHServerAsset,
         asset: any SHEncryptedAsset,
         filterVersions: [SHAssetQuality]? = nil
-    ) throws {
+    ) async throws {
         
         let manifest = try self.serverAssetVersionsURLDataManifest(
             serverAsset,
@@ -819,19 +819,29 @@ extension SHServerProxy {
             filterVersions: filterVersions
         )
         
-        self.remoteServer.uploadAsset(
-            with: serverAsset.globalIdentifier,
-            versionsDataManifest: manifest
-        ) {
-            result in
-            if case .success = result {
-                self.localServer.uploadAsset(
-                    with: serverAsset.globalIdentifier,
-                    versionsDataManifest: manifest
-                ) { result in
-                    if case .failure(let localError) = result {
-                        log.warning("asset was uploaded on remote server, but local asset wasn't marked as completed. This inconsistency will be resolved by assets sync. \(localError.localizedDescription)")
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.uploadAsset(
+                with: serverAsset.globalIdentifier,
+                versionsDataManifest: manifest
+            ) {
+                result in
+                switch result {
+                case .success:
+                    self.localServer.uploadAsset(
+                        with: serverAsset.globalIdentifier,
+                        versionsDataManifest: manifest
+                    ) { result in
+                        if case .failure(let localError) = result {
+                            log.warning("asset was uploaded on remote server, but local asset wasn't marked as completed. This inconsistency will be resolved by assets sync. \(localError.localizedDescription)")
+                        }
                     }
+                    
+                    continuation.resume(returning: ())
+                    
+                case .failure(let error):
+                    log.error("asset could not be uploaded to remote server: \(error.localizedDescription)")
+                    
+                    continuation.resume(throwing: error)
                 }
             }
         }
