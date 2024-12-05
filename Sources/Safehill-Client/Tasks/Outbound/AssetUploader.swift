@@ -272,7 +272,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                     
                     ///
                     /// Upload is completed.
-                    /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                    /// Remove the item in the upload queue, and add to the share queue if shared
                     ///
                     do {
                         try self.markAsSuccessful(

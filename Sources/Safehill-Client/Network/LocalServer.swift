@@ -1407,6 +1407,8 @@ struct LocalServer : SHServerAPI {
     
     func create(assets: [any SHEncryptedAsset],
                 groupId: String,
+                createdBy: any SHServerUser,
+                createdAt: Date,
                 createdFromThreadId: String?,
                 filterVersions: [SHAssetQuality]?,
                 overwriteFileIfExists: Bool,
@@ -1443,8 +1445,8 @@ struct LocalServer : SHServerAPI {
                     groupInfoById: [
                         groupId: SHGenericAssetGroupInfo(
                             encryptedTitle: nil,
-                            createdBy: self.requestor.identifier,
-                            createdAt: Date(),
+                            createdBy: createdBy.identifier,
+                            createdAt: createdAt,
                             createdFromThreadId: createdFromThreadId,
                             invitedUsersPhoneNumbers: nil
                         )
@@ -1501,62 +1503,7 @@ struct LocalServer : SHServerAPI {
             
             for encryptedVersion in asset.encryptedVersions.values {
                 
-                if asset.encryptedVersions.count == 1,
-                   asset.encryptedVersions.first?.key == .lowResolution {
-                    
-                    ///
-                    /// Every time a `.lowResolution` (and only  such resolution) is created
-                    /// remove the `.midResolution` and the `.hiResolution`
-                    /// from the cache
-                    ///
-                    
-                    for quality in [SHAssetQuality.midResolution, SHAssetQuality.hiResolution] {
-                        writeBatch.set(
-                            value: nil,
-                            for: "\(quality)::" + asset.globalIdentifier
-                        )
-                        writeBatch.set(
-                            value: nil,
-                            for: "data::" + "\(quality)::" + asset.globalIdentifier
-                        )
-                        for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
-                            let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
-                            let groupCreatorId = groupInfo.createdBy
-                            writeBatch.set(
-                                value: nil,
-                                for: [
-                                    "sender",
-                                    groupCreatorId ?? assetCreatorId,
-                                    quality.rawValue,
-                                    asset.globalIdentifier,
-                                    groupId
-                                ].joined(separator: "::")
-                            )
-                        }
-                        
-                        for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
-                            for groupId in groupIds {
-                                writeBatch.set(
-                                    value: nil,
-                                    for: [
-                                        "receiver",
-                                        recipientUserId,
-                                        quality.rawValue,
-                                        asset.globalIdentifier,
-                                        groupId
-                                    ].joined(separator: "::")
-                                )
-                            }
-                        }
-                        
-                        let versionDataURL = Self.assetVersionDataFile(
-                            for: asset.globalIdentifier,
-                            quality: quality
-                        )
-                        try? FileManager.default.removeItem(at: versionDataURL)
-                    }
-                }
-                else if encryptedVersion.quality == .midResolution,
+                if encryptedVersion.quality == .midResolution,
                    asset.encryptedVersions.keys.contains(.hiResolution) {
                     
                     ///

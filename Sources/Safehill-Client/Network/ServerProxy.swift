@@ -562,6 +562,7 @@ extension SHServerProxy {
     
     ///
     /// Retrieve asset from local server (cache) if available.
+    /// Do not try to fetch from remote server if such assets don't exist on local.
     ///
     /// - Parameters:
     ///   - assetIdentifiers: the global identifier of the asset to retrieve
@@ -581,7 +582,8 @@ extension SHServerProxy {
     
     ///
     /// Retrieves assets versions with given identifiers.
-    /// Tries to fetch from local server first, then remote server if some are not present. For those not available in the local server, **it updates the local server (cache)**
+    /// Tries to fetch from local server first, then remote server if some are not present.
+    /// For those not available in the local server, **it updates the local server (cache)**
     ///
     /// - Parameters:
     ///   - assetIdentifiers: the global asset identifiers to retrieve
@@ -761,6 +763,18 @@ extension SHServerProxy {
                                 }
                                 
                                 let remoteDictionary = await threadSafeRemoteDictionary.allKeyValues()
+                                
+                                ///
+                                /// CACHE
+                                ///
+                                DispatchQueue.global(qos: .utility).async {
+                                    self.localServer.create(
+                                        assets: Array(remoteDictionary.values),
+                                        descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
+                                        uploadState: .completed
+                                    ) { _ in }
+                                }
+                                
                                 completionHandler(.success(remoteDictionary))
                             }
                             

@@ -271,32 +271,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         }
     }
     
-    ///
-    /// Recreate the assets and call the restoration delegate to recreate the successful upload/share items.
-    /// At this point we only deal with assets that:
-    /// - are shared by THIS user
-    /// - are not in the local server
-    ///
-    internal func restore(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard !self.isCancelled else {
-            log.info("[\(type(of: self))] download task cancelled. Finishing")
-            completionHandler(.success(()))
-            return
-        }
-        
-        self.recreateLocalAssets(
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: filteringKeys,
-            qos: qos,
-            completionHandler: completionHandler
-        )
-    }
-    
     /// Given a list of descriptors determines which ones need to be dowloaded, authorized, or marked as backed up in the library.
     /// Returns the list of descriptors for the assets that are ready to be downloaded
     /// - Parameters:
@@ -317,21 +291,13 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
             return
         }
         
-        ///
-        /// Create 2 partitions:
-        /// - one for assets uploaded/shared by THIS user
-        /// - one for assets shared by OTHER users
-        ///
-        let sharedBySelfGlobalIdentifiers: [GlobalIdentifier] = descriptorsByGlobalIdentifier
-            .filter { dict in
-                dict.value.sharingInfo.sharedByUserIdentifier == self.user.identifier
-            }
-            .keys
-            .map({ $0 })
+        let sharedBySelfDescriptorsByGlobalIdentifier = descriptorsByGlobalIdentifier.filter({
+            dict in
+            dict.value.sharingInfo.sharedByUserIdentifier == self.user.identifier
+        })
         
-        self.restore(
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: sharedBySelfGlobalIdentifiers,
+        self.restoreQueueItems(
+            descriptorsByGlobalIdentifier: sharedBySelfDescriptorsByGlobalIdentifier,
             qos: qos
         ) { restoreResult in
             switch restoreResult {

@@ -27,9 +27,8 @@ protocol SHDownloadOperation {
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     )
     
-    func restore(
+    func restoreQueueItems(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     )

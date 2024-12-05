@@ -81,44 +81,6 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
         }
     }
     
-    override internal func restore(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard !self.isCancelled else {
-            log.info("[\(type(of: self))] download task cancelled. Finishing")
-            completionHandler(.success(()))
-            return
-        }
-        
-        ///
-        /// FOR THE ONES SHARED BY THIS USER
-        /// Notify the restoration delegates about the assets that need to be restored from the successful queues
-        /// These can only reference assets shared by THIS user. All other descriptors are ignored.
-        ///
-        /// These assets are definitely in the local server (because the descriptors fetch by a `SHLocalDownloadOperation`
-        /// contain only assets from the local server).
-        /// However they may or may not be in the history queues. The method `restoreQueueItems(descriptorsByGlobalIdentifier:filteringKeys:)
-        /// takes care of creating them
-        ///
-        self.restoreQueueItems(
-            descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-            filteringKeys: filteringKeys
-        ) { restoreResult in
-            
-            switch restoreResult {
-            case .success:
-                completionHandler(.success(()))
-
-            case .failure(let error):
-                self.log.critical("failure while restoring queue items \(filteringKeys): \(error.localizedDescription)")
-                completionHandler(.failure(error))
-            }
-        }
-    }
-    
     ///
     /// Get all asset descriptors associated with this user from the server.
     /// Descriptors serve as a manifest to determine what to download.
