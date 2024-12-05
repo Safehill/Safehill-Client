@@ -1138,6 +1138,14 @@ struct LocalServer : SHServerAPI {
             }
         }
         
+        if assetStoreInvalidKeys.isEmpty == false {
+            do {
+                let _ = try assetStore.removeValues(for: Array(assetStoreInvalidKeys))
+            } catch {
+                log.error("failed to remove invalid keys \(assetStoreInvalidKeys) from DB. \(error.localizedDescription)")
+            }
+        }
+        
         do {
             try assetStoreWriteBatch.write()
         } catch {
