@@ -414,19 +414,21 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
                     expectation1.fulfill()
                     return
                 }
-                do {
-                    try self.testUser.serverProxy.upload(
-                        serverAsset: serverAsset,
-                        asset: encryptedAsset
-                    )
-                } catch {
-                    XCTFail(error.localizedDescription)
+                Task {
+                    do {
+                        try await self.testUser.serverProxy.upload(
+                            serverAsset: serverAsset,
+                            asset: encryptedAsset
+                        )
+                    } catch {
+                        XCTFail(error.localizedDescription)
+                    }
+                    expectation1.fulfill()
                 }
             case .failure(let error):
                 XCTFail(error.localizedDescription)
+                expectation1.fulfill()
             }
-            
-            expectation1.fulfill()
         }
         
         wait(for: [expectation1], timeout: 5.0)

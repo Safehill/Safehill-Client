@@ -100,7 +100,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
             
             guard let data = assetDataByGlobalIdentifierAndQuality[metadata.globalIdentifier]?[quality]
             else {
-                log.error("mismatch between asset asset version data and metadata for key \(key)")
+                log.warning("mismatch between asset asset version data and metadata for key \(key)")
                 invalidKeys.insert(key)
                 invalidKeys.insert("data::\(key)")
                 continue

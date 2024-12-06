@@ -85,6 +85,8 @@ internal var CDNServerDefaultURLSessionConfiguration: URLSessionConfiguration {
 internal func CDNServerDefaultBackgroundURLSessionConfiguration(with sessionIdentifier: String) -> URLSessionConfiguration {
     let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
     
+    configuration.sharedContainerIdentifier = "group.com.gf.safehill.snoog"
+    
     /// The session should wait for connectivity to become available, instead of fail immediately
     configuration.waitsForConnectivity = true
     

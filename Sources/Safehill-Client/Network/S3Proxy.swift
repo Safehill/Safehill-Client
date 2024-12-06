@@ -60,7 +60,7 @@ struct S3Proxy {
         }
     }
     
-    private static func urlRequest(
+    internal static func urlRequest(
         _ data: Data?,
         usingPresignedURL presignedURL: URL,
         headers: [String: String]? = nil

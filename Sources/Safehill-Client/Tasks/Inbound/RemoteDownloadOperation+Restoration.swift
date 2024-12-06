@@ -2,58 +2,6 @@ import Foundation
 
 extension SHRemoteDownloadOperation {
     
-    internal func recreateLocalAssets(
-        descriptorsByGlobalIdentifier original: [GlobalIdentifier: any SHAssetDescriptor],
-        filteringKeys globalIdentifiersSharedBySelf: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        guard original.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        guard globalIdentifiersSharedBySelf.count > 0 else {
-            completionHandler(.success(()))
-            return
-        }
-        
-        let descriptorsByGlobalIdentifier = original.filter({
-            globalIdentifiersSharedBySelf.contains($0.value.globalIdentifier)
-            && $0.value.localIdentifier != nil
-        })
-        
-        self.log.debug("[\(type(of: self))] recreating local assets and queue items for \(globalIdentifiersSharedBySelf)")
-        
-        ///
-        /// Get the `.lowResolution` assets data from the remote server
-        ///
-        self.serverProxy.getAssetsAndCache(
-            withGlobalIdentifiers: globalIdentifiersSharedBySelf,
-            versions: [.lowResolution],
-            synchronousFetch: true
-        ) { fetchResult in
-            switch fetchResult {
-            case .success:
-                ///
-                /// **Remember:** saving a `.lowResolution` version only
-                /// will remove the `.midResolution` and the `.hiResolution`
-                /// in the cache.
-                ///
-                /// Notify the delegates about successful upload and share queue items
-                ///
-                self.restoreQueueItems(
-                    descriptorsByGlobalIdentifier: descriptorsByGlobalIdentifier,
-                    qos: qos,
-                    completionHandler: completionHandler
-                )
-            case .failure(let error):
-                self.log.error("[\(type(of: self))] failed to fetch assets from remote server. Assets in the local library but uploaded will not be marked as such. This operation will be attempted again. \(error.localizedDescription)")
-                completionHandler(.failure(error))
-            }
-        }
-    }
-    
     ///
     /// For all the descriptors whose originator user is _this_ user notify the restoration delegate about the change.
     /// Uploads and shares will be reported separately, according to the contract in the delegate.
@@ -63,7 +11,7 @@ extension SHRemoteDownloadOperation {
     ///   - qos: the quality of service
     ///   - completionHandler: the callback method
     ///
-    private func restoreQueueItems(
+    func restoreQueueItems(
         descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void

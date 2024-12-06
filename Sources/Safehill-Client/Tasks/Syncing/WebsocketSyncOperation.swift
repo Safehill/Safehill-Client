@@ -64,7 +64,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             return
         }
         
-        try await socket.connect(to: "ws/messages", 
+        try await socket.connect(to: "ws/messages",
                                  as: self.user,
                                  from: self.deviceId,
                                  keepAliveIntervalInSeconds: 5.0)
@@ -157,10 +157,11 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 
                 Task {
                     do {
-                        try await SHAssetSharingController(localUser: self.user)
-                            .convertUser(encoded.newUser,
-                                         assetIdsByGroupId: encoded.assetIdsByGroupId,
-                                         threadIds: encoded.threadIds)
+                        try await SHAssetSharingController(localUser: self.user).convertUser(
+                            encoded.newUser,
+                            assetIdsByGroupId: encoded.assetIdsByGroupId,
+                            threadIds: encoded.threadIds
+                        )
                     } catch {
                         self.log.error("[ws] CONVERSION-REQUEST: failed to convert newUser=\(encoded.newUser.name) assetIdsByGroupId=\(encoded.assetIdsByGroupId), threadIds=\(encoded.threadIds). \(error.localizedDescription)")
                     }
@@ -195,6 +196,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 let serverUser = SHRemoteUser(
                     identifier: requestor.identifier,
                     name: requestor.name,
+                    phoneNumber: requestor.phoneNumber,
                     publicKeyData: requestor.publicKeyData,
                     publicSignatureData: requestor.publicSignatureData
                 )
@@ -382,7 +384,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     return
                     
                 } else {
-                    /// 
+                    ///
                     /// BACKWARD COMPATIBILITY:
                     /// group-assets-share type messages were sent with `ThreadAssets` as content
                     /// but since late August 2024 it's been sent as a `[ConversationThreadAssetDTO]`

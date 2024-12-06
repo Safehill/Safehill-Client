@@ -25,7 +25,7 @@ public struct InteractionsGroupSummaryDTO: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         numComments = try container.decode(Int.self, forKey: .numComments)
-        encryptedTitle = try? container.decode(String.self, forKey: .encryptedTitle)
+        encryptedTitle = try? container.decodeIfPresent(String.self, forKey: .encryptedTitle)
         reactions = try container.decode([ReactionOutputDTO].self, forKey: .reactions)
         invitedUsersPhoneNumbers = try container.decode([String: String].self, forKey: .invitedUsersPhoneNumbers)
     }

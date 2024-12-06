@@ -1,6 +1,8 @@
 import Foundation
 import Yams
 import Contacts
+import Safehill_Crypto
+import CryptoKit
 
 public struct SHServerProxy: SHServerProxyProtocol {
     
@@ -138,6 +140,31 @@ extension SHServerProxy {
         group.notify(queue: .global(qos: .background)) {
             completionHandler(.success(()))
         }
+    }
+    
+    public func avatarImage(for user: any SHServerUser) async throws -> Data? {
+        if let data = try await self.localServer.avatarImage(for: user) {
+            return data
+        }
+        if let remoteData = try await self.remoteServer.avatarImage(for: user) {
+            try await self.localServer.saveAvatarImage(data: remoteData, for: user)
+            return remoteData
+        }
+        return nil
+    }
+    
+    public func saveAvatarImage(data: Data, for user: any SHServerUser) async throws {
+        if user.identifier == self.remoteServer.requestor.identifier {
+            try await self.remoteServer.saveAvatarImage(data: data, for: user)
+        }
+        try await self.localServer.saveAvatarImage(data: data, for: user)
+    }
+    
+    public func deleteAvatarImage(for user: any SHServerUser) async throws {
+        if user.identifier == self.remoteServer.requestor.identifier {
+            try await self.remoteServer.deleteAvatarImage(for: user)
+        }
+        try await self.localServer.deleteAvatarImage(for: user)
     }
     
     public func getUsers(
@@ -537,6 +564,7 @@ extension SHServerProxy {
     
     ///
     /// Retrieve asset from local server (cache) if available.
+    /// Do not try to fetch from remote server if such assets don't exist on local.
     ///
     /// - Parameters:
     ///   - assetIdentifiers: the global identifier of the asset to retrieve
@@ -556,7 +584,8 @@ extension SHServerProxy {
     
     ///
     /// Retrieves assets versions with given identifiers.
-    /// Tries to fetch from local server first, then remote server if some are not present. For those not available in the local server, **it updates the local server (cache)**
+    /// Tries to fetch from local server first, then remote server if some are not present.
+    /// For those not available in the local server, **it updates the local server (cache)**
     ///
     /// - Parameters:
     ///   - assetIdentifiers: the global asset identifiers to retrieve
@@ -623,11 +652,14 @@ extension SHServerProxy {
                     
                     log.debug("[asset-data] \(Array(assetVersionsToFetch)) DB CACHE MISS")
                     
+                    var intermediateResultReturned = false
+                    
                     ///
                     /// For asynchronous fetch, return the intermediate result from local, unless it's empty
                     ///
                     if synchronousFetch == false, localDictionary.isEmpty == false {
                         completionHandler(.success(localDictionary))
+                        intermediateResultReturned = true
                     }
                     
                     let threadSafeAssetVersionsToFetchByGid = ThreadSafeDictionary<GlobalIdentifier, [SHAssetQuality]>()
@@ -681,7 +713,7 @@ extension SHServerProxy {
                                     /// Call the completion handler with what could be retrieved locally if
                                     /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
                                     /// - `synchronousFetch` is `false` and the `localDictionary` is empty
-                                    if synchronousFetch || localDictionary.isEmpty {
+                                    if !intermediateResultReturned {
                                         completionHandler(.success(localDictionary))
                                     }
                                     return
@@ -724,12 +756,6 @@ extension SHServerProxy {
                                                 await threadSafeRemoteDictionary.setValue(remoteEncryptedAsset, forKey: assetId)
                                             }
                                             
-                                            if synchronousFetch == false {
-                                                completionHandler(.success([
-                                                    assetId: remoteEncryptedAsset
-                                                ]))
-                                            }
-                                            
                                         } else {
                                             log.warning("[asset-data] failed to fetch remote asset \(assetId) versions \(versionsToFetchRemotely) from remote. Skipping")
                                         }
@@ -741,31 +767,18 @@ extension SHServerProxy {
                                 
                                 let remoteDictionary = await threadSafeRemoteDictionary.allKeyValues()
                                 
-                                if synchronousFetch {
-                                    completionHandler(.success(remoteDictionary))
-                                }
-                                
                                 ///
-                                /// Create a copy of the assets just fetched from the server in the local server (cache)
+                                /// CACHE
                                 ///
-                                
-                                var encryptedAssetsToCreate = [any SHEncryptedAsset]()
-                                for assetId in assetVersionsToFetch.keys {
-                                    if let remoteEncryptedAsset = remoteDictionary[assetId] {
-                                        encryptedAssetsToCreate.append(remoteEncryptedAsset)
-                                    }
+                                DispatchQueue.global(qos: .utility).async {
+                                    self.localServer.create(
+                                        assets: Array(remoteDictionary.values),
+                                        descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
+                                        uploadState: .completed
+                                    ) { _ in }
                                 }
                                 
-                                self.localServer.create(
-                                    assets: Array(encryptedAssetsToCreate),
-                                    descriptorsByGlobalIdentifier: descriptorsByAssetGlobalId,
-                                    uploadState: .completed,
-                                    overwriteFileIfExists: false
-                                ) { result in
-                                    if case .failure(let err) = result {
-                                        log.warning("[asset-data] could not save downloaded remote asset to the local cache. This operation will be attempted again, but for now the cache is out of sync. error=\(err.localizedDescription)")
-                                    }
-                                }
+                                completionHandler(.success(remoteDictionary))
                             }
                             
                         case .failure(let error):
@@ -774,7 +787,7 @@ extension SHServerProxy {
                             /// Call the completion handler with what could be retrieved locally if
                             /// - `synchronousFetch` is `true` (for async case, it's already been called as an intermediate result if not empty)
                             /// - `synchronousFetch` is `false` and the `localDictionary` is empty
-                            if synchronousFetch || localDictionary.isEmpty {
+                            if !intermediateResultReturned {
                                 completionHandler(.success(localDictionary))
                             }
                             return
@@ -815,7 +828,7 @@ extension SHServerProxy {
         serverAsset: SHServerAsset,
         asset: any SHEncryptedAsset,
         filterVersions: [SHAssetQuality]? = nil
-    ) throws {
+    ) async throws {
         
         let manifest = try self.serverAssetVersionsURLDataManifest(
             serverAsset,
@@ -823,19 +836,29 @@ extension SHServerProxy {
             filterVersions: filterVersions
         )
         
-        self.remoteServer.uploadAsset(
-            with: serverAsset.globalIdentifier,
-            versionsDataManifest: manifest
-        ) {
-            result in
-            if case .success = result {
-                self.localServer.uploadAsset(
-                    with: serverAsset.globalIdentifier,
-                    versionsDataManifest: manifest
-                ) { result in
-                    if case .failure(let localError) = result {
-                        log.warning("asset was uploaded on remote server, but local asset wasn't marked as completed. This inconsistency will be resolved by assets sync. \(localError.localizedDescription)")
+        try await withUnsafeThrowingContinuation { continuation in
+            self.remoteServer.uploadAsset(
+                with: serverAsset.globalIdentifier,
+                versionsDataManifest: manifest
+            ) {
+                result in
+                switch result {
+                case .success:
+                    self.localServer.uploadAsset(
+                        with: serverAsset.globalIdentifier,
+                        versionsDataManifest: manifest
+                    ) { result in
+                        if case .failure(let localError) = result {
+                            log.warning("asset was uploaded on remote server, but local asset wasn't marked as completed. This inconsistency will be resolved by assets sync. \(localError.localizedDescription)")
+                        }
                     }
+                    
+                    continuation.resume(returning: ())
+                    
+                case .failure(let error):
+                    log.error("asset could not be uploaded to remote server: \(error.localizedDescription)")
+                    
+                    continuation.resume(throwing: error)
                 }
             }
         }
@@ -848,25 +871,60 @@ extension SHServerProxy {
     ) throws -> [SHAssetQuality: (URL, Data)] {
         var manifest = [SHAssetQuality: (URL, Data)]()
         
-        for encryptedAssetVersion in asset.encryptedVersions.values {
-            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
+        for serverAssetVersion in serverAsset.versions {
+            guard let serverAssetVersionQuality = SHAssetQuality(rawValue: serverAssetVersion.versionName) else {
+                throw SHHTTPError.ServerError.unexpectedResponse("Unknown version enum \(serverAssetVersion.versionName)")
+            }
+            guard filterVersions == nil || filterVersions!.contains(serverAssetVersionQuality) else {
                 continue
             }
             
-            log.info("[S3] uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            log.info("[S3] uploading to CDN asset version \(serverAssetVersion.versionName) for asset \(serverAsset.globalIdentifier) (localId=\(serverAsset.localIdentifier ?? ""))")
             
-            let serverAssetVersion = serverAsset.versions.first { sav in
-                sav.versionName == encryptedAssetVersion.quality.rawValue
-            }
-            guard let serverAssetVersion = serverAssetVersion else {
-                throw SHHTTPError.ClientError.badRequest("[S3] invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
+            guard let encryptedVersion = asset.encryptedVersions[serverAssetVersionQuality] else {
+                throw SHHTTPError.ServerError.unexpectedResponse("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
             }
             
             guard let url = URL(string: serverAssetVersion.presignedURL) else {
                 throw SHHTTPError.ServerError.unexpectedResponse("[S3] presigned URL is invalid")
             }
             
-            manifest[encryptedAssetVersion.quality] = (url, encryptedAssetVersion.encryptedData)
+            if encryptedVersion.encryptedSecret == serverAssetVersion.encryptedSecret,
+               encryptedVersion.publicKeyData == serverAssetVersion.publicKeyData,
+               encryptedVersion.publicSignatureData == serverAssetVersion.publicSignatureData {
+                manifest[serverAssetVersionQuality] = (url, encryptedVersion.encryptedData)
+            } else {
+                let decyptedAssetVersion = try self.remoteServer.requestor.decrypt(
+                    asset,
+                    versions: [serverAssetVersionQuality],
+                    receivedFrom: self.remoteServer.requestor
+                ).decryptedVersions[serverAssetVersionQuality]
+                
+                guard let decyptedAssetVersion else {
+                    throw SHHTTPError.ClientError.badRequest("Encrypted asset provided could not be decrypted by self")
+                }
+                
+                let encryptedSecret = SHShareablePayload(
+                    ephemeralPublicKeyData: serverAssetVersion.publicKeyData,
+                    cyphertext: serverAssetVersion.encryptedSecret,
+                    signature: serverAssetVersion.publicSignatureData
+                )
+                let privateSecretData = try SHUserContext(user: self.remoteServer.requestor.shUser)
+                    .decryptSecret(
+                        usingEncryptedSecret: encryptedSecret,
+                        protocolSalt: self.remoteServer.requestor.maybeEncryptionProtocolSalt!,
+                        signedWith: self.remoteServer.requestor.publicSignatureData
+                    )
+                
+                let privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
+                
+                let encryptedData = try SHEncryptedData(
+                    privateSecret: privateSecret,
+                    clearData: decyptedAssetVersion
+                )
+                
+                manifest[serverAssetVersionQuality] = (url, encryptedData.encryptedData)
+            }
         }
         
         return manifest

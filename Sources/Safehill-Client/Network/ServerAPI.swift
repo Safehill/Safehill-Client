@@ -491,13 +491,29 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    /// If a thread not be fetched, the user can request the originator of that share for access.
+    /// This will trigger a push notification to the originator asking to grant access to this user.
+    /// - Parameter groupId: the groupId
     func requestAccess(
         toThreadId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    /// If a share group could not be downloaded, the user can request the originator of that share for access.
+    /// This will trigger a push notification to the originator asking to grant access to this user.
+    /// - Parameter groupId: the groupId
     func requestAccess(
         toGroupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
+
+    func avatarImage(for user: any SHServerUser) async throws -> Data?
+    
+    /// Save the user avatar image
+    /// - Parameter data: the image data
+    /// - Returns: the URL the image has been saved to
+    func saveAvatarImage(data: Data, for user: any SHServerUser) async throws
+    
+    /// Delete the user avatar image, if any exists
+    func deleteAvatarImage(for user: any SHServerUser) async throws
 }

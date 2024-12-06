@@ -9,12 +9,12 @@ public struct SHGenericAssetGroupInfo : SHAssetGroupInfo, Codable {
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        encryptedTitle = try? container.decode(String.self, forKey: .encryptedTitle)
-        createdBy = try? container.decode(UserIdentifier.self, forKey: .createdBy)
-        let dateString = try? container.decode(String.self, forKey: .createdAt)
+        encryptedTitle = try? container.decodeIfPresent(String.self, forKey: .encryptedTitle)
+        createdBy = try? container.decodeIfPresent(UserIdentifier.self, forKey: .createdBy)
+        let dateString = try? container.decodeIfPresent(String.self, forKey: .createdAt)
         createdAt = dateString?.iso8601withFractionalSeconds
-        createdFromThreadId = try? container.decode(String.self, forKey: .createdFromThreadId)
-        invitedUsersPhoneNumbers = try? container.decode([String: String].self, forKey: .invitedUsersPhoneNumbers)
+        createdFromThreadId = try? container.decodeIfPresent(String.self, forKey: .createdFromThreadId)
+        invitedUsersPhoneNumbers = try? container.decodeIfPresent([String: String].self, forKey: .invitedUsersPhoneNumbers)
     }
     
     init(encryptedTitle: String?,

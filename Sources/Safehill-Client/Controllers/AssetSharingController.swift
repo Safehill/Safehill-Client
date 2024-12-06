@@ -41,6 +41,7 @@ public class SHAssetSharingController {
     internal func shareAsset(
         globalIdentifier: GlobalIdentifier,
         versions: [SHAssetQuality],
+        createdBy: any SHServerUser,
         with recipients: [any SHServerUser],
         via groupId: String,
         asPhotoMessageInThreadId: String? = nil,
@@ -53,7 +54,8 @@ public class SHAssetSharingController {
             self.localUser.shareableEncryptedAsset(
                 globalIdentifier: globalIdentifier,
                 versions: versions,
-                recipients: recipients,
+                createdBy: createdBy,
+                with: recipients,
                 groupId: groupId
             ) { result in
                 switch result {
@@ -112,6 +114,7 @@ public class SHAssetSharingController {
                 try await self.shareAsset(
                     globalIdentifier: globalIdentifier,
                     versions: [.lowResolution, .hiResolution],
+                    createdBy: self.localUser,
                     with: [userToConvert],
                     via: groupId
                 )

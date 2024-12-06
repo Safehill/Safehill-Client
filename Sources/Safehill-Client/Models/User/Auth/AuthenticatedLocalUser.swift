@@ -21,13 +21,14 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
     
     public var identifier: String { self.shUser.identifier }
     public var name: String
+    public var phoneNumber: String?
     
     public var publicKeyData: Data { self.shUser.publicKeyData }
     public var publicSignatureData: Data { self.shUser.publicSignatureData }
     
     public let keychainPrefix: String
     
-    public init?(localUser: SHLocalUser, name: String) {
+    public init?(localUser: SHLocalUser, name: String, phoneNumber: String?) {
         guard let encryptionProtocolSalt = localUser.maybeEncryptionProtocolSalt,
               let authToken = localUser.authToken
         else {
@@ -44,6 +45,7 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
     internal init(
         localUser: SHLocalUser,
         name: String,
+        phoneNumber: String?,
         encryptionProtocolSalt: Data,
         authToken: String
     ) {
@@ -52,6 +54,7 @@ public struct SHAuthenticatedLocalUser: SHLocalUserProtocol {
         self.encryptionProtocolSalt = encryptionProtocolSalt
         self.shUser = localUser.shUser
         self.name = name
+        self.phoneNumber = phoneNumber
     }
 }
 
@@ -70,13 +73,17 @@ extension SHAuthenticatedLocalUser {
     func shareableEncryptedAsset(
         globalIdentifier: String,
         versions: [SHAssetQuality],
-        recipients: [any SHServerUser],
+        createdBy: any SHServerUser,
+        with recipients: [any SHServerUser],
         groupId: String,
         completionHandler: @escaping (Result<any SHShareableEncryptedAsset, Error>) -> Void
     ) {
         let localAssetStoreController = SHLocalAssetStoreController(user: self)
         
-        localAssetStoreController.retrieveCommonEncryptionKey(for: globalIdentifier) {
+        localAssetStoreController.retrieveCommonEncryptionKey(
+            for: globalIdentifier,
+            signedBy: createdBy
+        ) {
             result in
             switch result {
             case .failure(let error):
