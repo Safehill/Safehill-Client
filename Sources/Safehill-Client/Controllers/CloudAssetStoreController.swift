@@ -47,22 +47,14 @@ struct SHAssetStoreController {
             force: force
         )
         
-        /// Only upload if the asset wasn't already uploaded by someone else
-        if serverAsset.createdBy == self.user.identifier {
-            do {
-                try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
-            } catch {
-                try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
-                throw error
-            }
+        do {
+            try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
+        } catch {
+            try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
+            throw error
         }
         
         return serverAsset
-    }
-    
-    func download(globalIdentifiers: [GlobalIdentifier],
-                  filterVersions: [SHAssetQuality]? = nil) throws -> [any SHDecryptedAsset] {
-        throw SHAssetStoreError.notImplemented
     }
 }
 
