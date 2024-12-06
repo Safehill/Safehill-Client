@@ -589,7 +589,7 @@ struct LocalServer : SHServerAPI {
             })
         }
         
-        var senderInfoDict = [GlobalIdentifier: UserIdentifier]()
+        var groupCreatorById = [String: UserIdentifier]()
         var groupInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetGroupInfo]]()
         var groupIdsByRecipientUserIdentifierByAssetId = [GlobalIdentifier: [UserIdentifier: [String]]]()
         
@@ -612,8 +612,6 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        var invalidAssetStoreKeys = Set<String>()
-        
         for senderKey in senderKeys {
             let components = senderKey.components(separatedBy: "::")
             /// Components:
@@ -624,12 +622,11 @@ struct LocalServer : SHServerAPI {
             /// 4) group identifier
             
             if components.count == 5 {
-                let sharedByUserId = components[1]
-                let globalIdentifier = components[3]
-                senderInfoDict[globalIdentifier] = sharedByUserId
+                let groupCreatorId = components[1]
+                let groupId = components[4]
+                groupCreatorById[groupId] = groupCreatorId
             } else {
                 log.error("invalid sender info key in DB: \(senderKey)")
-                invalidAssetStoreKeys.insert(senderKey)
             }
         }
         
@@ -673,7 +670,7 @@ struct LocalServer : SHServerAPI {
         for (key, value) in recipientDetailsDict {
             
             guard let value else {
-                invalidAssetStoreKeys.insert(key)
+                log.error("invalid value for key \(key) in DB")
                 continue
             }
             
@@ -705,13 +702,12 @@ struct LocalServer : SHServerAPI {
                 }
             } else {
                 log.error("failed to retrieve sharing information. Invalid entry format: \(key) -> \(value)")
-                invalidAssetStoreKeys.insert(key)
                 continue
             }
             
             if filteringGroupIds == nil || filteringGroupIds!.contains(groupId) {
                 let thisGroupPhoneNumberInvitation = groupPhoneNumberInvitations[groupId]
-                let createdBy = senderInfoDict[assetGid]
+                let createdBy = groupCreatorById[groupId]
                 let encryptedTitle = encryptedTitles[groupId]
                 let groupInfo = SHGenericAssetGroupInfo(
                     encryptedTitle: encryptedTitle,
@@ -754,7 +750,7 @@ struct LocalServer : SHServerAPI {
         for (k, v) in keyValues {
             
             guard let v else {
-                invalidAssetStoreKeys.insert(k)
+                log.error("invalid value for key \(k) in DB")
                 continue
             }
             
@@ -780,37 +776,22 @@ struct LocalServer : SHServerAPI {
             )
         }
         
-        ///
-        /// Remove keys that couldn't be deserialized
-        ///
-        if invalidAssetStoreKeys.isEmpty == false {
-            do {
-                let _ = try assetStore.removeValues(for: Array(invalidAssetStoreKeys))
-            } catch {
-                log.error("failed to remove invalid keys \(invalidAssetStoreKeys) from DB. \(error.localizedDescription)")
-            }
-        }
-        
-        var invalidGlobalIdentifiersInDB = Set<GlobalIdentifier>()
-        
         for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
-            guard let sharedBy = senderInfoDict[globalIdentifier] else {
-                log.error("failed to retrieve sender information for asset \(globalIdentifier)")
-                invalidGlobalIdentifiersInDB.insert(globalIdentifier)
-                continue
-            }
-            
             guard let groupInfoById = groupInfoByIdByAssetGid[globalIdentifier],
                   let sharedWithUsersInGroups = groupIdsByRecipientUserIdentifierByAssetId[globalIdentifier]
             else {
-                log.error("failed to retrieve group information for asset \(globalIdentifier)")
-                invalidGlobalIdentifiersInDB.insert(globalIdentifier)
+                log.warning("failed to retrieve group information for asset \(globalIdentifier)")
+                continue
+            }
+            
+            guard let sharedBy = assetStore.value(forKey: "creator::\(globalIdentifier)") as? UserIdentifier else {
+                log.warning("failed to retrieve creator for asset \(globalIdentifier)")
                 continue
             }
             
             if Set(sharedWithUsersInGroups.values.flatMap({ $0 })).count > groupInfoById.count
                 || groupInfoById.values.contains(where: { $0.createdAt == nil }) {
-                log.error("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.createdAt) }))")
+                log.warning("some group information (or the creation date of such groups) is missing. \(groupInfoById.map({ ($0.key, $0.value.createdAt) }))")
             }
             
             if groupInfoById.isEmpty {
@@ -879,14 +860,6 @@ struct LocalServer : SHServerAPI {
                 descriptor.serialized(),
                 forKey: globalIdentifier
             )
-        }
-        
-        if invalidGlobalIdentifiersInDB.isEmpty == false {
-            let _ = self.deleteAssets(withGlobalIdentifiers: Array(invalidGlobalIdentifiersInDB)) { res in
-                if case .failure(let error) = res {
-                    log.error("failed to remove assets \(invalidGlobalIdentifiersInDB) from DB. \(error.localizedDescription)")
-                }
-            }
         }
         
         completionHandler(.success(descriptors))
@@ -1148,9 +1121,11 @@ struct LocalServer : SHServerAPI {
                     }
                     
                     let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(groupId)::\(descriptor.globalIdentifier)::photoMessage"
+                    let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+                    let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
                     let value = DBSecureSerializableConversationThreadAsset(
                         globalIdentifier: descriptor.globalIdentifier,
-                        addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
+                        addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
                         addedAt: addedAt,
                         groupId: groupId
                     )
@@ -1231,7 +1206,7 @@ struct LocalServer : SHServerAPI {
         } catch {
             completionHandler(.failure(error))
             return
-        }                         
+        }
         
         /// Remove from the **ASSET STORE**:
         /// 1. Sender info (start with "sender::", ends with groupId)
@@ -1577,6 +1552,12 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
+            let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+            writeBatch.set(
+                value: assetCreatorId,
+                for: "creator::" + asset.globalIdentifier
+            )
+            
             for encryptedVersion in asset.encryptedVersions.values {
                 
                 if encryptedVersion.quality == .midResolution,
@@ -1601,7 +1582,6 @@ struct LocalServer : SHServerAPI {
                         for: "data::" + "\(SHAssetQuality.midResolution.rawValue)::" + asset.globalIdentifier
                     )
                     for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
-                        let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
                         let groupCreatorId = groupInfo.createdBy
                         writeBatch.set(
                             value: nil,
@@ -1744,9 +1724,11 @@ struct LocalServer : SHServerAPI {
                 
                 for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
                     if let threadId = groupInfo.createdFromThreadId {
+                        let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
+                        let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
                         let threadAsset = DBSecureSerializableConversationThreadAsset(
                             globalIdentifier: asset.globalIdentifier,
-                            addedByUserIdentifier: descriptor.sharingInfo.sharedByUserIdentifier,
+                            addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
                             addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
                             groupId: groupId
                         )
