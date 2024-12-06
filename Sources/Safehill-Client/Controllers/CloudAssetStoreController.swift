@@ -47,6 +47,10 @@ struct SHAssetStoreController {
             force: force
         )
         
+        guard serverAsset.createdBy == self.user.identifier else {
+            throw SHHTTPError.ServerError.unexpectedResponse("The server returned a different creator for this asset just created. This isn't supposed to happen. Aborting")
+        }
+        
         do {
             try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
         } catch {

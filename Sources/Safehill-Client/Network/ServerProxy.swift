@@ -1,6 +1,8 @@
 import Foundation
 import Yams
 import Contacts
+import Safehill_Crypto
+import CryptoKit
 
 public struct SHServerProxy: SHServerProxyProtocol {
     
@@ -868,25 +870,60 @@ extension SHServerProxy {
     ) throws -> [SHAssetQuality: (URL, Data)] {
         var manifest = [SHAssetQuality: (URL, Data)]()
         
-        for encryptedAssetVersion in asset.encryptedVersions.values {
-            guard filterVersions == nil || filterVersions!.contains(encryptedAssetVersion.quality) else {
+        for serverAssetVersion in serverAsset.versions {
+            guard let serverAssetVersionQuality = SHAssetQuality(rawValue: serverAssetVersion.versionName) else {
+                throw SHHTTPError.ServerError.unexpectedResponse("Unknown version enum \(serverAssetVersion.versionName)")
+            }
+            guard filterVersions == nil || filterVersions!.contains(serverAssetVersionQuality) else {
                 continue
             }
             
-            log.info("[S3] uploading to CDN asset version \(encryptedAssetVersion.quality.rawValue) for asset \(asset.globalIdentifier) (localId=\(asset.localIdentifier ?? ""))")
+            log.info("[S3] uploading to CDN asset version \(serverAssetVersion.versionName) for asset \(serverAsset.globalIdentifier) (localId=\(serverAsset.localIdentifier ?? ""))")
             
-            let serverAssetVersion = serverAsset.versions.first { sav in
-                sav.versionName == encryptedAssetVersion.quality.rawValue
-            }
-            guard let serverAssetVersion = serverAssetVersion else {
-                throw SHHTTPError.ClientError.badRequest("[S3] invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
+            guard let encryptedVersion = asset.encryptedVersions[serverAssetVersionQuality] else {
+                throw SHHTTPError.ServerError.unexpectedResponse("invalid upload payload. Mismatched local and server asset versions. server=\(serverAsset), local=\(asset)")
             }
             
             guard let url = URL(string: serverAssetVersion.presignedURL) else {
                 throw SHHTTPError.ServerError.unexpectedResponse("[S3] presigned URL is invalid")
             }
             
-            manifest[encryptedAssetVersion.quality] = (url, encryptedAssetVersion.encryptedData)
+            if encryptedVersion.encryptedSecret == serverAssetVersion.encryptedSecret,
+               encryptedVersion.publicKeyData == serverAssetVersion.publicKeyData,
+               encryptedVersion.publicSignatureData == serverAssetVersion.publicSignatureData {
+                manifest[serverAssetVersionQuality] = (url, encryptedVersion.encryptedData)
+            } else {
+                let decyptedAssetVersion = try self.remoteServer.requestor.decrypt(
+                    asset,
+                    versions: [serverAssetVersionQuality],
+                    receivedFrom: self.remoteServer.requestor
+                ).decryptedVersions[serverAssetVersionQuality]
+                
+                guard let decyptedAssetVersion else {
+                    throw SHHTTPError.ClientError.badRequest("Encrypted asset provided could not be decrypted by self")
+                }
+                
+                let encryptedSecret = SHShareablePayload(
+                    ephemeralPublicKeyData: serverAssetVersion.publicKeyData,
+                    cyphertext: serverAssetVersion.encryptedSecret,
+                    signature: serverAssetVersion.publicSignatureData
+                )
+                let privateSecretData = try SHUserContext(user: self.remoteServer.requestor.shUser)
+                    .decryptSecret(
+                        usingEncryptedSecret: encryptedSecret,
+                        protocolSalt: self.remoteServer.requestor.maybeEncryptionProtocolSalt!,
+                        signedWith: self.remoteServer.requestor.publicSignatureData
+                    )
+                
+                let privateSecret = try SymmetricKey(rawRepresentation: privateSecretData)
+                
+                let encryptedData = try SHEncryptedData(
+                    privateSecret: privateSecret,
+                    clearData: decyptedAssetVersion
+                )
+                
+                manifest[serverAssetVersionQuality] = (url, encryptedData.encryptedData)
+            }
         }
         
         return manifest
