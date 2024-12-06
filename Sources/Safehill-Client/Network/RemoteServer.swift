@@ -747,8 +747,8 @@ struct RemoteServer : SHServerAPI {
         
         var assetCreationDate: Date
         if asset.creationDate == nil {
-            log.warning("No asset creation date. Assuming 1/1/1970")
-            assetCreationDate = Date.init(timeIntervalSince1970: 0)
+            log.warning("No asset creation date. Assuming NOW")
+            assetCreationDate = Date()
         } else {
             assetCreationDate = asset.creationDate!
         }

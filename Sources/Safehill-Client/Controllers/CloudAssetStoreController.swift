@@ -38,7 +38,7 @@ struct SHAssetStoreController {
         with groupId: String,
         filterVersions: [SHAssetQuality]? = nil,
         force: Bool
-    ) throws -> SHServerAsset {
+    ) async throws -> SHServerAsset {
         
         let serverAsset = try self.createRemoteAsset(
             encryptedAsset,
@@ -47,22 +47,18 @@ struct SHAssetStoreController {
             force: force
         )
         
-        /// Only upload if the asset wasn't already uploaded by someone else
-        if serverAsset.createdBy == self.user.identifier {
-            do {
-                try self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
-            } catch {
-                try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
-                throw error
-            }
+        guard serverAsset.createdBy == self.user.identifier else {
+            throw SHHTTPError.ServerError.unexpectedResponse("The server returned a different creator for this asset just created. This isn't supposed to happen. Aborting")
+        }
+        
+        do {
+            try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
+        } catch {
+            try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
+            throw error
         }
         
         return serverAsset
-    }
-    
-    func download(globalIdentifiers: [GlobalIdentifier],
-                  filterVersions: [SHAssetQuality]? = nil) throws -> [any SHDecryptedAsset] {
-        throw SHAssetStoreError.notImplemented
     }
 }
 
@@ -138,10 +134,10 @@ extension SHAssetStoreController {
         serverAsset: SHServerAsset,
         asset: any SHEncryptedAsset,
         filterVersions: [SHAssetQuality]?
-    ) throws {
+    ) async throws {
         log.info("uploading asset \(asset.globalIdentifier) to the CDN")
         
-        try self.user.serverProxy.upload(
+        try await self.user.serverProxy.upload(
             serverAsset: serverAsset,
             asset: asset,
             filterVersions: filterVersions

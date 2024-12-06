@@ -3,8 +3,14 @@ import KnowledgeBase
 import os
 
 
-// MARK: - Sync Operation
-
+///
+/// ** ASSETS SYNC OPERATION **
+///
+/// Generates a diff between local and corresponding remote descriptors. Based on the diff:
+/// - Removes assets only on local
+/// - Updates assets on both that are different on remote
+///
+///
 public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-ASSETS-SYNC")

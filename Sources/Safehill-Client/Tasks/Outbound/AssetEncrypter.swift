@@ -374,6 +374,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 self.serverProxy.localServer.create(
                     assets: [encryptedAsset],
                     groupId: encryptionRequest.groupId,
+                    createdBy: self.user,
+                    createdAt: Date(),
                     createdFromThreadId: encryptionRequest.asPhotoMessageInThreadId,
                     filterVersions: nil,
                     overwriteFileIfExists: true
@@ -384,7 +386,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     case .success(_):
                         ///
                         /// Encryption is completed.
-                        /// Create an item in the history queue for this upload, and remove the one in the upload queue
+                        /// Remove the item in the encrypt queue and add to the upload queue
                         ///
                         do {
                             try self.markAsSuccessful(
