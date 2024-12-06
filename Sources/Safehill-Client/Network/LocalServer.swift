@@ -784,7 +784,7 @@ struct LocalServer : SHServerAPI {
                 continue
             }
             
-            guard let sharedBy = assetStore.value(forKey: "creator::\(globalIdentifier)") as? UserIdentifier else {
+            guard let sharedBy = try? assetStore.values(for: ["creator::\(globalIdentifier)"]).first as? UserIdentifier else {
                 log.warning("failed to retrieve creator for asset \(globalIdentifier)")
                 continue
             }
