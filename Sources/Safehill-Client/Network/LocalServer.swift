@@ -972,6 +972,11 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        var groupIdsCondition = KBGenericCondition(value: true)
+        for groupId in groupInfoById.keys {
+            groupIdsCondition = groupIdsCondition.or(KBGenericCondition(.endsWith, value: groupId))
+        }
+        
         ///
         /// Update the USER STORE
         /// - invitations
@@ -984,7 +989,11 @@ struct LocalServer : SHServerAPI {
         
         do {
             let allInvitationKeys = try userStore.keys(
-                    matching: KBGenericCondition(.beginsWith, value: "invitations::")
+                    matching: KBGenericCondition(
+                        .beginsWith, value: "invitations::"
+                    ).and(
+                        groupIdsCondition
+                    )
                 )
             
             for key in allInvitationKeys {
@@ -1044,6 +1053,7 @@ struct LocalServer : SHServerAPI {
         
         ///
         /// Update the ASSET STORE
+        /// - sender
         /// - recipients
         /// - thread assets (photo messages)
         ///
@@ -1054,7 +1064,30 @@ struct LocalServer : SHServerAPI {
         var assetStoreInvalidKeys = Set<String>()
         
         do {
-            /// 
+            // Remove all senders for the groups
+            let senderCondition = KBGenericCondition(
+                .beginsWith, value: "sender::"
+            ).and(groupIdsCondition)
+            
+            let _ = try assetStore.removeValues(forKeysMatching: senderCondition)
+            
+            // Add senders for the groups for each asset
+            for (groupId, diff) in groupInfoById {
+                guard let groupCreator = diff.groupInfo.createdBy else {
+                    continue
+                }
+                for assetId in diff.descriptorByAssetId.keys {
+                    assetStoreWriteBatch.set(value: true, for: [
+                        "sender",
+                        groupCreator,
+                        SHAssetQuality.lowResolution.rawValue,
+                        assetId,
+                        groupId
+                    ].joined(separator: "::"))
+                }
+            }
+            
+            ///
             /// Get all the `receiver::` keys to determine which values need update
             ///
             let recipientDetails = try assetStore
@@ -1063,6 +1096,7 @@ struct LocalServer : SHServerAPI {
                         KBGenericCondition(
                             .beginsWith, value: "receiver::"
                         )
+                        .and(groupIdsCondition)
                     )
                 
             for (key, rawVersionDetails) in recipientDetails {
@@ -1172,16 +1206,45 @@ struct LocalServer : SHServerAPI {
             return
         }
         
-        let shareCondition = KBGenericCondition(
-            .beginsWith, value: "receiver::"
-        ).or(KBGenericCondition(
-            .beginsWith, value: "sender::"
-        ))
-
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
         var groupIdCondition = KBGenericCondition(value: false)
         for groupId in groupIds {
             groupIdCondition = groupIdCondition.or(KBGenericCondition(.endsWith, value: groupId))
         }
+        
+        /// Remove from the **USER STORE**:
+        /// 1. Invitations info (start with "invitation::", ends with groupId)
+        /// 2. group titles (is "assets-groups::\(groupId)::encryptedTitle")
+        let userStoreWriteBatch = userStore.writeBatch()
+        for groupId in groupIds {
+            userStoreWriteBatch.set(value: nil, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::encryptedTitle")
+        }
+        do {
+            try userStoreWriteBatch.write()
+            let _ = try userStore.removeValues(forKeysMatching: KBGenericCondition(
+                .beginsWith, value: "invitations::"
+            ).and(groupIdCondition))
+        } catch {
+            completionHandler(.failure(error))
+            return
+        }                         
+        
+        /// Remove from the **ASSET STORE**:
+        /// 1. Sender info (start with "sender::", ends with groupId)
+        /// 2. Recipient info (start with "receiver::", ends with groupId)
+        /// 3. Info about thread-groupId linkage ("user-threads::", ends with groupId)
+        
+        let shareCondition = KBGenericCondition(
+            .beginsWith, value: "receiver::"
+        ).or(KBGenericCondition(
+            .beginsWith, value: "sender::"
+        )).or(KBGenericCondition(
+            .beginsWith, value: "\(SHInteractionAnchor.thread.rawValue)::"
+        ))
         
         let condition = shareCondition.and(groupIdCondition)
         assetStore.removeValues(forKeysMatching: condition) { result in
