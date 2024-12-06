@@ -157,7 +157,7 @@ struct AssetDescriptorsDiff {
             
             for (groupId, groupInfo) in remoteDescriptor.sharingInfo.groupInfoById {
                 if let localGroupInfo = correspondingLocalDescriptor.sharingInfo.groupInfoById[groupId] {
-                    if localGroupInfo.createdAt == groupInfo.createdAt,
+                    if Int(localGroupInfo.createdAt?.timeIntervalSince1970 ?? 0) == Int(groupInfo.createdAt?.timeIntervalSince1970 ?? 0),
                        localGroupInfo.createdBy == groupInfo.createdBy,
                        localGroupInfo.encryptedTitle == groupInfo.encryptedTitle,
                        localGroupInfo.createdFromThreadId == groupInfo.createdFromThreadId,
