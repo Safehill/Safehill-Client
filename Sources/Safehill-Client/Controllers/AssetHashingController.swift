@@ -63,7 +63,7 @@ public class SHHashingController {
         return globalIdentifier
     }
     
-    static func perceptualHash(forImageData imageData: Data) throws -> PerceptualHash {
+    public static func perceptualHash(forImageData imageData: Data) throws -> PerceptualHash {
         guard imageData.count > 0 else {
             throw Error.noImageData
         }
