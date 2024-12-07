@@ -7,7 +7,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     
     let globalIdentifier: GlobalIdentifier
     let localIdentifier: LocalIdentifier?
-    let perceptualHash: PerceptualHash
+    let perceptualHash: PerceptualHash? // Optional for backward compatibility
     let quality: SHAssetQuality
     let senderEncryptedSecret: Data
     let publicKey: Data
@@ -56,8 +56,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         let qualityStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.quality.rawValue) as? String
         let senderEncryptedSecretBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderEncryptedSecret.rawValue) as? String
         let publicKeyBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicKey.rawValue) as? String
-        let publicSignatureBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicSignature.rawValue)
-        as? String
+        let publicSignatureBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicSignature.rawValue) as? String
         let creationDateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.creationDate.rawValue) as? String
         let uploadStateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.uploadState.rawValue) as? String
         

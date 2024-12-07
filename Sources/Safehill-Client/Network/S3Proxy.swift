@@ -230,7 +230,7 @@ struct S3Proxy {
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: asset.globalIdentifier,
                     localIdentifier: asset.localIdentifier,
-                    perceptualHash: asset.perceptualHash ?? "",
+                    perceptualHash: asset.perceptualHash,
                     creationDate: asset.creationDate,
                     encryptedVersions: versionsDict
                 )

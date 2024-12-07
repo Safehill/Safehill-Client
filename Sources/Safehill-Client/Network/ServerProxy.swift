@@ -2094,4 +2094,11 @@ extension SHServerProxy {
     ) {
         self.remoteServer.requestAccess(toThreadId: toThreadId, completionHandler: completionHandler)
     }
+    
+    public func updateAssetFingerprint(
+        for globalIdentifier: GlobalIdentifier,
+        _ fingerprint: PerceptualHash
+    ) async throws {
+        try await self.remoteServer.updateAssetFingerprint(for: globalIdentifier, fingerprint)
+    }
 }

@@ -1986,7 +1986,7 @@ struct LocalServer : SHServerAPI {
                 let newValue = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: value.globalIdentifier,
                     localIdentifier: value.localIdentifier,
-                    perceptualHash: value.perceptualHash,
+                    perceptualHash: value.perceptualHash!, // All new uploads will have a perceptual hash, it's optional for backward compat
                     quality: value.quality,
                     senderEncryptedSecret: value.senderEncryptedSecret,
                     publicKey: value.publicKey,
@@ -4248,5 +4248,13 @@ struct LocalServer : SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+        throw SHHTTPError.ServerError.notImplemented
+    }
+    
+    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+        throw SHHTTPError.ServerError.notImplemented
     }
 }

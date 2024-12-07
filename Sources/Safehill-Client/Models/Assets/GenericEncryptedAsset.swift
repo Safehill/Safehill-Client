@@ -129,7 +129,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 encryptedAssetById[metadata.globalIdentifier] = SHGenericEncryptedAsset(
                     globalIdentifier: metadata.globalIdentifier,
                     localIdentifier: metadata.localIdentifier,
-                    perceptualHash: metadata.perceptualHash,
+                    perceptualHash: metadata.perceptualHash ?? "0",
                     creationDate: metadata.creationDate,
                     encryptedVersions: [quality: version]
                 )
