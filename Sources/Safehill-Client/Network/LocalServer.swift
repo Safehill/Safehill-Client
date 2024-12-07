@@ -714,7 +714,7 @@ struct LocalServer : SHServerAPI {
                     createdBy: createdBy,
                     createdAt: value.groupCreationDate,
                     createdFromThreadId: groupIdsToThreadIds[value.groupId],
-                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation
+                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation ?? [:]
                 )
                 
                 if groupInfoByIdByAssetGid[assetGid] == nil {
