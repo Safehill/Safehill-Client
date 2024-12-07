@@ -131,6 +131,7 @@ extension SHRemoteDownloadOperation {
                             asset: SHUploadableAsset(
                                 localIdentifier: descriptor.localIdentifier,
                                 globalIdentifier: descriptor.globalIdentifier,
+                                perceptualHash: descriptor.perceptualHash ?? "",
                                 creationDate: descriptor.creationDate,
                                 data: [:]
                             ),
@@ -185,6 +186,7 @@ extension SHRemoteDownloadOperation {
                     asset: SHUploadableAsset(
                         localIdentifier: descriptor.localIdentifier,
                         globalIdentifier: descriptor.globalIdentifier,
+                        perceptualHash: descriptor.perceptualHash ?? "",
                         creationDate: descriptor.creationDate,
                         data: [:]
                     ),

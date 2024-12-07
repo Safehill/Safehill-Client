@@ -746,6 +746,7 @@ extension SHServerProxy {
                                                 let updatedValue = SHGenericEncryptedAsset(
                                                     globalIdentifier: existing.globalIdentifier,
                                                     localIdentifier: existing.localIdentifier,
+                                                    perceptualHash: existing.perceptualHash,
                                                     creationDate: existing.creationDate,
                                                     encryptedVersions: updatedVersions
                                                 )
@@ -2092,5 +2093,12 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.remoteServer.requestAccess(toThreadId: toThreadId, completionHandler: completionHandler)
+    }
+    
+    public func updateAssetFingerprint(
+        for globalIdentifier: GlobalIdentifier,
+        _ fingerprint: PerceptualHash
+    ) async throws {
+        try await self.remoteServer.updateAssetFingerprint(for: globalIdentifier, fingerprint)
     }
 }

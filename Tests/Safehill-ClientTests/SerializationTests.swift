@@ -128,6 +128,7 @@ final class Safehill_SerializationTests: XCTestCase {
         let asset1 = SHUploadableAsset(
             localIdentifier: "localIdentifier",
             globalIdentifier: "globalIdentifier",
+            perceptualHash: nil,
             creationDate: nil,
             data: [:]
         )

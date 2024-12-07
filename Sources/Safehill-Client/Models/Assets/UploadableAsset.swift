@@ -9,12 +9,14 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     
     public let localIdentifier: LocalIdentifier?
     public let globalIdentifier: GlobalIdentifier
+    public let perceptualHash: PerceptualHash
     public let creationDate: Date?
     public let data: [SHAssetQuality: Data]
     
     enum CodingKeys: String, CodingKey {
         case localIdentifier
         case globalIdentifier
+        case perceptualHash
         case creationDate
         case data
     }
@@ -22,11 +24,13 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public init(
         localIdentifier: LocalIdentifier?,
         globalIdentifier: GlobalIdentifier,
+        perceptualHash: PerceptualHash,
         creationDate: Date?,
         data: [SHAssetQuality: Data]
     ) {
         self.localIdentifier = localIdentifier
         self.globalIdentifier = globalIdentifier
+        self.perceptualHash = perceptualHash
         self.creationDate = creationDate
         self.data = data
     }
@@ -34,6 +38,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public required convenience init?(coder decoder: NSCoder) {
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
+        let perceptualHash = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.perceptualHash.rawValue)
         let creationDateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.creationDate.rawValue) as? String
         
         var dataDict = [SHAssetQuality: Data]()
@@ -43,8 +48,13 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
             }
         }
         
-        guard let globalIdentifier = globalIdentifier as? String  else {
+        guard let globalIdentifier = globalIdentifier as? GlobalIdentifier else {
             log.error("unexpected value for globalIdentifier when decoding SHUploadableAsset object")
+            return nil
+        }
+        
+        guard let perceptualHash = perceptualHash as? PerceptualHash else {
+            log.error("unexpected value for perceptualHash when decoding SHUploadableAsset object")
             return nil
         }
         
@@ -60,8 +70,9 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
         }
         
         self.init(
-            localIdentifier: localIdentifier as? String,
+            localIdentifier: localIdentifier as? LocalIdentifier,
             globalIdentifier: globalIdentifier,
+            perceptualHash: perceptualHash,
             creationDate: creationDate,
             data: dataDict
         )
@@ -70,6 +81,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public func encode(with coder: NSCoder) {
         coder.encode(self.globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(self.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
+        coder.encode(self.perceptualHash, forKey: CodingKeys.perceptualHash.rawValue)
         coder.encode(self.creationDate?.iso8601withFractionalSeconds, forKey: CodingKeys.creationDate.rawValue)
         
         for (version, data) in self.data {

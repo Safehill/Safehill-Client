@@ -5,6 +5,7 @@ import Foundation
 ///
 public protocol SHAssetDescriptor: SHBackedUpAssetIdentifiable {
     var localIdentifier: String? { get set }
+    var perceptualHash: String? { get }
     var creationDate: Date? { get }
     var uploadState: SHAssetDescriptorUploadState { get }
     var sharingInfo: SHDescriptorSharingInfo { get }
