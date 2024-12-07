@@ -23,7 +23,7 @@ public class SHHashingController {
         }
     }
     
-    static func globalIdentifier(
+    public static func globalIdentifier(
         for photoAsset: SHApplePhotoAsset
     ) async -> GlobalIdentifier {
         let exifData = await photoAsset.getExifData()
@@ -77,7 +77,7 @@ public class SHHashingController {
         return "\(osHash)"
     }
     
-    static func calculateDistanceBetween(
+    public static func calculateDistanceBetween(
         lhsPerceptualHash: PerceptualHash,
         rhsPerceptualHash: PerceptualHash
     ) throws -> OSHashDistanceType {
