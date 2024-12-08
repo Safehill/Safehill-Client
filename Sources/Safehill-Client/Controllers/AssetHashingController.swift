@@ -1,4 +1,4 @@
-import CocoaImageHashing
+@_exported import CocoaImageHashing
 import Photos
 import Safehill_Crypto
 

@@ -12,7 +12,8 @@ let package = Package(
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .library(
             name: "Safehill-Client",
-            targets: ["Safehill-Client"]),
+            targets: ["Safehill-Client"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/Safehill/Safehill-Crypto", exact: "1.1.26"),
@@ -32,7 +33,8 @@ let package = Package(
                 "Yams",
                 "PhoneNumberKit",
                 .product(name: "CocoaImageHashing", package: "cocoaimagehashing")
-            ]
+            ],
+            publicHeadersPath: "include"
         ),
         .testTarget(
             name: "Safehill-ClientTests",
