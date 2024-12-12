@@ -667,6 +667,15 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        let permissionsById: [String: Int]
+        do {
+            permissionsById = try self.permissions(for: recipientDetailsDict.values.compactMap({ $0?.groupId }))
+        } catch {
+            log.critical("error retrieving group permissions. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
         for (key, value) in recipientDetailsDict {
             
             guard let value else {
@@ -714,7 +723,8 @@ struct LocalServer : SHServerAPI {
                     createdBy: createdBy,
                     createdAt: value.groupCreationDate,
                     createdFromThreadId: groupIdsToThreadIds[value.groupId],
-                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation ?? [:]
+                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation ?? [:],
+                    permissions: permissionsById[value.groupId]
                 )
                 
                 if groupInfoByIdByAssetGid[assetGid] == nil {
@@ -1461,6 +1471,7 @@ struct LocalServer : SHServerAPI {
                 createdBy: any SHServerUser,
                 createdAt: Date,
                 createdFromThreadId: String?,
+                permissions: Int?,
                 filterVersions: [SHAssetQuality]?,
                 overwriteFileIfExists: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
@@ -1499,7 +1510,8 @@ struct LocalServer : SHServerAPI {
                             createdBy: createdBy.identifier,
                             createdAt: createdAt,
                             createdFromThreadId: createdFromThreadId,
-                            invitedUsersPhoneNumbers: nil
+                            invitedUsersPhoneNumbers: nil,
+                            permissions: permissions
                         )
                     ]
                 )
@@ -1671,6 +1683,10 @@ struct LocalServer : SHServerAPI {
                             groupId
                         ].joined(separator: "::")
                     )
+                    
+                    if let permissions = groupInfo.permissions {
+                        writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::permissions")
+                    }
                 }
                 
                 for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
@@ -2009,6 +2025,7 @@ struct LocalServer : SHServerAPI {
     
     func share(asset: SHShareableEncryptedAsset,
                asPhotoMessageInThreadId: String?,
+               permissions: Int?,
                suppressNotification: Bool = true,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -2074,6 +2091,8 @@ struct LocalServer : SHServerAPI {
             }
             
         }
+        
+        writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::permissions")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -2769,6 +2788,35 @@ struct LocalServer : SHServerAPI {
                 result[groupId] = threadId
                 return result
             }
+    }
+    
+    func permissions(for groupId: String) throws -> Int {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            throw KBError.databaseNotReady
+        }
+        
+        return try assetStore.value(for: "\(SHInteractionAnchor.group.rawValue)::permissions") as? Int ?? 0
+    }
+    
+    func permissions(for groupIds: [String]) throws -> [String: Int] {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            throw KBError.databaseNotReady
+        }
+        
+        return try assetStore.dictionaryRepresentation(
+            forKeysMatching: KBGenericCondition(.endsWith, value: "::permissions")
+        ).reduce([String: Int]()) { partialResult, dict in
+            guard let groupId = dict.key.components(separatedBy: "::").first else {
+                return partialResult
+            }
+            guard let permissions = dict.value as? Int else {
+                return partialResult
+            }
+            
+            var result = partialResult
+            result[groupId] = permissions
+            return result
+        }
     }
     
     func getAssets(

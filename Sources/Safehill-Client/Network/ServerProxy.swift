@@ -955,11 +955,13 @@ extension SHServerProxy {
     func shareAssetLocally(
         _ asset: SHShareableEncryptedAsset,
         asPhotoMessageInThreadId: String?,
+        permissions: Int?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.localServer.share(
             asset: asset,
-            asPhotoMessageInThreadId: asPhotoMessageInThreadId
+            asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+            permissions: permissions
         ) {
             result in
             switch result {
@@ -973,11 +975,13 @@ extension SHServerProxy {
     
     func share(_ asset: SHShareableEncryptedAsset,
                asPhotoMessageInThreadId: String?,
+               permissions: Int?,
                suppressNotification: Bool = false,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.share(
             asset: asset,
             asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+            permissions: permissions,
             suppressNotification: suppressNotification,
             completionHandler: completionHandler
         )

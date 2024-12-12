@@ -45,6 +45,7 @@ public class SHAssetSharingController {
         with recipients: [any SHServerUser],
         via groupId: String,
         asPhotoMessageInThreadId: String? = nil,
+        permissions: Int?,
         isBackground: Bool = false
     ) async throws {
         log.info("generating encrypted assets for asset with id \(globalIdentifier) for users \(recipients.map({ $0.identifier }))")
@@ -68,6 +69,7 @@ public class SHAssetSharingController {
                     self.serverProxy.share(
                         shareableEncryptedAsset,
                         asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+                        permissions: permissions,
                         suppressNotification: isBackground
                     ) { shareResult in
                         switch shareResult {
@@ -91,7 +93,8 @@ public class SHAssetSharingController {
                                 /// After remote sharing is successful, add `receiver::` rows in local server
                                 self.serverProxy.shareAssetLocally(
                                     shareableEncryptedAsset,
-                                    asPhotoMessageInThreadId: asPhotoMessageInThreadId
+                                    asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+                                    permissions: permissions
                                 ) { _ in
                                     continuation.resume()
                                 }
@@ -116,7 +119,8 @@ public class SHAssetSharingController {
                     versions: [.lowResolution, .hiResolution],
                     createdBy: self.localUser,
                     with: [userToConvert],
-                    via: groupId
+                    via: groupId,
+                    permissions: nil
                 )
             }
         }

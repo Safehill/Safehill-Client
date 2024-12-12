@@ -288,6 +288,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                             with: shareRequest.sharedWith,
                             via: shareRequest.groupId,
                             asPhotoMessageInThreadId: shareRequest.asPhotoMessageInThreadId,
+                            permissions: shareRequest.permissions,
                             isBackground: shareRequest.isBackground
                         )
                     } catch {

@@ -143,10 +143,12 @@ public protocol SHServerAPI {
     /// - Parameters:
     ///   - asset: the asset to share, with references to asset id, version and user id to share with
     ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread and if so which thread
+    ///   - permissions: whether or not the asset should stay confidential, can be downloaded or reshared, or it's public
     ///   - suppressNotification: do not send a notification to the user. For instance, when the high resolution is shared in the background
     ///   - completionHandler: the callback method
     func share(asset: SHShareableEncryptedAsset,
                asPhotoMessageInThreadId: String?,
+               permissions: Int?,
                suppressNotification: Bool,
                completionHandler: @escaping (Result<Void, Error>) -> ())
     
