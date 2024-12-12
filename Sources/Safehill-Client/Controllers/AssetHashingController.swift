@@ -1,4 +1,4 @@
-@_exported import CocoaImageHashing
+import CocoaImageHashing
 import Photos
 import Safehill_Crypto
 
@@ -7,7 +7,7 @@ public typealias PerceptualHashDistance = Int64
 
 public class SHHashingController {
     
-    static let HashingProvider = OSImageHashingProviderId.pHash
+    private static let HashingProvider = OSImageHashingProviderId.pHash
     
     public enum Error: Swift.Error, CustomStringConvertible, LocalizedError {
         case noImageData
