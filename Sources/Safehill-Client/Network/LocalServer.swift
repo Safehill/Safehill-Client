@@ -1737,7 +1737,7 @@ struct LocalServer : SHServerAPI {
             
             for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
                 if let permissions = groupInfo.permissions {
-                    writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::permissions")
+                    writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions")
                 }
                 
                 if let threadId = groupInfo.createdFromThreadId {
@@ -2092,7 +2092,7 @@ struct LocalServer : SHServerAPI {
             
         }
         
-        writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::permissions")
+        writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(asset.groupId)::permissions")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -2795,7 +2795,7 @@ struct LocalServer : SHServerAPI {
             throw KBError.databaseNotReady
         }
         
-        return try assetStore.value(for: "\(SHInteractionAnchor.group.rawValue)::permissions") as? Int ?? 0
+        return try assetStore.value(for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions") as? Int ?? 0
     }
     
     func permissions(for groupIds: [String]) throws -> [String: Int] {
@@ -2806,7 +2806,8 @@ struct LocalServer : SHServerAPI {
         return try assetStore.dictionaryRepresentation(
             forKeysMatching: KBGenericCondition(.endsWith, value: "::permissions")
         ).reduce([String: Int]()) { partialResult, dict in
-            guard let groupId = dict.key.components(separatedBy: "::").first else {
+            let components = dict.key.components(separatedBy: "::")
+            guard components.count == 3, let groupId = components[1] else {
                 return partialResult
             }
             guard let permissions = dict.value as? Int else {
