@@ -1160,6 +1160,8 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
                 }
             }
+            
+            assetStoreWriteBatch.set(value: diff.groupInfo.permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions")
         }
         
         if assetStoreInvalidKeys.isEmpty == false {
