@@ -1683,10 +1683,6 @@ struct LocalServer : SHServerAPI {
                             groupId
                         ].joined(separator: "::")
                     )
-                    
-                    if let permissions = groupInfo.permissions {
-                        writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::permissions")
-                    }
                 }
                 
                 for (recipientUserId, groupIds) in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier {
@@ -1737,22 +1733,26 @@ struct LocalServer : SHServerAPI {
                         }
                     }
                 }
+            }
+            
+            for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
+                if let permissions = groupInfo.permissions {
+                    writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::permissions")
+                }
                 
-                for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
-                    if let threadId = groupInfo.createdFromThreadId {
-                        let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
-                        let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
-                        let threadAsset = DBSecureSerializableConversationThreadAsset(
-                            globalIdentifier: asset.globalIdentifier,
-                            addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
-                            addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
-                            groupId: groupId
-                        )
-                        if threadAssets[threadId] == nil {
-                            threadAssets[threadId] = [threadAsset]
-                        } else {
-                            threadAssets[threadId]!.append(threadAsset)
-                        }
+                if let threadId = groupInfo.createdFromThreadId {
+                    let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
+                    let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+                    let threadAsset = DBSecureSerializableConversationThreadAsset(
+                        globalIdentifier: asset.globalIdentifier,
+                        addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
+                        addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
+                        groupId: groupId
+                    )
+                    if threadAssets[threadId] == nil {
+                        threadAssets[threadId] = [threadAsset]
+                    } else {
+                        threadAssets[threadId]!.append(threadAsset)
                     }
                 }
             }

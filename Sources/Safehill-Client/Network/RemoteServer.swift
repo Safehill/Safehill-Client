@@ -815,7 +815,7 @@ struct RemoteServer : SHServerAPI {
             "versionSharingDetails": versions,
             "groupId": asset.groupId,
             "asPhotoMessageInThreadId": asPhotoMessageInThreadId,
-//            "permissions": permissions,
+            "permissions": permissions,
             "suppressNotification": suppressNotification
         ]
         
