@@ -2807,9 +2807,10 @@ struct LocalServer : SHServerAPI {
             forKeysMatching: KBGenericCondition(.endsWith, value: "::permissions")
         ).reduce([String: Int]()) { partialResult, dict in
             let components = dict.key.components(separatedBy: "::")
-            guard components.count == 3, let groupId = components[1] else {
+            guard components.count == 3 else {
                 return partialResult
             }
+            let groupId = components[1]
             guard let permissions = dict.value as? Int else {
                 return partialResult
             }
