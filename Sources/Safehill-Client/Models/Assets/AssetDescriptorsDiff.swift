@@ -161,6 +161,7 @@ struct AssetDescriptorsDiff {
                        localGroupInfo.createdBy == groupInfo.createdBy,
                        localGroupInfo.encryptedTitle == groupInfo.encryptedTitle,
                        localGroupInfo.createdFromThreadId == groupInfo.createdFromThreadId,
+                       localGroupInfo.permissions == groupInfo.permissions,
                        Set((localGroupInfo.invitedUsersPhoneNumbers ?? [:]).keys)
                         == Set((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys)
                     {

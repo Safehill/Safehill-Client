@@ -9,6 +9,8 @@ public protocol SHAssetGroupInfo {
     var createdAt: Date? { get }
     /// Whether or not the share group was created from a thread (namely is a photo message)
     var createdFromThreadId: String? { get }
+    /// Whether it's confidential, shareable or public. nil means unknown and will default to confidential
+    var permissions: Int? { get }
     /// The list of phone number that have been invited to this group
     var invitedUsersPhoneNumbers: [String: String]? { get }
 }

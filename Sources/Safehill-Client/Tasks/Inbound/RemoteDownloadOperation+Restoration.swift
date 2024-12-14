@@ -141,6 +141,7 @@ extension SHRemoteDownloadOperation {
                             sharedWith: [],
                             invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
                             asPhotoMessageInThreadId: groupInfo.createdFromThreadId,
+                            permissions: groupInfo.permissions ?? 0, // default to .confidential
                             isBackground: false
                         )
                         
@@ -193,8 +194,9 @@ extension SHRemoteDownloadOperation {
                     groupTitle: clearTitle,
                     eventOriginator: senderUser,
                     sharedWith: shareInfo.map({ $0.with }),
-                    invitedUsers: Array((descriptor.sharingInfo.groupInfoById[groupId]?.invitedUsersPhoneNumbers ?? [:]).keys),
-                    asPhotoMessageInThreadId: descriptor.sharingInfo.groupInfoById[groupId]?.createdFromThreadId,
+                    invitedUsers: Array((groupInfo.invitedUsersPhoneNumbers ?? [:]).keys),
+                    asPhotoMessageInThreadId: groupInfo.createdFromThreadId,
+                    permissions: groupInfo.permissions ?? 0, // default to .confidential
                     isBackground: false
                 )
                 

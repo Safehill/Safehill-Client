@@ -13,6 +13,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         case sharedWith
         case invitedUsers
         case asPhotoMessageInThreadId
+        case permissions
         case isBackground
     }
     
@@ -33,6 +34,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
     public let sharedWith: [any SHServerUser] // Empty if it's just a backup request
     public let invitedUsers: [String]
     public let asPhotoMessageInThreadId: String?
+    public let permissions: Int
     ///
     /// If set to true avoids side-effects, such as:
     /// -  calling the delegates
@@ -48,6 +50,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
                 sharedWith users: [any SHServerUser],
                 invitedUsers: [String],
                 asPhotoMessageInThreadId: String?,
+                permissions: Int,
                 isBackground: Bool) {
         self.asset = asset
         self.versions = versions
@@ -57,6 +60,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         self.sharedWith = users
         self.invitedUsers = invitedUsers
         self.asPhotoMessageInThreadId = asPhotoMessageInThreadId
+        self.permissions = permissions
         self.isBackground = isBackground
     }
     
@@ -86,6 +90,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         coder.encode(remoteReceivers, forKey: CodingKeys.sharedWith.rawValue)
         coder.encode(self.invitedUsers, forKey: CodingKeys.invitedUsers.rawValue)
         coder.encode(self.asPhotoMessageInThreadId, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue)
+        coder.encode(self.permissions, forKey: CodingKeys.permissions.rawValue)
         coder.encode(NSNumber(booleanLiteral: self.isBackground), forKey: CodingKeys.isBackground.rawValue)
         
     }
@@ -100,6 +105,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
         let invitedUsers = decoder.decodeObject(of: [NSArray.self, NSString.self], forKey: CodingKeys.invitedUsers.rawValue)
         let bg = decoder.decodeObject(of: NSNumber.self, forKey: CodingKeys.isBackground.rawValue)
         let asPhotoMessageInThreadId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.asPhotoMessageInThreadId.rawValue) as? String
+        let permissions = decoder.decodeInteger(forKey: CodingKeys.permissions.rawValue)
         
         guard let asset = asset else {
             log.error("unexpected value for asset when decoding SHEncryptionRequestQueueItem object")
@@ -175,6 +181,7 @@ public class SHGenericShareableGroupableQueueItem: NSObject, SHShareableGroupabl
                   sharedWith: remoteReceivers,
                   invitedUsers: invitedUsers,
                   asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+                  permissions: permissions,
                   isBackground: isBg.boolValue)
     }
 }
