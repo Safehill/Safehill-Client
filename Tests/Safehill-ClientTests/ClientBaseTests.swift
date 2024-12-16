@@ -170,7 +170,7 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         )
         
         do {
-            let perceptualHash = try SHHashingController.perceptualHash(forImageData: imageData)
+            let perceptualHash = try SHHashingController.perceptualHash(for: imageData)
         } catch {
             // TODO: Use real image data to calculate the perceptual hash
         }
