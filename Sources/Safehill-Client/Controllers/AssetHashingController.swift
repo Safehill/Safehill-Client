@@ -128,7 +128,6 @@ public class SHHashingController {
         cgImage = cgImg
         width = Int(image.platformImage.size.width)
         height = Int(image.platformImage.size.height)
-#endif
         
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
