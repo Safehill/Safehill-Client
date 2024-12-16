@@ -116,12 +116,15 @@ public class SHHashingController {
         let height: Int
         
 #if os(iOS)
-        guard let cgImg = image.platformImage.cgImage else { fatalError("Unable to get CGImage") }
-        cgImage = cgImg
-        width = image.size.width
-        height = image.size.height
+        guard let cgImg = image.platformImage.cgImage else {
+            fatalError("Unable to get CGImage")
+        }
 #elseif os(macOS)
-        guard let cgImg = image.platformImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fatalError("Unable to get CGImage") }
+        guard let cgImg = image.platformImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            fatalError("Unable to get CGImage")
+        }
+#endif
+        
         cgImage = cgImg
         width = Int(image.platformImage.size.width)
         height = Int(image.platformImage.size.height)
