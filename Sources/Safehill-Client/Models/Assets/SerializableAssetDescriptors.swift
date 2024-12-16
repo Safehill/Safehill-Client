@@ -10,7 +10,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
-    public let perceptualHash: PerceptualHash?
+    public let perceptualHash: PerceptualHash
     public let creationDate: Date?
     public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
@@ -36,7 +36,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                perceptualHash: PerceptualHash?,
+                perceptualHash: PerceptualHash,
                 creationDate: Date?,
                 uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHGenericDescriptorSharingInfo) {
@@ -60,6 +60,10 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
             log.error("unexpected value for globalIdentifier when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
+        guard let perceptualHash = perceptualHash as? String else {
+            log.error("unexpected value for perceptualHash when decoding SHGenericAssetDescriptorClass object")
+            return nil
+        }
         guard let uploadStateStr = uploadStateStr as? String,
               let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr)
         else {
@@ -75,7 +79,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
         self.init(
             globalIdentifier: globalIdentifier,
             localIdentifier: localIdentifier as? LocalIdentifier,
-            perceptualHash: perceptualHash as? PerceptualHash,
+            perceptualHash: perceptualHash,
             creationDate: creationDate as? Date,
             uploadState: uploadState,
             sharingInfo: sharingInfo

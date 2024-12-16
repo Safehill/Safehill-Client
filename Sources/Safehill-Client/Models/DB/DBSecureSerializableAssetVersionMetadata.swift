@@ -7,7 +7,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     
     let globalIdentifier: GlobalIdentifier
     let localIdentifier: LocalIdentifier?
-    let perceptualHash: PerceptualHash? // Optional for backward compatibility
+    let perceptualHash: PerceptualHash
     let quality: SHAssetQuality
     let senderEncryptedSecret: Data
     let publicKey: Data
@@ -65,11 +65,6 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
             return nil
         }
         
-        guard let perceptualHash = perceptualHash else {
-            log.error("unexpected value for perceptualHash when decoding DBSecureSerializableAssetVersionMetadata object")
-            return nil
-        }
-        
         guard let qualityStr,
               let quality = SHAssetQuality(rawValue: qualityStr) else {
             log.error("unexpected value for quality when decoding DBSecureSerializableAssetVersionMetadata object")
@@ -114,7 +109,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         self.init(
             globalIdentifier: globalIdentifier,
             localIdentifier: localIdentifier,
-            perceptualHash: perceptualHash,
+            perceptualHash: perceptualHash ?? "0",
             quality: quality,
             senderEncryptedSecret: senderEncryptedSecret,
             publicKey: publicKey,

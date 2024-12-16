@@ -84,11 +84,6 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
         let size = SHSizeForQuality(quality: .lowResolution)
         let image = try await self.phAsset.imageSynchronous(forSize: size, usingImageManager: self.imageManager)
         return try SHHashingController.perceptualHash(for: image)
-        guard let imageData = try await self.data(for: [.lowResolution])[.lowResolution]
-        else {
-            throw SHHashingController.Error.noImageData
-        }
-        return try SHHashingController.perceptualHash(for: imageData)
     }
     
     public func encode(with coder: NSCoder) {

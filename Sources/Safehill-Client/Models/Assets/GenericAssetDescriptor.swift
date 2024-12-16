@@ -3,7 +3,7 @@ import Foundation
 public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public let globalIdentifier: GlobalIdentifier
     public var localIdentifier: LocalIdentifier?
-    public var perceptualHash: PerceptualHash?
+    public var perceptualHash: PerceptualHash
     public let creationDate: Date?
     public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
@@ -31,7 +31,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
         localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
-        perceptualHash = try? container.decode(String.self, forKey: .perceptualHash)
+        perceptualHash = try container.decode(String.self, forKey: .perceptualHash)
         let dateString = try? container.decode(String.self, forKey: .creationDate)
         creationDate = dateString?.iso8601withFractionalSeconds
         let uploadStateString = try container.decode(String.self, forKey: .uploadState)
@@ -46,7 +46,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                perceptualHash: PerceptualHash?,
+                perceptualHash: PerceptualHash,
                 creationDate: Date?,
                 uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHDescriptorSharingInfo) {

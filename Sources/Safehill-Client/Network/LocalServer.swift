@@ -740,6 +740,7 @@ struct LocalServer : SHServerAPI {
         ///
         var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetDescriptorUploadState]]()
         var localInfoByGlobalIdentifier = [GlobalIdentifier: (phAssetId: LocalIdentifier?, creationDate: Date?)]()
+        var perceptualHashByGlobalIdentifier = [GlobalIdentifier: PerceptualHash]()
         
         var condition = KBGenericCondition(value: false)
         for quality in SHAssetQuality.all {
@@ -784,6 +785,8 @@ struct LocalServer : SHServerAPI {
                 phAssetId: localInfoByGlobalIdentifier[v.globalIdentifier]?.phAssetId ?? v.localIdentifier,
                 creationDate: localInfoByGlobalIdentifier[v.globalIdentifier]?.creationDate ?? v.creationDate
             )
+            
+            perceptualHashByGlobalIdentifier[v.globalIdentifier] = v.perceptualHash
         }
         
         for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
@@ -860,7 +863,7 @@ struct LocalServer : SHServerAPI {
             let descriptor = SHGenericAssetDescriptor(
                 globalIdentifier: globalIdentifier,
                 localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
-                perceptualHash: nil,
+                perceptualHash: perceptualHashByGlobalIdentifier[globalIdentifier]!,
                 creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
                 uploadState: combinedUploadState,
                 sharingInfo: sharingInfo
@@ -1503,7 +1506,7 @@ struct LocalServer : SHServerAPI {
             let phantomAssetDescriptor = SHGenericAssetDescriptor(
                 globalIdentifier: encryptedAsset.globalIdentifier,
                 localIdentifier: encryptedAsset.localIdentifier,
-                perceptualHash: nil,
+                perceptualHash: encryptedAsset.perceptualHash,
                 creationDate: encryptedAsset.creationDate,
                 uploadState: .started,
                 sharingInfo: SHGenericDescriptorSharingInfo(
@@ -2004,7 +2007,7 @@ struct LocalServer : SHServerAPI {
                 let newValue = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: value.globalIdentifier,
                     localIdentifier: value.localIdentifier,
-                    perceptualHash: value.perceptualHash!, // All new uploads will have a perceptual hash, it's optional for backward compat
+                    perceptualHash: value.perceptualHash,
                     quality: value.quality,
                     senderEncryptedSecret: value.senderEncryptedSecret,
                     publicKey: value.publicKey,
