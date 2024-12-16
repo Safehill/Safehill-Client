@@ -378,6 +378,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     createdBy: self.user,
                     createdAt: Date(),
                     createdFromThreadId: encryptionRequest.asPhotoMessageInThreadId,
+                    permissions: encryptionRequest.permissions,
                     filterVersions: nil,
                     overwriteFileIfExists: true
                 ) { result in

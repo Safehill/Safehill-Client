@@ -31,6 +31,7 @@ public struct SHUploadPipeline {
     ///   - recipients: the recipient users
     ///   - invitedUsers: the phone numbers invited to the share with groupId
     ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread, and if so which thread
+    ///   - permissions: whether or not the asset should stay confidential, can be downloaded or reshared, or it's public
     public static func enqueueUpload(
         of asset: SHUploadableAsset,
         groupId: String,
@@ -38,7 +39,8 @@ public struct SHUploadPipeline {
         sender: any SHServerUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
-        asPhotoMessageInThreadId: String?
+        asPhotoMessageInThreadId: String?,
+        permissions: Int
     ) throws {
         
         let request = SHEncryptionRequestQueueItem(
@@ -50,6 +52,7 @@ public struct SHUploadPipeline {
             sharedWith: recipients,
             invitedUsers: invitedUsers,
             asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+            permissions: permissions,
             isBackground: false
         )
         
@@ -81,6 +84,7 @@ public struct SHUploadPipeline {
     ///   - sender: the user sending the asset
     ///   - recipients: the recipient users
     ///   - asPhotoMessageInThreadId: whether or not the asset is being shared in the context of a thread, and if so which thread
+    ///   - permissions: whether or not the asset should stay confidential, can be downloaded or reshared, or it's public
     public static func enqueueShare(
         of asset: SHUploadableAsset,
         groupId: String,
@@ -88,7 +92,8 @@ public struct SHUploadPipeline {
         sender: SHAuthenticatedLocalUser,
         recipients: [any SHServerUser],
         invitedUsers: [String],
-        asPhotoMessageInThreadId: String?
+        asPhotoMessageInThreadId: String?,
+        permissions: Int
     ) throws {
         let request = SHEncryptionRequestQueueItem(
             asset: asset,
@@ -99,6 +104,7 @@ public struct SHUploadPipeline {
             sharedWith: recipients,
             invitedUsers: invitedUsers,
             asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+            permissions: permissions,
             isBackground: false
         )
         

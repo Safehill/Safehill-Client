@@ -790,6 +790,7 @@ struct RemoteServer : SHServerAPI {
     
     func share(asset: SHShareableEncryptedAsset,
                asPhotoMessageInThreadId: String?,
+               permissions: Int?,
                suppressNotification: Bool,
                completionHandler: @escaping (Swift.Result<Void, Error>) -> ()) {
         
@@ -815,6 +816,7 @@ struct RemoteServer : SHServerAPI {
             "versionSharingDetails": versions,
             "groupId": asset.groupId,
             "asPhotoMessageInThreadId": asPhotoMessageInThreadId,
+            "permissions": permissions,
             "suppressNotification": suppressNotification
         ]
         

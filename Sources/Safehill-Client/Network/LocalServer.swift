@@ -667,6 +667,15 @@ struct LocalServer : SHServerAPI {
             return
         }
         
+        let permissionsById: [String: Int]
+        do {
+            permissionsById = try self.permissions(for: recipientDetailsDict.values.compactMap({ $0?.groupId }))
+        } catch {
+            log.critical("error retrieving group permissions. \(error.localizedDescription)")
+            completionHandler(.failure(error))
+            return
+        }
+        
         for (key, value) in recipientDetailsDict {
             
             guard let value else {
@@ -714,7 +723,8 @@ struct LocalServer : SHServerAPI {
                     createdBy: createdBy,
                     createdAt: value.groupCreationDate,
                     createdFromThreadId: groupIdsToThreadIds[value.groupId],
-                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation
+                    invitedUsersPhoneNumbers: thisGroupPhoneNumberInvitation ?? [:],
+                    permissions: permissionsById[value.groupId]
                 )
                 
                 if groupInfoByIdByAssetGid[assetGid] == nil {
@@ -1151,6 +1161,8 @@ struct LocalServer : SHServerAPI {
                     log.error("failed to update group id thread id mapping from remote to local server for group \(groupId). \(error.localizedDescription)")
                 }
             }
+            
+            assetStoreWriteBatch.set(value: diff.groupInfo.permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions")
         }
         
         if assetStoreInvalidKeys.isEmpty == false {
@@ -1462,6 +1474,7 @@ struct LocalServer : SHServerAPI {
                 createdBy: any SHServerUser,
                 createdAt: Date,
                 createdFromThreadId: String?,
+                permissions: Int?,
                 filterVersions: [SHAssetQuality]?,
                 overwriteFileIfExists: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
@@ -1502,7 +1515,8 @@ struct LocalServer : SHServerAPI {
                             createdBy: createdBy.identifier,
                             createdAt: createdAt,
                             createdFromThreadId: createdFromThreadId,
-                            invitedUsersPhoneNumbers: nil
+                            invitedUsersPhoneNumbers: nil,
+                            permissions: permissions
                         )
                     ]
                 )
@@ -1725,22 +1739,26 @@ struct LocalServer : SHServerAPI {
                         }
                     }
                 }
+            }
+            
+            for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
+                if let permissions = groupInfo.permissions {
+                    writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions")
+                }
                 
-                for (groupId, groupInfo) in descriptor.sharingInfo.groupInfoById {
-                    if let threadId = groupInfo.createdFromThreadId {
-                        let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
-                        let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
-                        let threadAsset = DBSecureSerializableConversationThreadAsset(
-                            globalIdentifier: asset.globalIdentifier,
-                            addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
-                            addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
-                            groupId: groupId
-                        )
-                        if threadAssets[threadId] == nil {
-                            threadAssets[threadId] = [threadAsset]
-                        } else {
-                            threadAssets[threadId]!.append(threadAsset)
-                        }
+                if let threadId = groupInfo.createdFromThreadId {
+                    let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
+                    let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
+                    let threadAsset = DBSecureSerializableConversationThreadAsset(
+                        globalIdentifier: asset.globalIdentifier,
+                        addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
+                        addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
+                        groupId: groupId
+                    )
+                    if threadAssets[threadId] == nil {
+                        threadAssets[threadId] = [threadAsset]
+                    } else {
+                        threadAssets[threadId]!.append(threadAsset)
                     }
                 }
             }
@@ -2015,6 +2033,7 @@ struct LocalServer : SHServerAPI {
     
     func share(asset: SHShareableEncryptedAsset,
                asPhotoMessageInThreadId: String?,
+               permissions: Int?,
                suppressNotification: Bool = true,
                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
@@ -2080,6 +2099,8 @@ struct LocalServer : SHServerAPI {
             }
             
         }
+        
+        writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(asset.groupId)::permissions")
         
         writeBatch.write(completionHandler: completionHandler)
     }
@@ -2775,6 +2796,37 @@ struct LocalServer : SHServerAPI {
                 result[groupId] = threadId
                 return result
             }
+    }
+    
+    func permissions(for groupId: String) throws -> Int {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            throw KBError.databaseNotReady
+        }
+        
+        return try assetStore.value(for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions") as? Int ?? 0
+    }
+    
+    func permissions(for groupIds: [String]) throws -> [String: Int] {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            throw KBError.databaseNotReady
+        }
+        
+        return try assetStore.dictionaryRepresentation(
+            forKeysMatching: KBGenericCondition(.endsWith, value: "::permissions")
+        ).reduce([String: Int]()) { partialResult, dict in
+            let components = dict.key.components(separatedBy: "::")
+            guard components.count == 3 else {
+                return partialResult
+            }
+            let groupId = components[1]
+            guard let permissions = dict.value as? Int else {
+                return partialResult
+            }
+            
+            var result = partialResult
+            result[groupId] = permissions
+            return result
+        }
     }
     
     func getAssets(

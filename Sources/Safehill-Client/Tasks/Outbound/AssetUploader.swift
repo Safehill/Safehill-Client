@@ -98,6 +98,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         let sharedWith = request.sharedWith
         let invitedUsers = request.invitedUsers
         let asPhotoMessageInThreadId = request.asPhotoMessageInThreadId
+        let permissions = request.permissions
         let isBackground = request.isBackground
         
         /// Dequeue from Upload queue
@@ -153,6 +154,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 sharedWith: sharedWith,
                 invitedUsers: invitedUsers,
                 asPhotoMessageInThreadId: asPhotoMessageInThreadId,
+                permissions: permissions,
                 isBackground: isBackground
             )
             try request.enqueue(in: shareQueue, with: request.identifier)
