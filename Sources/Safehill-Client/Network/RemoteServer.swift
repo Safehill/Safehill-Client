@@ -768,7 +768,7 @@ struct RemoteServer : SHServerAPI {
         var createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
-            "perceptualIdentifier": asset.perceptualHash,
+            "perceptualHash": asset.perceptualHash,
             "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions
