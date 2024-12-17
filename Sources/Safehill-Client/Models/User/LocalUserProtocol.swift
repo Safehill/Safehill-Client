@@ -147,7 +147,7 @@ extension SHLocalUserProtocol {
         return SHGenericDecryptedAsset(
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
-            perceptualHash: asset.perceptualHash,
+            fingerprint: asset.fingerprint,
             decryptedVersions: decryptedVersions,
             creationDate: asset.creationDate
         )

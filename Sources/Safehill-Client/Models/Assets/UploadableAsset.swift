@@ -9,14 +9,14 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     
     public let localIdentifier: LocalIdentifier?
     public let globalIdentifier: GlobalIdentifier
-    public let perceptualHash: PerceptualHash
+    public let fingerprint: PerceptualHash
     public let creationDate: Date?
     public let data: [SHAssetQuality: Data]
     
     enum CodingKeys: String, CodingKey {
         case localIdentifier
         case globalIdentifier
-        case perceptualHash
+        case fingerprint
         case creationDate
         case data
     }
@@ -24,13 +24,13 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public init(
         localIdentifier: LocalIdentifier?,
         globalIdentifier: GlobalIdentifier,
-        perceptualHash: PerceptualHash,
+        fingerprint: PerceptualHash,
         creationDate: Date?,
         data: [SHAssetQuality: Data]
     ) {
         self.localIdentifier = localIdentifier
         self.globalIdentifier = globalIdentifier
-        self.perceptualHash = perceptualHash
+        self.fingerprint = fingerprint
         self.creationDate = creationDate
         self.data = data
     }
@@ -38,7 +38,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public required convenience init?(coder decoder: NSCoder) {
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
-        let perceptualHash = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.perceptualHash.rawValue)
+        let fingerprint = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.fingerprint.rawValue)
         let creationDateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.creationDate.rawValue) as? String
         
         var dataDict = [SHAssetQuality: Data]()
@@ -53,8 +53,8 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
             return nil
         }
         
-        guard let perceptualHash = perceptualHash as? PerceptualHash else {
-            log.error("unexpected value for perceptualHash when decoding SHUploadableAsset object")
+        guard let fingerprint = fingerprint as? PerceptualHash else {
+            log.error("unexpected value for fingerprint when decoding SHUploadableAsset object")
             return nil
         }
         
@@ -72,7 +72,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
         self.init(
             localIdentifier: localIdentifier as? LocalIdentifier,
             globalIdentifier: globalIdentifier,
-            perceptualHash: perceptualHash,
+            fingerprint: fingerprint,
             creationDate: creationDate,
             data: dataDict
         )
@@ -81,7 +81,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public func encode(with coder: NSCoder) {
         coder.encode(self.globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(self.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
-        coder.encode(self.perceptualHash, forKey: CodingKeys.perceptualHash.rawValue)
+        coder.encode(self.fingerprint, forKey: CodingKeys.fingerprint.rawValue)
         coder.encode(self.creationDate?.iso8601withFractionalSeconds, forKey: CodingKeys.creationDate.rawValue)
         
         for (version, data) in self.data {

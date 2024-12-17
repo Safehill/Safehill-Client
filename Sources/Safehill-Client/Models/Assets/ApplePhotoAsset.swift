@@ -303,17 +303,17 @@ extension SHApplePhotoAsset {
             globalId = await self.generateGlobalIdentifier()
         }
         
-        let perceptual: PerceptualHash
+        let fingerprint: PerceptualHash
         if let perceptualHash {
-            perceptual = perceptualHash
+            fingerprint = perceptualHash
         } else {
-            perceptual = try await self.generatePerceptualHash()
+            fingerprint = try await self.generatePerceptualHash()
         }
         
         return SHUploadableAsset(
             localIdentifier: self.phAsset.localIdentifier,
             globalIdentifier: globalId,
-            perceptualHash: perceptual,
+            fingerprint: fingerprint,
             creationDate: self.phAsset.creationDate,
             data: try await data(for: versions)
         )

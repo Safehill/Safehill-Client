@@ -63,7 +63,7 @@ actor ThreadSafeAssetsDict {
                 dictionary[encryptedAsset.globalIdentifier] = SHGenericEncryptedAsset(
                     globalIdentifier: dictionary[encryptedAsset.globalIdentifier]!.globalIdentifier,
                     localIdentifier: dictionary[encryptedAsset.globalIdentifier]!.localIdentifier,
-                    perceptualHash: dictionary[encryptedAsset.globalIdentifier]!.perceptualHash,
+                    fingerprint: dictionary[encryptedAsset.globalIdentifier]!.fingerprint,
                     creationDate: dictionary[encryptedAsset.globalIdentifier]!.creationDate,
                     encryptedVersions: newEncryptedVersions
                 )

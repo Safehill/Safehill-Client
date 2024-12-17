@@ -86,7 +86,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         return SHGenericEncryptedAsset(
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
-            perceptualHash: asset.perceptualHash,
+            fingerprint: asset.fingerprint,
             creationDate: asset.creationDate,
             encryptedVersions: encryptedVersions
         )
