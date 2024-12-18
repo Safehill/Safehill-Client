@@ -740,6 +740,7 @@ struct LocalServer : SHServerAPI {
         ///
         var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetDescriptorUploadState]]()
         var localInfoByGlobalIdentifier = [GlobalIdentifier: (phAssetId: LocalIdentifier?, creationDate: Date?)]()
+        var perceptualHashByGlobalIdentifier = [GlobalIdentifier: PerceptualHash]()
         
         var condition = KBGenericCondition(value: false)
         for quality in SHAssetQuality.all {
@@ -784,6 +785,8 @@ struct LocalServer : SHServerAPI {
                 phAssetId: localInfoByGlobalIdentifier[v.globalIdentifier]?.phAssetId ?? v.localIdentifier,
                 creationDate: localInfoByGlobalIdentifier[v.globalIdentifier]?.creationDate ?? v.creationDate
             )
+            
+            perceptualHashByGlobalIdentifier[v.globalIdentifier] = v.perceptualHash
         }
         
         for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
@@ -860,6 +863,7 @@ struct LocalServer : SHServerAPI {
             let descriptor = SHGenericAssetDescriptor(
                 globalIdentifier: globalIdentifier,
                 localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
+                fingerprint: perceptualHashByGlobalIdentifier[globalIdentifier]!,
                 creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
                 uploadState: combinedUploadState,
                 sharingInfo: sharingInfo
@@ -1490,6 +1494,7 @@ struct LocalServer : SHServerAPI {
                 return SHGenericEncryptedAsset(
                     globalIdentifier: $0.globalIdentifier,
                     localIdentifier: $0.localIdentifier,
+                    fingerprint: $0.fingerprint,
                     creationDate: $0.creationDate,
                     encryptedVersions: newVersions
                 )
@@ -1501,6 +1506,7 @@ struct LocalServer : SHServerAPI {
             let phantomAssetDescriptor = SHGenericAssetDescriptor(
                 globalIdentifier: encryptedAsset.globalIdentifier,
                 localIdentifier: encryptedAsset.localIdentifier,
+                fingerprint: encryptedAsset.fingerprint,
                 creationDate: encryptedAsset.creationDate,
                 uploadState: .started,
                 sharingInfo: SHGenericDescriptorSharingInfo(
@@ -1634,6 +1640,7 @@ struct LocalServer : SHServerAPI {
                 let versionMetadata = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: asset.globalIdentifier,
                     localIdentifier: asset.localIdentifier,
+                    perceptualHash: asset.fingerprint,
                     quality: encryptedVersion.quality,
                     senderEncryptedSecret: encryptedVersion.encryptedSecret,
                     publicKey: encryptedVersion.publicKeyData,
@@ -1795,6 +1802,7 @@ struct LocalServer : SHServerAPI {
                         let serverAsset = SHServerAsset(
                             globalIdentifier: asset.globalIdentifier,
                             localIdentifier: asset.localIdentifier,
+                            fingerprint: asset.fingerprint,
                             createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
                             creationDate: asset.creationDate,
                             groupId: thisUserGroupId,
@@ -1999,6 +2007,7 @@ struct LocalServer : SHServerAPI {
                 let newValue = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: value.globalIdentifier,
                     localIdentifier: value.localIdentifier,
+                    perceptualHash: value.perceptualHash,
                     quality: value.quality,
                     senderEncryptedSecret: value.senderEncryptedSecret,
                     publicKey: value.publicKey,
@@ -4294,5 +4303,13 @@ struct LocalServer : SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+        throw SHHTTPError.ServerError.notImplemented
+    }
+    
+    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+        throw SHHTTPError.ServerError.notImplemented
     }
 }

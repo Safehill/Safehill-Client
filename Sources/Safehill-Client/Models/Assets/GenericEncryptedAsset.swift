@@ -2,17 +2,20 @@ import Foundation
 import KnowledgeBase
 
 public struct SHGenericEncryptedAsset : SHEncryptedAsset {
-    public let globalIdentifier: String
-    public let localIdentifier: String?
+    public let globalIdentifier: GlobalIdentifier
+    public let localIdentifier: LocalIdentifier?
+    public let fingerprint: PerceptualHash
     public let creationDate: Date?
     public let encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion]
     
-    public init(globalIdentifier: String,
-                localIdentifier: String?,
+    public init(globalIdentifier: GlobalIdentifier,
+                localIdentifier: LocalIdentifier?,
+                fingerprint: PerceptualHash,
                 creationDate: Date?,
                 encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion]) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
+        self.fingerprint = fingerprint
         self.creationDate = creationDate
         self.encryptedVersions = encryptedVersions
     }
@@ -117,6 +120,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 let encryptedAsset = SHGenericEncryptedAsset(
                     globalIdentifier: existing.globalIdentifier,
                     localIdentifier: existing.localIdentifier,
+                    fingerprint: existing.fingerprint,
                     creationDate: existing.creationDate,
                     encryptedVersions: versions
                 )
@@ -125,6 +129,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 encryptedAssetById[metadata.globalIdentifier] = SHGenericEncryptedAsset(
                     globalIdentifier: metadata.globalIdentifier,
                     localIdentifier: metadata.localIdentifier,
+                    fingerprint: metadata.perceptualHash,
                     creationDate: metadata.creationDate,
                     encryptedVersions: [quality: version]
                 )

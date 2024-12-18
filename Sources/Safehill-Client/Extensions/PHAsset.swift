@@ -38,6 +38,20 @@ public enum NSUIImage {
     }
 #endif
     
+    static func from(data: Data) -> NSUIImage? {
+#if os(iOS)
+        guard let image = UIImage(data: data) else {
+            return nil
+        }
+        return NSUIImage.uiKit(image)
+#else
+        guard let image = NSImage(data: data) else {
+            return nil
+        }
+        return NSUIImage.appKit(image)
+#endif
+    }
+    
     func data() throws -> Data {
 #if os(iOS)
         let data = self.platformImage.pngData()

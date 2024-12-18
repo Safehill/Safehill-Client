@@ -1,8 +1,9 @@
 import Foundation
 
 public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
-    public let globalIdentifier: String
-    public var localIdentifier: String?
+    public let globalIdentifier: GlobalIdentifier
+    public var localIdentifier: LocalIdentifier?
+    public var fingerprint: PerceptualHash
     public let creationDate: Date?
     public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
@@ -10,6 +11,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     enum CodingKeys: String, CodingKey {
         case globalIdentifier
         case localIdentifier
+        case fingerprint
         case creationDate
         case uploadState
         case sharingInfo
@@ -19,6 +21,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(globalIdentifier, forKey: .globalIdentifier)
         try container.encode(localIdentifier, forKey: .localIdentifier)
+        try container.encode(fingerprint, forKey: .fingerprint)
         try container.encode(creationDate, forKey: .creationDate)
         try container.encode(uploadState.rawValue, forKey: .uploadState)
         try container.encode(sharingInfo as! SHGenericDescriptorSharingInfo, forKey: .sharingInfo)
@@ -28,6 +31,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         globalIdentifier = try container.decode(String.self, forKey: .globalIdentifier)
         localIdentifier = try? container.decode(String.self, forKey: .localIdentifier)
+        fingerprint = try container.decode(String.self, forKey: .fingerprint)
         let dateString = try? container.decode(String.self, forKey: .creationDate)
         creationDate = dateString?.iso8601withFractionalSeconds
         let uploadStateString = try container.decode(String.self, forKey: .uploadState)
@@ -40,13 +44,15 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         sharingInfo = try container.decode(SHGenericDescriptorSharingInfo.self, forKey: .sharingInfo)
     }
     
-    public init(globalIdentifier: String,
-                localIdentifier: String?,
+    public init(globalIdentifier: GlobalIdentifier,
+                localIdentifier: LocalIdentifier?,
+                fingerprint: PerceptualHash,
                 creationDate: Date?,
                 uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
+        self.fingerprint = fingerprint
         self.creationDate = creationDate
         self.uploadState = uploadState
         self.sharingInfo = sharingInfo
@@ -56,6 +62,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         SHGenericAssetDescriptorClass(
             globalIdentifier: self.globalIdentifier,
             localIdentifier: self.localIdentifier,
+            fingerprint: self.fingerprint,
             creationDate: self.creationDate,
             uploadState: self.uploadState,
             sharingInfo: SHGenericDescriptorSharingInfo(
@@ -70,6 +77,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         SHGenericAssetDescriptor(
             globalIdentifier: cls.globalIdentifier,
             localIdentifier: cls.localIdentifier,
+            fingerprint: cls.fingerprint,
             creationDate: cls.creationDate,
             uploadState: cls.uploadState,
             sharingInfo: cls.sharingInfo

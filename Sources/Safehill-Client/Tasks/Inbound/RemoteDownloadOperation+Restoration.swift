@@ -131,6 +131,7 @@ extension SHRemoteDownloadOperation {
                             asset: SHUploadableAsset(
                                 localIdentifier: descriptor.localIdentifier,
                                 globalIdentifier: descriptor.globalIdentifier,
+                                fingerprint: descriptor.fingerprint,
                                 creationDate: descriptor.creationDate,
                                 data: [:]
                             ),
@@ -186,6 +187,7 @@ extension SHRemoteDownloadOperation {
                     asset: SHUploadableAsset(
                         localIdentifier: descriptor.localIdentifier,
                         globalIdentifier: descriptor.globalIdentifier,
+                        fingerprint: descriptor.fingerprint,
                         creationDate: descriptor.creationDate,
                         data: [:]
                     ),

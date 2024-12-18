@@ -768,6 +768,7 @@ struct RemoteServer : SHServerAPI {
         var createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
+            "fingerprint": asset.fingerprint,
             "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions
@@ -1644,5 +1645,27 @@ struct RemoteServer : SHServerAPI {
                 }
             }
         }
+    }
+    
+    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+        try await withUnsafeThrowingContinuation {
+            (continuation: UnsafeContinuation<Void, any Error>) in
+            
+            let parameters = ["fingerprint": fingerprint]
+            
+            self.post("fingerprint/update/\(globalIdentifier)", parameters: parameters) {
+                (result: Result<NoReply, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+    
+    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+        throw SHHTTPError.ServerError.notImplemented
     }
 }
