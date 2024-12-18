@@ -39,6 +39,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         error: Error
     ) throws {
         let globalIdentifier = request.asset.globalIdentifier
+        let localIdentifier = request.asset.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let users = request.sharedWith
@@ -73,7 +74,10 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
                         delegate.didFailSharing(
-                            ofAsset: globalIdentifier,
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: globalIdentifier,
+                                localIdentifier: localIdentifier
+                            ),
                             with: users,
                             in: groupId,
                             error: error
@@ -102,6 +106,7 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
         globalIdentifier: GlobalIdentifier
     ) throws {
         let globalIdentifier = request.asset.globalIdentifier
+        let localIdentifier = request.asset.localIdentifier
         let groupId = request.groupId
         
         /// Dequeque from ShareQueue
@@ -133,7 +138,14 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetSharerDelegate {
-                    delegate.didCompleteSharing(ofAsset: globalIdentifier, with: request.sharedWith, in: groupId)
+                    delegate.didCompleteSharing(
+                        ofAsset: SHBackedUpAssetIdentifier(
+                            globalIdentifier: globalIdentifier,
+                            localIdentifier: localIdentifier
+                        ),
+                        with: request.sharedWith,
+                        in: groupId
+                    )
                 }
             }
         }
@@ -235,9 +247,14 @@ internal class SHEncryptAndShareOperation: SHEncryptionOperation, @unchecked Sen
             self.delegatesQueue.async {
                 for delegate in assetDelegates {
                     if let delegate = delegate as? SHAssetSharerDelegate {
-                        delegate.didStartSharing(ofAsset: shareRequest.asset.globalIdentifier,
-                                                 with: shareRequest.sharedWith,
-                                                 in: shareRequest.groupId)
+                        delegate.didStartSharing(
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: shareRequest.asset.globalIdentifier,
+                                localIdentifier: shareRequest.asset.localIdentifier
+                            ),
+                            with: shareRequest.sharedWith,
+                            in: shareRequest.groupId
+                        )
                     }
                 }
             }
