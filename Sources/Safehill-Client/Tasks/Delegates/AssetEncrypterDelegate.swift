@@ -1,7 +1,17 @@
 import Foundation
 
 public protocol SHAssetEncrypterDelegate: SHOutboundAssetOperationDelegate {
-    func didStartEncryption(ofAsset: GlobalIdentifier, in groupId: String)
-    func didCompleteEncryption(ofAsset: GlobalIdentifier, in groupId: String)
-    func didFailEncryption(ofAsset: GlobalIdentifier, in groupId: String, error: Error)
+    func didStartEncryption(
+        ofAsset: SHBackedUpAssetIdentifier,
+        in groupId: String
+    )
+    func didCompleteEncryption(
+        ofAsset: SHBackedUpAssetIdentifier,
+        in groupId: String
+    )
+    func didFailEncryption(
+        ofAsset: SHBackedUpAssetIdentifier,
+        in groupId: String,
+        error: Error
+    )
 }

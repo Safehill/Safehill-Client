@@ -132,6 +132,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let globalIdentifier = request.asset.globalIdentifier
+        let localIdentifier = request.asset.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let users = request.sharedWith
@@ -168,12 +169,22 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 /// Notify the delegates
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
-                        delegate.didFailEncryption(ofAsset: globalIdentifier, in: groupId, error: error)
+                        delegate.didFailEncryption(
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: globalIdentifier,
+                                localIdentifier: localIdentifier
+                            ),
+                            in: groupId,
+                            error: error
+                        )
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
                             delegate.didFailSharing(
-                                ofAsset: globalIdentifier,
+                                ofAsset: SHBackedUpAssetIdentifier(
+                                    globalIdentifier: globalIdentifier,
+                                    localIdentifier: localIdentifier
+                                ),
                                 with: users,
                                 in: groupId,
                                 error: error
@@ -193,6 +204,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
         globalIdentifier: String
     ) throws {
         let globalIdentifier = request.asset.globalIdentifier
+        let localIdentifier = request.asset.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let isBackground = request.isBackground
@@ -232,7 +244,13 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             /// Notify the delegates
             for delegate in assetsDelegates {
                 if let delegate = delegate as? SHAssetEncrypterDelegate {
-                    delegate.didCompleteEncryption(ofAsset: globalIdentifier, in: groupId)
+                    delegate.didCompleteEncryption(
+                        ofAsset: SHBackedUpAssetIdentifier(
+                            globalIdentifier: globalIdentifier,
+                            localIdentifier: localIdentifier
+                        ),
+                        in: groupId
+                    )
                 }
             }
         }
@@ -285,7 +303,10 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetEncrypterDelegate {
                         delegate.didStartEncryption(
-                            ofAsset: encryptionRequest.asset.globalIdentifier,
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: encryptionRequest.asset.globalIdentifier,
+                                localIdentifier: encryptionRequest.asset.localIdentifier
+                            ),
                             in: encryptionRequest.groupId
                         )
                     }

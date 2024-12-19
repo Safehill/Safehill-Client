@@ -35,6 +35,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         let globalIdentifier = request.asset.globalIdentifier
+        let localIdentifier = request.asset.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let users = request.sharedWith
@@ -69,14 +70,26 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             self.delegatesQueue.async {
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didFailUpload(ofAsset: globalIdentifier, in: groupId, error: error)
+                        delegate.didFailUpload(
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: globalIdentifier,
+                                localIdentifier: localIdentifier
+                            ),
+                            in: groupId,
+                            error: error
+                        )
                     }
                     if users.count > 0 {
                         if let delegate = delegate as? SHAssetSharerDelegate {
-                            delegate.didFailSharing(ofAsset: globalIdentifier,
-                                                    with: users,
-                                                    in: groupId,
-                                                    error: error)
+                            delegate.didFailSharing(
+                                ofAsset: SHBackedUpAssetIdentifier(
+                                    globalIdentifier: globalIdentifier,
+                                    localIdentifier: localIdentifier
+                                ),
+                                with: users,
+                                in: groupId,
+                                error: error
+                            )
                         }
                     }
                 }
@@ -91,6 +104,7 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
         uploadRequest request: SHUploadRequestQueueItem
     ) throws {
         let globalIdentifier = request.asset.globalIdentifier
+        let localIdentifier = request.asset.localIdentifier
         let versions = request.versions
         let groupId = request.groupId
         let groupTitle = request.groupTitle
@@ -128,7 +142,13 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 /// Notify the delegates
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didCompleteUpload(ofAsset: globalIdentifier, in: groupId)
+                        delegate.didCompleteUpload(
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: globalIdentifier,
+                                localIdentifier: localIdentifier
+                            ),
+                            in: groupId
+                        )
                     }
                 }
             }
@@ -191,6 +211,10 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             return
         }
         
+        let globalIdentifier = uploadRequest.asset.globalIdentifier
+        let localIdentifier = uploadRequest.asset.localIdentifier
+        let versions = uploadRequest.versions
+        
         let handleError = { (error: Error) in
             self.log.error("FAIL in UPLOAD: \(error.localizedDescription)")
             
@@ -208,14 +232,17 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
             self.delegatesQueue.async {
                 for delegate in assetsDelegates {
                     if let delegate = delegate as? SHAssetUploaderDelegate {
-                        delegate.didStartUpload(ofAsset: uploadRequest.asset.globalIdentifier, in: uploadRequest.groupId)
+                        delegate.didStartUpload(
+                            ofAsset: SHBackedUpAssetIdentifier(
+                                globalIdentifier: globalIdentifier,
+                                localIdentifier: localIdentifier
+                            ),
+                            in: uploadRequest.groupId
+                        )
                     }
                 }
             }
         }
-        
-        let globalIdentifier = uploadRequest.asset.globalIdentifier
-        let versions = uploadRequest.versions
         
         log.info("retrieving encrypted asset from local server proxy: \(globalIdentifier) versions=\(versions)")
         self.serverProxy.getLocalAssets(
