@@ -128,7 +128,7 @@ final class Safehill_SerializationTests: XCTestCase {
         let asset1 = SHUploadableAsset(
             localIdentifier: "localIdentifier",
             globalIdentifier: "globalIdentifier",
-            perceptualHash: "0",
+            fingerprint: "0",
             creationDate: nil,
             data: [:]
         )
@@ -143,6 +143,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 sharedWith: [],
                 invitedUsers: [],
                 asPhotoMessageInThreadId: nil,
+                permissions: 0,
                 isBackground: false
             ),
             SHGenericShareableGroupableQueueItem(
@@ -154,6 +155,7 @@ final class Safehill_SerializationTests: XCTestCase {
                 sharedWith: [sender],
                 invitedUsers: ["phoneNumber1", "phoneNumber2"],
                 asPhotoMessageInThreadId: "threadId",
+                permissions: 0,
                 isBackground: true
             ),
         ]
@@ -396,7 +398,7 @@ final class Safehill_SerializationTests: XCTestCase {
     }
     
     func testSerializePhone() throws {
-        let parsed = SHPhoneNumberParser.sharedInstance.parse(["+14085373509"])
+        let parsed = SHPhoneNumberParser.sharedInstance.parse(["+14798563903"])
         if let first = parsed.first, let phoneNumber = first {
             print(phoneNumber.e164FormattedNumber)
             let hashedPhoneNumber = phoneNumber.hashedPhoneNumber

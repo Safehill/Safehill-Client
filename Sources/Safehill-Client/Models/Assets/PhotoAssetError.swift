@@ -18,7 +18,7 @@ public enum SHPhotoAssetError : Error, CustomStringConvertible, LocalizedError {
                 return "photo asset url could not be retrieved"
             }
         case .applePhotosAssetRetrievalError(let reason):
-            return "error while retrieving asset from Apple photos library: \(reason)"
+            return "Some assets could not be fetch from the Apple Photos library: \(reason)"
         case .photoResizingError:
             return "There was an error when resizing the image"
         }
