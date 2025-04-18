@@ -60,12 +60,14 @@ extension SHServerProxy {
                                phoneNumber: Int,
                                code: String,
                                medium: SendCodeToUserRequestDTO.Medium,
+                               appName: String,
                                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.sendCodeToUser(
             countryCode: countryCode,
             phoneNumber: phoneNumber,
             code: code,
             medium: medium,
+            appName: appName,
             completionHandler: completionHandler
         )
     }

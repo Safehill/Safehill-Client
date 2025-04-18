@@ -370,12 +370,14 @@ struct RemoteServer : SHServerAPI {
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
+                        appName: String,
                         completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "countryCode": countryCode,
             "phoneNumber": phoneNumber,
             "code": code,
-            "medium": medium.rawValue
+            "medium": medium.rawValue,
+            "appName": appName
         ] as [String : Any]
         self.post("users/code/send", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {

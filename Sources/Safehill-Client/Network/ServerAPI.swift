@@ -17,11 +17,13 @@ public protocol SHServerAPI {
     ///   - phoneNumber: the recipient's phone number
     ///   - code: the code to send
     ///   - medium: the medium, either SMS or email
+    ///   - appName: the name of the app to mention in the SMS ("Snoog", "Safehill", "Nova Stream", …)
     ///   - completionHandler: the callback method
     func sendCodeToUser(countryCode: Int, 
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
+                        appName: String,
                         completionHandler: @escaping (Result<Void, Error>) -> ())
     
     /// Updates an existing user details or credentials. If the value is nil, it's not updated
