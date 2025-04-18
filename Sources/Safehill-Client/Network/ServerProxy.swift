@@ -1020,6 +1020,28 @@ extension SHServerProxy {
             }
         }
     }
+    
+    func changeGroupPermission(
+        groupId: String,
+        permission: Int,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.changeGroupPermission(groupId: groupId, permission: permission) {
+            remoteResult in
+            switch remoteResult {
+            case .success:
+                self.localServer.changeGroupPermission(groupId: groupId, permission: permission) {
+                    localResult in
+                    if case .failure(let failure) = localResult {
+                        log.warning("failed to change permissions locally after successfully changing them remotely \(groupId) \(permission): \(failure.localizedDescription)")
+                    }
+                    completionHandler(.success(()))
+                }
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 }
 
 

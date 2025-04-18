@@ -855,6 +855,22 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
+    func changeGroupPermission(
+        groupId: String,
+        permission: Int,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("assets/change-permissions/\(groupId)/\(permission)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success(_):
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
     func markAsset(with assetGlobalIdentifier: String,
                    quality: SHAssetQuality,
                    as: SHAssetDescriptorUploadState,
