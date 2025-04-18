@@ -370,12 +370,14 @@ struct RemoteServer : SHServerAPI {
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
+                        appName: String,
                         completionHandler: @escaping (Result<Void, Error>) -> ()) {
         let parameters = [
             "countryCode": countryCode,
             "phoneNumber": phoneNumber,
             "code": code,
-            "medium": medium.rawValue
+            "medium": medium.rawValue,
+            "appName": appName
         ] as [String : Any]
         self.post("users/code/send", parameters: parameters, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
@@ -389,17 +391,21 @@ struct RemoteServer : SHServerAPI {
     
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber? = nil,
+                    forcePhoneNumberLinking: Bool = false,
                     completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
         var parameters = [String : Any]()
-        if let name = name {
+        if let name {
             parameters["name"] = name
         }
-        if let phoneNumber = phoneNumber {
+        if let phoneNumber {
             parameters["phoneNumber"] = phoneNumber.hashedPhoneNumber
+        }
+        if forcePhoneNumberLinking == true {
+            parameters["forcePhoneNumberLinking"] = true
         }
         self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {

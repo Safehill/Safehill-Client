@@ -60,20 +60,27 @@ extension SHServerProxy {
                                phoneNumber: Int,
                                code: String,
                                medium: SendCodeToUserRequestDTO.Medium,
+                               appName: String,
                                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.remoteServer.sendCodeToUser(
             countryCode: countryCode,
             phoneNumber: phoneNumber,
             code: code,
             medium: medium,
+            appName: appName,
             completionHandler: completionHandler
         )
     }
     
     public func updateUser(phoneNumber: SHPhoneNumber? = nil,
                            name: String? = nil,
+                           forcePhoneNumberLinking: Bool = false,
                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
-        self.remoteServer.updateUser(name: name, phoneNumber: phoneNumber) { result in
+        self.remoteServer.updateUser(
+            name: name,
+            phoneNumber: phoneNumber,
+            forcePhoneNumberLinking: forcePhoneNumberLinking
+        ) { result in
             switch result {
             case .success(_):
                 self.localServer.updateUser(name: name, phoneNumber: phoneNumber, completionHandler: completionHandler)

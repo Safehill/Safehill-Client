@@ -121,12 +121,14 @@ struct LocalServer : SHServerAPI {
                         phoneNumber: Int,
                         code: String,
                         medium: SendCodeToUserRequestDTO.Medium,
+                        appName: String,
                         completionHandler: @escaping (Result<Void, Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber? = nil,
+                    forcePhoneNumberLinking: Bool = false,
                     completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
