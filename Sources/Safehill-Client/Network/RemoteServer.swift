@@ -389,17 +389,21 @@ struct RemoteServer : SHServerAPI {
     
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber? = nil,
+                    forcePhoneNumberLinking: Bool = false,
                     completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))
             return
         }
         var parameters = [String : Any]()
-        if let name = name {
+        if let name {
             parameters["name"] = name
         }
-        if let phoneNumber = phoneNumber {
+        if let phoneNumber {
             parameters["phoneNumber"] = phoneNumber.hashedPhoneNumber
+        }
+        if forcePhoneNumberLinking == true {
+            parameters["forcePhoneNumberLinking"] = true
         }
         self.post("users/update", parameters: parameters, requiresAuthentication: true) { (result: Result<SHRemoteUser, Error>) in
             switch result {

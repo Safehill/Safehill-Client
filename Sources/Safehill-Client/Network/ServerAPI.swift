@@ -31,6 +31,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber?,
+                    forcePhoneNumberLinking: Bool,
                     completionHandler: @escaping (Result<any SHServerUser, Error>) -> ())
     
     /// Delete the user making the request and all related assets, metadata and sharing information

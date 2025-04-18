@@ -398,7 +398,7 @@ final class Safehill_SerializationTests: XCTestCase {
     }
     
     func testSerializePhone() throws {
-        let parsed = SHPhoneNumberParser.sharedInstance.parse(["+14798563903"])
+        let parsed = SHPhoneNumberParser.sharedInstance.parse(["+14154949152"])
         if let first = parsed.first, let phoneNumber = first {
             print(phoneNumber.e164FormattedNumber)
             let hashedPhoneNumber = phoneNumber.hashedPhoneNumber

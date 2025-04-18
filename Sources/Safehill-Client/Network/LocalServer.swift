@@ -127,6 +127,7 @@ struct LocalServer : SHServerAPI {
     
     func updateUser(name: String?,
                     phoneNumber: SHPhoneNumber? = nil,
+                    forcePhoneNumberLinking: Bool = false,
                     completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
         guard name != nil || phoneNumber != nil else {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Invalid parameters")))

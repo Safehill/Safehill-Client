@@ -72,8 +72,13 @@ extension SHServerProxy {
     
     public func updateUser(phoneNumber: SHPhoneNumber? = nil,
                            name: String? = nil,
+                           forcePhoneNumberLinking: Bool = false,
                            completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
-        self.remoteServer.updateUser(name: name, phoneNumber: phoneNumber) { result in
+        self.remoteServer.updateUser(
+            name: name,
+            phoneNumber: phoneNumber,
+            forcePhoneNumberLinking: forcePhoneNumberLinking
+        ) { result in
             switch result {
             case .success(_):
                 self.localServer.updateUser(name: name, phoneNumber: phoneNumber, completionHandler: completionHandler)
