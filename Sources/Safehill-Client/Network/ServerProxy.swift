@@ -1021,7 +1021,7 @@ extension SHServerProxy {
         }
     }
     
-    func changeGroupPermission(
+    public func changeGroupPermission(
         groupId: String,
         permission: Int,
         completionHandler: @escaping (Result<Void, Error>) -> ()
