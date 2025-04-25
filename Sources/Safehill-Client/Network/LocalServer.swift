@@ -2193,6 +2193,23 @@ struct LocalServer : SHServerAPI {
         }
     }
     
+    func changeGroupPermission(
+        groupId: String,
+        permission: Int,
+        completionHandler: @escaping (Result<Void, any Error>) -> ()
+    ) {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        assetStore.set(
+            value: permission,
+            for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions",
+            completionHandler: completionHandler
+        )
+    }
+    
     func deleteAssets(withGlobalIdentifiers globalIdentifiers: [GlobalIdentifier], completionHandler: @escaping (Result<[String], Error>) -> ()) {
         guard globalIdentifiers.count > 0 else {
             completionHandler(.success([]))

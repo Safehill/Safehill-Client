@@ -165,6 +165,17 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
     
+    /// Changes the sharing permissions for an existing group (from regular to confidential, for instance)
+    /// - Parameters:
+    ///   - groupId: the group identifier
+    ///   - permission: the permission code
+    ///   - completionHandler: the callback method
+    func changeGroupPermission(
+        groupId: String,
+        permission: Int,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
     // MARK: Assets Uploading
     
     /// Upload encrypted asset versions data to the CDN.
