@@ -560,11 +560,19 @@ struct RemoteServer : SHServerAPI {
         }
     }
     
-    func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        let parameters = [
+    func registerDevice(
+        _ deviceId: String,
+        token: String?,
+        appBundleId: String?,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        var parameters = [
             "deviceId": deviceId,
             "token": token
         ]
+        if let appBundleId {
+            parameters["appBundleId"] = appBundleId
+        }
         self.post("users/devices/register", parameters: parameters) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):

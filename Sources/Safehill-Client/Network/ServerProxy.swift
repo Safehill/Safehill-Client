@@ -396,8 +396,18 @@ extension SHServerProxy {
         }
     }
     
-    public func registerDevice(_ deviceId: String, token: String?, completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        self.remoteServer.registerDevice(deviceId, token: token, completionHandler: completionHandler)
+    public func registerDevice(
+        _ deviceId: String,
+        token: String?,
+        appBundleId: String? = null,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.registerDevice(
+            deviceId,
+            token: token,
+            appBundleId: appBundleId,
+            completionHandler: completionHandler
+        )
     }
 }
 
