@@ -399,7 +399,7 @@ extension SHServerProxy {
     public func registerDevice(
         _ deviceId: String,
         token: String?,
-        appBundleId: String? = null,
+        appBundleId: String? = nil,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.remoteServer.registerDevice(
