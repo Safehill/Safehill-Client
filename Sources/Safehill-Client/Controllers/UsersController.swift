@@ -14,6 +14,45 @@ public class SHUsersController {
         self.localUser.serverProxy
     }
     
+    public func refreshConnections() async throws -> [UserIdentifier: any SHServerUser] {
+        try await withUnsafeThrowingContinuation { continuation in
+            serverProxy.getUsers(
+                withIdentifiers: nil
+            ) { result in
+                switch result {
+                case .success(let serverUsers):
+                    var users = [UserIdentifier: any SHServerUser]()
+                    for serverUser in serverUsers {
+                        users[serverUser.identifier] = serverUser
+                    }
+                    ServerUserCache.shared.cache(users: Array(users.values))
+                    continuation.resume(returning: users)
+                case .failure(let err):
+                    continuation.resume(throwing: err)
+                }
+            }
+        }
+    }
+    
+    public func getCachedUsers() async throws -> [UserIdentifier: any SHServerUser] {
+        return try await withUnsafeThrowingContinuation { continuation in
+            serverProxy.getLocalUsers(withIdentifiers: nil) {
+                result in
+                switch result {
+                case .success(let serverUsers):
+                    var users = [UserIdentifier: any SHServerUser]()
+                    for serverUser in serverUsers {
+                        users[serverUser.identifier] = serverUser
+                    }
+                    continuation.resume(returning: users)
+                case .failure(let err):
+                    log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
+                    continuation.resume(throwing: err)
+                }
+            }
+        }
+    }
+    
     /// Retrieve from either the in-memory or the on-disk cache only.
     /// Best effort to retrieve users **locally** (maybe when there's no connection to get them from the server?)
     /// Doesn't cache the result in memory.
@@ -50,6 +89,7 @@ public class SHUsersController {
                     for serverUser in serverUsers {
                         users[serverUser.identifier] = serverUser
                     }
+                    ServerUserCache.shared.cache(users: Array(users.values))
                     continuation.resume(returning: users)
                 case .failure(let err):
                     log.warning("failed to retrieve users from the local server: \(err.localizedDescription)")
