@@ -1,5 +1,4 @@
 import Foundation
-import Yams
 import Contacts
 import Safehill_Crypto
 import CryptoKit
@@ -521,17 +520,7 @@ extension SHServerProxy {
             switch result {
             case .failure(let err):
                 completionHandler(.failure(err))
-            case .success(let descriptors):
-#if DEBUG
-                if descriptors.count > 0 {
-//                    let encoder = YAMLEncoder()
-//                    let encoded = (try? encoder.encode(descriptors as! [SHGenericAssetDescriptor])) ?? ""
-//                    log.debug("[DESCRIPTORS] from local server:\n\(encoded)")
-//                    log.debug("[DESCRIPTORS] from local server: \(descriptors.count)")
-                } else {
-//                    log.debug("[DESCRIPTORS] from local server: empty")
-                }
-#endif
+            case .success(_):
                 completionHandler(result)
             }
         }
@@ -550,16 +539,6 @@ extension SHServerProxy {
             case .failure(let serverError):
                 completionHandler(.failure(serverError))
             case .success(let descriptors):
-#if DEBUG
-                if descriptors.count > 0 {
-//                    let encoder = YAMLEncoder()
-//                    let encoded = (try? encoder.encode(descriptors as! [SHGenericAssetDescriptor])) ?? ""
-//                    log.debug("[DESCRIPTORS] from remote server:\n\(encoded)")
-//                    log.debug("[DESCRIPTORS] from remote server: \(descriptors.count)")
-                } else {
-//                    log.debug("[DESCRIPTORS] from remote server: empty")
-                }
-#endif
                 completionHandler(.success(descriptors))
             }
         }
