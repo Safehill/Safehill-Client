@@ -10,12 +10,12 @@ internal actor ThreadSafeList<T: Codable> {
 actor ThreadSafeDictionary<Key: Hashable, Value> {
     
     private var dictionary: [Key: Value] = [:]
-    
-    func getValue(forKey key: Key) -> Value? {
+
+    func value(for key: Key) -> Value? {
         return dictionary[key]
     }
     
-    func setValue(_ value: Value, forKey key: Key) {
+    func set(_ value: Value, for key: Key) {
         dictionary[key] = value
     }
     
