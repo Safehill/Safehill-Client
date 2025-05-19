@@ -724,18 +724,24 @@ extension SHServerProxy {
 
                                 let remoteOnlyAssets = await threadSafeRemoteOnly.allKeyValues()
 
-                                ///
-                                /// CACHE only remote assets
-                                ///
-                                Task.detached(priority: .utility) {
-                                    self.localServer.create(
-                                        assets: Array(remoteOnlyAssets.values),
-                                        descriptorsByGlobalIdentifier: descriptorMap,
-                                        uploadState: .completed,
-                                        overwriteFileIfExists: false
-                                    ) { _ in }
+                                if !remoteOnlyAssets.values.isEmpty {
+                                    ///
+                                    /// CACHE only remote assets
+                                    ///
+                                    Task.detached(priority: .utility) {
+                                        self.localServer.create(
+                                            assets: Array(remoteOnlyAssets.values),
+                                            descriptorsByGlobalIdentifier: descriptorMap,
+                                            uploadState: .completed,
+                                            overwriteFileIfExists: true
+                                        ) { localCachingResult in
+                                            if case .failure(let failure) = localCachingResult {
+                                                log.warning("[asset-data] caching failed for \(remoteOnlyAssets): \(error.localizedDescription)")
+                                            }
+                                        }
+                                    }
                                 }
-
+                                
                                 ///
                                 /// Combine local + remote for return
                                 ///
