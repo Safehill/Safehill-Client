@@ -735,7 +735,7 @@ extension SHServerProxy {
                                             uploadState: .completed,
                                             overwriteFileIfExists: true
                                         ) { localCachingResult in
-                                            if case .failure(let failure) = localCachingResult {
+                                            if case .failure(let error) = localCachingResult {
                                                 log.warning("[asset-data] caching failed for \(remoteOnlyAssets): \(error.localizedDescription)")
                                             }
                                         }
