@@ -196,7 +196,8 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
         if diff.userGroupChangesByAssetGid.isEmpty == false {
             dispatchGroup.enter()
             self.serverProxy.localServer.updateUserGroupInfo(
-                basedOn: diff.userGroupChangesByAssetGid
+                basedOn: diff.userGroupChangesByAssetGid,
+                versions: nil
             ) { [weak self] result in
                 
                 guard let self = self else {
@@ -227,7 +228,8 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
         if diff.userGroupRemovalsByAssetGid.isEmpty == false {
             dispatchGroup.enter()
             self.serverProxy.localServer.removeAssetRecipients(
-                basedOn: diff.userGroupRemovalsByAssetGid.mapValues({ Array($0.keys) })
+                basedOn: diff.userGroupRemovalsByAssetGid.mapValues({ Array($0.keys) }),
+                versions: nil
             ) { [weak self] result in
                 guard let self = self else {
                     return

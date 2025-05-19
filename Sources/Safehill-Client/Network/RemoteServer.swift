@@ -44,7 +44,7 @@ struct GenericFailureResponse: Decodable {
     let reason: String?
 }
 
-struct RemoteServer : SHServerAPI {
+struct RemoteServer : SHRemoteServerAPI {
     
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)

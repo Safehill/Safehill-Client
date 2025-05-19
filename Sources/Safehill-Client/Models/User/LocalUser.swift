@@ -111,7 +111,7 @@ public struct SHLocalUser: SHLocalUserProtocol {
         )
     }
     
-    fileprivate init(
+    internal init(
         shUser: SHLocalCryptoUser,
         authToken: String?,
         maybeEncryptionProtocolSalt: Data?,

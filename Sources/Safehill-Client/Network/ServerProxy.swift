@@ -5,12 +5,18 @@ import CryptoKit
 
 public struct SHServerProxy: SHServerProxyProtocol {
     
-    let localServer: LocalServer
-    let remoteServer: RemoteServer
+    let localServer: SHLocalServerAPI
+    let remoteServer: SHRemoteServerAPI
     
     public init(user: SHLocalUserProtocol) {
         self.localServer = LocalServer(requestor: user)
         self.remoteServer = RemoteServer(requestor: user)
+    }
+    
+    // Useful for testing
+    internal init(local: SHLocalServerAPI, remote: SHRemoteServerAPI) {
+        self.localServer = local
+        self.remoteServer = remote
     }
 }
 
@@ -82,7 +88,12 @@ extension SHServerProxy {
         ) { result in
             switch result {
             case .success(_):
-                self.localServer.updateUser(name: name, phoneNumber: phoneNumber, completionHandler: completionHandler)
+                self.localServer.updateUser(
+                    name: name,
+                    phoneNumber: phoneNumber,
+                    forcePhoneNumberLinking: false,
+                    completionHandler: completionHandler
+                )
             case .failure(let err):
                 completionHandler(.failure(err))
             }
@@ -91,7 +102,12 @@ extension SHServerProxy {
     
     public func updateLocalUser(name: String,
                                 completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
-        self.localServer.updateUser(name: name, completionHandler: completionHandler)
+        self.localServer.updateUser(
+            name: name,
+            phoneNumber: nil,
+            forcePhoneNumberLinking: false,
+            completionHandler: completionHandler
+        )
     }
     
     internal func updateLocalUser(_ user: SHRemoteUser,
@@ -958,7 +974,8 @@ extension SHServerProxy {
         self.localServer.share(
             asset: asset,
             asPhotoMessageInThreadId: asPhotoMessageInThreadId,
-            permissions: permissions
+            permissions: permissions,
+            suppressNotification: true
         ) {
             result in
             switch result {

@@ -18,7 +18,7 @@ public enum SHLocalServerError: Error, LocalizedError {
     }
 }
 
-struct LocalServer : SHServerAPI {
+struct LocalServer : SHLocalServerAPI {
     
     let requestor: SHLocalUserProtocol
     
@@ -115,15 +115,6 @@ struct LocalServer : SHServerAPI {
                 return
             }
         }
-    }
-    
-    func sendCodeToUser(countryCode: Int,
-                        phoneNumber: Int,
-                        code: String,
-                        medium: SendCodeToUserRequestDTO.Medium,
-                        appName: String,
-                        completionHandler: @escaping (Result<Void, Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func updateUser(name: String?,
@@ -410,10 +401,6 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    public func signIn(clientBuild: String?, completionHandler: @escaping (Result<SHAuthResponse, Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
     private func serializeUser(_ res: Any?) -> (any SHServerUser)? {
         var serialized: (any SHServerUser)? = nil
         
@@ -498,36 +485,8 @@ struct LocalServer : SHServerAPI {
         }
     }
     
-    func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String: any SHServerUser], Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func searchUsers(query: String, completionHandler: @escaping (Result<[SHServerUser], Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
     func countUploaded(
         completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func authorizeUsers(
-        with userPublicIdentifiers: [String],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func blockUsers(
-        with userPublicIdentifiers: [String],
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func pendingOrBlockedUsers(
-        completionHandler: @escaping (Result<UserAuthorizationStatusDTO, Error>) -> ()
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
@@ -4308,20 +4267,6 @@ struct LocalServer : SHServerAPI {
         } catch {
             completionHandler(.failure(error))
         }
-    }
-
-    func requestAccess(
-        toThreadId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-    
-    func requestAccess(
-        toGroupId: String,
-        completionHandler: @escaping (Result<Void, Error>) -> ()
-    ) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
     func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
