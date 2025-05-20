@@ -714,11 +714,11 @@ extension SHServerProxy {
                                             await threadSafeRemoteOnly.set(fetched, for: assetId)
 
                                         } else {
-                                            log.warning("[asset-data] Remote fetch missing for \(assetId)")
+                                            log.warning("[asset-data] Remote fetch missing for \(assetId) versions \(versions)")
                                         }
 
                                     } catch {
-                                        log.warning("[asset-data] Remote fetch failed for \(assetId): \(error.localizedDescription)")
+                                        log.warning("[asset-data] Remote fetch failed for \(assetId) versions \(versions): \(error.localizedDescription)")
                                     }
                                 }
 
