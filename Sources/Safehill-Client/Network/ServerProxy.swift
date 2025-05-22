@@ -2086,7 +2086,7 @@ extension SHServerProxy {
         try await self.remoteServer.updateAssetFingerprint(for: globalIdentifier, fingerprint)
     }
     
-    func sendEncryptedKeysToWebClient(
+    public func sendEncryptedKeysToWebClient(
         sessionId: String,
         requestorIp: String,
         encryptedPrivateKeyData: Data,
