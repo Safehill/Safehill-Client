@@ -2085,4 +2085,19 @@ extension SHServerProxy {
     ) async throws {
         try await self.remoteServer.updateAssetFingerprint(for: globalIdentifier, fingerprint)
     }
+    
+    func sendEncryptedKeysToWebClient(
+        sessionId: String,
+        requestorIp: String,
+        encryptedPrivateKeyData: Data,
+        encryptedPrivateSignatureData: Data
+    ) async throws -> Void
+    {
+        try await self.remoteServer.sendEncryptedKeysToWebClient(
+            sessionId: sessionId,
+            requestorIp: requestorIp,
+            encryptedPrivateKeyData: encryptedPrivateKeyData,
+            encryptedPrivateSignatureData: encryptedPrivateSignatureData
+        )
+    }
 }

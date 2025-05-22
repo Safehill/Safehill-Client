@@ -656,10 +656,10 @@ struct RemoteServer : SHRemoteServerAPI {
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
-                log.debug("[rest-api] retrieved \(descriptors.count) asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
+                log.debug("[rest-api] REMOTE retrieved \(descriptors.count) asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
                 completionHandler(.success(descriptors))
             case .failure(let error):
-                log.error("[rest-api] error retrieving asset descriptors. \(error.localizedDescription)")
+                log.error("[rest-api] REMOTE error retrieving asset descriptors. \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -1697,5 +1697,33 @@ struct RemoteServer : SHRemoteServerAPI {
     
     func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
         throw SHHTTPError.ServerError.notImplemented
+    }
+    
+    func sendEncryptedKeysToWebClient(
+        sessionId: String,
+        requestorIp: String,
+        encryptedPrivateKeyData: Data,
+        encryptedPrivateSignatureData: Data
+    ) async throws -> Void
+    {
+        try await withUnsafeThrowingContinuation {
+            (continuation: UnsafeContinuation<Void, any Error>) in
+            
+            let parameters = [
+                "requestorIp": requestorIp,
+                "privateKey": encryptedPrivateKeyData.base64EncodedString(),
+                "privateSignature": encryptedPrivateSignatureData.base64EncodedString()
+            ]
+            
+            self.post("app-web-auth/\(sessionId)/sendKeys", parameters: parameters) {
+                (result: Result<NoReply, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 }

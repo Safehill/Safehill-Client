@@ -1,4 +1,4 @@
-
+import Foundation
 
 public protocol SHRemoteServerAPI : SHServerAPI {
     
@@ -78,4 +78,13 @@ public protocol SHRemoteServerAPI : SHServerAPI {
         appBundleId: String?,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
+    
+    // MARK: Web login
+    
+    func sendEncryptedKeysToWebClient(
+        sessionId: String,
+        requestorIp: String,
+        encryptedPrivateKeyData: Data,
+        encryptedPrivateSignatureData: Data
+    ) async throws -> Void
 }
