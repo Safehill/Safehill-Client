@@ -1715,7 +1715,7 @@ struct RemoteServer : SHRemoteServerAPI {
                 "privateSignature": encryptedPrivateSignatureData.base64EncodedString()
             ]
             
-            self.post("app-web-auth/\(sessionId)/sendKeys", parameters: parameters) {
+            self.post("app-web-auth/\(sessionId)/send-keys", parameters: parameters) {
                 (result: Result<NoReply, Error>) in
                 switch result {
                 case .failure(let error):
