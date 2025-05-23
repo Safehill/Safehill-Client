@@ -1705,7 +1705,7 @@ struct RemoteServer : SHRemoteServerAPI {
         encryptedPrivateKeyData: Data,
         encryptedPrivateKeyIvData: Data,
         encryptedPrivateSignatureData: Data,
-        encryptedPrivateSignatureIVData: Data
+        encryptedPrivateSignatureIvData: Data
     ) async throws -> Void
     {
         try await withUnsafeThrowingContinuation {
@@ -1716,7 +1716,7 @@ struct RemoteServer : SHRemoteServerAPI {
                 "privateKey": encryptedPrivateKeyData.base64EncodedString(),
                 "privateKeyIV": encryptedPrivateKeyIvData.base64EncodedString(),
                 "privateSignature": encryptedPrivateSignatureData.base64EncodedString(),
-                "privateSignatureIV": encryptedPrivateSignatureIVData.base64EncodedString()
+                "privateSignatureIV": encryptedPrivateSignatureIvData.base64EncodedString()
             ]
             
             self.post("app-web-auth/\(sessionId)/send-keys", parameters: parameters) {

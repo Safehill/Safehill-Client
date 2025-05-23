@@ -2092,7 +2092,7 @@ extension SHServerProxy {
         encryptedPrivateKeyData: Data,
         encryptedPrivateKeyIvData: Data,
         encryptedPrivateSignatureData: Data,
-        encryptedPrivateSignatureIVData: Data
+        encryptedPrivateSignatureIvData: Data
     ) async throws -> Void
     {
         try await self.remoteServer.sendEncryptedKeysToWebClient(
@@ -2101,7 +2101,7 @@ extension SHServerProxy {
             encryptedPrivateKeyData: encryptedPrivateKeyData,
             encryptedPrivateKeyIvData: encryptedPrivateKeyIvData,
             encryptedPrivateSignatureData: encryptedPrivateSignatureData,
-            encryptedPrivateSignatureIVData: encryptedPrivateSignatureIVData
+            encryptedPrivateSignatureIvData: encryptedPrivateSignatureIvData
         )
     }
 }
