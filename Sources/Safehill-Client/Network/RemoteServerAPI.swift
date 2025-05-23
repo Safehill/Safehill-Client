@@ -85,6 +85,8 @@ public protocol SHRemoteServerAPI : SHServerAPI {
         sessionId: String,
         requestorIp: String,
         encryptedPrivateKeyData: Data,
-        encryptedPrivateSignatureData: Data
+        encryptedPrivateKeyIvData: Data,
+        encryptedPrivateSignatureData: Data,
+        encryptedPrivateSignatureIVData: Data
     ) async throws -> Void
 }
