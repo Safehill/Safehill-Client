@@ -12,11 +12,11 @@ public let SafehillServerURLComponents: URLComponents = {
     
 #if targetEnvironment(simulator)
     components.scheme = "https"
-    components.host = "67ba-2601-645-c681-b96b-00-1001.ngrok-free.app"
+    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #elseif DEBUG
     components.scheme = "https"
-    components.host = "67ba-2601-645-c681-b96b-00-1001.ngrok-free.app"
+    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #else
     components.scheme = "https"
@@ -32,11 +32,11 @@ public let SafehillServerURLComponentsForWebsockets: URLComponents = {
     
 #if targetEnvironment(simulator)
     components.scheme = "wss"
-    components.host = "67ba-2601-645-c681-b96b-00-1001.ngrok-free.app"
+    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #elseif DEBUG
     components.scheme = "wss"
-    components.host = "67ba-2601-645-c681-b96b-00-1001.ngrok-free.app"
+    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #else
     components.scheme = "wss"
