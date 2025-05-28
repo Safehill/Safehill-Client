@@ -59,7 +59,7 @@ public actor SHAssetEmbeddingsController {
 
     // MARK: - Public methods
 
-    internal func loadModelIfNeeded() async throws {
+    public func loadModelIfNeeded() async throws {
         let variant = ModelVariant.current()
         let fileManager = FileManager.default
         let localModelURL = variant.localURL
