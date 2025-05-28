@@ -2,7 +2,7 @@ import opencv2
 
 public extension SHHashingController {
 
-    static func perceptualHash(for imageData: Data) throws -> PerceptualHash {
+    internal static func perceptualHash(for imageData: Data) throws -> PerceptualHash {
         guard let image = NSUIImage.from(data: imageData) else {
             throw Error.noImageData
         }
@@ -10,7 +10,7 @@ public extension SHHashingController {
         return try perceptualHash(for: image)
     }
     
-    static func perceptualHash(for image: NSUIImage) throws -> PerceptualHash {
+    internal static func perceptualHash(for image: NSUIImage) throws -> PerceptualHash {
         let src = convertImageToMat(image)
         
         let phashAlgorithm = PHash.create()
@@ -20,7 +20,7 @@ public extension SHHashingController {
         return outputMat.hash()
     }
     
-    static func compare(_ hash1: PerceptualHash, _ hash2: PerceptualHash) throws -> Double {
+    internal static func compare(_ hash1: PerceptualHash, _ hash2: PerceptualHash) throws -> Double {
         let phashAlgorithm = PHash.create()
         return phashAlgorithm.compare(hashOne: try Mat.from(hash: hash1), hashTwo: try Mat.from(hash: hash2))
     }

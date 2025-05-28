@@ -14,7 +14,7 @@ struct DummyAsset : SHEncryptedAsset {
     
     var localIdentifier: LocalIdentifier? { nil }
     
-    var fingerprint: PerceptualHash { "" }
+    var fingerprint: String { "" }
     
     var creationDate: Date? { Date() }
     

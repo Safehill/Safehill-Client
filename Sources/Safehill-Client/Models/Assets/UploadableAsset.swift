@@ -9,7 +9,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     
     public let localIdentifier: LocalIdentifier?
     public let globalIdentifier: GlobalIdentifier
-    public let fingerprint: PerceptualHash
+    public let fingerprint: String
     public let creationDate: Date?
     public let data: [SHAssetQuality: Data]
     
@@ -24,7 +24,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
     public init(
         localIdentifier: LocalIdentifier?,
         globalIdentifier: GlobalIdentifier,
-        fingerprint: PerceptualHash,
+        fingerprint: String,
         creationDate: Date?,
         data: [SHAssetQuality: Data]
     ) {
@@ -53,7 +53,7 @@ public class SHUploadableAsset : NSObject, NSSecureCoding {
             return nil
         }
         
-        guard let fingerprint = fingerprint as? PerceptualHash else {
+        guard let fingerprint = fingerprint as? String else {
             log.error("unexpected value for fingerprint when decoding SHUploadableAsset object")
             return nil
         }

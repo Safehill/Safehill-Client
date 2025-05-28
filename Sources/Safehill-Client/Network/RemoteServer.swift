@@ -95,6 +95,7 @@ struct RemoteServer : SHRemoteServerAPI {
         request: URLRequest,
         usingSession urlSession: URLSession,
         decodingResponseAs type: T.Type,
+        warnIfNo200: Bool = true,
         completionHandler: @escaping (Result<T, Error>) -> Void
     ) {
 //        log.trace("""
@@ -129,7 +130,7 @@ struct RemoteServer : SHRemoteServerAPI {
             }
             
             let httpResponse = response as! HTTPURLResponse
-            if httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
+            if warnIfNo200, httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
                 log.warning("request \(request.httpMethod!) \(request.url!) received \(httpResponse.statusCode) response")
                 if let data = data {
                     let convertedString = String(data: data, encoding: String.Encoding.utf8)
@@ -1605,7 +1606,8 @@ struct RemoteServer : SHRemoteServerAPI {
                     RemoteServer.makeRequest(
                         request: request,
                         usingSession: S3Proxy.S3URLSession,
-                        decodingResponseAs: Data.self
+                        decodingResponseAs: Data.self,
+                        warnIfNo200: false
                     ) { result in
                         switch result {
                         case .success(let data):
@@ -1677,7 +1679,7 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: String) async throws {
         try await withUnsafeThrowingContinuation {
             (continuation: UnsafeContinuation<Void, any Error>) in
             
@@ -1695,7 +1697,7 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+    func searchSimilarAssets(to fingerprint: String) async throws {
         throw SHHTTPError.ServerError.notImplemented
     }
     

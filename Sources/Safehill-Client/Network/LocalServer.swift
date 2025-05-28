@@ -701,7 +701,7 @@ struct LocalServer : SHLocalServerAPI {
         ///
         var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetDescriptorUploadState]]()
         var localInfoByGlobalIdentifier = [GlobalIdentifier: (phAssetId: LocalIdentifier?, creationDate: Date?)]()
-        var perceptualHashByGlobalIdentifier = [GlobalIdentifier: PerceptualHash]()
+        var fingerprintByGlobalIdentifier = [GlobalIdentifier: String]()
         
         var condition = KBGenericCondition(value: false)
         for quality in SHAssetQuality.all {
@@ -747,7 +747,7 @@ struct LocalServer : SHLocalServerAPI {
                 creationDate: localInfoByGlobalIdentifier[v.globalIdentifier]?.creationDate ?? v.creationDate
             )
             
-            perceptualHashByGlobalIdentifier[v.globalIdentifier] = v.perceptualHash
+            fingerprintByGlobalIdentifier[v.globalIdentifier] = v.fingerprint
         }
         
         for globalIdentifier in versionUploadStateByIdentifierQuality.keys {
@@ -824,7 +824,7 @@ struct LocalServer : SHLocalServerAPI {
             let descriptor = SHGenericAssetDescriptor(
                 globalIdentifier: globalIdentifier,
                 localIdentifier: localInfoByGlobalIdentifier[globalIdentifier]?.phAssetId,
-                fingerprint: perceptualHashByGlobalIdentifier[globalIdentifier]!,
+                fingerprint: fingerprintByGlobalIdentifier[globalIdentifier]!,
                 creationDate: localInfoByGlobalIdentifier[globalIdentifier]?.creationDate,
                 uploadState: combinedUploadState,
                 sharingInfo: sharingInfo
@@ -1601,7 +1601,7 @@ struct LocalServer : SHLocalServerAPI {
                 let versionMetadata = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: asset.globalIdentifier,
                     localIdentifier: asset.localIdentifier,
-                    perceptualHash: asset.fingerprint,
+                    fingerprint: asset.fingerprint,
                     quality: encryptedVersion.quality,
                     senderEncryptedSecret: encryptedVersion.encryptedSecret,
                     publicKey: encryptedVersion.publicKeyData,
@@ -1968,7 +1968,7 @@ struct LocalServer : SHLocalServerAPI {
                 let newValue = DBSecureSerializableAssetVersionMetadata(
                     globalIdentifier: value.globalIdentifier,
                     localIdentifier: value.localIdentifier,
-                    perceptualHash: value.perceptualHash,
+                    fingerprint: value.fingerprint,
                     quality: value.quality,
                     senderEncryptedSecret: value.senderEncryptedSecret,
                     publicKey: value.publicKey,
@@ -4269,11 +4269,11 @@ struct LocalServer : SHLocalServerAPI {
         }
     }
     
-    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: String) async throws {
         throw SHHTTPError.ServerError.notImplemented
     }
     
-    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+    func searchSimilarAssets(to fingerprint: String) async throws {
         throw SHHTTPError.ServerError.notImplemented
     }
 }

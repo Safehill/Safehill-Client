@@ -80,7 +80,7 @@ public class SHApplePhotoAsset : NSObject, NSSecureCoding {
     
     /// Generate the perceptial hash of the `.lowResolution` image
     /// - Returns: the hash
-    func generatePerceptualHash() async throws -> PerceptualHash {
+    private func generatePerceptualHash() async throws -> PerceptualHash {
         let size = SHSizeForQuality(quality: .lowResolution)
         let image = try await self.phAsset.imageSynchronous(forSize: size, usingImageManager: self.imageManager)
         return try SHHashingController.perceptualHash(for: image)
@@ -294,7 +294,7 @@ extension SHApplePhotoAsset {
     public func toUploadableAsset(
         for versions: [SHAssetQuality],
         globalIdentifier: GlobalIdentifier? = nil,
-        perceptualHash: PerceptualHash? = nil
+        fingerprint: String? = nil
     ) async throws -> SHUploadableAsset {
         let globalId: GlobalIdentifier
         if let globalIdentifier {
@@ -303,17 +303,22 @@ extension SHApplePhotoAsset {
             globalId = await self.generateGlobalIdentifier()
         }
         
-        let fingerprint: PerceptualHash
-        if let perceptualHash {
-            fingerprint = perceptualHash
+        let fp: String
+        if let fingerprint {
+            fp = fingerprint
         } else {
-            fingerprint = try await self.generatePerceptualHash()
+            let size = SHSizeForQuality(quality: .lowResolution)
+            let image = try await self.phAsset.imageSynchronous(forSize: size, usingImageManager: self.imageManager)
+            
+            let embeddingsController = SHAssetEmbeddingsController.shared
+            try await embeddingsController.loadModelIfNeeded()
+            fp = try await embeddingsController.generateEmbeddings(for: image)
         }
         
         return SHUploadableAsset(
             localIdentifier: self.phAsset.localIdentifier,
             globalIdentifier: globalId,
-            fingerprint: fingerprint,
+            fingerprint: fp,
             creationDate: self.phAsset.creationDate,
             data: try await data(for: versions)
         )

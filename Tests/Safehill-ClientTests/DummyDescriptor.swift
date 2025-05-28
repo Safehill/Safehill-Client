@@ -13,7 +13,7 @@ struct DummyDescriptor : SHAssetDescriptor {
     
     var localIdentifier: LocalIdentifier?
     
-    var fingerprint: PerceptualHash
+    var fingerprint: String
     
     var creationDate: Date?
     

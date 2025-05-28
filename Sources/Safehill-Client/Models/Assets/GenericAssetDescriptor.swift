@@ -3,7 +3,7 @@ import Foundation
 public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public let globalIdentifier: GlobalIdentifier
     public var localIdentifier: LocalIdentifier?
-    public var fingerprint: PerceptualHash
+    public var fingerprint: String
     public let creationDate: Date?
     public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
@@ -46,7 +46,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                fingerprint: PerceptualHash,
+                fingerprint: String,
                 creationDate: Date?,
                 uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHDescriptorSharingInfo) {

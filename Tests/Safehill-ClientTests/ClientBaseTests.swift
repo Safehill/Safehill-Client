@@ -169,16 +169,10 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
             publicSignatureData: encryptedImageSecret.signature
         )
         
-        do {
-            let perceptualHash = try SHHashingController.perceptualHash(for: imageData)
-        } catch {
-            // TODO: Use real image data to calculate the perceptual hash
-        }
-        
         let encryptedAsset = SHGenericEncryptedAsset(
             globalIdentifier: "Logo-globalId",
             localIdentifier: "Logo-localId",
-            fingerprint: "0", // perceptualHash,
+            fingerprint: "base64Embedding",
             creationDate: Date(),
             encryptedVersions: [.lowResolution: encryptedVersion]
         )

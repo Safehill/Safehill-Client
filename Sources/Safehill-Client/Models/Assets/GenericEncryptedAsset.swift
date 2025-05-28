@@ -4,13 +4,13 @@ import KnowledgeBase
 public struct SHGenericEncryptedAsset : SHEncryptedAsset {
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
-    public let fingerprint: PerceptualHash
+    public let fingerprint: String
     public let creationDate: Date?
     public let encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion]
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                fingerprint: PerceptualHash,
+                fingerprint: String,
                 creationDate: Date?,
                 encryptedVersions: [SHAssetQuality: SHEncryptedAssetVersion]) {
         self.globalIdentifier = globalIdentifier
@@ -129,7 +129,7 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 encryptedAssetById[metadata.globalIdentifier] = SHGenericEncryptedAsset(
                     globalIdentifier: metadata.globalIdentifier,
                     localIdentifier: metadata.localIdentifier,
-                    fingerprint: metadata.perceptualHash,
+                    fingerprint: metadata.fingerprint,
                     creationDate: metadata.creationDate,
                     encryptedVersions: [quality: version]
                 )

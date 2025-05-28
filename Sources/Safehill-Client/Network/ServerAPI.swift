@@ -471,7 +471,7 @@ public protocol SHServerAPI {
     /// Delete the user avatar image, if any exists
     func deleteAvatarImage(for user: any SHServerUser) async throws
     
-    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: String) async throws
     
-    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws
+    func searchSimilarAssets(to fingerprint: String) async throws
 }

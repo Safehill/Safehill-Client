@@ -4,7 +4,7 @@ import Foundation
 public struct SHServerAsset : Codable {
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
-    public let fingerprint: PerceptualHash
+    public let fingerprint: String
     public let createdBy: UserIdentifier
     public let creationDate: Date?
     public let groupId: String
@@ -25,7 +25,7 @@ public struct SHServerAsset : Codable {
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                fingerprint: PerceptualHash,
+                fingerprint: String,
                 createdBy: UserIdentifier,
                 creationDate: Date?,
                 groupId: String,

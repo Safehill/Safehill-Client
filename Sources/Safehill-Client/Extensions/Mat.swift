@@ -1,6 +1,6 @@
 import opencv2
 
-public typealias PerceptualHash = String
+typealias PerceptualHash = String
 
 extension Mat {
     static func from(hash: PerceptualHash) throws -> Mat {

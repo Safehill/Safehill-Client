@@ -7,7 +7,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     
     let globalIdentifier: GlobalIdentifier
     let localIdentifier: LocalIdentifier?
-    let perceptualHash: PerceptualHash
+    let fingerprint: String
     let quality: SHAssetQuality
     let senderEncryptedSecret: Data
     let publicKey: Data
@@ -18,7 +18,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     enum CodingKeys: String, CodingKey {
         case globalIdentifier
         case localIdentifier
-        case perceptualHash
+        case fingerprint
         case quality
         case senderEncryptedSecret
         case publicKey
@@ -30,7 +30,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     init(
         globalIdentifier: GlobalIdentifier,
         localIdentifier: LocalIdentifier?,
-        perceptualHash: PerceptualHash,
+        fingerprint: String,
         quality: SHAssetQuality,
         senderEncryptedSecret: Data,
         publicKey: Data,
@@ -40,7 +40,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     ) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
-        self.perceptualHash = perceptualHash
+        self.fingerprint = fingerprint
         self.quality = quality
         self.senderEncryptedSecret = senderEncryptedSecret
         self.publicKey = publicKey
@@ -52,7 +52,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     required convenience init?(coder decoder: NSCoder) {
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue) as? String
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue) as? String
-        let perceptualHash = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.perceptualHash.rawValue) as? String
+        let fingerprint = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.fingerprint.rawValue) as? String
         let qualityStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.quality.rawValue) as? String
         let senderEncryptedSecretBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderEncryptedSecret.rawValue) as? String
         let publicKeyBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicKey.rawValue) as? String
@@ -109,7 +109,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         self.init(
             globalIdentifier: globalIdentifier,
             localIdentifier: localIdentifier,
-            perceptualHash: perceptualHash ?? "0",
+            fingerprint: fingerprint ?? "0",
             quality: quality,
             senderEncryptedSecret: senderEncryptedSecret,
             publicKey: publicKey,
@@ -122,7 +122,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     func encode(with coder: NSCoder) {
         coder.encode(globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
-        coder.encode(perceptualHash, forKey: CodingKeys.perceptualHash.rawValue)
+        coder.encode(fingerprint, forKey: CodingKeys.fingerprint.rawValue)
         coder.encode(quality.rawValue, forKey: CodingKeys.quality.rawValue)
         coder.encode(senderEncryptedSecret.base64EncodedString(), forKey: CodingKeys.senderEncryptedSecret.rawValue)
         coder.encode(publicKey.base64EncodedString(), forKey: CodingKeys.publicKey.rawValue)

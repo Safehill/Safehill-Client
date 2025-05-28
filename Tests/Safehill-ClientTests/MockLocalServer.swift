@@ -281,11 +281,11 @@ class MockLocalServer: SHLocalServerAPI {
         
     }
     
-    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: String) async throws {
         
     }
     
-    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+    func searchSimilarAssets(to fingerprint: String) async throws {
         
     }
     

@@ -10,7 +10,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
-    public let fingerprint: PerceptualHash
+    public let fingerprint: String
     public let creationDate: Date?
     public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
@@ -36,7 +36,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                fingerprint: PerceptualHash,
+                fingerprint: String,
                 creationDate: Date?,
                 uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHGenericDescriptorSharingInfo) {
@@ -61,7 +61,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
             return nil
         }
         guard let fingerprint = fingerprint as? String else {
-            log.error("unexpected value for perceptualHash when decoding SHGenericAssetDescriptorClass object")
+            log.error("unexpected value for fignerprint when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
         guard let uploadStateStr = uploadStateStr as? String,
