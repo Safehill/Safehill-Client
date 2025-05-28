@@ -28,7 +28,7 @@ public enum NSUIImage {
     }
 #endif
     
-    static func from(data: Data) -> NSUIImage? {
+    public static func from(data: Data) -> NSUIImage? {
 #if os(iOS)
         guard let image = UIImage(data: data) else {
             return nil
@@ -85,7 +85,7 @@ public enum NSUIImage {
 
 extension NSUIImage {
     
-    func toCVPixelBuffer(width: Int = 224, height: Int = 224) -> CVPixelBuffer? {
+    internal func toCVPixelBuffer(width: Int = 224, height: Int = 224) -> CVPixelBuffer? {
         var pixelBuffer: CVPixelBuffer?
         
         let attrs: [CFString: Any] = [
