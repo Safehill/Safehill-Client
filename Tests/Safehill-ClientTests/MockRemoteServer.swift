@@ -258,4 +258,7 @@ class MockRemoteServer: SHRemoteServerAPI {
     func getRemoteAssets(withGlobalIdentifiers: [GlobalIdentifier], versions: [SHAssetQuality]) async throws -> [GlobalIdentifier: any SHEncryptedAsset] {
         return stubbedAssets
     }
+    
+    func sendEncryptedKeysToWebClient(sessionId: String, requestorIp: String, encryptedPrivateKeyData: Data, encryptedPrivateKeyIvData: Data, encryptedPrivateSignatureData: Data, encryptedPrivateSignatureIvData: Data) async throws {
+    }
 }
