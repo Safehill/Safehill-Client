@@ -12,12 +12,16 @@ enum ModelVariant {
     case neuralNetwork
 
     static func current() -> ModelVariant {
+#if targetEnvironment(simulator)
+        // Always fallback to neuralNetwork on simulator
+        return .neuralNetwork
+#else
         if #available(iOS 15.0, macOS 12.0, *) {
             return .mlProgram
-        }
-        else {
+        } else {
             return .neuralNetwork
         }
+#endif
     }
 
     var s3URL: URL {
@@ -146,7 +150,7 @@ public actor SHAssetEmbeddingsController {
             ])
         }
 
-        guard let buffer = image.toCVPixelBuffer(width: 224, height: 224) else {
+        guard let buffer = image.toCVPixelBuffer() else {
             throw NSError(domain: "TinyCLIP", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "Failed to create pixel buffer"
             ])
