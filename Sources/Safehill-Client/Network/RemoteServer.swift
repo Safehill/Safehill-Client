@@ -44,7 +44,7 @@ struct GenericFailureResponse: Decodable {
     let reason: String?
 }
 
-struct RemoteServer : SHServerAPI {
+struct RemoteServer : SHRemoteServerAPI {
     
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
@@ -656,10 +656,10 @@ struct RemoteServer : SHServerAPI {
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
-                log.debug("[rest-api] retrieved \(descriptors.count) asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
+                log.debug("[rest-api] REMOTE retrieved \(descriptors.count) asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
                 completionHandler(.success(descriptors))
             case .failure(let error):
-                log.error("[rest-api] error retrieving asset descriptors. \(error.localizedDescription)")
+                log.error("[rest-api] REMOTE error retrieving asset descriptors. \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -679,10 +679,10 @@ struct RemoteServer : SHServerAPI {
         self.post("assets/descriptors/retrieve", parameters: parameters) { (result: Result<[SHGenericAssetDescriptor], Error>) in
             switch result {
             case .success(let descriptors):
-                log.debug("[rest-api] retrieved \(descriptors.count) asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
+                log.debug("[rest-api] REMOTE retrieved \(descriptors.count) asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil")")
                 completionHandler(.success(descriptors))
             case .failure(let error):
-                log.error("[rest-api] error retrieving asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil"). \(error.localizedDescription)")
+                log.error("[rest-api] REMOTE error retrieving asset descriptors after \(after?.iso8601withFractionalSeconds ?? "nil"). \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         }
@@ -1697,5 +1697,37 @@ struct RemoteServer : SHServerAPI {
     
     func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
         throw SHHTTPError.ServerError.notImplemented
+    }
+    
+    func sendEncryptedKeysToWebClient(
+        sessionId: String,
+        requestorIp: String,
+        encryptedPrivateKeyData: Data,
+        encryptedPrivateKeyIvData: Data,
+        encryptedPrivateSignatureData: Data,
+        encryptedPrivateSignatureIvData: Data
+    ) async throws -> Void
+    {
+        try await withUnsafeThrowingContinuation {
+            (continuation: UnsafeContinuation<Void, any Error>) in
+            
+            let parameters = [
+                "requestorIp": requestorIp,
+                "privateKey": encryptedPrivateKeyData.base64EncodedString(),
+                "privateKeyIV": encryptedPrivateKeyIvData.base64EncodedString(),
+                "privateSignature": encryptedPrivateSignatureData.base64EncodedString(),
+                "privateSignatureIV": encryptedPrivateSignatureIvData.base64EncodedString()
+            ]
+            
+            self.post("app-web-auth/\(sessionId)/send-keys", parameters: parameters) {
+                (result: Result<NoReply, Error>) in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success:
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 }

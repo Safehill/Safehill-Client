@@ -1,6 +1,6 @@
 import Foundation
 
-typealias GroupInfoDiff = (
+public typealias GroupInfoDiff = (
     groupInfo: SHAssetGroupInfo,
     descriptorByAssetId: [GlobalIdentifier: any SHAssetDescriptor]
 )

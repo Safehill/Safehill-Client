@@ -1,6 +1,6 @@
 import Foundation
 
-internal protocol ConversationThreadUpdate {
+public protocol ConversationThreadUpdate {
     var threadId: String { get }
     var name: String? { get }
     var membersPublicIdentifier: [UserIdentifier] { get }

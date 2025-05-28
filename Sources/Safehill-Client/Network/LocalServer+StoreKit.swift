@@ -32,9 +32,9 @@ public enum SHStoreKitHandlerError: Error, LocalizedError {
 }
 
 public enum SHIAPProduct {
-    case free, basic, premium, pro
+    case free, basic, premium
     
-    public var identifier: String? {
+    public var snoogAppIdentifier: String? {
         switch self {
         case .free:
             nil
@@ -42,8 +42,17 @@ public enum SHIAPProduct {
             "safehill.subscription.basic"
         case .premium:
             "safehill.subscription.premium"
-        case .pro:
-            "safehill.subscription.professional"
+        }
+    }
+    
+    public var safehillAppIdentifier: String? {
+        switch self {
+        case .free:
+            nil
+        case .basic:
+            "safehill.safehillapp.subscription.basic"
+        case .premium:
+            "safehill.safehillapp.subscription.premium"
         }
     }
 }
@@ -53,8 +62,7 @@ public let SHIAPSharedSecret = "92267f6120324e16b1cf9b52c5ea26e7"
 public let SHIAPProductLimits = [
     SHIAPProduct.free: 50,
     SHIAPProduct.basic: 1000,
-    SHIAPProduct.premium: 25000,
-    SHIAPProduct.pro: 1000000
+    SHIAPProduct.premium: 25000
 ]
 
 

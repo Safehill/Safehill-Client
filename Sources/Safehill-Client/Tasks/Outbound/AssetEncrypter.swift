@@ -366,7 +366,7 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
             dispatchGroup.leave()
         }
         
-        dispatchGroup.notify(queue: .global(qos: qos)) {
+        dispatchGroup.notify(queue: .global(qos: qos), execute: {
             guard secretRetrievalError == nil else {
                 handleError(secretRetrievalError!)
                 return
@@ -425,6 +425,6 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     }
                 }
             }
-        }
+        })
     }
 }
