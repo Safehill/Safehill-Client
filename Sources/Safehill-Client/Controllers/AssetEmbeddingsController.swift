@@ -164,9 +164,17 @@ public actor SHAssetEmbeddingsController {
 
         let input = try MLDictionaryFeatureProvider(dictionary: ["input": buffer])
         let result = try model.prediction(from: input)
-
-        guard let embedding = result.featureValue(for: "output")?.multiArrayValue else {
+        
+        guard result.featureNames.count == 1,
+              let featureName = result.featureNames.first
+        else {
             throw NSError(domain: "TinyCLIP", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: "Model did not return expected feature"
+            ])
+        }
+
+        guard let embedding = result.featureValue(for: featureName)?.multiArrayValue else {
+            throw NSError(domain: "TinyCLIP", code: 5, userInfo: [
                 NSLocalizedDescriptionKey: "Model did not return embedding"
             ])
         }
