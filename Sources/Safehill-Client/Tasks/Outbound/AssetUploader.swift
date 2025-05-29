@@ -279,10 +279,17 @@ internal class SHUploadOperation: Operation, SHBackgroundQueueBackedOperationPro
                 
                 Task(priority: qos.toTaskPriority()) {
                     let fingerprint: AssetFingerprint
-                    if uploadRequest.asset.fingerprint == nil {
-                        try await uploadRequest.asset.calculateFingerprintIfNeeded()
+                    
+                    do {
+                        if uploadRequest.asset.fingerprint == nil {
+                            try await uploadRequest.asset.calculateFingerprintIfNeeded()
+                        }
+                        fingerprint = uploadRequest.asset.fingerprint!
+                    } catch {
+                        let error = SHBackgroundOperationError.fatalError("failed to create embeddings: \(error.localizedDescription)")
+                        handleError(error)
+                        return
                     }
-                    fingerprint = uploadRequest.asset.fingerprint!
                     
                     let serverAsset: SHServerAsset
                     do {
