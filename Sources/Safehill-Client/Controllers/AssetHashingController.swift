@@ -1,6 +1,8 @@
 import Photos
 import Safehill_Crypto
 
+public typealias PerceptualHash = String
+
 public class SHHashingController {
     
     public enum Error: Swift.Error, CustomStringConvertible, LocalizedError {

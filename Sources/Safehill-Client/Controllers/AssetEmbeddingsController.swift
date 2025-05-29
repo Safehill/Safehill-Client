@@ -60,6 +60,10 @@ public actor SHAssetEmbeddingsController {
     public static let shared = SHAssetEmbeddingsController()
 
     private var model: MLModel?
+    
+    private init() {
+        self.model = nil
+    }
 
     // MARK: - Public methods
 

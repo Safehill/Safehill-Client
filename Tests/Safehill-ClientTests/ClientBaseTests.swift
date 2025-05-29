@@ -172,7 +172,6 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
         let encryptedAsset = SHGenericEncryptedAsset(
             globalIdentifier: "Logo-globalId",
             localIdentifier: "Logo-localId",
-            fingerprint: "base64Embedding",
             creationDate: Date(),
             encryptedVersions: [.lowResolution: encryptedVersion]
         )
@@ -498,7 +497,6 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         return SHGenericEncryptedAsset(
             globalIdentifier: "globalId",
             localIdentifier: "localId",
-            fingerprint: "0",
             creationDate: Date(),
             encryptedVersions: [.lowResolution: encryptedVersion]
         )
@@ -519,7 +517,6 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         return SHGenericDecryptedAsset(
             globalIdentifier: encryptedAsset.globalIdentifier,
             localIdentifier: encryptedAsset.localIdentifier,
-            fingerprint: "0",
             decryptedVersions: [.lowResolution: decryptedData],
             creationDate: encryptedAsset.creationDate
         )

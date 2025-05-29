@@ -13,8 +13,6 @@ struct DummyDescriptor : SHAssetDescriptor {
     
     var localIdentifier: LocalIdentifier?
     
-    var fingerprint: String
-    
     var creationDate: Date?
     
     var uploadState: SHAssetDescriptorUploadState
@@ -25,7 +23,6 @@ struct DummyDescriptor : SHAssetDescriptor {
         SHGenericAssetDescriptorClass(
             globalIdentifier: self.globalIdentifier,
             localIdentifier: self.localIdentifier,
-            fingerprint: self.fingerprint,
             creationDate: self.creationDate,
             uploadState: self.uploadState,
             sharingInfo: SHGenericDescriptorSharingInfo(
@@ -39,7 +36,6 @@ struct DummyDescriptor : SHAssetDescriptor {
     init(globalIdentifier: GlobalIdentifier) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = nil
-        self.fingerprint = ""
         self.creationDate = nil
         self.uploadState = .completed
         self.sharingInfo = SHGenericDescriptorSharingInfo(

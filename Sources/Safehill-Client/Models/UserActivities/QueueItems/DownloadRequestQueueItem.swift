@@ -25,7 +25,6 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         let assetDescriptor = SHGenericAssetDescriptorClass(
             globalIdentifier: assetDescriptor.globalIdentifier,
             localIdentifier: assetDescriptor.localIdentifier,
-            fingerprint: assetDescriptor.fingerprint,
             creationDate: assetDescriptor.creationDate,
             uploadState: assetDescriptor.uploadState,
             sharingInfo: assetDescriptor.sharingInfo as! SHGenericDescriptorSharingInfo
@@ -71,7 +70,6 @@ public class SHDownloadRequestQueueItem: NSObject, NSSecureCoding, SHSerializabl
         let assetDescriptor = SHGenericAssetDescriptor(
             globalIdentifier: descriptor.globalIdentifier,
             localIdentifier: descriptor.localIdentifier,
-            fingerprint: descriptor.fingerprint,
             creationDate: descriptor.creationDate,
             uploadState: descriptor.uploadState,
             sharingInfo: descriptor.sharingInfo

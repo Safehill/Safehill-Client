@@ -10,7 +10,6 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
-    public let fingerprint: String
     public let creationDate: Date?
     public let uploadState: SHAssetDescriptorUploadState
     public let sharingInfo: SHDescriptorSharingInfo
@@ -18,7 +17,6 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     enum CodingKeys: String, CodingKey {
         case globalIdentifier
         case localIdentifier
-        case fingerprint
         case creationDate
         case uploadState
         case sharingInfo
@@ -27,7 +25,6 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public func encode(with coder: NSCoder) {
         coder.encode(self.globalIdentifier, forKey: CodingKeys.globalIdentifier.rawValue)
         coder.encode(self.localIdentifier, forKey: CodingKeys.localIdentifier.rawValue)
-        coder.encode(self.fingerprint, forKey: CodingKeys.fingerprint.rawValue)
         coder.encode(self.creationDate, forKey: CodingKeys.creationDate.rawValue)
         coder.encode(self.uploadState.rawValue, forKey: CodingKeys.uploadState.rawValue)
         let encodableSharingInfo = try? JSONEncoder().encode(self.sharingInfo as! SHGenericDescriptorSharingInfo)
@@ -36,13 +33,11 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
-                fingerprint: String,
                 creationDate: Date?,
                 uploadState: SHAssetDescriptorUploadState,
                 sharingInfo: SHGenericDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
-        self.fingerprint = fingerprint
         self.creationDate = creationDate
         self.uploadState = uploadState
         self.sharingInfo = sharingInfo
@@ -51,17 +46,12 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public required convenience init?(coder decoder: NSCoder) {
         let globalIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.globalIdentifier.rawValue)
         let localIdentifier = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.localIdentifier.rawValue)
-        let fingerprint = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.fingerprint.rawValue)
         let creationDate = decoder.decodeObject(of: NSDate.self, forKey: CodingKeys.creationDate.rawValue)
         let uploadStateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.uploadState.rawValue)
         let sharingInfoData = decoder.decodeObject(of: NSData.self, forKey: CodingKeys.sharingInfo.rawValue)
                 
         guard let globalIdentifier = globalIdentifier as? String else {
             log.error("unexpected value for globalIdentifier when decoding SHGenericAssetDescriptorClass object")
-            return nil
-        }
-        guard let fingerprint = fingerprint as? String else {
-            log.error("unexpected value for fignerprint when decoding SHGenericAssetDescriptorClass object")
             return nil
         }
         guard let uploadStateStr = uploadStateStr as? String,
@@ -79,7 +69,6 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
         self.init(
             globalIdentifier: globalIdentifier,
             localIdentifier: localIdentifier as? LocalIdentifier,
-            fingerprint: fingerprint,
             creationDate: creationDate as? Date,
             uploadState: uploadState,
             sharingInfo: sharingInfo

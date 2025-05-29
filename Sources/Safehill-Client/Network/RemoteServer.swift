@@ -751,6 +751,7 @@ struct RemoteServer : SHRemoteServerAPI {
     }
 
     func create(assets: [any SHEncryptedAsset],
+                fingerprintsById: [GlobalIdentifier: AssetFingerprint],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
                 force: Bool,
@@ -759,6 +760,8 @@ struct RemoteServer : SHRemoteServerAPI {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API only supports creating one asset per request")))
             return
         }
+        
+        let fingerprint = fingerprintsById[asset.globalIdentifier]!
         
         var assetCreationDate: Date
         if asset.creationDate == nil {
@@ -783,11 +786,15 @@ struct RemoteServer : SHRemoteServerAPI {
         var createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
-            "fingerprint": asset.fingerprint,
+            "embeddings": fingerprint.embeddings,
             "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions
         ]
+        
+        if let pHash = fingerprint.perceptualHash {
+            createDict["perceptualHash"] = fingerprint.perceptualHash
+        }
         
         if force {
             createDict["force"] = true
@@ -1679,11 +1686,14 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: String) async throws {
+    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: AssetFingerprint) async throws {
         try await withUnsafeThrowingContinuation {
             (continuation: UnsafeContinuation<Void, any Error>) in
             
-            let parameters = ["fingerprint": fingerprint]
+            var parameters = ["embeddings": fingerprint.embeddings]
+            if let pHash = fingerprint.perceptualHash {
+                parameters["perceptualHash"] = pHash
+            }
             
             self.post("fingerprint/update/\(globalIdentifier)", parameters: parameters) {
                 (result: Result<NoReply, Error>) in
@@ -1697,7 +1707,7 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func searchSimilarAssets(to fingerprint: String) async throws {
+    func searchSimilarAssets(to fingerprint: AssetFingerprint) async throws {
         throw SHHTTPError.ServerError.notImplemented
     }
     

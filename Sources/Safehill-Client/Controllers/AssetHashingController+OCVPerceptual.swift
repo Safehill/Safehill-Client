@@ -1,14 +1,6 @@
 import opencv2
 
 public extension SHHashingController {
-
-    internal static func perceptualHash(for imageData: Data) throws -> PerceptualHash {
-        guard let image = NSUIImage.from(data: imageData) else {
-            throw Error.noImageData
-        }
-        
-        return try perceptualHash(for: image)
-    }
     
     internal static func perceptualHash(for image: NSUIImage) throws -> PerceptualHash {
         let src = convertImageToMat(image)

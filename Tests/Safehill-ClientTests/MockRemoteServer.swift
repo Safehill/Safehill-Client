@@ -83,7 +83,7 @@ class MockRemoteServer: SHRemoteServerAPI {
         completionHandler(.success(stubbedAssets))
     }
     
-    func create(assets: [any SHEncryptedAsset], groupId: String, filterVersions: [SHAssetQuality]?, force: Bool, completionHandler: @escaping (Result<[SHServerAsset], any Error>) -> ()) {
+    func create(assets: [any SHEncryptedAsset], fingerprintsById: [GlobalIdentifier: AssetFingerprint], groupId: String, filterVersions: [SHAssetQuality]?, force: Bool, completionHandler: @escaping (Result<[SHServerAsset], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -239,11 +239,11 @@ class MockRemoteServer: SHRemoteServerAPI {
         
     }
     
-    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: String) async throws {
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: AssetFingerprint) async throws {
         
     }
     
-    func searchSimilarAssets(to fingerprint: String) async throws {
+    func searchSimilarAssets(to fingerprint: AssetFingerprint) async throws {
         
     }
     

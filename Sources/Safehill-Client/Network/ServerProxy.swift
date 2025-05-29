@@ -2081,7 +2081,7 @@ extension SHServerProxy {
     
     public func updateAssetFingerprint(
         for globalIdentifier: GlobalIdentifier,
-        _ fingerprint: String
+        _ fingerprint: AssetFingerprint
     ) async throws {
         try await self.remoteServer.updateAssetFingerprint(for: globalIdentifier, fingerprint)
     }

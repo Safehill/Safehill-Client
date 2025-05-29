@@ -1,7 +1,5 @@
 import opencv2
 
-typealias PerceptualHash = String
-
 extension Mat {
     static func from(hash: PerceptualHash) throws -> Mat {
         // Convert the hex string to bytes

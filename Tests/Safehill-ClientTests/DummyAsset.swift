@@ -14,8 +14,6 @@ struct DummyAsset : SHEncryptedAsset {
     
     var localIdentifier: LocalIdentifier? { nil }
     
-    var fingerprint: String { "" }
-    
     var creationDate: Date? { Date() }
     
     var encryptedVersions: [SHAssetQuality : any SHEncryptedAssetVersion]
