@@ -1695,7 +1695,7 @@ struct RemoteServer : SHRemoteServerAPI {
                 parameters["perceptualHash"] = pHash
             }
             
-            self.post("fingerprint/update/\(globalIdentifier)", parameters: parameters) {
+            self.post("fingerprint/update/ref/\(globalIdentifier)", parameters: parameters) {
                 (result: Result<NoReply, Error>) in
                 switch result {
                 case .failure(let error):
