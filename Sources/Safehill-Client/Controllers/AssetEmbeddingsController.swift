@@ -27,9 +27,9 @@ enum ModelVariant {
     var s3URL: URL {
         switch self {
         case .mlProgram:
-            return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/v1/TinyCLIP.mlpackage.zip")!
+            return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/latest/TinyCLIP.mlpackage.zip")!
         case .neuralNetwork:
-            return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/v1/compat/TinyCLIP.mlmodel")!
+            return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/latest/compat/TinyCLIP.mlmodel")!
         }
     }
 
@@ -71,6 +71,11 @@ public actor SHAssetEmbeddingsController {
         let variant = ModelVariant.current()
         let fileManager = FileManager.default
         let localModelURL = variant.localURL
+        
+        // TODO: Replace this with checksums.
+        // This is here temporarily so that we can force download
+        // instead of using the cached version
+        fileManager.removeItem(atPath: localModelURL.path)
 
         if !fileManager.fileExists(atPath: localModelURL.path) {
             try await downloadAndCacheModel(from: variant.s3URL, to: localModelURL)
