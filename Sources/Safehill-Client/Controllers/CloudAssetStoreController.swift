@@ -35,6 +35,7 @@ struct SHAssetStoreController {
     
     func upload(
         asset encryptedAsset: any SHEncryptedAsset,
+        fingerprint: AssetFingerprint,
         with groupId: String,
         filterVersions: [SHAssetQuality]? = nil,
         force: Bool
@@ -42,6 +43,7 @@ struct SHAssetStoreController {
         
         let serverAsset = try self.createRemoteAsset(
             encryptedAsset,
+            fingerprint: fingerprint,
             groupId: groupId,
             filterVersions: filterVersions,
             force: force
@@ -66,6 +68,7 @@ extension SHAssetStoreController {
     
     private func createRemoteAsset(
         _ asset: any SHEncryptedAsset,
+        fingerprint: AssetFingerprint,
         groupId: String,
         filterVersions: [SHAssetQuality]?,
         force: Bool
@@ -80,6 +83,7 @@ extension SHAssetStoreController {
         group.enter()
         self.user.serverProxy.remoteServer.create(
             assets: [asset],
+            fingerprintsById: [asset.globalIdentifier: fingerprint],
             groupId: groupId,
             filterVersions: filterVersions,
             force: force

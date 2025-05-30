@@ -209,7 +209,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                             return SHGenericAssetDescriptor(
                                 globalIdentifier: desc.globalIdentifier,
                                 localIdentifier: desc.localIdentifier,
-                                fingerprint: desc.fingerprint,
                                 creationDate: desc.creationDate,
                                 uploadState: desc.uploadState,
                                 sharingInfo: SHGenericDescriptorSharingInfo(
