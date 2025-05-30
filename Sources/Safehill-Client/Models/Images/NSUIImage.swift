@@ -88,17 +88,24 @@ extension NSUIImage {
     internal func toCVPixelBuffer(width: Int = 224, height: Int = 224) -> CVPixelBuffer? {
         var pixelBuffer: CVPixelBuffer?
         
-        let attrs: [CFString: Any] = [
-            kCVPixelBufferCGImageCompatibilityKey: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: true
-        ]
+        // ✅ Use BGRA here
+        // Core ML reads BGRA as RGB by dropping the alpha channel
+        // and reordering to RGB.
+        // Do not use ARGB as it causes the model to use the alpha channel
+        // as red, etc. → wrong order!
+        
+        let attrs = [
+            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
+            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue!,
+            kCVPixelBufferPixelFormatTypeKey: Int(kCVPixelFormatType_32BGRA)
+        ] as CFDictionary
         
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
             width,
             height,
-            kCVPixelFormatType_32ARGB,
-            attrs as CFDictionary,
+            kCVPixelFormatType_32BGRA,
+            attrs,
             &pixelBuffer
         )
         
