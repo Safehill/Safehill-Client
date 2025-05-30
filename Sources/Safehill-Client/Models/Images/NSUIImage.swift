@@ -131,7 +131,7 @@ extension NSUIImage {
         
         CVPixelBufferLockBaseAddress(buffer, [])
         
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         guard let context = CGContext(
             data: CVPixelBufferGetBaseAddress(buffer),
             width: width,
@@ -154,6 +154,7 @@ extension NSUIImage {
             CVPixelBufferUnlockBaseAddress(buffer, [])
             return nil
         }
+        context.interpolationQuality = .high
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
         
 #elseif os(macOS)
@@ -172,6 +173,7 @@ extension NSUIImage {
             return nil
         }
         
+        context.interpolationQuality = .high
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 #endif
         
