@@ -106,6 +106,22 @@ extension NSUIImage {
             return nil
         }
         
+#if DEBUG
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        if let baseAddress = CVPixelBufferGetBaseAddress(buffer) {
+            let buf = baseAddress.assumingMemoryBound(to: UInt8.self)
+            for i in 0..<10 {
+                let offset = i * 4
+                let a = buf[offset]     // Alpha
+                let r = buf[offset + 1]
+                let g = buf[offset + 2]
+                let b = buf[offset + 3]
+                print("Pixel \(i): R=\(r), G=\(g), B=\(b), A=\(a)")
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(buffer, .readOnly)
+#endif
+        
         CVPixelBufferLockBaseAddress(buffer, [])
         
         let colorSpace = CGColorSpaceCreateDeviceRGB()
