@@ -75,7 +75,7 @@ public actor SHAssetEmbeddingsController {
         // TODO: Replace this with checksums.
         // This is here temporarily so that we can force download
         // instead of using the cached version
-        fileManager.removeItem(atPath: localModelURL.path)
+        try fileManager.removeItem(atPath: localModelURL.path)
 
         if !fileManager.fileExists(atPath: localModelURL.path) {
             try await downloadAndCacheModel(from: variant.s3URL, to: localModelURL)
