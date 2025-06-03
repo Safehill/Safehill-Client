@@ -2,6 +2,12 @@ import Foundation
 
 public protocol SHRemoteServerAPI : SHServerAPI {
     
+    // MARK: Asset embeddings
+    
+    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: AssetFingerprint) async throws
+    
+    func searchSimilarAssets(to fingerprint: AssetFingerprint) async throws
+    
     // MARK: User Management
     
     /// Logs the current user, aka the requestor
