@@ -18,6 +18,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     let socket: WebSocketAPI
     
     private var websocketConnectionDelegates: [WebSocketDelegate]
+    internal let assetsDescriptorsDelegates: [SHAssetsDescriptorsDelegate]
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     internal let userConversionDelegates: [SHUserConversionDelegate]
@@ -29,6 +30,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         user: SHAuthenticatedLocalUser,
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
+        assetDescriptorsDelegates: [SHAssetsDescriptorsDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
         userConversionDelegates: [SHUserConversionDelegate]
@@ -36,6 +38,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
+        self.assetsDescriptorsDelegates = assetDescriptorsDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.userConversionDelegates = userConversionDelegates
@@ -128,6 +131,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             return
         }
         
+        let assetsDescriptorsDelegates = self.assetsDescriptorsDelegates
         let interactionsSyncDelegates = self.interactionsSyncDelegates
         let userConnectionsDelegates = self.userConnectionsDelegates
         
@@ -383,7 +387,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
                 self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                interactionsSyncDelegates.forEach({
+                assetsDescriptorsDelegates.forEach({
                     $0.didUpdateAssets(with: globalIdentifiers)
                 })
                 
@@ -392,7 +396,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
-                interactionsSyncDelegates.forEach({
+                assetsDescriptorsDelegates.forEach({
                     $0.didUpdateAssets(with: globalIdentifiers)
                 })
             }

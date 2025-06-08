@@ -18,8 +18,6 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     func didReceivePhotoMessages(_: [ConversationThreadAssetDTO],
                                  in threadId: String)
     
-    func didUpdateAssets(with globalIdentifiers: [GlobalIdentifier])
-    
     func reactionsDidChange(inThread threadId: String)
     func reactionsDidChange(inGroup groupId: String)
     
