@@ -19,7 +19,6 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
                                  in threadId: String)
     
     func didUpdateAssets(with globalIdentifiers: [GlobalIdentifier])
-    func didRemoveAssets(with globalIdentifiers: [GlobalIdentifier])
     
     func reactionsDidChange(inThread threadId: String)
     func reactionsDidChange(inGroup groupId: String)

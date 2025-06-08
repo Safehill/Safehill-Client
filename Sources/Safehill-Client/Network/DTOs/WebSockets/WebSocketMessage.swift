@@ -15,8 +15,7 @@ public struct WebSocketMessage: Codable {
         case connectionRequest = "connection-request"
         case userConversionManifest = "user-conversion-manifest"
         case threadUserConverted = "thread-user-converted"
-        case assetsUpdate = "assets-update"
-        case assetsRemove = "assets-remove"
+        case assetsDescriptorsChanged = "assets-descriptors-changed"
     }
     
     let type: MessageType

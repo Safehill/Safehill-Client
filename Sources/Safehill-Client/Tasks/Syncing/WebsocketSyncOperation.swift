@@ -375,7 +375,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                 }
                 
-            case .groupAssetsShare: // DEPRECATED IN FAVOR OF .assetsUpdate
+            case .groupAssetsShare: // DEPRECATED IN FAVOR OF .assetsDescriptorChanged
                 guard let groupAssets = try? JSONDecoder().decode([ConversationThreadAssetDTO].self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
@@ -387,22 +387,13 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     $0.didUpdateAssets(with: globalIdentifiers)
                 })
                 
-            case .assetsUpdate:
+            case .assetsDescriptorsChanged:
                 guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
                 interactionsSyncDelegates.forEach({
                     $0.didUpdateAssets(with: globalIdentifiers)
-                })
-                
-            case .assetsRemove:
-                guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
-                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
-                    return
-                }
-                interactionsSyncDelegates.forEach({
-                    $0.didRemoveAssets(with: globalIdentifiers)
                 })
             }
         }
