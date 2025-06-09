@@ -344,6 +344,8 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     return
                 }
                 
+                self.log.debug("[ws] UPDATE-THREAD: thread id \(threadUpdateWsMessage.threadId)")
+                
                 Task {
                     do {
                         try await self.serverProxy.updateLocalThread(from: threadUpdateWsMessage)
@@ -396,6 +398,9 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
+                
                 assetsDescriptorsDelegates.forEach({
                     $0.didUpdateAssets(with: globalIdentifiers)
                 })
