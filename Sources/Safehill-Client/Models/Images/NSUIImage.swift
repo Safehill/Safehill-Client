@@ -1,4 +1,5 @@
 import CoreVideo
+import CoreML
 
 #if os(iOS)
 import UIKit
@@ -85,101 +86,76 @@ public enum NSUIImage {
 
 extension NSUIImage {
     
-    internal func toCVPixelBuffer(width: Int = 224, height: Int = 224) -> CVPixelBuffer? {
-        var pixelBuffer: CVPixelBuffer?
-        
-        // ✅ Use BGRA here
-        // Core ML reads BGRA as RGB by dropping the alpha channel
-        // and reordering to RGB.
-        // Do not use ARGB as it causes the model to use the alpha channel
-        // as red, etc. → wrong order!
-        
-        let attrs = [
-            kCVPixelBufferCGImageCompatibilityKey: kCFBooleanTrue!,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: kCFBooleanTrue!,
-            kCVPixelBufferPixelFormatTypeKey: Int(kCVPixelFormatType_32BGRA)
-        ] as CFDictionary
-        
-        let status = CVPixelBufferCreate(
-            kCFAllocatorDefault,
-            width,
-            height,
-            kCVPixelFormatType_32BGRA,
-            attrs,
-            &pixelBuffer
-        )
-        
-        guard status == kCVReturnSuccess, let buffer = pixelBuffer else {
-            return nil
+    func toNormalizedNCHWArray() throws -> MLMultiArray {
+        guard let resized = self.resized(to: CGSize(width: 224, height: 224)),
+              let rgbData = resized.rgbData() else {
+            throw NSError(domain: "TinyCLIP", code: 10, userInfo: [NSLocalizedDescriptionKey: "Failed to preprocess image"])
         }
-        
-#if DEBUG
-        CVPixelBufferLockBaseAddress(buffer, .readOnly)
-        if let baseAddress = CVPixelBufferGetBaseAddress(buffer) {
-            let buf = baseAddress.assumingMemoryBound(to: UInt8.self)
-            for i in 0..<10 {
-                let offset = i * 4
-                let a = buf[offset]     // Alpha
-                let r = buf[offset + 1]
-                let g = buf[offset + 2]
-                let b = buf[offset + 3]
-                print("Pixel \(i): R=\(r), G=\(g), B=\(b), A=\(a)")
+
+        let array = try MLMultiArray(shape: [1, 3, 224, 224], dataType: .float32)
+
+        // CLIP normalization constants
+        let mean: [Float] = [0.485, 0.456, 0.406]
+        let std: [Float]  = [0.229, 0.224, 0.225]
+
+        for c in 0..<3 {
+            for y in 0..<224 {
+                for x in 0..<224 {
+                    let idx = (y * 224 + x) * 3 + c
+                    let pixel = Float(rgbData[idx]) / 255.0
+                    let normalized = (pixel - mean[c]) / std[c]
+                    
+                    let index: [NSNumber] = [0, NSNumber(value: c), NSNumber(value: y), NSNumber(value: x)]
+                    array[index] = NSNumber(value: normalized)
+                }
             }
         }
-        CVPixelBufferUnlockBaseAddress(buffer, .readOnly)
-#endif
-        
-        CVPixelBufferLockBaseAddress(buffer, [])
-        
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-        guard let context = CGContext(
-            data: CVPixelBufferGetBaseAddress(buffer),
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
-        ) else {
-            CVPixelBufferUnlockBaseAddress(buffer, [])
-            return nil
-        }
-        
-        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
-        
-        let image = self.platformImage
-        
+
+        return array
+    }
+
+    private func resized(to size: CGSize) -> NSUIImage? {
 #if os(iOS)
-        guard let cgImage = image.cgImage else {
-            CVPixelBufferUnlockBaseAddress(buffer, [])
-            return nil
-        }
-        context.interpolationQuality = .high
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        
+        UIGraphicsBeginImageContextWithOptions(size, false, 1.0)
+        self.platformImage.draw(in: CGRect(origin: .zero, size: size))
+        let result = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return result == nil ? nil : NSUIImage.uiKit(result!)
 #elseif os(macOS)
-        let newImage = NSImage(size: NSSize(width: width, height: height))
+        let newImage = NSImage(size: size)
         newImage.lockFocus()
-        image.draw(
-            in: NSRect(x: 0, y: 0, width: width, height: height),
+        self.platformImage.draw(
+            in: NSRect(origin: .zero, size: size),
             from: .zero,
             operation: .copy,
             fraction: 1.0
         )
         newImage.unlockFocus()
-        
-        guard let cgImage = newImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            CVPixelBufferUnlockBaseAddress(buffer, [])
-            return nil
-        }
-        
-        context.interpolationQuality = .high
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return NSUIImage.appKit(newImage)
 #endif
-        
-        CVPixelBufferUnlockBaseAddress(buffer, [])
-        
-        return buffer
+    }
+
+    private func rgbData() -> [UInt8]? {
+#if os(iOS)
+        guard let cgImage = self.platformImage.cgImage else { return nil }
+#elseif os(macOS)
+        guard let cgImage = self.platformImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+#endif
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerPixel = 3
+        let bytesPerRow = bytesPerPixel * width
+        var rawData = [UInt8](repeating: 0, count: height * width * bytesPerPixel)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = CGContext(data: &rawData,
+                                width: width,
+                                height: height,
+                                bitsPerComponent: 8,
+                                bytesPerRow: bytesPerRow,
+                                space: colorSpace,
+                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+        context?.draw(cgImage, in: CGRect(origin: .zero, size: CGSize(width: width, height: height)))
+        return rawData
     }
 }
 

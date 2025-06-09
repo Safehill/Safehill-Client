@@ -161,26 +161,15 @@ public actor SHAssetEmbeddingsController {
             ])
         }
 
-        guard let buffer = image.toCVPixelBuffer() else {
-            throw NSError(domain: "TinyCLIP", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to create pixel buffer"
-            ])
-        }
-
-        let input = try MLDictionaryFeatureProvider(dictionary: ["input": buffer])
+        let inputArray = try image.toNormalizedNCHWArray()
+        let input = try MLDictionaryFeatureProvider(dictionary: ["pixel_values": inputArray])
         let result = try model.prediction(from: input)
         
         guard result.featureNames.count == 1,
-              let featureName = result.featureNames.first
-        else {
+              let featureName = result.featureNames.first,
+              let embedding = result.featureValue(for: featureName)?.multiArrayValue else {
             throw NSError(domain: "TinyCLIP", code: 4, userInfo: [
-                NSLocalizedDescriptionKey: "Model did not return expected feature"
-            ])
-        }
-
-        guard let embedding = result.featureValue(for: featureName)?.multiArrayValue else {
-            throw NSError(domain: "TinyCLIP", code: 5, userInfo: [
-                NSLocalizedDescriptionKey: "Model did not return embedding"
+                NSLocalizedDescriptionKey: "Model did not return expected embedding"
             ])
         }
 
