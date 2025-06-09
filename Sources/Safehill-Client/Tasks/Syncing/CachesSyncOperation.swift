@@ -167,6 +167,8 @@ public class SHCachesSyncOperation: Operation, SHBackgroundOperationProtocol, @u
                         $0.assetIdsAreVisibleToUsers(assetIdToUserIds)
                     })
                 }
+                
+                completionHandler(.success(()))
             }
         }
     }
