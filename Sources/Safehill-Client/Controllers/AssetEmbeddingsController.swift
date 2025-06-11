@@ -1,5 +1,6 @@
 import Foundation
 import CoreML
+import CryptoKit
 import ZIPFoundation
 #if os(iOS)
 import UIKit
@@ -30,6 +31,15 @@ enum ModelVariant {
             return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/latest/TinyCLIP.mlpackage.zip")!
         case .neuralNetwork:
             return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/latest/compat/TinyCLIP.mlmodel")!
+        }
+    }
+    
+    var checksumS3URL: URL {
+        switch self {
+        case .mlProgram:
+            return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/latest/TinyCLIP.mlpackage.zip.sha256")!
+        case .neuralNetwork:
+            return URL(string: "https://s3.us-east-2.wasabisys.com/safehill-ml-prod/latest/compat/TinyCLIP.mlmodel.sha256")!
         }
     }
 
@@ -72,19 +82,31 @@ public actor SHAssetEmbeddingsController {
         let fileManager = FileManager.default
         let localModelURL = variant.localURL
         
-        // TODO: Replace this with checksums.
-        // This is here temporarily so that we can force download
-        // instead of using the cached version
-        try? fileManager.removeItem(atPath: localModelURL.path)
+        let needsDownload: Bool
 
-        if !fileManager.fileExists(atPath: localModelURL.path) {
+        if fileManager.fileExists(atPath: localModelURL.path) {
+            do {
+                let expectedChecksum = try await downloadChecksum(from: variant.checksumS3URL)
+                let localChecksum = try sha256(for: localModelURL)
+                needsDownload = (expectedChecksum != localChecksum)
+            } catch {
+                // If we can't fetch the checksum or calculate it, assume it's invalid
+                log.error("Checksum verification failed, will re-download ML model: \(error)")
+                needsDownload = true
+            }
+        } else {
+            needsDownload = true
+        }
+
+        if needsDownload {
+            try? fileManager.removeItem(atPath: localModelURL.path)
             try await downloadAndCacheModel(from: variant.s3URL, to: localModelURL)
         }
 
         // Compile .mlmodel to .mlmodelc
         let compiledURL = try MLModel.compileModel(at: localModelURL)
 
-        model = try MLModel(contentsOf: compiledURL)
+        self.model = try MLModel(contentsOf: compiledURL)
     }
     
     public func generateEmbeddings(for nsuiImage: NSUIImage) async throws -> String {
@@ -94,6 +116,25 @@ public actor SHAssetEmbeddingsController {
     }
 
     // MARK: - Private methods
+    
+    private func sha256(for fileURL: URL) throws -> String {
+        let data = try Data(contentsOf: fileURL)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+    
+    private func downloadChecksum(from url: URL) async throws -> String {
+        let (data, _) = try await URLSession.shared.data(from: url)
+        guard let checksum = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              checksum.count == 64
+        else {
+            throw NSError(domain: "TinyCLIP", code: 99, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid checksum format from \(url)"
+            ])
+        }
+        return checksum
+    }
 
     private func downloadAndCacheModel(from url: URL, to destination: URL) async throws {
         let fileManager = FileManager.default
@@ -155,7 +196,7 @@ public actor SHAssetEmbeddingsController {
     }
 
     private func runModel(on image: NSUIImage) throws -> MLMultiArray {
-        guard let model = model else {
+        guard let model = self.model else {
             throw NSError(domain: "TinyCLIP", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "Model not loaded"
             ])
