@@ -403,6 +403,12 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         // Sender uploads
         self.testUser.serverProxy.remoteServer.create(
             assets: [encryptedAsset],
+            fingerprintsById: [
+                encryptedAsset.globalIdentifier: AssetFingerprint(
+                    perceptualHash: nil,
+                    embeddings: ""
+                )
+            ],
             groupId: "groupId",
             filterVersions: nil,
             force: false

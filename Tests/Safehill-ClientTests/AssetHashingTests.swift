@@ -15,8 +15,10 @@ final class Safehill_AssetHashingTests: XCTestCase {
                 return
             }
             
-            let hash1 = try SHHashingController.perceptualHash(for: data)
-            let hash2 = try SHHashingController.perceptualHash(for: data2)
+            let image1 = NSUIImage.from(data: data)!
+            let image2 = NSUIImage.from(data: data2)!
+            let hash1 = try SHHashingController.perceptualHash(for: image1)
+            let hash2 = try SHHashingController.perceptualHash(for: image2)
             
             XCTAssertEqual(hash1, hash2)
             
@@ -42,10 +44,13 @@ final class Safehill_AssetHashingTests: XCTestCase {
             return
         }
         
-        let perceptualHash = try SHHashingController.perceptualHash(for: data)
+        let image = NSUIImage.from(data: data)!
+        let largeImage = NSUIImage.from(data: largeData)!
+        
+        let perceptualHash = try SHHashingController.perceptualHash(for: image)
         XCTAssertEqual(perceptualHash, "abfffaaefbebbefb")
         
-        let largeImagePerceptualHash = try SHHashingController.perceptualHash(for: largeData)
+        let largeImagePerceptualHash = try SHHashingController.perceptualHash(for: largeImage)
         XCTAssertEqual(largeImagePerceptualHash, "af42fa946f6b8435")
         XCTAssertNotEqual(perceptualHash, largeImagePerceptualHash)
         
