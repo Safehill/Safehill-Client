@@ -95,6 +95,7 @@ struct RemoteServer : SHRemoteServerAPI {
         request: URLRequest,
         usingSession urlSession: URLSession,
         decodingResponseAs type: T.Type,
+        warnIfNo200: Bool = true,
         completionHandler: @escaping (Result<T, Error>) -> Void
     ) {
 //        log.trace("""
@@ -129,7 +130,7 @@ struct RemoteServer : SHRemoteServerAPI {
             }
             
             let httpResponse = response as! HTTPURLResponse
-            if httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
+            if warnIfNo200, httpResponse.statusCode < 200 || httpResponse.statusCode > 299 {
                 log.warning("request \(request.httpMethod!) \(request.url!) received \(httpResponse.statusCode) response")
                 if let data = data {
                     let convertedString = String(data: data, encoding: String.Encoding.utf8)
@@ -750,6 +751,7 @@ struct RemoteServer : SHRemoteServerAPI {
     }
 
     func create(assets: [any SHEncryptedAsset],
+                fingerprintsById: [GlobalIdentifier: AssetFingerprint],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
                 force: Bool,
@@ -758,6 +760,8 @@ struct RemoteServer : SHRemoteServerAPI {
             completionHandler(.failure(SHHTTPError.ClientError.badRequest("Current API only supports creating one asset per request")))
             return
         }
+        
+        let fingerprint = fingerprintsById[asset.globalIdentifier]!
         
         var assetCreationDate: Date
         if asset.creationDate == nil {
@@ -782,11 +786,15 @@ struct RemoteServer : SHRemoteServerAPI {
         var createDict: [String: Any?] = [
             "globalIdentifier": asset.globalIdentifier,
             "localIdentifier": asset.localIdentifier,
-            "fingerprint": asset.fingerprint,
+            "embeddings": fingerprint.embeddings,
             "creationDate": assetCreationDate.iso8601withFractionalSeconds,
             "groupId": groupId,
             "versions": assetVersions
         ]
+        
+        if let pHash = fingerprint.perceptualHash {
+            createDict["perceptualHash"] = fingerprint.perceptualHash
+        }
         
         if force {
             createDict["force"] = true
@@ -1605,7 +1613,8 @@ struct RemoteServer : SHRemoteServerAPI {
                     RemoteServer.makeRequest(
                         request: request,
                         usingSession: S3Proxy.S3URLSession,
-                        decodingResponseAs: Data.self
+                        decodingResponseAs: Data.self,
+                        warnIfNo200: false
                     ) { result in
                         switch result {
                         case .success(let data):
@@ -1677,13 +1686,16 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws {
+    func updateAssetFingerprint(for globalIdentifier: GlobalIdentifier, _ fingerprint: AssetFingerprint) async throws {
         try await withUnsafeThrowingContinuation {
             (continuation: UnsafeContinuation<Void, any Error>) in
             
-            let parameters = ["fingerprint": fingerprint]
+            var parameters = ["embeddings": fingerprint.embeddings]
+            if let pHash = fingerprint.perceptualHash {
+                parameters["perceptualHash"] = pHash
+            }
             
-            self.post("fingerprint/update/\(globalIdentifier)", parameters: parameters) {
+            self.post("fingerprint/update/ref/\(globalIdentifier)", parameters: parameters) {
                 (result: Result<NoReply, Error>) in
                 switch result {
                 case .failure(let error):
@@ -1695,7 +1707,7 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws {
+    func searchSimilarAssets(to fingerprint: AssetFingerprint) async throws {
         throw SHHTTPError.ServerError.notImplemented
     }
     

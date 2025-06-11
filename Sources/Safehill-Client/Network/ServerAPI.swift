@@ -84,11 +84,13 @@ public protocol SHServerAPI {
     /// Create encrypted assets and their versions on the server, and retrieves the presigned URL for the client to upload.
     /// - Parameters:
     ///   - assets: the encrypted data for each asset
+    ///   - fingerprintsById: the assets fingerprints
     ///   - groupId: the group identifier used for the first upload
     ///   - filterVersions: because the input `SHEncryptedAsset`, optionally specify which versions to pick up from the `assets` object
     ///   - force: if set to true overrides all sharing information for the existing asset version for the requesting user, if one with the same name exists
     ///   - completionHandler: the callback method
     func create(assets: [any SHEncryptedAsset],
+                fingerprintsById: [GlobalIdentifier: AssetFingerprint],
                 groupId: String,
                 filterVersions: [SHAssetQuality]?,
                 force: Bool,
@@ -470,8 +472,4 @@ public protocol SHServerAPI {
     
     /// Delete the user avatar image, if any exists
     func deleteAvatarImage(for user: any SHServerUser) async throws
-    
-    func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: PerceptualHash) async throws
-    
-    func searchSimilarAssets(to fingerprint: PerceptualHash) async throws
 }

@@ -169,16 +169,9 @@ final class Safehill_ClientEncryptionUnitTests: XCTestCase {
             publicSignatureData: encryptedImageSecret.signature
         )
         
-        do {
-            let perceptualHash = try SHHashingController.perceptualHash(for: imageData)
-        } catch {
-            // TODO: Use real image data to calculate the perceptual hash
-        }
-        
         let encryptedAsset = SHGenericEncryptedAsset(
             globalIdentifier: "Logo-globalId",
             localIdentifier: "Logo-localId",
-            fingerprint: "0", // perceptualHash,
             creationDate: Date(),
             encryptedVersions: [.lowResolution: encryptedVersion]
         )
@@ -410,6 +403,12 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         // Sender uploads
         self.testUser.serverProxy.remoteServer.create(
             assets: [encryptedAsset],
+            fingerprintsById: [
+                encryptedAsset.globalIdentifier: AssetFingerprint(
+                    perceptualHash: nil,
+                    embeddings: ""
+                )
+            ],
             groupId: "groupId",
             filterVersions: nil,
             force: false
@@ -504,7 +503,6 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         return SHGenericEncryptedAsset(
             globalIdentifier: "globalId",
             localIdentifier: "localId",
-            fingerprint: "0",
             creationDate: Date(),
             encryptedVersions: [.lowResolution: encryptedVersion]
         )
@@ -525,7 +523,6 @@ final class Safehill_ClientIntegrationTests : XCTestCase {
         return SHGenericDecryptedAsset(
             globalIdentifier: encryptedAsset.globalIdentifier,
             localIdentifier: encryptedAsset.localIdentifier,
-            fingerprint: "0",
             decryptedVersions: [.lowResolution: decryptedData],
             creationDate: encryptedAsset.creationDate
         )

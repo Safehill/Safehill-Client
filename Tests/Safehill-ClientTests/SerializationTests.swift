@@ -128,7 +128,6 @@ final class Safehill_SerializationTests: XCTestCase {
         let asset1 = SHUploadableAsset(
             localIdentifier: "localIdentifier",
             globalIdentifier: "globalIdentifier",
-            fingerprint: "0",
             creationDate: nil,
             data: [:]
         )
