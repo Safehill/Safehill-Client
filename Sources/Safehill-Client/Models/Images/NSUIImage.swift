@@ -157,19 +157,35 @@ extension NSUIImage {
 #endif
         let width = cgImage.width
         let height = cgImage.height
-        let bytesPerPixel = 3
+        let bytesPerPixel = 4
         let bytesPerRow = bytesPerPixel * width
         var rawData = [UInt8](repeating: 0, count: height * width * bytesPerPixel)
+
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(data: &rawData,
-                                width: width,
-                                height: height,
-                                bitsPerComponent: 8,
-                                bytesPerRow: bytesPerRow,
-                                space: colorSpace,
-                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
-        context?.draw(cgImage, in: CGRect(origin: .zero, size: CGSize(width: width, height: height)))
-        return rawData
+        guard let context = CGContext(
+            data: &rawData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        ) else {
+            return nil
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        // Return just RGB part (ignore alpha)
+        var rgbData = [UInt8](repeating: 0, count: width * height * 3)
+        for i in 0..<(width * height) {
+            rgbData[i * 3 + 0] = rawData[i * 4 + 0] // R
+            rgbData[i * 3 + 1] = rawData[i * 4 + 1] // G
+            rgbData[i * 3 + 2] = rawData[i * 4 + 2] // B
+        }
+
+        return rgbData
     }
+
 }
 
