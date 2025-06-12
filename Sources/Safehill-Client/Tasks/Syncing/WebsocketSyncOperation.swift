@@ -18,6 +18,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     let socket: WebSocketAPI
     
     private var websocketConnectionDelegates: [WebSocketDelegate]
+    internal let assetsDescriptorsDelegates: [SHAssetsDescriptorsDelegate]
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     internal let userConversionDelegates: [SHUserConversionDelegate]
@@ -29,6 +30,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         user: SHAuthenticatedLocalUser,
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
+        assetDescriptorsDelegates: [SHAssetsDescriptorsDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
         userConversionDelegates: [SHUserConversionDelegate]
@@ -36,6 +38,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
+        self.assetsDescriptorsDelegates = assetDescriptorsDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.userConversionDelegates = userConversionDelegates
@@ -128,6 +131,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             return
         }
         
+        let assetsDescriptorsDelegates = self.assetsDescriptorsDelegates
         let interactionsSyncDelegates = self.interactionsSyncDelegates
         let userConnectionsDelegates = self.userConnectionsDelegates
         
@@ -206,7 +210,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .message:
-                
                 guard let textMessage = try? JSONDecoder().decode(WebSocketMessage.TextMessage.self, from: contentData),
                       let interactionId = textMessage.interactionId else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
@@ -236,7 +239,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .reactionAdd:
-                
                 guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
                       let interactionId = reaction.interactionId,
                       let reactionType = ReactionType(rawValue: reaction.reactionType)
@@ -268,7 +270,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .reactionRemove:
-                
                 guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
                       let reactionType = ReactionType(rawValue: reaction.reactionType)
                 else {
@@ -302,7 +303,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .threadAdd:
-                
                 guard let threadOutputDTO = try? JSONDecoder().decode(ConversationThreadOutputDTO.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
@@ -321,7 +321,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 }
                 
             case .threadRemove:
-                
                 guard let threadId = try? JSONDecoder().decode(String.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
@@ -340,11 +339,12 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 }
                 
             case .threadUpdate:
-                
                 guard let threadUpdateWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadUpdate.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] UPDATE-THREAD: thread id \(threadUpdateWsMessage.threadId)")
                 
                 Task {
                     do {
@@ -364,49 +364,45 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     }
                 }
                 
-            case .threadAssetsShare, .groupAssetsShare:
-                
+            case .threadAssetsShare:
                 if let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) {
-                    
                     self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
                     
                     let threadId = threadAssetsWsMessage.threadId
                     let threadAssets = threadAssetsWsMessage.assets
                     
                     interactionsSyncDelegates.forEach({
-                        if message.type == .threadAssetsShare {
-                            $0.didReceivePhotoMessages(threadAssets, in: threadId)
-                        } else {
-                            $0.didReceivePhotos(threadAssets)
-                        }
+                        $0.didReceivePhotoMessages(threadAssets, in: threadId)
                     })
                     
                     return
                     
                 } else {
-                    ///
-                    /// BACKWARD COMPATIBILITY:
-                    /// group-assets-share type messages were sent with `ThreadAssets` as content
-                    /// but since late August 2024 it's been sent as a `[ConversationThreadAssetDTO]`
-                    /// hence the fallthrough
-                    ///
-                    if message.type != .groupAssetsShare {
-                        self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
-                    }
-                    fallthrough
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                 }
                 
-            case .groupAssetsShare:
-                
+            case .groupAssetsShare: // DEPRECATED IN FAVOR OF .assetsDescriptorChanged
                 guard let groupAssets = try? JSONDecoder().decode([ConversationThreadAssetDTO].self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
+                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets in group \(groupAssets.map({ ($0.globalIdentifier, $0.groupId) }))")
+                assetsDescriptorsDelegates.forEach({
+                    $0.didUpdateAssets(with: globalIdentifiers)
+                })
                 
-                interactionsSyncDelegates.forEach({
-                    $0.didReceivePhotos(groupAssets)
+            case .assetsDescriptorsChanged:
+                guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
+                
+                assetsDescriptorsDelegates.forEach({
+                    $0.didUpdateAssets(with: globalIdentifiers)
                 })
             }
         }
