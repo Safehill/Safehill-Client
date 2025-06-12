@@ -93,21 +93,35 @@ extension NSUIImage {
         }
 
         let array = try MLMultiArray(shape: [1, 3, 224, 224], dataType: .float32)
+        let ptr = UnsafeMutablePointer<Float32>(OpaquePointer(array.dataPointer))
 
         // CLIP normalization constants
         let mean: [Float] = [0.485, 0.456, 0.406]
         let std: [Float]  = [0.229, 0.224, 0.225]
 
-        for c in 0..<3 {
-            for y in 0..<224 {
-                for x in 0..<224 {
-                    let idx = (y * 224 + x) * 3 + c
-                    let pixel = Float(rgbData[idx]) / 255.0
-                    let normalized = (pixel - mean[c]) / std[c]
-                    
-                    let index: [NSNumber] = [0, NSNumber(value: c), NSNumber(value: y), NSNumber(value: x)]
-                    array[index] = NSNumber(value: normalized)
-                }
+        ///
+        /// TinyCLIP and similar CLIP models using TorchVision-style preprocessing expect:
+        /// Shape: [1, 3, 224, 224] (NCHW)
+        /// Channel order: RGB
+        /// Value range: float32 in [0,1], then normalized using the CLIP normalization constants
+        ///
+        
+        for y in 0..<224 {
+            for x in 0..<224 {
+                let pixelIndex = (y * 224 + x) * 3
+
+                let r = Float(rgbData[pixelIndex]) / 255.0
+                let g = Float(rgbData[pixelIndex + 1]) / 255.0
+                let b = Float(rgbData[pixelIndex + 2]) / 255.0
+
+                let rNorm = (r - mean[0]) / std[0]
+                let gNorm = (g - mean[1]) / std[1]
+                let bNorm = (b - mean[2]) / std[2]
+
+                let baseOffset = y * 224 + x
+                ptr[0 * 224 * 224 + baseOffset] = rNorm
+                ptr[1 * 224 * 224 + baseOffset] = gNorm
+                ptr[2 * 224 * 224 + baseOffset] = bNorm
             }
         }
 
@@ -143,19 +157,35 @@ extension NSUIImage {
 #endif
         let width = cgImage.width
         let height = cgImage.height
-        let bytesPerPixel = 3
+        let bytesPerPixel = 4
         let bytesPerRow = bytesPerPixel * width
         var rawData = [UInt8](repeating: 0, count: height * width * bytesPerPixel)
+
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(data: &rawData,
-                                width: width,
-                                height: height,
-                                bitsPerComponent: 8,
-                                bytesPerRow: bytesPerRow,
-                                space: colorSpace,
-                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
-        context?.draw(cgImage, in: CGRect(origin: .zero, size: CGSize(width: width, height: height)))
-        return rawData
+        guard let context = CGContext(
+            data: &rawData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        ) else {
+            return nil
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        // Return just RGB part (ignore alpha)
+        var rgbData = [UInt8](repeating: 0, count: width * height * 3)
+        for i in 0..<(width * height) {
+            rgbData[i * 3 + 0] = rawData[i * 4 + 0] // R
+            rgbData[i * 3 + 1] = rawData[i * 4 + 1] // G
+            rgbData[i * 3 + 2] = rawData[i * 4 + 2] // B
+        }
+
+        return rgbData
     }
+
 }
 
