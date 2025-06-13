@@ -7,7 +7,7 @@ import os
 ///
 /// This pipeline operation deals with assets present the LocalServer.
 /// **It does not** deal with remote server or remote descriptors. See `SHRemoteDownloadOperation` for remote descriptor processing.
-/// The local pipeline is responsible for identifying the mapping between the assets in the photos library and the assets in the local server. The ones that don't have a mapping to the local photo library,  are decrypted from the local server and served via the `SHAssetDownloaderDelegate`.
+/// The local pipeline is responsible for identifying the mapping between the assets in the photos library and the assets in the local server. The ones that don't have a mapping to the local photo library,  are decrypted from the local server and served via the `SHAssetSyncingDelegate`.
 /// The restoration delegates are notified about successful uploads and shares from this user. It assumes the history queues on disk are in sync with the local server, so it doesn't try to create history items like the `SHRemoteDownloadOperation`.
 ///
 ///
@@ -30,13 +30,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
     
     public override init(
         user: SHLocalUserProtocol,
-        downloaderDelegates: [SHAssetDownloaderDelegate],
+        assetSyncingDelegates: [SHAssetSyncingDelegate],
         restorationDelegate: SHAssetActivityRestorationDelegate,
         photoIndexer: SHPhotosIndexer
     ) {
         super.init(
             user: user,
-            downloaderDelegates: downloaderDelegates,
+            assetSyncingDelegates: assetSyncingDelegates,
             restorationDelegate: restorationDelegate,
             photoIndexer: photoIndexer
         )
@@ -95,22 +95,12 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
-        let handleFailure = { (error: Error) in
-            let downloaderDelegates = self.downloaderDelegates
-            self.delegatesQueue.async {
-                downloaderDelegates.forEach({
-                    $0.didFailDownloadCycle(with: error)
-                })
-            }
-            completionHandler(.failure(error))
-        }
-        
         self.fetchDescriptors(after: date) {
             result in
             switch result {
             case .failure(let error):
                 self.log.error("[\(type(of: self))] failed to fetch local descriptors: \(error.localizedDescription)")
-                handleFailure(error)
+                completionHandler(.failure(error))
                 return
             case .success(let fullDescriptorList):
                 self.log.debug("[\(type(of: self))] original descriptors: \(fullDescriptorList.count)")
@@ -118,7 +108,7 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                     switch result {
                     case .failure(let error):
                         self.log.error("[\(type(of: self))] failed to process descriptors: \(error.localizedDescription)")
-                        handleFailure(error)
+                        completionHandler(.failure(error))
                     case .success(let filteredDescriptors):
 #if DEBUG
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
@@ -138,17 +128,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                                 self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsReadyToDecryptById.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
 #endif
                                 
-                                let downloaderDelegates = self.downloaderDelegates
-                                downloaderDelegates.forEach({
-                                    $0.didCompleteDownloadCycle(
-                                        forLocalDescriptors: descriptorsReadyToDecryptById
-                                    )
-                                })
-                                
                                 completionHandler(.success(()))
                                 
                             case .failure(let error):
-                                handleFailure(error)
+                                completionHandler(.failure(error))
                             }
                             
                         }

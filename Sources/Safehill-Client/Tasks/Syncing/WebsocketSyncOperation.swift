@@ -18,10 +18,11 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     let socket: WebSocketAPI
     
     private var websocketConnectionDelegates: [WebSocketDelegate]
-    internal let assetsDescriptorsDelegates: [SHAssetsDescriptorsDelegate]
+    private let assetSyncingDelegates: [SHAssetSyncingDelegate]
+    private let restorationDelegate: SHAssetActivityRestorationDelegate
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
-    internal let userConversionDelegates: [SHUserConversionDelegate]
+    private let userConversionDelegates: [SHUserConversionDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
@@ -30,7 +31,8 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         user: SHAuthenticatedLocalUser,
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
-        assetDescriptorsDelegates: [SHAssetsDescriptorsDelegate],
+        assetSyncingDelegates: [SHAssetSyncingDelegate],
+        restorationDelegate: SHAssetActivityRestorationDelegate,
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
         userConversionDelegates: [SHUserConversionDelegate]
@@ -38,7 +40,8 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
-        self.assetsDescriptorsDelegates = assetDescriptorsDelegates
+        self.assetSyncingDelegates = assetSyncingDelegates
+        self.restorationDelegate = restorationDelegate
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.userConversionDelegates = userConversionDelegates
@@ -131,7 +134,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             return
         }
         
-        let assetsDescriptorsDelegates = self.assetsDescriptorsDelegates
+        let assetSyncingDelegates = self.assetSyncingDelegates
         let interactionsSyncDelegates = self.interactionsSyncDelegates
         let userConnectionsDelegates = self.userConnectionsDelegates
         
@@ -389,9 +392,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
                 self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                assetsDescriptorsDelegates.forEach({
-                    $0.didUpdateAssets(with: globalIdentifiers)
-                })
+                self.syncAssets(with: globalIdentifiers)
                 
             case .assetsDescriptorsChanged:
                 guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
@@ -401,10 +402,30 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 
                 self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
                 
-                assetsDescriptorsDelegates.forEach({
-                    $0.didUpdateAssets(with: globalIdentifiers)
-                })
+                self.syncAssets(with: globalIdentifiers)
             }
+        }
+    }
+    
+    public func syncAssets(with globalIdentifiers: [GlobalIdentifier]) {
+        SHRemoteDownloadOperation(
+            user: user,
+            assetSyncingDelegates: self.assetSyncingDelegates,
+            restorationDelegate: self.restorationDelegate,
+            photoIndexer: SHPhotosIndexer()
+        )
+        .run(for: globalIdentifiers,
+             filteringGroups: nil,
+             startingFrom: nil,
+             qos: .default
+        ) { _ in
+            SHAssetsSyncOperation(
+                user: self.user,
+                assetsDelegates: self.assetSyncingDelegates
+            ).run(
+                qos: .default,
+                for: globalIdentifiers
+            ) { _ in }
         }
     }
     

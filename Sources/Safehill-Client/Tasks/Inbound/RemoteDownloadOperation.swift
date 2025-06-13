@@ -24,17 +24,17 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     let user: SHLocalUserProtocol
     
-    let downloaderDelegates: [SHAssetDownloaderDelegate]
+    let assetSyncingDelegates: [SHAssetSyncingDelegate]
     let restorationDelegate: SHAssetActivityRestorationDelegate
     
     let photoIndexer: SHPhotosIndexer
     
     public init(user: SHLocalUserProtocol,
-                downloaderDelegates: [SHAssetDownloaderDelegate],
+                assetSyncingDelegates: [SHAssetSyncingDelegate],
                 restorationDelegate: SHAssetActivityRestorationDelegate,
                 photoIndexer: SHPhotosIndexer) {
         self.user = user
-        self.downloaderDelegates = downloaderDelegates
+        self.assetSyncingDelegates = assetSyncingDelegates
         self.restorationDelegate = restorationDelegate
         self.photoIndexer = photoIndexer
     }
@@ -157,14 +157,14 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
 #endif
             
             guard filteredDescriptors.count > 0 else {
-                let downloaderDelegates = self.downloaderDelegates
+                let assetSyncingDelegates = self.assetSyncingDelegates
                 self.delegatesQueue.async {
                     if fromRemote {
-                        downloaderDelegates.forEach({
+                        assetSyncingDelegates.forEach({
                             $0.didReceiveRemoteAssetDescriptors([], referencing: [:])
                         })
                     } else {
-                        downloaderDelegates.forEach({
+                        assetSyncingDelegates.forEach({
                             $0.didReceiveLocalAssetDescriptors([], referencing: [:])
                         })
                     }
@@ -239,17 +239,17 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     /// The ones shared by THIS user will be restored through the restoration delegate.
                     ///
                     let userDictsImmutable = usersDict
-                    let downloaderDelegates = self.downloaderDelegates
+                    let assetSyncingDelegates = self.assetSyncingDelegates
                     self.delegatesQueue.async {
                         if fromRemote {
-                            downloaderDelegates.forEach({
+                            assetSyncingDelegates.forEach({
                                 $0.didReceiveRemoteAssetDescriptors(
                                     filteredDescriptorsFromRetrievableUsers,
                                     referencing: userDictsImmutable
                                 )
                             })
                         } else {
-                            downloaderDelegates.forEach({
+                            assetSyncingDelegates.forEach({
                                 $0.didReceiveLocalAssetDescriptors(
                                     filteredDescriptorsFromRetrievableUsers,
                                     referencing: userDictsImmutable
@@ -397,28 +397,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         let fetchStartedAt = Date()
         
         let handleResult = { (result: Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) in
-            let downloaderDelegates = self.downloaderDelegates
-            
-            switch result {
-            
-            case .failure(let error):
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didFailDownloadCycle(with: error)
-                    })
-                }
-                
-            case .success(let dict):
+            if case .success(let dict) = result {
                 SHRemoteDownloadOperation.lastFetchDate = fetchStartedAt
-                self.delegatesQueue.async {
-                    downloaderDelegates.forEach({
-                        $0.didCompleteDownloadCycle(
-                            forLocalDescriptors: dict
-                        )
-                    })
-                }
             }
-            
             completionHandler(result)
         }
         
