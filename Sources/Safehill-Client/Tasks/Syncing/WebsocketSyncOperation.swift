@@ -391,7 +391,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
                 self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                self.resyncAssets(with: globalIdentifiers)
+                self.resyncAssets(with: globalIdentifiers) { _ in }
                 
             case .assetsDescriptorsChanged:
                 guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
@@ -401,14 +401,15 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 
                 self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
                 
-                self.resyncAssets(with: globalIdentifiers)
+                self.resyncAssets(with: globalIdentifiers) { _ in }
             }
         }
     }
     
     public func resyncAssets(
         with globalIdentifiers: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass = .default
+        qos: DispatchQoS.QoSClass = .default,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         SHRemoteDownloadOperation(
             user: user,
@@ -420,20 +421,27 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
              filteringGroups: nil,
              startingFrom: nil,
              qos: qos
-        ) { _ in
+        ) { res1 in
+            if case .failure(let failure) = res1 {
+                completionHandler(.failure(failure))
+                return
+            }
             SHAssetsSyncOperation(
                 user: self.user,
                 assetsDelegates: self.assetSyncingDelegates
             ).run(
                 qos: qos,
                 for: globalIdentifiers
-            ) { _ in }
+            ) { res2 in
+                completionHandler(res2)
+            }
         }
     }
     
     public func resyncGroup(
         groupId: String,
-        qos: DispatchQoS.QoSClass = .default
+        qos: DispatchQoS.QoSClass = .default,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
     ) {
         SHRemoteDownloadOperation(
             user: user,
@@ -447,14 +455,20 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             startingFrom: .distantPast,
             qos: .userInitiated
         ) { result in
-            if case .success(let assetsAndDescriptors) = result {
+            switch result {
+            case .failure(let failure):
+                completionHandler(.failure(failure))
+                return
+            case .success(let assetsAndDescriptors):
                 SHAssetsSyncOperation(
                     user: self.user,
                     assetsDelegates: self.assetSyncingDelegates
                 ).run(
                     qos: qos,
                     for: Array(assetsAndDescriptors.keys)
-                ) { _ in }
+                ) { res2 in
+                    completionHandler(res2)
+                }
             }
         }
     }
