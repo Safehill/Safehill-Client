@@ -397,7 +397,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         let fetchStartedAt = Date()
         
         let handleResult = { (result: Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) in
-            if case .success(let dict) = result {
+            if case .success(let _) = result {
                 SHRemoteDownloadOperation.lastFetchDate = fetchStartedAt
             }
             completionHandler(result)

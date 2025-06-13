@@ -134,7 +134,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             return
         }
         
-        let assetSyncingDelegates = self.assetSyncingDelegates
         let interactionsSyncDelegates = self.interactionsSyncDelegates
         let userConnectionsDelegates = self.userConnectionsDelegates
         
@@ -392,7 +391,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
                 self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                self.syncAssets(with: globalIdentifiers)
+                self.resyncAssets(with: globalIdentifiers)
                 
             case .assetsDescriptorsChanged:
                 guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
@@ -402,12 +401,15 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 
                 self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
                 
-                self.syncAssets(with: globalIdentifiers)
+                self.resyncAssets(with: globalIdentifiers)
             }
         }
     }
     
-    public func syncAssets(with globalIdentifiers: [GlobalIdentifier]) {
+    public func resyncAssets(
+        with globalIdentifiers: [GlobalIdentifier],
+        qos: DispatchQoS.QoSClass = .default
+    ) {
         SHRemoteDownloadOperation(
             user: user,
             assetSyncingDelegates: self.assetSyncingDelegates,
@@ -417,15 +419,43 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         .run(for: globalIdentifiers,
              filteringGroups: nil,
              startingFrom: nil,
-             qos: .default
+             qos: qos
         ) { _ in
             SHAssetsSyncOperation(
                 user: self.user,
                 assetsDelegates: self.assetSyncingDelegates
             ).run(
-                qos: .default,
+                qos: qos,
                 for: globalIdentifiers
             ) { _ in }
+        }
+    }
+    
+    public func resyncGroup(
+        groupId: String,
+        qos: DispatchQoS.QoSClass = .default
+    ) {
+        SHRemoteDownloadOperation(
+            user: user,
+            assetSyncingDelegates: self.assetSyncingDelegates,
+            restorationDelegate: self.restorationDelegate,
+            photoIndexer: SHPhotosIndexer()
+        )
+        .run(
+            for: nil,                   /// All assets
+            filteringGroups: [groupId], /// in group `groupId`
+            startingFrom: .distantPast,
+            qos: .userInitiated
+        ) { result in
+            if case .success(let assetsAndDescriptors) = result {
+                SHAssetsSyncOperation(
+                    user: self.user,
+                    assetsDelegates: self.assetSyncingDelegates
+                ).run(
+                    qos: qos,
+                    for: Array(assetsAndDescriptors.keys)
+                ) { _ in }
+            }
         }
     }
     
