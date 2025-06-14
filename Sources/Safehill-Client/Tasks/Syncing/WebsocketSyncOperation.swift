@@ -36,7 +36,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
         userConversionDelegates: [SHUserConversionDelegate]
-    ) throws {
+    ) {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
