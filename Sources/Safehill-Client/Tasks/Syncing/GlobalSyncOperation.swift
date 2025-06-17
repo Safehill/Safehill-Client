@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
+public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
     
     public typealias OperationResult = Result<Void, Error>
     
@@ -18,8 +18,8 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     let socket: WebSocketAPI
     
     private var websocketConnectionDelegates: [WebSocketDelegate]
-    private let assetSyncingDelegates: [SHAssetSyncingDelegate]
-    private let restorationDelegate: SHAssetActivityRestorationDelegate
+    internal let assetSyncingDelegates: [SHAssetSyncingDelegate]
+    internal let restorationDelegate: SHAssetActivityRestorationDelegate
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     private let userConversionDelegates: [SHUserConversionDelegate]
@@ -81,7 +81,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 self.processMessage(message)
                 
                 if self.isCancelled {
-                    await self.stopWebSocket(error: nil)
+                    await self.stopSyncing(error: nil)
                     break
                 }
             }
@@ -101,7 +101,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     log.info("[ws] websocket connection error: \(error.localizedDescription)")
                     
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
-                    await self.stopWebSocket(error: error)
+                    await self.stopSyncing(error: error)
                     
                     /// Exponential retry with backoff
                     try await Task.sleep(nanoseconds: self.retryDelay * 1_000_000_000)
@@ -112,19 +112,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 }
             }
             log.error("[ws] failed to connect to websocket: \(error.localizedDescription)")
-        }
-    }
-    
-    public func stopWebSocket(error: Error?) async {
-        await self.socket.disconnect()
-        self.log.debug("[ws] DISCONNECTED")
-        
-        websocketConnectionDelegates.forEach {
-            $0.didDisconnect(error: error)
-        }
-        
-        Self.memberAccessQueue.sync {
-            Self.isWebSocketConnected = false
         }
     }
     
@@ -391,7 +378,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
                 self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                self.resyncAssets(with: globalIdentifiers) { _ in }
+                self.syncAssets(with: globalIdentifiers) { _ in }
                 
             case .assetsDescriptorsChanged:
                 guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
@@ -401,85 +388,21 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 
                 self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
                 
-                self.resyncAssets(with: globalIdentifiers) { _ in }
+                self.syncAssets(with: globalIdentifiers) { _ in }
             }
         }
     }
     
-    public func resyncAssets(
-        with globalIdentifiers: [GlobalIdentifier],
-        qos: DispatchQoS.QoSClass = .default,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        SHRemoteDownloadOperation(
-            user: user,
-            assetSyncingDelegates: self.assetSyncingDelegates,
-            restorationDelegate: self.restorationDelegate,
-            photoIndexer: SHPhotosIndexer()
-        )
-        .run(for: globalIdentifiers,
-             filteringGroups: nil,
-             startingFrom: nil,
-             qos: qos
-        ) { res1 in
-            if case .failure(let failure) = res1 {
-                completionHandler(.failure(failure))
-                return
-            }
-            SHAssetsSyncOperation(
-                user: self.user,
-                assetsDelegates: self.assetSyncingDelegates
-            ).run(
-                qos: qos,
-                for: globalIdentifiers
-            ) { res2 in
-                completionHandler(res2)
-            }
-        }
-    }
-    
-    public func resyncGroup(
-        groupId: String,
-        qos: DispatchQoS.QoSClass = .default,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    ) {
-        SHRemoteDownloadOperation(
-            user: user,
-            assetSyncingDelegates: self.assetSyncingDelegates,
-            restorationDelegate: self.restorationDelegate,
-            photoIndexer: SHPhotosIndexer()
-        )
-        .run(
-            for: nil,                   /// All assets
-            filteringGroups: [groupId], /// in group `groupId`
-            startingFrom: .distantPast,
-            qos: .userInitiated
-        ) { result in
-            switch result {
-            case .failure(let failure):
-                completionHandler(.failure(failure))
-                return
-            case .success(let assetsAndDescriptors):
-                SHAssetsSyncOperation(
-                    user: self.user,
-                    assetsDelegates: self.assetSyncingDelegates
-                ).run(
-                    qos: qos,
-                    for: Array(assetsAndDescriptors.keys)
-                ) { res2 in
-                    completionHandler(res2)
-                }
-            }
-        }
+    public override func start() {
+        super.start()
+        self.startSyncing()
     }
     
     /// Main run.
     /// 1. Sync the threads list between local and remote
     /// 2. Pull the summary for threads and groups
     /// 3. Start the WEBSOCKET connection for updates
-    public override func start() {
-        super.start()
-        
+    public func startSyncing() {
         Task(priority: .high) {
             do {
                 log.debug("[SHInteractionsSyncOperation] starting websocket")
@@ -491,6 +414,19 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             } catch {
                 log.error("\(error.localizedDescription)")
             }
+        }
+    }
+    
+    public func stopSyncing(error: Error?) async {
+        await self.socket.disconnect()
+        self.log.debug("[ws] DISCONNECTED")
+        
+        websocketConnectionDelegates.forEach {
+            $0.didDisconnect(error: error)
+        }
+        
+        Self.memberAccessQueue.sync {
+            Self.isWebSocketConnected = false
         }
     }
 }
