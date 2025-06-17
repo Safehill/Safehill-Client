@@ -393,16 +393,11 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         }
     }
     
-    public override func start() {
-        super.start()
-        self.startSyncing()
-    }
-    
     /// Main run.
     /// 1. Sync the threads list between local and remote
     /// 2. Pull the summary for threads and groups
     /// 3. Start the WEBSOCKET connection for updates
-    public func startSyncing() {
+    private func startSyncing() {
         Task(priority: .high) {
             do {
                 log.debug("[SHInteractionsSyncOperation] starting websocket")
@@ -427,6 +422,18 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         
         Self.memberAccessQueue.sync {
             Self.isWebSocketConnected = false
+        }
+    }
+    
+    public override func start() {
+        super.start()
+        self.startSyncing()
+    }
+    
+    public override func cancel() {
+        super.cancel()
+        Task {
+            await self.stopSyncing(error: nil)
         }
     }
 }
