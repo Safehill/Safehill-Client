@@ -32,7 +32,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
     }
     
     public func sync(
-        remoteAndLocalDescriptors: [any SHAssetDescriptor],
+        remoteDescriptors: [any SHAssetDescriptor],
         localDescriptors: [any SHAssetDescriptor],
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<Void, Error>) -> Void
@@ -54,7 +54,7 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
         ///
         
         let diff = AssetDescriptorsDiff.generateUsing(
-            remote: remoteAndLocalDescriptors,
+            remote: remoteDescriptors,
             local: localDescriptors,
             for: self.user
         )
@@ -260,6 +260,43 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
         }
     }
     
+    public func run(
+        qos: DispatchQoS.QoSClass,
+        for globalIdentifiers: [GlobalIdentifier],
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.serverProxy.getLocalAssetDescriptors(
+            for: globalIdentifiers,
+            after: nil,
+            useCache: false
+        ) { localResult in
+            switch localResult {
+            case .success(let localDescriptors):
+                self.serverProxy.getRemoteAssetDescriptors(
+                    for: globalIdentifiers,
+                    after: nil
+                ) { remoteResult in
+                    switch remoteResult {
+                    case .success(let remoteDescriptors):
+                        ///
+                        /// Sync the descriptors fetched from server and the local ones
+                        ///
+                        self.sync(remoteDescriptors: remoteDescriptors,
+                                  localDescriptors: localDescriptors,
+                                  qos: qos,
+                                  completionHandler: completionHandler)
+                    case .failure(let err):
+                        self.log.error("failed to fetch descriptors from server when calculating diff: \(err.localizedDescription)")
+                        completionHandler(.failure(err))
+                    }
+                }
+            case .failure(let err):
+                self.log.error("failed to fetch descriptors from LOCAL server when calculating diff: \(err.localizedDescription)")
+                completionHandler(.failure(err))
+            }
+        }
+    }
+    
     public func run(qos: DispatchQoS.QoSClass, completionHandler: @escaping (Result<Void, Error>) -> Void) {
         ///
         /// Get the descriptors from the local server
@@ -278,9 +315,11 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
                     switch remoteResult {
                     case .success(let remoteAndLocalDescriptors):
                         ///
-                        /// Start the sync process
+                        /// Sync all the new descriptors that are both in remote and local and just local.
+                        /// The ones only in remote are NEW asset descriptors which will be handled
+                        /// by the SHRemoteDownloadOperation operation.
                         ///
-                        self.sync(remoteAndLocalDescriptors: remoteAndLocalDescriptors,
+                        self.sync(remoteDescriptors: remoteAndLocalDescriptors,
                                   localDescriptors: localDescriptors,
                                   qos: qos,
                                   completionHandler: completionHandler)

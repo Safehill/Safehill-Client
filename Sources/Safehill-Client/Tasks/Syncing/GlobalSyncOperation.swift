@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
+public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
     
     public typealias OperationResult = Result<Void, Error>
     
@@ -18,9 +18,11 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     let socket: WebSocketAPI
     
     private var websocketConnectionDelegates: [WebSocketDelegate]
+    internal let assetSyncingDelegates: [SHAssetSyncingDelegate]
+    internal let restorationDelegate: SHAssetActivityRestorationDelegate
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
-    internal let userConversionDelegates: [SHUserConversionDelegate]
+    private let userConversionDelegates: [SHUserConversionDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
@@ -29,13 +31,17 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
         user: SHAuthenticatedLocalUser,
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
+        assetSyncingDelegates: [SHAssetSyncingDelegate],
+        restorationDelegate: SHAssetActivityRestorationDelegate,
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
         userConversionDelegates: [SHUserConversionDelegate]
-    ) throws {
+    ) {
         self.user = user
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
+        self.assetSyncingDelegates = assetSyncingDelegates
+        self.restorationDelegate = restorationDelegate
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.userConversionDelegates = userConversionDelegates
@@ -75,7 +81,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 self.processMessage(message)
                 
                 if self.isCancelled {
-                    await self.stopWebSocket(error: nil)
+                    await self.stopSyncing(error: nil)
                     break
                 }
             }
@@ -95,7 +101,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     log.info("[ws] websocket connection error: \(error.localizedDescription)")
                     
                     /// Disconnect if not already disconnected (this sets the `socket.webSocketTask` to `nil`
-                    await self.stopWebSocket(error: error)
+                    await self.stopSyncing(error: error)
                     
                     /// Exponential retry with backoff
                     try await Task.sleep(nanoseconds: self.retryDelay * 1_000_000_000)
@@ -106,19 +112,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 }
             }
             log.error("[ws] failed to connect to websocket: \(error.localizedDescription)")
-        }
-    }
-    
-    public func stopWebSocket(error: Error?) async {
-        await self.socket.disconnect()
-        self.log.debug("[ws] DISCONNECTED")
-        
-        websocketConnectionDelegates.forEach {
-            $0.didDisconnect(error: error)
-        }
-        
-        Self.memberAccessQueue.sync {
-            Self.isWebSocketConnected = false
         }
     }
     
@@ -206,7 +199,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .message:
-                
                 guard let textMessage = try? JSONDecoder().decode(WebSocketMessage.TextMessage.self, from: contentData),
                       let interactionId = textMessage.interactionId else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets but the client can't validate it. This is not supposed to happen. \(message.content)")
@@ -236,7 +228,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .reactionAdd:
-                
                 guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
                       let interactionId = reaction.interactionId,
                       let reactionType = ReactionType(rawValue: reaction.reactionType)
@@ -268,7 +259,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .reactionRemove:
-                
                 guard let reaction = try? JSONDecoder().decode(WebSocketMessage.Reaction.self, from: contentData),
                       let reactionType = ReactionType(rawValue: reaction.reactionType)
                 else {
@@ -302,7 +292,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 })
                 
             case .threadAdd:
-                
                 guard let threadOutputDTO = try? JSONDecoder().decode(ConversationThreadOutputDTO.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
@@ -321,7 +310,6 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 }
                 
             case .threadRemove:
-                
                 guard let threadId = try? JSONDecoder().decode(String.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
@@ -340,11 +328,12 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                 }
                 
             case .threadUpdate:
-                
                 guard let threadUpdateWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadUpdate.self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                
+                self.log.debug("[ws] UPDATE-THREAD: thread id \(threadUpdateWsMessage.threadId)")
                 
                 Task {
                     do {
@@ -364,50 +353,42 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
                     }
                 }
                 
-            case .threadAssetsShare, .groupAssetsShare:
-                
+            case .threadAssetsShare:
                 if let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) {
-                    
                     self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
                     
                     let threadId = threadAssetsWsMessage.threadId
                     let threadAssets = threadAssetsWsMessage.assets
                     
                     interactionsSyncDelegates.forEach({
-                        if message.type == .threadAssetsShare {
-                            $0.didReceivePhotoMessages(threadAssets, in: threadId)
-                        } else {
-                            $0.didReceivePhotos(threadAssets)
-                        }
+                        $0.didReceivePhotoMessages(threadAssets, in: threadId)
                     })
                     
                     return
                     
                 } else {
-                    ///
-                    /// BACKWARD COMPATIBILITY:
-                    /// group-assets-share type messages were sent with `ThreadAssets` as content
-                    /// but since late August 2024 it's been sent as a `[ConversationThreadAssetDTO]`
-                    /// hence the fallthrough
-                    ///
-                    if message.type != .groupAssetsShare {
-                        self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
-                    }
-                    fallthrough
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                 }
                 
-            case .groupAssetsShare:
-                
+            case .groupAssetsShare: // DEPRECATED IN FAVOR OF .assetsDescriptorChanged
                 guard let groupAssets = try? JSONDecoder().decode([ConversationThreadAssetDTO].self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
+                let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
+                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
                 
-                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets in group \(groupAssets.map({ ($0.globalIdentifier, $0.groupId) }))")
+                self.syncAssets(with: globalIdentifiers) { _ in }
                 
-                interactionsSyncDelegates.forEach({
-                    $0.didReceivePhotos(groupAssets)
-                })
+            case .assetsDescriptorsChanged:
+                guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+                
+                self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
+                
+                self.syncAssets(with: globalIdentifiers) { _ in }
             }
         }
     }
@@ -416,9 +397,7 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
     /// 1. Sync the threads list between local and remote
     /// 2. Pull the summary for threads and groups
     /// 3. Start the WEBSOCKET connection for updates
-    public override func start() {
-        super.start()
-        
+    private func startSyncing() {
         Task(priority: .high) {
             do {
                 log.debug("[SHInteractionsSyncOperation] starting websocket")
@@ -430,6 +409,31 @@ public class SHWebsocketSyncOperation: Operation, @unchecked Sendable {
             } catch {
                 log.error("\(error.localizedDescription)")
             }
+        }
+    }
+    
+    public func stopSyncing(error: Error?) async {
+        await self.socket.disconnect()
+        self.log.debug("[ws] DISCONNECTED")
+        
+        websocketConnectionDelegates.forEach {
+            $0.didDisconnect(error: error)
+        }
+        
+        Self.memberAccessQueue.sync {
+            Self.isWebSocketConnected = false
+        }
+    }
+    
+    public override func start() {
+        super.start()
+        self.startSyncing()
+    }
+    
+    public override func cancel() {
+        super.cancel()
+        Task {
+            await self.stopSyncing(error: nil)
         }
     }
 }
