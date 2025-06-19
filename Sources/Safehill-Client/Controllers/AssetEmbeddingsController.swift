@@ -110,6 +110,7 @@ public actor SHAssetEmbeddingsController {
     }
     
     public func generateEmbeddings(for nsuiImage: NSUIImage) async throws -> String {
+        try await loadModelIfNeeded()
         let embeddings = try runModel(on: nsuiImage)
         let base64Embeddings = try embeddingToBase64(embeddings)
         return base64Embeddings
