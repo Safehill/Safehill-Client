@@ -1197,7 +1197,7 @@ extension SHServerProxy {
     ///   - completionHandler: the callback method
     internal func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     ) {
         self.remoteServer.getAssets(inThread: threadId) { remoteResult in
             switch remoteResult {

@@ -254,7 +254,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     )
     
     // MARK: Groups

@@ -371,7 +371,7 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
                 }
                 
             case .groupAssetsShare: // DEPRECATED IN FAVOR OF .assetsDescriptorChanged
-                guard let groupAssets = try? JSONDecoder().decode([ConversationThreadAssetDTO].self, from: contentData) else {
+                guard let groupAssets = try? JSONDecoder().decode([AssetGroupLinkageDTO].self, from: contentData) else {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }

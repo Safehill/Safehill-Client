@@ -15,7 +15,7 @@ public protocol SHInteractionsSyncingDelegate: SHInboundAssetOperationDelegate {
     func didReceiveTextMessages(_: [MessageOutputDTO],
                                 inThread threadId: String)
     
-    func didReceivePhotoMessages(_: [ConversationThreadAssetDTO],
+    func didReceivePhotoMessages(_: [AssetGroupLinkageDTO],
                                  in threadId: String)
     
     func reactionsDidChange(inThread threadId: String)

@@ -1094,7 +1094,7 @@ struct LocalServer : SHLocalServerAPI {
                     let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(groupId)::\(descriptor.globalIdentifier)::photoMessage"
                     let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
                     let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
-                    let value = DBSecureSerializableConversationThreadAsset(
+                    let value = DBSecureSerializableAssetGroupLinkage(
                         globalIdentifier: descriptor.globalIdentifier,
                         addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
                         addedAt: addedAt,
@@ -1520,7 +1520,7 @@ struct LocalServer : SHLocalServerAPI {
         let writeBatch = assetStore.writeBatch()
         
         /// Thread id to thread asset to save to local db
-        var threadAssets = [String: [DBSecureSerializableConversationThreadAsset]]()
+        var threadAssets = [String: [DBSecureSerializableAssetGroupLinkage]]()
         
         for asset in assets {
             guard let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier] else {
@@ -1707,7 +1707,7 @@ struct LocalServer : SHLocalServerAPI {
                 if let threadId = groupInfo.createdFromThreadId {
                     let groupCreatorId = descriptor.sharingInfo.groupInfoById[groupId]?.createdBy
                     let assetCreatorId = descriptor.sharingInfo.sharedByUserIdentifier
-                    let threadAsset = DBSecureSerializableConversationThreadAsset(
+                    let threadAsset = DBSecureSerializableAssetGroupLinkage(
                         globalIdentifier: asset.globalIdentifier,
                         addedByUserIdentifier: groupCreatorId ?? assetCreatorId,
                         addedAt: (groupInfo.createdAt ?? Date()).iso8601withFractionalSeconds,
@@ -2035,7 +2035,7 @@ struct LocalServer : SHLocalServerAPI {
         if let asPhotoMessageInThreadId {
             let key = "\(SHInteractionAnchor.thread.rawValue)::\(asPhotoMessageInThreadId)::\(asset.groupId)::\(asset.globalIdentifier)::photoMessage"
             
-            let value = DBSecureSerializableConversationThreadAsset(
+            let value = DBSecureSerializableAssetGroupLinkage(
                 globalIdentifier: asset.globalIdentifier,
                 addedByUserIdentifier: self.requestor.identifier,
                 addedAt: Date().iso8601withFractionalSeconds,
@@ -2804,22 +2804,22 @@ struct LocalServer : SHLocalServerAPI {
     
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     ) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
             return
         }
         
-        let photoMessagesById: [String: ConversationThreadAssetDTO]
-        var nonPhotoMessagesById = [String: UsersGroupAssetDTO]()
+        let explicitlyInThreadById: [String: AssetGroupLinkageDTO]
+        var implicitlyInThreadById = [String: AssetRefDTO]()
         
         do {
             ///
             /// Get the photo messages in this thread,
             /// previously synced by the method `LocalServer::cache(_:in)`
             ///
-            photoMessagesById = try assetStore
+            explicitlyInThreadById = try assetStore
                 .values(
                     forKeysMatching: KBGenericCondition(
                         .beginsWith,
@@ -2831,12 +2831,12 @@ struct LocalServer : SHLocalServerAPI {
                         )
                     )
                 )
-                .reduce([String: ConversationThreadAssetDTO]()) { partialResult, value in
+                .reduce([String: AssetGroupLinkageDTO]()) { partialResult, value in
                     guard let data = value as? Data else {
                         log.critical("unexpected non-data photo message in thread \(threadId)")
                         return partialResult
                     }
-                    guard let photoMessage = try? DBSecureSerializableConversationThreadAsset.deserialize(from: data) else {
+                    guard let photoMessage = try? DBSecureSerializableAssetGroupLinkage.deserialize(from: data) else {
                         log.critical("failed to decode photo message in thread \(threadId)")
                         return partialResult
                     }
@@ -2878,13 +2878,13 @@ struct LocalServer : SHLocalServerAPI {
                                 .map({ $0.1 })
                                 .first
                             {
-                                let groupAsset = UsersGroupAssetDTO(
+                                let assetRef = AssetRefDTO(
                                     globalIdentifier: assetId,
                                     addedByUserIdentifier: senderId,
                                     addedAt: Date().iso8601withFractionalSeconds
                                 )
-                                if photoMessagesById[assetId] == nil {
-                                    nonPhotoMessagesById[assetId] = groupAsset
+                                if explicitlyInThreadById[assetId] == nil {
+                                    implicitlyInThreadById[assetId] = assetRef
                                 }
                             }
                         }
@@ -2905,9 +2905,9 @@ struct LocalServer : SHLocalServerAPI {
                 if let nonPhotoMessagesError {
                     completionHandler(.failure(nonPhotoMessagesError))
                 } else {
-                    let result = ConversationThreadAssetsDTO(
-                        photoMessages: Array(photoMessagesById.values),
-                        otherAssets: Array(nonPhotoMessagesById.values)
+                    let result = SharedAssetsLibraryDTO(
+                        photoMessages: Array(explicitlyInThreadById.values),
+                        otherAssets: Array(implicitlyInThreadById.values)
                     )
                     completionHandler(.success(result))
                 }

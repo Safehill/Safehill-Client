@@ -59,7 +59,7 @@ public struct WebSocketMessage: Codable {
     
     struct ThreadAssets: Codable {
         let threadId: String
-        let assets: [ConversationThreadAssetDTO]
+        let assets: [AssetGroupLinkageDTO]
     }
     
     struct NewUserConnection: Codable {

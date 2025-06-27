@@ -1245,7 +1245,7 @@ struct RemoteServer : SHRemoteServerAPI {
     
     func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     ) {
         self.post(
             "threads/retrieve/\(threadId)/assets",

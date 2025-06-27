@@ -351,7 +351,7 @@ failed to initialize E2EE details for thread \(conversationThread?.threadId ?? "
     
     public func getAssets(
         inThread threadId: String,
-        completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     ) {
         self.serverProxy.getAssets(inThread: threadId, completionHandler: completionHandler)
     }

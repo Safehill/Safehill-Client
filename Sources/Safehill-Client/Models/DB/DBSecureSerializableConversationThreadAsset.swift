@@ -1,6 +1,6 @@
 import Foundation
 
-public class DBSecureSerializableConversationThreadAsset: NSObject, NSSecureCoding {
+public class DBSecureSerializableAssetGroupLinkage: NSObject, NSSecureCoding {
     
     public static var supportsSecureCoding: Bool = true
     
@@ -42,19 +42,19 @@ public class DBSecureSerializableConversationThreadAsset: NSObject, NSSecureCodi
         let groupId = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.groupId.rawValue)
         
         guard let globalIdentifier = globalIdentifier as? String else {
-            log.error("unexpected value for globalIdentifier when decoding DBSecureSerializableConversationThreadAsset object")
+            log.error("unexpected value for globalIdentifier when decoding DBSecureSerializableAssetGroupLinkage object")
             return nil
         }
         guard let addedByUserIdentifier = addedByUserIdentifier as? String else {
-            log.error("unexpected value for addedByUserIdentifier when decoding DBSecureSerializableConversationThreadAsset object")
+            log.error("unexpected value for addedByUserIdentifier when decoding DBSecureSerializableAssetGroupLinkage object")
             return nil
         }
         guard let addedAt = addedAt as? String else {
-            log.error("unexpected value for addedAt when decoding DBSecureSerializableConversationThreadAsset object")
+            log.error("unexpected value for addedAt when decoding DBSecureSerializableAssetGroupLinkage object")
             return nil
         }
         guard let groupId = groupId as? String else {
-            log.error("unexpected value for groupId when decoding DBSecureSerializableConversationThreadAsset object")
+            log.error("unexpected value for groupId when decoding DBSecureSerializableAssetGroupLinkage object")
             return nil
         }
         
@@ -66,8 +66,8 @@ public class DBSecureSerializableConversationThreadAsset: NSObject, NSSecureCodi
         )
     }
     
-    func toDTO() -> ConversationThreadAssetDTO {
-        ConversationThreadAssetDTO(
+    func toDTO() -> AssetGroupLinkageDTO {
+        AssetGroupLinkageDTO(
             globalIdentifier: self.globalIdentifier,
             addedByUserIdentifier: self.addedByUserIdentifier,
             addedAt: self.addedAt,
@@ -75,16 +75,16 @@ public class DBSecureSerializableConversationThreadAsset: NSObject, NSSecureCodi
         )
     }
     
-    static func fromDTO(_ conversationThreadAsset: ConversationThreadAssetDTO) -> DBSecureSerializableConversationThreadAsset {
-        DBSecureSerializableConversationThreadAsset(
-            globalIdentifier: conversationThreadAsset.globalIdentifier,
-            addedByUserIdentifier: conversationThreadAsset.addedByUserIdentifier,
-            addedAt: conversationThreadAsset.addedAt,
-            groupId: conversationThreadAsset.groupId
+    static func fromDTO(_ assetGroupLinkage: AssetGroupLinkageDTO) -> DBSecureSerializableAssetGroupLinkage {
+        DBSecureSerializableAssetGroupLinkage(
+            globalIdentifier: assetGroupLinkage.globalIdentifier,
+            addedByUserIdentifier: assetGroupLinkage.addedByUserIdentifier,
+            addedAt: assetGroupLinkage.addedAt,
+            groupId: assetGroupLinkage.groupId
         )
     }
     
-    static func deserialize(from data: Data) throws -> DBSecureSerializableConversationThreadAsset {
+    static func deserialize(from data: Data) throws -> DBSecureSerializableAssetGroupLinkage {
         let unarchiver: NSKeyedUnarchiver
         if #available(macOS 10.13, *) {
             unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
@@ -92,7 +92,7 @@ public class DBSecureSerializableConversationThreadAsset: NSObject, NSSecureCodi
             unarchiver = NSKeyedUnarchiver(forReadingWith: data)
         }
         guard let photoMessage = unarchiver.decodeObject(
-            of: DBSecureSerializableConversationThreadAsset.self,
+            of: DBSecureSerializableAssetGroupLinkage.self,
             forKey: NSKeyedArchiveRootObjectKey
         ) else {
             log.critical("failed to decode photo messages from data")
