@@ -1739,31 +1739,28 @@ struct LocalServer : SHLocalServerAPI {
                 var serverAssets = [SHServerAsset]()
                 for asset in assets {
                     let descriptor = descriptorsByGlobalIdentifier[asset.globalIdentifier]!
-                    for thisUserGroupId in descriptor.sharingInfo.groupIdsByRecipientUserIdentifier[self.requestor.identifier]! {
-                        var serverAssetVersions = [SHServerAssetVersion]()
-                        for encryptedVersion in asset.encryptedVersions.values {
-                            serverAssetVersions.append(
-                                SHServerAssetVersion(
-                                    versionName: encryptedVersion.quality.rawValue,
-                                    publicKeyData: encryptedVersion.publicKeyData,
-                                    publicSignatureData: encryptedVersion.publicSignatureData,
-                                    encryptedSecret: encryptedVersion.encryptedSecret,
-                                    presignedURL: "",
-                                    presignedURLExpiresInMinutes: 0
-                                )
+                    var serverAssetVersions = [SHServerAssetVersion]()
+                    for encryptedVersion in asset.encryptedVersions.values {
+                        serverAssetVersions.append(
+                            SHServerAssetVersion(
+                                versionName: encryptedVersion.quality.rawValue,
+                                publicKeyData: encryptedVersion.publicKeyData,
+                                publicSignatureData: encryptedVersion.publicSignatureData,
+                                encryptedSecret: encryptedVersion.encryptedSecret,
+                                presignedURL: "",
+                                presignedURLExpiresInMinutes: 0
                             )
-                        }
-                        
-                        let serverAsset = SHServerAsset(
-                            globalIdentifier: asset.globalIdentifier,
-                            localIdentifier: asset.localIdentifier,
-                            createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
-                            creationDate: asset.creationDate,
-                            groupId: thisUserGroupId,
-                            versions: serverAssetVersions
                         )
-                        serverAssets.append(serverAsset)
                     }
+                    
+                    let serverAsset = SHServerAsset(
+                        globalIdentifier: asset.globalIdentifier,
+                        localIdentifier: asset.localIdentifier,
+                        createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
+                        creationDate: asset.creationDate,
+                        versions: serverAssetVersions
+                    )
+                    serverAssets.append(serverAsset)
                 }
                 
                 completionHandler(.success(serverAssets))
