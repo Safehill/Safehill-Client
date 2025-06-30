@@ -38,62 +38,6 @@ public struct SHKGQuery {
         }
     }
     
-    internal static func ingest(
-        _ conversationThreadAssets: ConversationThreadAssetsDTO,
-        in thread: ConversationThreadOutputDTO
-    ) throws {
-        try readWriteGraphQueue.sync(flags: .barrier) {
-            
-            guard let graph = SHDBManager.sharedInstance.graph else {
-                throw KBError.databaseNotReady
-            }
-            
-            guard let userStore = SHDBManager.sharedInstance.userStore else {
-                throw KBError.databaseNotReady
-            }
-            let writeBatch = userStore.writeBatch()
-            
-            for photoMessage in conversationThreadAssets.photoMessages {
-                let data = try NSKeyedArchiver.archivedData(
-                    withRootObject: DBSecureSerializableConversationThreadAsset.fromDTO(photoMessage),
-                    requiringSecureCoding: true
-                )
-                writeBatch.set(
-                    value: data,
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::photoMessage",
-                    timestamp: photoMessage.addedAt.iso8601withFractionalSeconds ?? Date()
-                )
-                
-                try self.ingestShare(
-                    of: photoMessage.globalIdentifier,
-                    from: photoMessage.addedByUserIdentifier,
-                    to: thread.membersPublicIdentifier,
-                    in: graph
-                )
-            }
-            
-            for otherAsset in conversationThreadAssets.otherAssets {
-                let data = try NSKeyedArchiver.archivedData(
-                    withRootObject: DBSecureSerializableUserGroupAsset.fromDTO(otherAsset),
-                    requiringSecureCoding: true
-                )
-                writeBatch.set(
-                    value: data,
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::nonPhotoMessage",
-                    timestamp: otherAsset.addedAt.iso8601withFractionalSeconds ?? Date()
-                )
-                try self.ingestShare(
-                    of: otherAsset.globalIdentifier,
-                    from: otherAsset.addedByUserIdentifier,
-                    to: thread.membersPublicIdentifier,
-                    in: graph
-                )
-            }
-            
-            try writeBatch.write()
-        }
-    }
-    
     internal static func ingestProvisionalShare(
         of assetIdentifier: GlobalIdentifier,
         localIdentifier: LocalIdentifier?,

@@ -6,7 +6,7 @@ extension SHGlobalSyncOperation {
         let assetsDownloadOperation = SHRemoteDownloadOperation(
             user: self.user,
             assetSyncingDelegates: self.assetSyncingDelegates,
-            restorationDelegate: self.restorationDelegate,
+            activitySyncingDelegates: self.activitySyncingDelegates,
             photoIndexer: SHPhotosIndexer()
         )
         let assetsSyncOperation = SHAssetsSyncOperation(
@@ -43,7 +43,7 @@ extension SHGlobalSyncOperation {
         let assetsDownloadOperation = SHRemoteDownloadOperation(
             user: user,
             assetSyncingDelegates: self.assetSyncingDelegates,
-            restorationDelegate: self.restorationDelegate,
+            activitySyncingDelegates: self.activitySyncingDelegates,
             photoIndexer: SHPhotosIndexer()
         )
         let assetsSyncOperation = SHAssetsSyncOperation(
@@ -77,7 +77,7 @@ extension SHGlobalSyncOperation {
         SHRemoteDownloadOperation(
             user: user,
             assetSyncingDelegates: self.assetSyncingDelegates,
-            restorationDelegate: self.restorationDelegate,
+            activitySyncingDelegates: self.activitySyncingDelegates,
             photoIndexer: SHPhotosIndexer()
         )
         .run(

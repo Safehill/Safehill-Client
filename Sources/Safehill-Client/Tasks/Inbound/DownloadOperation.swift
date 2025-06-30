@@ -21,15 +21,8 @@ protocol SHDownloadOperation {
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     )
     
-    func processAssetsInDescriptors(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
-    )
-    
-    func restoreQueueItems(
-        descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-        qos: DispatchQoS.QoSClass,
-        completionHandler: @escaping (Result<Void, Error>) -> Void
-    )
+    func createAssetActivities(
+        from descriptors: [any SHAssetDescriptor],
+        usersDict: [UserIdentifier: any SHServerUser]
+    ) async -> [any AssetActivity]
 }

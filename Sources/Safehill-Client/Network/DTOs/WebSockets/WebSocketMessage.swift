@@ -10,8 +10,6 @@ public struct WebSocketMessage: Codable {
         case threadAdd = "thread-add"
         case threadUpdate = "thread-update"
         case threadRemove = "thread-remove"
-        case threadAssetsShare = "thread-assets-share"
-        case groupAssetsShare = "group-assets-share"
         case connectionRequest = "connection-request"
         case userConversionManifest = "user-conversion-manifest"
         case threadUserConverted = "thread-user-converted"
@@ -55,11 +53,6 @@ public struct WebSocketMessage: Codable {
         let membersPublicIdentifier: [String]
         let invitedUsersPhoneNumbers: [String: String]
         let lastUpdatedAt: String?
-    }
-    
-    struct ThreadAssets: Codable {
-        let threadId: String
-        let assets: [AssetGroupLinkageDTO]
     }
     
     struct NewUserConnection: Codable {
