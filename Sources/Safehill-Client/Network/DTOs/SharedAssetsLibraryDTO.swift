@@ -15,7 +15,7 @@ public struct SharedAssetsLibraryDTO: Codable {
         case otherAssets
     }
     
-    init(
+    public init(
         photoMessages: [AssetGroupLinkageDTO],
         otherAssets: [AssetRefDTO]
     ) {
