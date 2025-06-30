@@ -6,7 +6,7 @@ public enum GroupPermission: Int {
     
     public static let defaultValue: GroupPermission = .shared
     
-    var label: String {
+    public var label: String {
         switch self {
         case .confidential:
             "Confidential"
