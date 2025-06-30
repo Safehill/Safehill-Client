@@ -14,7 +14,7 @@ public class GenericAssetActivity: AssetActivity {
     
     public let asPhotoMessageInThreadId: String?
     
-    init(
+    public init(
         assetIds: [GlobalIdentifier],
         groupId: String,
         groupTitle: String? = nil,
