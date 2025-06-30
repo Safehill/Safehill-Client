@@ -63,7 +63,7 @@ extension SHRemoteDownloadOperation {
         assetGIdsByGroupId: [String: [GlobalIdentifier]],
         sharedWithByGroupId: [String: [any SHServerUser]] // Use Set to avoid duplicates
     ) {
-        var assetGIdsByGroupId: [String: [GlobalIdentifier]] = [:]
+        var assetGIdsByGroupId: [String: Set<GlobalIdentifier>] = [:]
         var sharedWithByGroupId: [String: Set<UserIdentifier>] = [:]
 
         for asset in descriptors {
@@ -72,7 +72,7 @@ extension SHRemoteDownloadOperation {
 
             for (userId, groupIds) in groupMapping {
                 for groupId in groupIds {
-                    assetGIdsByGroupId[groupId, default: []].append(globalId)
+                    assetGIdsByGroupId[groupId, default: []].insert(globalId)
                     sharedWithByGroupId[groupId, default: []].insert(userId)
                 }
             }
@@ -96,7 +96,7 @@ extension SHRemoteDownloadOperation {
             usersByGroupId[groupId] = users
         }
 
-        return (assetGIdsByGroupId, usersByGroupId)
+        return (assetGIdsByGroupId.mapValues({ Array($0) }), usersByGroupId)
     }
     
     private func createAssetActivities(
