@@ -38,7 +38,6 @@ extension SHRemoteDownloadOperation {
                     guard
                         existingInfo.encryptedTitle == groupInfo.encryptedTitle,
                         existingInfo.createdBy == groupInfo.createdBy,
-                        existingInfo.createdAt == groupInfo.createdAt,
                         existingInfo.createdFromThreadId == groupInfo.createdFromThreadId,
                         existingInfo.permissions == groupInfo.permissions,
                         existingInfo.invitedUsersPhoneNumbers == groupInfo.invitedUsersPhoneNumbers
