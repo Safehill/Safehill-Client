@@ -327,14 +327,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
 #endif
                 
                 let processedDescriptors = Array(processedDescriptorsByGid.values)
-                
-                do {
-                    try SHKGQuery.ingest(processedDescriptors, receiverUserId: self.user.identifier)
-                    completionHandler(.success(processedDescriptorsByGid))
-                } catch {
-                    completionHandler(.failure(error))
-                    return
-                }
+                completionHandler(.success(processedDescriptorsByGid))
             }
         }
     }

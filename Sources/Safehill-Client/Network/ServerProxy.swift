@@ -1206,8 +1206,11 @@ extension SHServerProxy {
                 completionHandler(.success(threadAssets))
                 
             case .failure(let failure):
-                log.error("failed to get assets in thread \(threadId) from remote server, trying local. \(failure.localizedDescription)")
-                self.localServer.getAssets(inThread: threadId, completionHandler: completionHandler)
+                log.error("failed to get assets in thread \(threadId) from remote server, retrieving local. \(failure.localizedDescription)")
+                self.localServer.getAssets(
+                    inThread: threadId,
+                    completionHandler: completionHandler
+                )
             }
         }
     }

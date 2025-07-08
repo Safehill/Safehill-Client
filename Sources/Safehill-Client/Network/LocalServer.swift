@@ -264,13 +264,6 @@ struct LocalServer : SHLocalServerAPI {
             return
         }
         
-        do {
-            try SHKGQuery.removeUsers(with: identifiers)
-        } catch {
-            completionHandler(.failure(error))
-            return
-        }
-        
         let condition: KBGenericCondition
         if identifiers.isEmpty {
             condition = KBGenericCondition(value: true)
@@ -300,13 +293,6 @@ struct LocalServer : SHLocalServerAPI {
     func deleteAllAssets(completionHandler: @escaping (Result<[String], Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        do {
-            try SHKGQuery.deepClean()
-        } catch {
-            completionHandler(.failure(error))
             return
         }
         
@@ -1791,14 +1777,6 @@ struct LocalServer : SHLocalServerAPI {
                 completionHandler(.failure(error))
                 
             case .success:
-            
-                do {
-                    try SHKGQuery.ingestShareChanges(sharingInfoByAssetId)
-                } catch {
-                    completionHandler(.failure(error))
-                    return
-                }
-                
                 let versions = versions ?? SHAssetQuality.all
                 
                 let writeBatch = assetStore.writeBatch()
@@ -1854,13 +1832,6 @@ struct LocalServer : SHLocalServerAPI {
                                completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        do {
-            try SHKGQuery.removeSharingInformation(basedOn: userIdsToRemoveFromAssetGid)
-        } catch {
-            completionHandler(.failure(error))
             return
         }
         
@@ -2171,13 +2142,6 @@ struct LocalServer : SHLocalServerAPI {
         
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
-            return
-        }
-        
-        do {
-            try SHKGQuery.removeAssets(with: globalIdentifiers)
-        } catch {
-            completionHandler(.failure(error))
             return
         }
         
@@ -2844,71 +2808,11 @@ struct LocalServer : SHLocalServerAPI {
                     return result
                 }
             
-            ///
-            /// Retrieve all assets shared with the people in this thread
-            /// (regardless if they are photo messages)
-            /// then filter out the photo messages
-            ///
-            let dispatchGroup = DispatchGroup()
-            var nonPhotoMessagesError: Error? = nil
-            
-            dispatchGroup.enter()
-            self.listThreads(withIdentifiers: [threadId]) {
-                listThreadResult in
-                switch listThreadResult {
-                case .success(let threads):
-                    guard let thread = threads.first else {
-                        nonPhotoMessagesError = SHLocalServerError.threadNotPresent(threadId)
-                        dispatchGroup.leave()
-                        return
-                    }
-                    
-                    do {
-                        let assetIdsTuples = try SHKGQuery.assetGlobalIdentifiers(
-                            amongst: thread.membersPublicIdentifier,
-                            requestingUserId: self.requestor.identifier
-                        )
-                        
-                        for (assetId, predRecipients) in assetIdsTuples {
-                            if let senderId = predRecipients
-                                .filter({ $0.0 == .shares })
-                                .map({ $0.1 })
-                                .first
-                            {
-                                let assetRef = AssetRefDTO(
-                                    globalIdentifier: assetId,
-                                    addedByUserIdentifier: senderId,
-                                    addedAt: Date().iso8601withFractionalSeconds
-                                )
-                                if explicitlyInThreadById[assetId] == nil {
-                                    implicitlyInThreadById[assetId] = assetRef
-                                }
-                            }
-                        }
-                    } catch {
-                        log.error("failed to retrieve thread \(threadId) assets from graph. \(error.localizedDescription)")
-                        nonPhotoMessagesError = error
-                        dispatchGroup.leave()
-                    }
-                    
-                case .failure(let error):
-                    log.error("failed to retrieve thread \(threadId) from local server. Failed to calculate non-photomessage assets. \(error.localizedDescription)")
-                    nonPhotoMessagesError = error
-                    dispatchGroup.leave()
-                }
-            }
-            
-            dispatchGroup.notify(queue: .global()) {
-                if let nonPhotoMessagesError {
-                    completionHandler(.failure(nonPhotoMessagesError))
-                } else {
-                    let result = SharedAssetsLibraryDTO(
-                        photoMessages: Array(explicitlyInThreadById.values),
-                        otherAssets: Array(implicitlyInThreadById.values)
-                    )
-                    completionHandler(.success(result))
-                }
-            }
+            let result = SharedAssetsLibraryDTO(
+                photoMessages: Array(explicitlyInThreadById.values),
+                otherAssets: []
+            )
+            completionHandler(.success(result))
             
         } catch {
             completionHandler(.failure(error))
@@ -3128,21 +3032,11 @@ struct LocalServer : SHLocalServerAPI {
                     var threadSummaryById = [String: InteractionsThreadSummaryDTO]()
                     
                     for (threadId, thread) in threadsById {
-                        let assetIdsCount: Int
-                        do {
-                            let assetIds = try SHKGQuery.assetGlobalIdentifiers(
-                                amongst: thread.membersPublicIdentifier,
-                                requestingUserId: self.requestor.identifier
-                            )
-                            assetIdsCount = assetIds.count
-                        } catch {
-                            assetIdsCount = 0
-                        }
                         let threadSummary = InteractionsThreadSummaryDTO(
                             thread: thread,
                             lastEncryptedMessage: lastMessageByThreadId[threadId],
                             numMessages: interactionIdsByThreadId[threadId]?.count ?? 0,
-                            numAssets: assetIdsCount
+                            numAssets: 0
                         )
                         threadSummaryById[threadId] = threadSummary
                     }

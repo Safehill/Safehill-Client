@@ -11,7 +11,8 @@ public enum SHKGPredicate: String {
 var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
 var UserIdToAssetGidSharedWithCache = [UserIdentifier: Set<GlobalIdentifier>]()
 
-public struct SHKGQuery {
+@available(*, deprecated, message: "Fully deprecated")
+private struct SHKGQuery {
     
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
     

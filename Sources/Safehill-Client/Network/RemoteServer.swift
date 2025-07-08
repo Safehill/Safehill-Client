@@ -49,6 +49,8 @@ struct RemoteServer : SHRemoteServerAPI {
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
+    let threadAssetsInMemoryCache = ThreadSafeCache<String, CacheBox<SharedAssetsLibraryDTO>>()
+    
     init(requestor: SHLocalUserProtocol) {
         self.requestor = requestor
     }
@@ -1247,12 +1249,21 @@ struct RemoteServer : SHRemoteServerAPI {
         inThread threadId: String,
         completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     ) {
+        if let cached = threadAssetsInMemoryCache.value(forKey: threadId) as? CacheBox<SharedAssetsLibraryDTO> {
+            completionHandler(.success(cached.value))
+            return
+        }
+        
         self.post(
             "threads/retrieve/\(threadId)/assets",
             parameters: nil,
-            requiresAuthentication: true,
-            completionHandler: completionHandler
-        )
+            requiresAuthentication: true
+        ) { (result: Result<SharedAssetsLibraryDTO, Error>) in
+            if case .success(let dto) = result {
+                threadAssetsInMemoryCache.set(CacheBox(dto), forKey: threadId)
+            }
+            completionHandler(result)
+        }
     }
     
     func deleteThread(
