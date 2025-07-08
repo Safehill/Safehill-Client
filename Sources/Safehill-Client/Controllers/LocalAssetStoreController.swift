@@ -70,10 +70,10 @@ public struct SHLocalAssetStoreController {
                     versions: versions,
                     receivedFrom: self.user
                 )
-                log.debug("[\(type(of: self))] successfully decrypted asset \(decryptedAsset.globalIdentifier)")
+                log.debug("[\(type(of: self))] successfully decrypted asset \(descriptor.globalIdentifier)")
                 completionHandler(.success(decryptedAsset))
             } catch {
-                log.error("[\(type(of: self))] failed decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")
+                log.error("[\(type(of: self))] failed decrypting asset \(descriptor.globalIdentifier): \(error.localizedDescription)")
                 completionHandler(.failure(error))
             }
         } else {
@@ -99,7 +99,7 @@ public struct SHLocalAssetStoreController {
                             versions: versions,
                             receivedFrom: serverUser
                         )
-                        log.debug("[\(type(of: self))] successfully decrypted asset \(decryptedAsset.globalIdentifier)")
+                        log.debug("[\(type(of: self))] successfully decrypted asset \(descriptor.globalIdentifier)")
                         completionHandler(.success(decryptedAsset))
                     } catch {
                         log.error("[\(type(of: self))] failed decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")

@@ -56,7 +56,7 @@ struct SHAssetStoreController {
         do {
             try await self.upload(serverAsset: serverAsset, asset: encryptedAsset, filterVersions: filterVersions)
         } catch {
-            try? self.deleteRemoteAsset(globalIdentifier: encryptedAsset.globalIdentifier)
+            try? self.deleteRemoteAsset(globalIdentifier: serverAsset.globalIdentifier)
             throw error
         }
         

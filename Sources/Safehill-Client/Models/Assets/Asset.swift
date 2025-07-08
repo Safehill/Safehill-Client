@@ -6,7 +6,7 @@ public enum Asset: GenericAssetIdentifiable {
     case fromApplePhotosLibrary(PHAsset)
     case fromApplePhotosLibraryBackedUp(BackedUpAsset)
     case downloading(any SHAssetDescriptor)
-    case downloaded(any SHDecryptedAsset)
+    case downloaded(any SHAssetDescriptor, any SHDecryptedAsset)
     
     public var debugType: String {
         switch self {
@@ -27,10 +27,10 @@ public enum Asset: GenericAssetIdentifiable {
             return asset.localIdentifier
         case .fromApplePhotosLibraryBackedUp(let asset):
             return asset.globalIdentifier
-        case .downloading(let assetDescriptor):
-            return assetDescriptor.globalIdentifier
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.globalIdentifier
+        case .downloading(let descriptor):
+            return descriptor.globalIdentifier
+        case .downloaded(let descriptor, _):
+            return descriptor.globalIdentifier
         }
     }
     
@@ -40,10 +40,10 @@ public enum Asset: GenericAssetIdentifiable {
             return phAsset.localIdentifier
         case .fromApplePhotosLibraryBackedUp(let asset):
             return asset.phAsset.localIdentifier
-        case .downloading(let assetDescriptor):
-            return assetDescriptor.localIdentifier
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.localIdentifier
+        case .downloading(let descriptor):
+            return descriptor.localIdentifier
+        case .downloaded(let descriptor, _):
+            return descriptor.localIdentifier
         }
     }
     
@@ -53,10 +53,10 @@ public enum Asset: GenericAssetIdentifiable {
             return nil
         case .fromApplePhotosLibraryBackedUp(let asset):
             return asset.globalIdentifier
-        case .downloading(let assetDescriptor):
-            return assetDescriptor.globalIdentifier
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.globalIdentifier
+        case .downloading(let descriptor):
+            return descriptor.globalIdentifier
+        case .downloaded(let descriptor, _):
+            return descriptor.globalIdentifier
         }
     }
     
@@ -66,10 +66,10 @@ public enum Asset: GenericAssetIdentifiable {
             return asset.creationDate
         case .fromApplePhotosLibraryBackedUp(let asset):
             return asset.phAsset.creationDate
-        case .downloading(let assetDescriptor):
-            return assetDescriptor.creationDate
-        case .downloaded(let decryptedAsset):
-            return decryptedAsset.creationDate
+        case .downloading(let descriptor):
+            return descriptor.creationDate
+        case .downloaded(let descriptor, _):
+            return descriptor.creationDate
         }
     }
     
@@ -91,7 +91,7 @@ public enum Asset: GenericAssetIdentifiable {
     
     public var isFromRemoteLibrary: Bool {
         switch self {
-        case .downloaded(_), .fromApplePhotosLibraryBackedUp(_), .downloading(_):
+        case .downloaded(_, _), .fromApplePhotosLibraryBackedUp(_), .downloading(_):
             return true
         default:
             return false
