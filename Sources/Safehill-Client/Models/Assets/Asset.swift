@@ -3,10 +3,10 @@ import Photos
 
 
 public enum Asset: GenericAssetIdentifiable {
-    case fromApplePhotosLibrary(PHAsset)
-    case fromApplePhotosLibraryBackedUp(BackedUpAsset)
-    case downloading(any SHAssetDescriptor)
-    case downloaded(any SHAssetDescriptor, any SHDecryptedAsset)
+    case fromApplePhotosLibrary(PHAsset) // In the local device library only
+    case fromApplePhotosLibraryBackedUp(BackedUpAsset) // Both in the local device library and in the Safehill cloud
+    case downloading(any SHAssetDescriptor) // In the Safehill cloud only, no version data retrieved yet
+    case downloaded(any SHAssetDescriptor, any SHDecryptedAsset) // In the Safehill cloud only, some version data retrieved and held in the SHDecryptedAsset object
     
     public var debugType: String {
         switch self {
