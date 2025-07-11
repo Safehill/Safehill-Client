@@ -16,32 +16,45 @@ class CacheItem<Value> {
 
 public class ThreadSafeCache<Key: Hashable, Value: AnyObject> {
     private let cache = NSCache<WrappedKey, Entry>()
-    private let expirationTime: TimeInterval
+    
+    /// The time after which the value is considered stale
+    private let expirationInterval: TimeInterval
+    /// The time after expiration until the value is still in the cache
+    /// This is useful to keep expired values in the cache instead of immediately remove them after expiration.
     private let evictionInterval: TimeInterval
+    
+    /// The timer that runs every 60 seconds to evict items
     private var evictionTimer: Timer?
     
     public init(
-        expirationTime: TimeInterval = 300,
-        evictionInterval: TimeInterval = 60
+        expirationInterval: TimeInterval = 300, // (5 minutes)
+        evictionInterval: TimeInterval = 0
     ) {
-        self.expirationTime = expirationTime
+        self.expirationInterval = expirationInterval
         self.evictionInterval = evictionInterval
         startEvictionTimer()
     }
     
     public func set(_ value: Value, forKey key: Key) {
-        let entry = Entry(value: value, expiration: expirationTime)
+        let entry = Entry(value: value, expiration: expirationInterval)
         cache.setObject(entry, forKey: WrappedKey(key))
     }
     
-    public func value(forKey key: Key) -> AnyObject? {
+    public func value(
+        forKey key: Key,
+        ignoreExpiration: Bool = false
+    ) -> AnyObject? {
         guard let entry = cache.object(forKey: WrappedKey(key)) else {
             return nil
         }
         
         if entry.isExpired {
-            removeValue(forKey: key)
-            return nil
+            if shouldEvictItem(entry) {
+                removeValue(forKey: key)
+            }
+            if !ignoreExpiration {
+                return nil
+            }
         }
         
         return entry.value
@@ -59,17 +72,24 @@ public class ThreadSafeCache<Key: Hashable, Value: AnyObject> {
     
     private func startEvictionTimer() {
         evictionTimer?.invalidate()
-        evictionTimer = Timer.scheduledTimer(withTimeInterval: evictionInterval, repeats: true) { [weak self] _ in
-            self?.evictExpiredItems()
+        evictionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.evictItems()
         }
     }
     
-    private func evictExpiredItems() {
+    private func evictItems() {
         for key in cache.allKeys {
             if let entry = cache.object(forKey: key), entry.isExpired {
-                cache.removeObject(forKey: key)
+                if shouldEvictItem(entry) {
+                    cache.removeObject(forKey: key)
+                }
             }
         }
+    }
+    
+    private func shouldEvictItem(_ item: CacheItem<AnyObject>) -> Bool {
+        let evictionDate = item.expirationDate.addingTimeInterval(self.evictionInterval)
+        return Date() > evictionDate
     }
     
     deinit {

@@ -9,8 +9,12 @@ public struct SHServerProxy: SHServerProxyProtocol {
     let remoteServer: SHRemoteServerAPI
     
     public init(user: SHLocalUserProtocol) {
-        self.localServer = LocalServer(requestor: user)
-        self.remoteServer = RemoteServer(requestor: user)
+        let sharedAPICaches = ThreadSafeCache<String, AnyObject>(
+            evictionInterval: 172800 /// 2 days after expired, so that the `LocalServer` can pick up these values even if expired
+        )
+        
+        self.remoteServer = RemoteServer(requestor: user, sharedCaches: sharedAPICaches)
+        self.localServer = LocalServer(requestor: user, sharedCaches: sharedAPICaches)
     }
     
     // Useful for testing
@@ -366,8 +370,10 @@ extension SHServerProxy {
         }
     }
     
-    private func fetchLocalUserAccount(originalServerError: Error? = nil,
-                                      completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()) {
+    private func fetchLocalUserAccount(
+        originalServerError: Error? = nil,
+        completionHandler: @escaping (Result<any SHServerUser, Error>) -> ()
+    ) {
         self.localServer.getUsers(withIdentifiers: [self.remoteServer.requestor.identifier]) { result in
             switch result {
             case .success(let users):

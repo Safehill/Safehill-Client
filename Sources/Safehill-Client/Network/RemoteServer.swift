@@ -49,10 +49,15 @@ struct RemoteServer : SHRemoteServerAPI {
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
-    let threadAssetsInMemoryCache = ThreadSafeCache<String, CacheBox<SharedAssetsLibraryDTO>>()
+    /// The caches shared between the Local and the Remote Server
+    let sharedCaches: ThreadSafeCache<String, AnyObject>
     
-    init(requestor: SHLocalUserProtocol) {
+    init(
+        requestor: SHLocalUserProtocol,
+        sharedCaches: ThreadSafeCache<String, AnyObject> = .init()
+    ) {
         self.requestor = requestor
+        self.sharedCaches = sharedCaches
     }
     
     func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
@@ -215,10 +220,12 @@ struct RemoteServer : SHRemoteServerAPI {
         }.resume()
     }
     
-    func get<T: Decodable>(_ route: String,
-                           parameters: [String: Any]?,
-                           requiresAuthentication: Bool = true,
-                           completionHandler: @escaping (Result<T, Error>) -> Void) {
+    func get<T: Decodable>(
+        _ route: String,
+        parameters: [String: Any]?,
+        requiresAuthentication: Bool = true,
+        completionHandler: @escaping (Result<T, Error>) -> Void
+    ) {
         let url: URL
         if parameters == nil {
             url = requestURL(route: route, urlParameters: nil)
@@ -253,11 +260,13 @@ struct RemoteServer : SHRemoteServerAPI {
         )
     }
     
-    private func route<T: Decodable>(_ route: String,
-                                     method: String,
-                                     parameters: [String: Any?]?,
-                                     requiresAuthentication: Bool,
-                                     completionHandler: @escaping (Result<T, Error>) -> Void) {
+    private func route<T: Decodable>(
+        _ route: String,
+        method: String,
+        parameters: [String: Any?]?,
+        requiresAuthentication: Bool,
+        completionHandler: @escaping (Result<T, Error>) -> Void
+    ) {
         let url = requestURL(route: route)
         
         var request = URLRequest(url: url, timeoutInterval: 90)
@@ -325,10 +334,12 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
-    func post<T: Decodable>(_ route: String,
-                            parameters: [String: Any?]?,
-                            requiresAuthentication: Bool = true,
-                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+    func post<T: Decodable>(
+        _ route: String,
+        parameters: [String: Any?]?,
+        requiresAuthentication: Bool = true,
+        completionHandler: @escaping (Result<T, Error>) -> Void
+    ) {
         self.route(
             route,
             method: "POST",
@@ -338,10 +349,12 @@ struct RemoteServer : SHRemoteServerAPI {
         )
     }
     
-    func delete<T: Decodable>(_ route: String,
-                            parameters: [String: Any?]?,
-                            requiresAuthentication: Bool = true,
-                            completionHandler: @escaping (Result<T, Error>) -> Void) {
+    func delete<T: Decodable>(
+        _ route: String,
+        parameters: [String: Any?]?,
+        requiresAuthentication: Bool = true,
+        completionHandler: @escaping (Result<T, Error>) -> Void
+    ) {
         self.route(
             route,
             method: "DELETE",
@@ -424,6 +437,7 @@ struct RemoteServer : SHRemoteServerAPI {
         self.post("users/safe-delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
+                self.sharedCaches.removeAll()
                 return completionHandler(.success(()))
             case .failure(let error):
                 if case SHHTTPError.ClientError.notFound = error {
@@ -442,6 +456,7 @@ struct RemoteServer : SHRemoteServerAPI {
         ], requiresAuthentication: false) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
+                self.sharedCaches.removeAll()
                 return completionHandler(.success(()))
             case .failure(let error):
                 if case SHHTTPError.ClientError.notFound = error {
@@ -1249,18 +1264,19 @@ struct RemoteServer : SHRemoteServerAPI {
         inThread threadId: String,
         completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()
     ) {
-        if let cached = threadAssetsInMemoryCache.value(forKey: threadId) as? CacheBox<SharedAssetsLibraryDTO> {
+        let urlString = "threads/retrieve/\(threadId)/assets"
+        if let cached = self.sharedCaches.value(forKey: urlString) as? CacheBox<SharedAssetsLibraryDTO> {
             completionHandler(.success(cached.value))
             return
         }
         
         self.post(
-            "threads/retrieve/\(threadId)/assets",
+            urlString,
             parameters: nil,
             requiresAuthentication: true
         ) { (result: Result<SharedAssetsLibraryDTO, Error>) in
             if case .success(let dto) = result {
-                threadAssetsInMemoryCache.set(CacheBox(dto), forKey: threadId)
+                self.sharedCaches.set(CacheBox(dto), forKey: urlString)
             }
             completionHandler(result)
         }
