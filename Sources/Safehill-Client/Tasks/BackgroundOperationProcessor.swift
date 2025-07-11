@@ -27,28 +27,22 @@ public actor SHBackgroundOperationProcessor<T: SHBackgroundOperationProtocol> {
         qos: DispatchQoS.QoSClass,
         completion: @escaping (T.OperationResult?) -> Void
     ) {
-        Task { [weak self] in
-            guard let self = self else { return }
-            let operationKey = await self.operationKey
-            log.debug("\(operationKey): run at qos=\(qos.toTaskPriority().rawValue)")
-            
-            ///
-            /// If another operation of the same type is running, skip this cycle
-            ///
-            let isRunning = await self.runningOperations[operationKey] ?? false
-            guard !isRunning else {
-                completion(nil)
-                return
-            }
-            
-            await self.setOperationRunning(operationKey, running: true)
-            operation.run(qos: qos) { result in
-                completion(result)
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    await self.setOperationRunning(operationKey, running: false)
-                }
-            }
+        let operationKey = self.operationKey
+        log.debug("\(operationKey): run at qos=\(qos.toTaskPriority().rawValue)")
+        
+        ///
+        /// If another operation of the same type is running, don't run it
+        ///
+        let isRunning = self.runningOperations[operationKey] ?? false
+        guard !isRunning else {
+            completion(nil)
+            return
+        }
+        
+        self.setOperationRunning(operationKey, running: true)
+        operation.run(qos: qos) { result in
+            completion(result)
+            self.setOperationRunning(operationKey, running: false)
         }
     }
     

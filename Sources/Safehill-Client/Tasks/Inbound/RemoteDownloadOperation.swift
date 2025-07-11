@@ -107,7 +107,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     
     ///
     /// Takes the full list of descriptors from server (remote or local, depending on whether it's running as part of the
-    /// `SHLocalActivityRestoreOperation` or the `SHDownloadOperation`.
+    /// `SHLocalDownloadOperation` or the `SHRemoteDownloadOperation`.
     ///
     ///
     /// Filters out
