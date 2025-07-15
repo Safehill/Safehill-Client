@@ -1,5 +1,8 @@
 import Foundation
 
+let AssetDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHRemoteDownloadOperation>()
+let AssetSyncPipelineProcessor = SHBackgroundOperationProcessor<SHAssetsSyncOperation>()
+
 extension SHGlobalSyncOperation {
     
     public func syncAllAssets(
@@ -16,25 +19,15 @@ extension SHGlobalSyncOperation {
             assetsDelegates: self.assetSyncingDelegates
         )
         
-        try await withUnsafeThrowingContinuation { continuation in
-            assetsDownloadOperation.run(qos: qos) {
-                rdor in
-                assetsSyncOperation.run(qos: qos) {
-                    asor in
-                    switch (rdor, asor) {
-                    case (.success, .success):
-                        self.log.debug("assets sync completed")
-                        continuation.resume()
-                    case (.failure(let e1), _):
-                        self.log.debug("assets sync failed")
-                        continuation.resume(throwing: e1)
-                    case (_, .failure(let e2)):
-                        self.log.debug("assets sync failed")
-                        continuation.resume(throwing: e2)
-                    }
-                }
-            }
-        }
+        await AssetDownloadPipelineProcessor.runOperation(
+            assetsDownloadOperation,
+            qos: qos
+        ) { _ in }
+        
+        await AssetSyncPipelineProcessor.runOperation(
+            assetsSyncOperation,
+            qos: qos
+        ) { _ in }
     }
     
     public func syncAssets(
@@ -53,10 +46,11 @@ extension SHGlobalSyncOperation {
             assetsDelegates: self.assetSyncingDelegates
         )
         
-        assetsDownloadOperation.run(for: globalIdentifiers,
-             filteringGroups: nil,
-             startingFrom: nil,
-             qos: qos
+        assetsDownloadOperation.run(
+            for: globalIdentifiers,
+            filteringGroups: nil,
+            startingFrom: nil,
+            qos: qos
         ) { res1 in
             if case .failure(let failure) = res1 {
                 completionHandler(.failure(failure))

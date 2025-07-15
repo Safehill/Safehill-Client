@@ -23,7 +23,7 @@ struct LocalServer : SHLocalServerAPI {
     /// Cache the local descriptors to reduce frequent DB calls
     let localDescriptorsCache = ThreadSafeCache<String, SHGenericAssetDescriptorClass>()
     
-    ///
+    /// The caches shared between the Local and the Remote Server
     let sharedCaches: ThreadSafeCache<String, AnyObject>
     
     static var dataFolderURL: URL {

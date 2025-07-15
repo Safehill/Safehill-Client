@@ -11,7 +11,7 @@ import os
 /// - Updates assets on both that are different on remote
 ///
 ///
-public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
+internal class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @unchecked Sendable {
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-ASSETS-SYNC")
     
@@ -335,5 +335,3 @@ public class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, @u
         }
     }
 }
-
-public let AssetsSyncProcessor = SHBackgroundOperationProcessor<SHAssetsSyncOperation>()
