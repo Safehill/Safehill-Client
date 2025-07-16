@@ -15,7 +15,7 @@ import os
 /// 4. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
 ///     - local server assets and queue items are created when missing, and the restoration delegate is called
 ///
-internal class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
+public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
     
     internal static var lastFetchDate: Date? = nil
     

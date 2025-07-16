@@ -25,7 +25,7 @@ import os
 ///
 /// Any new asset that needs to be downloaded from the server while the app is running is taken care of by the sister processor, the `SHRemoteDownloadOperation`.
 ///
-internal class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sendable {
+public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sendable {
     
     public override init(
         user: SHLocalUserProtocol,
