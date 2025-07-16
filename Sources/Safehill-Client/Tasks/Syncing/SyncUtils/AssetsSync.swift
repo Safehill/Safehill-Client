@@ -7,7 +7,7 @@ extension SHGlobalSyncOperation {
     
     public func syncAllAssets(
         qos: DispatchQoS.QoSClass = .default
-    ) async throws {
+    ) async {
         let assetsDownloadOperation = SHRemoteDownloadOperation(
             user: self.user,
             assetSyncingDelegates: self.assetSyncingDelegates,
