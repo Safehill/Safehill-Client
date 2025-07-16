@@ -1,13 +1,26 @@
 import Foundation
 
-let AssetDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHRemoteDownloadOperation>()
-let AssetSyncPipelineProcessor = SHBackgroundOperationProcessor<SHAssetsSyncOperation>()
-
 extension SHGlobalSyncOperation {
     
     public func syncAllAssets(
         qos: DispatchQoS.QoSClass = .default
-    ) async {
+    ) async throws {
+        try await withUnsafeThrowingContinuation { continuation in
+            self.syncAllAssets(qos: qos) { result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    public func syncAllAssets(
+        qos: DispatchQoS.QoSClass = .default,
+        completionHandler: @escaping (Result<Void, Error>) -> Void
+    ) {
         let assetsDownloadOperation = SHRemoteDownloadOperation(
             user: self.user,
             assetSyncingDelegates: self.assetSyncingDelegates,
@@ -19,15 +32,19 @@ extension SHGlobalSyncOperation {
             assetsDelegates: self.assetSyncingDelegates
         )
         
-        await AssetDownloadPipelineProcessor.runOperation(
-            assetsDownloadOperation,
+        assetsDownloadOperation.run(
             qos: qos
-        ) { _ in }
-        
-        await AssetSyncPipelineProcessor.runOperation(
-            assetsSyncOperation,
-            qos: qos
-        ) { _ in }
+        ) { res1 in
+            if case .failure(let failure) = res1 {
+                completionHandler(.failure(failure))
+                return
+            }
+            assetsSyncOperation.run(
+                qos: qos
+            ) { res2 in
+                completionHandler(res2)
+            }
+        }
     }
     
     public func syncAssets(
