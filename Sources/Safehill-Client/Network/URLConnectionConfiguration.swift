@@ -9,20 +9,20 @@ public let SHDownloadTimeoutInMilliseconds = 300000 // 5 minutes
 
 public let SafehillServerURLComponents: URLComponents = {
     var components = URLComponents()
-    
-#if targetEnvironment(simulator)
-    components.scheme = "http"
-    components.host = "127.0.0.1"
-    components.port = 8080
-#elseif DEBUG
+//    
+//#if targetEnvironment(simulator)
+//    components.scheme = "http"
+//    components.host = "127.0.0.1"
+//    components.port = 8080
+//#elseif DEBUG
     components.scheme = "https"
     components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
-#else
-    components.scheme = "https"
-    components.host = "app.safehill.io"
-    components.port = 443
-#endif
+//#else
+//    components.scheme = "https"
+//    components.host = "app.safehill.io"
+//    components.port = 443
+//#endif
     
     return components
 }()
@@ -30,19 +30,19 @@ public let SafehillServerURLComponents: URLComponents = {
 public let SafehillServerURLComponentsForWebsockets: URLComponents = {
     var components = URLComponents()
     
-#if targetEnvironment(simulator)
-    components.scheme = "ws"
-    components.host = "127.0.0.1"
-    components.port = 8080
-#elseif DEBUG
+//#if targetEnvironment(simulator)
+//    components.scheme = "ws"
+//    components.host = "127.0.0.1"
+//    components.port = 8080
+//#elseif DEBUG
     components.scheme = "wss"
     components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
-#else
-    components.scheme = "wss"
-    components.host = "app.safehill.io"
-    components.port = 443
-#endif
+//#else
+//    components.scheme = "wss"
+//    components.host = "app.safehill.io"
+//    components.port = 443
+//#endif
     
     return components
 }()
