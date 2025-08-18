@@ -78,18 +78,7 @@ public class SHAssetSharingController {
                             continuation.resume(throwing: err)
                             
                         case .success:
-                            if isBackground == false {
-                                do {
-                                    // Ingest into the graph
-                                    try SHKGQuery.ingestShare(
-                                        of: globalIdentifier,
-                                        from: self.localUser.identifier,
-                                        to: recipients.map({ $0.identifier })
-                                    )
-                                } catch {
-                                    log.warning("failed to update the local graph with sharing information")
-                                }
-                                
+                            if isBackground == false {                                
                                 /// After remote sharing is successful, add `receiver::` rows in local server
                                 self.serverProxy.shareAssetLocally(
                                     shareableEncryptedAsset,

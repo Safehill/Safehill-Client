@@ -8,17 +8,16 @@ import os
 /// This pipeline operation deals with assets present the LocalServer.
 /// **It does not** deal with remote server or remote descriptors. See `SHRemoteDownloadOperation` for remote descriptor processing.
 /// The local pipeline is responsible for identifying the mapping between the assets in the photos library and the assets in the local server. The ones that don't have a mapping to the local photo library,  are decrypted from the local server and served via the `SHAssetSyncingDelegate`.
-/// The restoration delegates are notified about successful uploads and shares from this user. It assumes the history queues on disk are in sync with the local server, so it doesn't try to create history items like the `SHRemoteDownloadOperation`.
 ///
 ///
 /// The steps are:
 /// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)`: the descriptors are fetched from the local server
-/// 2. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered our if
+/// 2. Convert descriptors into `AssetActivity` objects and calling the `SHActivitySyncingDelegate`
+/// 3. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered our if
 ///     - the referenced asset is blacklisted (attemtped to download too many times),
 ///     - any user referenced in the descriptor is not "retrievabile", or
 ///     - the asset hasn't finished uploaing (upload status is neither `.notStarted` nor `.failed`)
-/// 3. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
-///     - for the assets shared by _this_ user, the restoration delegate is called to restore them
+/// 4. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
 ///     - the assets shared by from _other_ users are returned so they can be decrypted
 ///
 /// Ideally in the lifecycle of the application, the decryption of the low resolution happens only once.
@@ -31,13 +30,13 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
     public override init(
         user: SHLocalUserProtocol,
         assetSyncingDelegates: [SHAssetSyncingDelegate],
-        restorationDelegate: SHAssetActivityRestorationDelegate,
+        activitySyncingDelegates: [SHActivitySyncingDelegate],
         photoIndexer: SHPhotosIndexer
     ) {
         super.init(
             user: user,
             assetSyncingDelegates: assetSyncingDelegates,
-            restorationDelegate: restorationDelegate,
+            activitySyncingDelegates: activitySyncingDelegates,
             photoIndexer: photoIndexer
         )
     }
@@ -114,32 +113,10 @@ public class SHLocalDownloadOperation: SHRemoteDownloadOperation, @unchecked Sen
                         let delta = Set(fullDescriptorList.map({ $0.globalIdentifier })).subtracting(filteredDescriptors.keys)
                         self.log.debug("[\(type(of: self))] after processing: \(filteredDescriptors.count). delta=\(delta)")
 #endif
-                        self.processAssetsInDescriptors(
-                            descriptorsByGlobalIdentifier: filteredDescriptors,
-                            qos: qos
-                        ) { result in
-                            
-                            switch result {
-                            case .success(let descriptorsReadyToDecryptById):
-                                
-#if DEBUG
-                                let delta1 = Set(filteredDescriptors.keys).subtracting(descriptorsReadyToDecryptById.map({ $0.value.globalIdentifier }))
-                                let delta2 = Set(descriptorsReadyToDecryptById.map({ $0.value.globalIdentifier })).subtracting(filteredDescriptors.keys)
-                                self.log.debug("[\(type(of: self))] ready for decryption: \(descriptorsReadyToDecryptById.count). onlyInProcessed=\(delta1) onlyInToDecrypt=\(delta2)")
-#endif
-                                
-                                completionHandler(.success(()))
-                                
-                            case .failure(let error):
-                                completionHandler(.failure(error))
-                            }
-                            
-                        }
+                        completionHandler(.success(()))
                     }
                 }
             }
         }
     }
 }
-
-public let LocalDownloadPipelineProcessor = SHBackgroundOperationProcessor<SHLocalDownloadOperation>()

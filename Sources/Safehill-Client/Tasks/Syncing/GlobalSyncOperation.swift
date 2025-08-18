@@ -19,7 +19,7 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
     
     private var websocketConnectionDelegates: [WebSocketDelegate]
     internal let assetSyncingDelegates: [SHAssetSyncingDelegate]
-    internal let restorationDelegate: SHAssetActivityRestorationDelegate
+    internal let activitySyncingDelegates: [SHActivitySyncingDelegate]
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     private let userConversionDelegates: [SHUserConversionDelegate]
@@ -32,7 +32,7 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         deviceId: String,
         websocketConnectionDelegates: [WebSocketDelegate],
         assetSyncingDelegates: [SHAssetSyncingDelegate],
-        restorationDelegate: SHAssetActivityRestorationDelegate,
+        activitySyncingDelegates: [SHActivitySyncingDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
         userConversionDelegates: [SHUserConversionDelegate]
@@ -41,7 +41,7 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         self.deviceId = deviceId
         self.websocketConnectionDelegates = websocketConnectionDelegates
         self.assetSyncingDelegates = assetSyncingDelegates
-        self.restorationDelegate = restorationDelegate
+        self.activitySyncingDelegates = activitySyncingDelegates
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.userConversionDelegates = userConversionDelegates
@@ -352,33 +352,6 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
                         self.log.critical("[ws] error updating DB after \(message.type.rawValue) message via WebSockets. \(error.localizedDescription)")
                     }
                 }
-                
-            case .threadAssetsShare:
-                if let threadAssetsWsMessage = try? JSONDecoder().decode(WebSocketMessage.ThreadAssets.self, from: contentData) {
-                    self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): thread id \(threadAssetsWsMessage.threadId)")
-                    
-                    let threadId = threadAssetsWsMessage.threadId
-                    let threadAssets = threadAssetsWsMessage.assets
-                    
-                    interactionsSyncDelegates.forEach({
-                        $0.didReceivePhotoMessages(threadAssets, in: threadId)
-                    })
-                    
-                    return
-                    
-                } else {
-                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
-                }
-                
-            case .groupAssetsShare: // DEPRECATED IN FAVOR OF .assetsDescriptorChanged
-                guard let groupAssets = try? JSONDecoder().decode([ConversationThreadAssetDTO].self, from: contentData) else {
-                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
-                    return
-                }
-                let globalIdentifiers = groupAssets.map({$0.globalIdentifier})
-                self.log.debug("[ws] ASSETSHARE \(message.type.rawValue): assets gids \(globalIdentifiers)")
-                
-                self.syncAssets(with: globalIdentifiers) { _ in }
                 
             case .assetsDescriptorsChanged:
                 guard let globalIdentifiers = try? JSONDecoder().decode([GlobalIdentifier].self, from: contentData) else {

@@ -311,22 +311,6 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     }
                 }
             }
-            
-            do {
-                ///
-                /// As soon as the global identifier can be calculated (because the asset is fetched and ready to be encrypted)
-                /// ingest that identifier into the graph as a provisional share.
-                ///
-                try SHKGQuery.ingestProvisionalShare(
-                    of: asset.globalIdentifier,
-                    localIdentifier: encryptionRequest.asset.localIdentifier,
-                    from: self.user.identifier,
-                    to: encryptionRequest.sharedWith.map({ $0.identifier })
-                )
-            } catch {
-                handleError(error)
-                return
-            }
         }
         
         ///

@@ -2,12 +2,6 @@ import XCTest
 @testable import Safehill_Client
 import os
 
-struct DummyRestorationDelegate: SHAssetActivityRestorationDelegate {
-    func restoreUploadHistoryItems(from: [String : [(SHUploadHistoryItem, Date)]]) {}
-    
-    func restoreShareHistoryItems(from: [String : [(SHShareHistoryItem, Date)]]) {}
-}
-
 class DummyOperation: Operation, @unchecked Sendable, SHBackgroundOperationProtocol {
     typealias OperationResult = Result<Void, Error>
     

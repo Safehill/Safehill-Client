@@ -11,7 +11,8 @@ public enum SHKGPredicate: String {
 var UserIdToAssetGidSharedByCache = [UserIdentifier: Set<GlobalIdentifier>]()
 var UserIdToAssetGidSharedWithCache = [UserIdentifier: Set<GlobalIdentifier>]()
 
-public struct SHKGQuery {
+@available(*, deprecated, message: "Fully deprecated")
+private struct SHKGQuery {
     
     private static let readWriteGraphQueue = DispatchQueue(label: "SHKGQuery.readWrite", attributes: .concurrent)
     
@@ -35,62 +36,6 @@ public struct SHKGQuery {
         
         if errors.isEmpty == false {
             throw errors.first!
-        }
-    }
-    
-    internal static func ingest(
-        _ conversationThreadAssets: ConversationThreadAssetsDTO,
-        in thread: ConversationThreadOutputDTO
-    ) throws {
-        try readWriteGraphQueue.sync(flags: .barrier) {
-            
-            guard let graph = SHDBManager.sharedInstance.graph else {
-                throw KBError.databaseNotReady
-            }
-            
-            guard let userStore = SHDBManager.sharedInstance.userStore else {
-                throw KBError.databaseNotReady
-            }
-            let writeBatch = userStore.writeBatch()
-            
-            for photoMessage in conversationThreadAssets.photoMessages {
-                let data = try NSKeyedArchiver.archivedData(
-                    withRootObject: DBSecureSerializableConversationThreadAsset.fromDTO(photoMessage),
-                    requiringSecureCoding: true
-                )
-                writeBatch.set(
-                    value: data,
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::photoMessage",
-                    timestamp: photoMessage.addedAt.iso8601withFractionalSeconds ?? Date()
-                )
-                
-                try self.ingestShare(
-                    of: photoMessage.globalIdentifier,
-                    from: photoMessage.addedByUserIdentifier,
-                    to: thread.membersPublicIdentifier,
-                    in: graph
-                )
-            }
-            
-            for otherAsset in conversationThreadAssets.otherAssets {
-                let data = try NSKeyedArchiver.archivedData(
-                    withRootObject: DBSecureSerializableUserGroupAsset.fromDTO(otherAsset),
-                    requiringSecureCoding: true
-                )
-                writeBatch.set(
-                    value: data,
-                    for: "\(SHInteractionAnchor.thread.rawValue)::\(thread.threadId)::assets::nonPhotoMessage",
-                    timestamp: otherAsset.addedAt.iso8601withFractionalSeconds ?? Date()
-                )
-                try self.ingestShare(
-                    of: otherAsset.globalIdentifier,
-                    from: otherAsset.addedByUserIdentifier,
-                    to: thread.membersPublicIdentifier,
-                    in: graph
-                )
-            }
-            
-            try writeBatch.write()
         }
     }
     

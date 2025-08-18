@@ -3,15 +3,17 @@ import Contacts
 
 public protocol SHLocalServerAPI : SHServerAPI {
     
-    func create(assets: [any SHEncryptedAsset],
-                groupId: String,
-                createdBy: any SHServerUser,
-                createdAt: Date,
-                createdFromThreadId: String?,
-                permissions: Int?,
-                filterVersions: [SHAssetQuality]?,
-                overwriteFileIfExists: Bool,
-                completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ())
+    func create(
+        assets: [any SHEncryptedAsset],
+        groupId: String,
+        createdBy: any SHServerUser,
+        createdAt: Date,
+        createdFromThreadId: String?,
+        permissions: Int?,
+        filterVersions: [SHAssetQuality]?,
+        overwriteFileIfExists: Bool,
+        completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()
+    )
     
     func createOrUpdateUser(
         identifier: UserIdentifier,

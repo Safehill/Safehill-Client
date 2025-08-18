@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ConversationThreadAssetDTO: Codable {
+public struct AssetGroupLinkageDTO: Codable {
     public let globalIdentifier: GlobalIdentifier
     public let addedByUserIdentifier: String
     public let addedAt: String

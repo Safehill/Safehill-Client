@@ -193,7 +193,7 @@ class MockLocalServer: SHLocalServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func getAssets(inThread threadId: String, completionHandler: @escaping (Result<ConversationThreadAssetsDTO, any Error>) -> ()) {
+    func getAssets(inThread threadId: String, completionHandler: @escaping (Result<SharedAssetsLibraryDTO, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     

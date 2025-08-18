@@ -1,17 +1,23 @@
 import Foundation
 
-public struct ConversationThreadAssetsDTO: Codable {
-    public let photoMessages: [ConversationThreadAssetDTO]
-    public let otherAssets: [UsersGroupAssetDTO]
+public struct SharedAssetsLibraryDTO: Codable {
+    /**
+     * The assets shared explicily in a ConversationThread
+     */
+    public let photoMessages: [AssetGroupLinkageDTO]
+    /**
+     * The assets shared with the users currently in a ConversationThread
+     */
+    public let otherAssets: [AssetRefDTO]
     
     enum CodingKeys: String, CodingKey {
         case photoMessages
         case otherAssets
     }
     
-    init(
-        photoMessages: [ConversationThreadAssetDTO],
-        otherAssets: [UsersGroupAssetDTO]
+    public init(
+        photoMessages: [AssetGroupLinkageDTO],
+        otherAssets: [AssetRefDTO]
     ) {
         self.photoMessages = photoMessages
         self.otherAssets = otherAssets
@@ -19,8 +25,8 @@ public struct ConversationThreadAssetsDTO: Codable {
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        photoMessages = try container.decode([ConversationThreadAssetDTO].self, forKey: .photoMessages)
-        otherAssets = try container.decode([UsersGroupAssetDTO].self, forKey: .otherAssets)
+        photoMessages = try container.decode([AssetGroupLinkageDTO].self, forKey: .photoMessages)
+        otherAssets = try container.decode([AssetRefDTO].self, forKey: .otherAssets)
     }
     
     public func encode(to encoder: Encoder) throws {

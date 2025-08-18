@@ -1,6 +1,8 @@
 import Foundation
 import KnowledgeBase
 
+public let SHDefaultDBTimeoutInMilliseconds = 15000 // 15 seconds
+
 extension KBKVStore {
     static func initKVStoreWithRetries(dbName name: String,
                                        completionHandler: @escaping (Result<KBKVStore, Error>) -> Void) {

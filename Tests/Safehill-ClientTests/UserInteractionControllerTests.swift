@@ -417,8 +417,8 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         completionHandler(.success(serverThread))
     }
     
-    func getAssets(inThread threadId: String, completionHandler: @escaping (Result<ConversationThreadAssetsDTO, Error>) -> ()) {
-        completionHandler(.success(ConversationThreadAssetsDTO(photoMessages: [], otherAssets: [])))
+    func getAssets(inThread threadId: String, completionHandler: @escaping (Result<SharedAssetsLibraryDTO, Error>) -> ()) {
+        completionHandler(.success(SharedAssetsLibraryDTO(photoMessages: [], otherAssets: [])))
     }
     
     func removeReaction(
