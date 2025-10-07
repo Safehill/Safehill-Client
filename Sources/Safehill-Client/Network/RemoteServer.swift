@@ -1749,7 +1749,7 @@ struct RemoteServer : SHRemoteServerAPI {
     {
         try await withUnsafeThrowingContinuation {
             (continuation: UnsafeContinuation<Void, any Error>) in
-            
+
             let parameters = [
                 "requestorIp": requestorIp,
                 "privateKey": encryptedPrivateKeyData.base64EncodedString(),
@@ -1757,7 +1757,7 @@ struct RemoteServer : SHRemoteServerAPI {
                 "privateSignature": encryptedPrivateSignatureData.base64EncodedString(),
                 "privateSignatureIV": encryptedPrivateSignatureIvData.base64EncodedString()
             ]
-            
+
             self.post("app-web-auth/\(sessionId)/send-keys", parameters: parameters) {
                 (result: Result<NoReply, Error>) in
                 switch result {
@@ -1768,5 +1768,49 @@ struct RemoteServer : SHRemoteServerAPI {
                 }
             }
         }
+    }
+
+    // MARK: Collections
+
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "name": name,
+            "description": description
+        ]
+
+        self.post("collections/create", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.post("collections/retrieve", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.post("collections/retrieve/\(id)", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "name": name,
+            "description": description,
+            "pricing": pricing
+        ]
+
+        self.post("collections/update/\(id)", parameters: parameters, completionHandler: completionHandler)
     }
 }

@@ -233,5 +233,30 @@ internal protocol SHServerProxyProtocol {
         from groupId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
+
+    // MARK: Collections
+
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
 }
 

@@ -2113,4 +2113,47 @@ extension SHServerProxy {
             encryptedPrivateSignatureIvData: encryptedPrivateSignatureIvData
         )
     }
+
+    // MARK: Collections
+
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.createCollection(
+            name: name,
+            description: description,
+            completionHandler: completionHandler
+        )
+    }
+
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.retrieveCollections(completionHandler: completionHandler)
+    }
+
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveCollection(id: id, completionHandler: completionHandler)
+    }
+
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.updateCollection(
+            id: id,
+            name: name,
+            description: description,
+            pricing: pricing,
+            completionHandler: completionHandler
+        )
+    }
 }

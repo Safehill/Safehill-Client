@@ -472,4 +472,48 @@ public protocol SHServerAPI {
     
     /// Delete the user avatar image, if any exists
     func deleteAvatarImage(for user: any SHServerUser) async throws
+
+    // MARK: Collections
+
+    /// Creates a new collection
+    /// - Parameters:
+    ///   - name: the collection name
+    ///   - description: the collection description
+    ///   - completionHandler: the callback method
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    /// Retrieve all collections for the user (owned + shared + accessed public)
+    /// - Parameter completionHandler: the callback method
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
+    /// Retrieve a single collection by ID
+    /// - Parameters:
+    ///   - id: the collection identifier
+    ///   - completionHandler: the callback method
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    /// Update an existing collection (only if owned by user)
+    /// - Parameters:
+    ///   - id: the collection identifier
+    ///   - name: the new name (optional)
+    ///   - description: the new description (optional)
+    ///   - pricing: the new pricing (optional)
+    ///   - completionHandler: the callback method
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
 }

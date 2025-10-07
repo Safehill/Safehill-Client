@@ -261,4 +261,20 @@ class MockRemoteServer: SHRemoteServerAPI {
     
     func sendEncryptedKeysToWebClient(sessionId: String, requestorIp: String, encryptedPrivateKeyData: Data, encryptedPrivateKeyIvData: Data, encryptedPrivateSignatureData: Data, encryptedPrivateSignatureIvData: Data) async throws {
     }
+
+    func createCollection(name: String, description: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollection(id: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func updateCollection(id: String, name: String?, description: String?, pricing: Double?, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 }
