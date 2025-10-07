@@ -516,4 +516,28 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
     )
 
+    /// Track collection access (for collections not owned by user)
+    /// - Parameters:
+    ///   - id: the collection identifier
+    ///   - completionHandler: the callback method
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+
+    /// Search collections with different criteria
+    /// - Parameters:
+    ///   - query: search query text (optional)
+    ///   - searchScope: "owned" for user's owned and accessed, "all" for all discoverable collections
+    ///   - visibility: optional filter by visibility
+    ///   - priceRange: optional price range filter
+    ///   - completionHandler: the callback method
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
 }

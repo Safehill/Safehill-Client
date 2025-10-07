@@ -258,5 +258,18 @@ internal protocol SHServerProxyProtocol {
         pricing: Double?,
         completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
     )
+
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
 }
 

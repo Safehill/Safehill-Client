@@ -2156,4 +2156,27 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.trackCollectionAccess(id: id, completionHandler: completionHandler)
+    }
+
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.searchCollections(
+            query: query,
+            searchScope: searchScope,
+            visibility: visibility,
+            priceRange: priceRange,
+            completionHandler: completionHandler
+        )
+    }
 }

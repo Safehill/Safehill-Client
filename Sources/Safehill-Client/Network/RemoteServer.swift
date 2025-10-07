@@ -1813,4 +1813,39 @@ struct RemoteServer : SHRemoteServerAPI {
 
         self.post("collections/update/\(id)", parameters: parameters, completionHandler: completionHandler)
     }
+
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("collections/track-access/\(id)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "query": query,
+            "searchScope": searchScope,
+            "visibility": visibility,
+            "priceRange": priceRange != nil ? [
+                "min": priceRange!.min,
+                "max": priceRange!.max
+            ] : nil
+        ]
+
+        self.post("collections/search", parameters: parameters, completionHandler: completionHandler)
+    }
 }
