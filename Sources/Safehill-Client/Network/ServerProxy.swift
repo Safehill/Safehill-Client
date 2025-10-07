@@ -2116,7 +2116,7 @@ extension SHServerProxy {
 
     // MARK: Collections
 
-    func createCollection(
+    public func createCollection(
         name: String,
         description: String,
         completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
@@ -2128,7 +2128,7 @@ extension SHServerProxy {
         )
     }
 
-    func retrieveCollections(
+    public func retrieveCollections(
         completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
     ) {
         self.remoteServer.retrieveCollections(completionHandler: completionHandler)
@@ -2141,7 +2141,7 @@ extension SHServerProxy {
         self.remoteServer.retrieveCollection(id: id, completionHandler: completionHandler)
     }
 
-    func updateCollection(
+    public func updateCollection(
         id: String,
         name: String?,
         description: String?,
