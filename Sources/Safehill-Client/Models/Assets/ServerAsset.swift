@@ -8,9 +8,9 @@ public struct SHServerAsset : Codable {
     public let creationDate: Date?
     public let versions: [SHServerAssetVersion]
     /// Indicates if this asset is publicly accessible without encryption
-    var isPublic: Bool
+    public let isPublic: Bool
     /// Public versions with direct access URLs (only present when isPublic = true)
-    var publicVersions: [SHServerPublicAssetVersion]?
+    public let publicVersions: [SHServerPublicAssetVersion]?
     
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
