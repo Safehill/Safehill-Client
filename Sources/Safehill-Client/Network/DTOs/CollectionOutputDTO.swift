@@ -9,6 +9,5 @@ public struct CollectionOutputDTO: Codable {
     public let pricing: Double
     public let lastUpdated: String // ISO string timestamp
     public let createdBy: String
-    public let assets: [CollectionAssetDTO]
-    public let publicAssets: [PublicCollectionAssetDTO]
+    public let assets: [SHServerAsset]
 }

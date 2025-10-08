@@ -1703,8 +1703,10 @@ struct LocalServer : SHLocalServerAPI {
                                 publicKeyData: encryptedVersion.publicKeyData,
                                 publicSignatureData: encryptedVersion.publicSignatureData,
                                 encryptedSecret: encryptedVersion.encryptedSecret,
+                                senderPublicSignatureData: self.requestor.publicSignatureData,
                                 presignedURL: "",
-                                presignedURLExpiresInMinutes: 0
+                                presignedURLExpiresInMinutes: 0,
+                                timeUploaded: Date().iso8601withFractionalSeconds
                             )
                         )
                     }
@@ -1714,7 +1716,9 @@ struct LocalServer : SHLocalServerAPI {
                         localIdentifier: asset.localIdentifier,
                         createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
                         creationDate: asset.creationDate,
-                        versions: serverAssetVersions
+                        isPublic: false,
+                        versions: serverAssetVersions,
+                        publicVersions: nil
                     )
                     serverAssets.append(serverAsset)
                 }
