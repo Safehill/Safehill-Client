@@ -63,7 +63,7 @@ class MockLocalServer: SHLocalServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier : any SHAssetDescriptor], uploadState: SHAssetDescriptorUploadState, overwriteFileIfExists: Bool, completionHandler: @escaping (Result<[SHServerAsset], any Error>) -> ()) {
+    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier : any SHAssetDescriptor], uploadState: SHAssetUploadState, overwriteFileIfExists: Bool, completionHandler: @escaping (Result<[SHServerAsset], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -153,7 +153,7 @@ class MockLocalServer: SHLocalServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetDescriptorUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -293,7 +293,7 @@ class MockLocalServer: SHLocalServerAPI {
         completion(.success(stubbedAssets))
     }
 
-    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor], uploadState: SHAssetDescriptorUploadState, completion: @escaping (Result<Void, Error>) -> ()) {
+    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor], uploadState: SHAssetUploadState, completion: @escaping (Result<Void, Error>) -> ()) {
         completion(.success(()))
     }
 

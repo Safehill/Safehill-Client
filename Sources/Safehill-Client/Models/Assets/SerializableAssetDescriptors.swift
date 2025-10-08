@@ -11,7 +11,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public let globalIdentifier: GlobalIdentifier
     public let localIdentifier: LocalIdentifier?
     public let creationDate: Date?
-    public let uploadState: SHAssetDescriptorUploadState
+    public let uploadState: SHAssetUploadState
     public let sharingInfo: SHDescriptorSharingInfo
     
     enum CodingKeys: String, CodingKey {
@@ -34,7 +34,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
                 creationDate: Date?,
-                uploadState: SHAssetDescriptorUploadState,
+                uploadState: SHAssetUploadState,
                 sharingInfo: SHGenericDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
@@ -55,7 +55,7 @@ public class SHGenericAssetDescriptorClass: NSObject, NSSecureCoding {
             return nil
         }
         guard let uploadStateStr = uploadStateStr as? String,
-              let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr)
+              let uploadState = SHAssetUploadState(rawValue: uploadStateStr)
         else {
             log.error("unexpected value for uploadState when decoding SHGenericAssetDescriptorClass object")
             return nil

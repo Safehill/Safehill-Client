@@ -906,7 +906,7 @@ struct RemoteServer : SHRemoteServerAPI {
     
     func markAsset(with assetGlobalIdentifier: String,
                    quality: SHAssetQuality,
-                   as: SHAssetDescriptorUploadState,
+                   as: SHAssetUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard `as` == .completed else {
             completionHandler(.failure(SHHTTPError.ServerError.notImplemented))

@@ -15,7 +15,7 @@ struct DummyDescriptor : SHAssetDescriptor {
     
     var creationDate: Date?
     
-    var uploadState: SHAssetDescriptorUploadState
+    var uploadState: SHAssetUploadState
     
     var sharingInfo: any SHDescriptorSharingInfo
     

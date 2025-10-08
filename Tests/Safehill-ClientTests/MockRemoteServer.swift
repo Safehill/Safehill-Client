@@ -103,7 +103,7 @@ class MockRemoteServer: SHRemoteServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetDescriptorUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     

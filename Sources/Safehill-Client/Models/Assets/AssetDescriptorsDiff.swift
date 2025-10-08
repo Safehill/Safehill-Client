@@ -17,7 +17,7 @@ struct AssetDescriptorsDiff {
         let globalIdentifier: String
         let localIdentifier: String
         let quality: SHAssetQuality
-        let newUploadState: SHAssetDescriptorUploadState
+        let newUploadState: SHAssetUploadState
     }
     
     let assetsRemovedOnRemote: [SHBackedUpAssetIdentifier]

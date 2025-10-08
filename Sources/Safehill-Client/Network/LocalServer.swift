@@ -695,7 +695,7 @@ struct LocalServer : SHLocalServerAPI {
         ///
         /// Retrieve all information from the asset store for all assets and matching versions.
         ///
-        var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetDescriptorUploadState]]()
+        var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetUploadState]]()
         var localInfoByGlobalIdentifier = [GlobalIdentifier: (phAssetId: LocalIdentifier?, creationDate: Date?)]()
         
         var condition = KBGenericCondition(value: false)
@@ -800,7 +800,7 @@ struct LocalServer : SHLocalServerAPI {
                 versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution]
             }
             
-            var combinedUploadState: SHAssetDescriptorUploadState = .started
+            var combinedUploadState: SHAssetUploadState = .started
             if let uploadStates = versionUploadStateByIdentifierQuality[globalIdentifier] {
                 if uploadStates.allSatisfy({ (_, value) in value == .completed }) {
                     // ALL completed successfully
@@ -1477,7 +1477,7 @@ struct LocalServer : SHLocalServerAPI {
     
     func create(assets: [any SHEncryptedAsset],
                 descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-                uploadState: SHAssetDescriptorUploadState,
+                uploadState: SHAssetUploadState,
                 overwriteFileIfExists: Bool = false,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.isEmpty == false else {
@@ -1716,6 +1716,7 @@ struct LocalServer : SHLocalServerAPI {
                         localIdentifier: asset.localIdentifier,
                         createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
                         creationDate: asset.creationDate,
+                        uploadState: uploadState,
                         isPublic: false,
                         versions: serverAssetVersions,
                         publicVersions: nil
@@ -1869,7 +1870,7 @@ struct LocalServer : SHLocalServerAPI {
     
     func markAsset(with assetGlobalIdentifier: GlobalIdentifier,
                    quality: SHAssetQuality,
-                   as state: SHAssetDescriptorUploadState,
+                   as state: SHAssetUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))

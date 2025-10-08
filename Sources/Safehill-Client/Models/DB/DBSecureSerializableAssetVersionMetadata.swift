@@ -12,7 +12,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     let publicKey: Data
     let publicSignature: Data
     let creationDate: Date?
-    let uploadState: SHAssetDescriptorUploadState
+    let uploadState: SHAssetUploadState
     
     enum CodingKeys: String, CodingKey {
         case globalIdentifier
@@ -33,7 +33,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         publicKey: Data,
         publicSignature: Data,
         creationDate: Date?,
-        uploadState: SHAssetDescriptorUploadState
+        uploadState: SHAssetUploadState
     ) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier
@@ -96,7 +96,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         }
         
         guard let uploadStateStr,
-              let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateStr) else {
+              let uploadState = SHAssetUploadState(rawValue: uploadStateStr) else {
             log.error("unexpected value for uploadState when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }

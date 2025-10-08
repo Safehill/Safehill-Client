@@ -149,7 +149,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func markAsset(with assetGlobalIdentifier: GlobalIdentifier,
                    quality: SHAssetQuality,
-                   as: SHAssetDescriptorUploadState,
+                   as: SHAssetUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ())
     
     // MARK: Assets Removal

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SHAssetDescriptorUploadState: String {
+public enum SHAssetUploadState: String {
     
     /// Not started is  default state on remote server when the asset is created,
     /// but the upload of any version hasn't completed yet
