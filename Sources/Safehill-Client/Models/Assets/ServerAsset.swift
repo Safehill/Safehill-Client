@@ -28,7 +28,7 @@ public struct SHServerAsset : Codable {
         uploadState = try container.decode(String.self, forKey: .uploadState)
         versions = try container.decode([SHServerAssetVersion].self, forKey: .versions)
         isPublic = try container.decode(Bool.self, forKey: .isPublic)
-        publicVersions = try container.decode([SHServerPublicAssetVersion].self, forKey: .publicVersions)
+        publicVersions = try? container.decode([SHServerPublicAssetVersion].self, forKey: .publicVersions)
     }
     
     public init(globalIdentifier: GlobalIdentifier,
