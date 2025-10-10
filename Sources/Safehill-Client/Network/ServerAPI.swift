@@ -540,4 +540,11 @@ public protocol SHServerAPI {
         completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
     )
 
+    /// Get top pick collections
+    /// - Parameter completionHandler: the callback method
+    /// - Returns: Up to 10 recommended public collections based on popularity, excluding collections already accessed or owned by the user
+    func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
 }

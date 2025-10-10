@@ -320,4 +320,8 @@ class MockLocalServer: SHLocalServerAPI {
     func searchCollections(query: String?, searchScope: String, visibility: String?, priceRange: PriceRangeDTO?, completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+
+    func topPickCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 }

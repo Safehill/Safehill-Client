@@ -2179,4 +2179,10 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+
+    public func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.topPickCollections(completionHandler: completionHandler)
+    }
 }

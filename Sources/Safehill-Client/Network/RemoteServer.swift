@@ -1848,4 +1848,10 @@ struct RemoteServer : SHRemoteServerAPI {
 
         self.post("collections/search", parameters: parameters, completionHandler: completionHandler)
     }
+
+    func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.post("collections/top-picks", parameters: nil, completionHandler: completionHandler)
+    }
 }

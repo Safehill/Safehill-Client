@@ -4126,4 +4126,10 @@ struct LocalServer : SHLocalServerAPI {
     ) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+
+    func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 }
