@@ -103,7 +103,7 @@ class MockRemoteServer: SHRemoteServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetDescriptorUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -260,5 +260,33 @@ class MockRemoteServer: SHRemoteServerAPI {
     }
     
     func sendEncryptedKeysToWebClient(sessionId: String, requestorIp: String, encryptedPrivateKeyData: Data, encryptedPrivateKeyIvData: Data, encryptedPrivateSignatureData: Data, encryptedPrivateSignatureIvData: Data) async throws {
+    }
+
+    func createCollection(name: String, description: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollection(id: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func updateCollection(id: String, name: String?, description: String?, pricing: Double?, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func trackCollectionAccess(id: String, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func searchCollections(query: String?, searchScope: String, visibility: String?, priceRange: PriceRangeDTO?, completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func topPickCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 }

@@ -469,6 +469,30 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func uninvite(_ phoneNumbers: [String], from groupId: String, completionHandler: @escaping (Result<Void, Error>) -> ()) {
         self.localServer.uninvite(phoneNumbers, from: groupId, completionHandler: completionHandler)
     }
+
+    func createCollection(name: String, description: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollection(id: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func updateCollection(id: String, name: String?, description: String?, pricing: Double?, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func trackCollectionAccess(id: String, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func searchCollections(query: String?, searchScope: String, visibility: String?, priceRange: PriceRangeDTO?, completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 }
 
 

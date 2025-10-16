@@ -2113,4 +2113,76 @@ extension SHServerProxy {
             encryptedPrivateSignatureIvData: encryptedPrivateSignatureIvData
         )
     }
+
+    // MARK: Collections
+
+    public func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.createCollection(
+            name: name,
+            description: description,
+            completionHandler: completionHandler
+        )
+    }
+
+    public func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.retrieveCollections(completionHandler: completionHandler)
+    }
+
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.retrieveCollection(id: id, completionHandler: completionHandler)
+    }
+
+    public func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.remoteServer.updateCollection(
+            id: id,
+            name: name,
+            description: description,
+            pricing: pricing,
+            completionHandler: completionHandler
+        )
+    }
+
+    public func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.trackCollectionAccess(id: id, completionHandler: completionHandler)
+    }
+
+    public func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.searchCollections(
+            query: query,
+            searchScope: searchScope,
+            visibility: visibility,
+            priceRange: priceRange,
+            completionHandler: completionHandler
+        )
+    }
+
+    public func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.remoteServer.topPickCollections(completionHandler: completionHandler)
+    }
 }

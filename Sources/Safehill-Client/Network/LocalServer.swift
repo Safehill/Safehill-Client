@@ -695,7 +695,7 @@ struct LocalServer : SHLocalServerAPI {
         ///
         /// Retrieve all information from the asset store for all assets and matching versions.
         ///
-        var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetDescriptorUploadState]]()
+        var versionUploadStateByIdentifierQuality = [GlobalIdentifier: [SHAssetQuality: SHAssetUploadState]]()
         var localInfoByGlobalIdentifier = [GlobalIdentifier: (phAssetId: LocalIdentifier?, creationDate: Date?)]()
         
         var condition = KBGenericCondition(value: false)
@@ -800,7 +800,7 @@ struct LocalServer : SHLocalServerAPI {
                 versionUploadStateByIdentifierQuality[globalIdentifier]![.midResolution] = versionUploadStateByIdentifierQuality[globalIdentifier]![.hiResolution]
             }
             
-            var combinedUploadState: SHAssetDescriptorUploadState = .started
+            var combinedUploadState: SHAssetUploadState = .started
             if let uploadStates = versionUploadStateByIdentifierQuality[globalIdentifier] {
                 if uploadStates.allSatisfy({ (_, value) in value == .completed }) {
                     // ALL completed successfully
@@ -1477,7 +1477,7 @@ struct LocalServer : SHLocalServerAPI {
     
     func create(assets: [any SHEncryptedAsset],
                 descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-                uploadState: SHAssetDescriptorUploadState,
+                uploadState: SHAssetUploadState,
                 overwriteFileIfExists: Bool = false,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ()) {
         guard assets.isEmpty == false else {
@@ -1703,8 +1703,10 @@ struct LocalServer : SHLocalServerAPI {
                                 publicKeyData: encryptedVersion.publicKeyData,
                                 publicSignatureData: encryptedVersion.publicSignatureData,
                                 encryptedSecret: encryptedVersion.encryptedSecret,
+                                senderPublicSignatureData: self.requestor.publicSignatureData,
                                 presignedURL: "",
-                                presignedURLExpiresInMinutes: 0
+                                presignedURLExpiresInMinutes: 0,
+                                timeUploaded: Date().iso8601withFractionalSeconds
                             )
                         )
                     }
@@ -1714,7 +1716,10 @@ struct LocalServer : SHLocalServerAPI {
                         localIdentifier: asset.localIdentifier,
                         createdBy: descriptor.sharingInfo.sharedByUserIdentifier,
                         creationDate: asset.creationDate,
-                        versions: serverAssetVersions
+                        uploadState: uploadState,
+                        isPublic: false,
+                        versions: serverAssetVersions,
+                        publicVersions: nil
                     )
                     serverAssets.append(serverAsset)
                 }
@@ -1865,7 +1870,7 @@ struct LocalServer : SHLocalServerAPI {
     
     func markAsset(with assetGlobalIdentifier: GlobalIdentifier,
                    quality: SHAssetQuality,
-                   as state: SHAssetDescriptorUploadState,
+                   as state: SHAssetUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard let assetStore = SHDBManager.sharedInstance.assetStore else {
             completionHandler(.failure(KBError.databaseNotReady))
@@ -4066,9 +4071,65 @@ struct LocalServer : SHLocalServerAPI {
             }
             
             completionHandler(.success(()))
-            
+
         } catch {
             completionHandler(.failure(error))
         }
+    }
+
+    // MARK: Collections
+
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 }

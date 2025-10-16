@@ -149,7 +149,7 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func markAsset(with assetGlobalIdentifier: GlobalIdentifier,
                    quality: SHAssetQuality,
-                   as: SHAssetDescriptorUploadState,
+                   as: SHAssetUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ())
     
     // MARK: Assets Removal
@@ -472,4 +472,79 @@ public protocol SHServerAPI {
     
     /// Delete the user avatar image, if any exists
     func deleteAvatarImage(for user: any SHServerUser) async throws
+
+    // MARK: Collections
+
+    /// Creates a new collection
+    /// - Parameters:
+    ///   - name: the collection name
+    ///   - description: the collection description
+    ///   - completionHandler: the callback method
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    /// Retrieve all collections for the user (owned + shared + accessed public)
+    /// - Parameter completionHandler: the callback method
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
+    /// Retrieve a single collection by ID
+    /// - Parameters:
+    ///   - id: the collection identifier
+    ///   - completionHandler: the callback method
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    /// Update an existing collection (only if owned by user)
+    /// - Parameters:
+    ///   - id: the collection identifier
+    ///   - name: the new name (optional)
+    ///   - description: the new description (optional)
+    ///   - pricing: the new pricing (optional)
+    ///   - completionHandler: the callback method
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    )
+
+    /// Track collection access (for collections not owned by user)
+    /// - Parameters:
+    ///   - id: the collection identifier
+    ///   - completionHandler: the callback method
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+
+    /// Search collections with different criteria
+    /// - Parameters:
+    ///   - query: search query text (optional)
+    ///   - searchScope: "owned" for user's owned and accessed, "all" for all discoverable collections
+    ///   - visibility: optional filter by visibility
+    ///   - priceRange: optional price range filter
+    ///   - completionHandler: the callback method
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
+    /// Get top pick collections
+    /// - Parameter completionHandler: the callback method
+    /// - Returns: Up to 10 recommended public collections based on popularity, excluding collections already accessed or owned by the user
+    func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    )
+
 }

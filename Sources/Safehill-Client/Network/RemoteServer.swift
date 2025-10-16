@@ -906,7 +906,7 @@ struct RemoteServer : SHRemoteServerAPI {
     
     func markAsset(with assetGlobalIdentifier: String,
                    quality: SHAssetQuality,
-                   as: SHAssetDescriptorUploadState,
+                   as: SHAssetUploadState,
                    completionHandler: @escaping (Result<Void, Error>) -> ()) {
         guard `as` == .completed else {
             completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
@@ -1749,7 +1749,7 @@ struct RemoteServer : SHRemoteServerAPI {
     {
         try await withUnsafeThrowingContinuation {
             (continuation: UnsafeContinuation<Void, any Error>) in
-            
+
             let parameters = [
                 "requestorIp": requestorIp,
                 "privateKey": encryptedPrivateKeyData.base64EncodedString(),
@@ -1757,7 +1757,7 @@ struct RemoteServer : SHRemoteServerAPI {
                 "privateSignature": encryptedPrivateSignatureData.base64EncodedString(),
                 "privateSignatureIV": encryptedPrivateSignatureIvData.base64EncodedString()
             ]
-            
+
             self.post("app-web-auth/\(sessionId)/send-keys", parameters: parameters) {
                 (result: Result<NoReply, Error>) in
                 switch result {
@@ -1768,5 +1768,90 @@ struct RemoteServer : SHRemoteServerAPI {
                 }
             }
         }
+    }
+
+    // MARK: Collections
+
+    func createCollection(
+        name: String,
+        description: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "name": name,
+            "description": description
+        ]
+
+        self.post("collections/create", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    func retrieveCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.post("collections/retrieve", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func retrieveCollection(
+        id: String,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        self.post("collections/retrieve/\(id)", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func updateCollection(
+        id: String,
+        name: String?,
+        description: String?,
+        pricing: Double?,
+        completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "name": name,
+            "description": description,
+            "pricing": pricing
+        ]
+
+        self.post("collections/update/\(id)", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    func trackCollectionAccess(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("collections/track-access/\(id)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func searchCollections(
+        query: String?,
+        searchScope: String,
+        visibility: String?,
+        priceRange: PriceRangeDTO?,
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "query": query,
+            "searchScope": searchScope,
+            "visibility": visibility,
+            "priceRange": priceRange != nil ? [
+                "min": priceRange!.min,
+                "max": priceRange!.max
+            ] : nil
+        ]
+
+        self.post("collections/search", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    func topPickCollections(
+        completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
+    ) {
+        self.post("collections/top-picks", parameters: nil, completionHandler: completionHandler)
     }
 }

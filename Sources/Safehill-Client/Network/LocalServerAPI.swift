@@ -59,7 +59,7 @@ public protocol SHLocalServerAPI : SHServerAPI {
     
     func create(assets: [any SHEncryptedAsset],
                 descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor],
-                uploadState: SHAssetDescriptorUploadState,
+                uploadState: SHAssetUploadState,
                 overwriteFileIfExists: Bool,
                 completionHandler: @escaping (Result<[SHServerAsset], Error>) -> ())
     

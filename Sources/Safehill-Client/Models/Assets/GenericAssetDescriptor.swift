@@ -4,7 +4,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public let globalIdentifier: GlobalIdentifier
     public var localIdentifier: LocalIdentifier?
     public let creationDate: Date?
-    public let uploadState: SHAssetDescriptorUploadState
+    public let uploadState: SHAssetUploadState
     public let sharingInfo: SHDescriptorSharingInfo
     
     enum CodingKeys: String, CodingKey {
@@ -31,7 +31,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
         let dateString = try? container.decode(String.self, forKey: .creationDate)
         creationDate = dateString?.iso8601withFractionalSeconds
         let uploadStateString = try container.decode(String.self, forKey: .uploadState)
-        guard let uploadState = SHAssetDescriptorUploadState(rawValue: uploadStateString) else {
+        guard let uploadState = SHAssetUploadState(rawValue: uploadStateString) else {
             throw DecodingError.dataCorrupted(.init(codingPath: [CodingKeys.uploadState],
                                                     debugDescription: "Invalid UploadState value \(uploadStateString)")
             )
@@ -43,7 +43,7 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
     public init(globalIdentifier: GlobalIdentifier,
                 localIdentifier: LocalIdentifier?,
                 creationDate: Date?,
-                uploadState: SHAssetDescriptorUploadState,
+                uploadState: SHAssetUploadState,
                 sharingInfo: SHDescriptorSharingInfo) {
         self.globalIdentifier = globalIdentifier
         self.localIdentifier = localIdentifier

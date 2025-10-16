@@ -63,7 +63,7 @@ class MockLocalServer: SHLocalServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier : any SHAssetDescriptor], uploadState: SHAssetDescriptorUploadState, overwriteFileIfExists: Bool, completionHandler: @escaping (Result<[SHServerAsset], any Error>) -> ()) {
+    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier : any SHAssetDescriptor], uploadState: SHAssetUploadState, overwriteFileIfExists: Bool, completionHandler: @escaping (Result<[SHServerAsset], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -153,7 +153,7 @@ class MockLocalServer: SHLocalServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetDescriptorUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+    func markAsset(with assetGlobalIdentifier: GlobalIdentifier, quality: SHAssetQuality, as: SHAssetUploadState, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
@@ -293,7 +293,35 @@ class MockLocalServer: SHLocalServerAPI {
         completion(.success(stubbedAssets))
     }
 
-    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor], uploadState: SHAssetDescriptorUploadState, completion: @escaping (Result<Void, Error>) -> ()) {
+    func create(assets: [any SHEncryptedAsset], descriptorsByGlobalIdentifier: [GlobalIdentifier: any SHAssetDescriptor], uploadState: SHAssetUploadState, completion: @escaping (Result<Void, Error>) -> ()) {
         completion(.success(()))
+    }
+
+    func createCollection(name: String, description: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func retrieveCollection(id: String, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func updateCollection(id: String, name: String?, description: String?, pricing: Double?, completionHandler: @escaping (Result<CollectionOutputDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func trackCollectionAccess(id: String, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func searchCollections(query: String?, searchScope: String, visibility: String?, priceRange: PriceRangeDTO?, completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func topPickCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 }
