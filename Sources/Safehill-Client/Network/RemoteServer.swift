@@ -1866,9 +1866,14 @@ struct RemoteServer : SHRemoteServerAPI {
 
     func confirmPayment(
         collectionId: String,
+        paymentIntentId: String,
         completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
     ) {
-        self.post("collections/confirm-payment/\(collectionId)", parameters: nil, completionHandler: completionHandler)
+        self.post(
+            "collections/confirm-payment/\(collectionId)",
+            parameters: ["paymentIntentId": paymentIntentId],
+            completionHandler: completionHandler
+        )
     }
 
     func checkCollectionAccess(

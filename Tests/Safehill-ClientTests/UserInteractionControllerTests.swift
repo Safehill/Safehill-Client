@@ -498,7 +498,7 @@ struct SHMockServerProxy: SHServerProxyProtocol {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 
-    func confirmPayment(collectionId: String, completionHandler: @escaping (Result<PaymentConfirmationDTO, any Error>) -> ()) {
+    func confirmPayment(collectionId: String, paymentIntentId: String, completionHandler: @escaping (Result<PaymentConfirmationDTO, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 

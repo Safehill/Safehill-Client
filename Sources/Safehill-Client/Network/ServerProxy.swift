@@ -2198,10 +2198,12 @@ extension SHServerProxy {
 
     public func confirmPayment(
         collectionId: String,
+        paymentIntentId: String,
         completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
     ) {
         self.remoteServer.confirmPayment(
             collectionId: collectionId,
+            paymentIntentId: paymentIntentId,
             completionHandler: completionHandler
         )
     }

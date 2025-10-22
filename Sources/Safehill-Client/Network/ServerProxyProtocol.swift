@@ -279,6 +279,7 @@ internal protocol SHServerProxyProtocol {
 
     func confirmPayment(
         collectionId: String,
+        paymentIntentId: String,
         completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
     )
 

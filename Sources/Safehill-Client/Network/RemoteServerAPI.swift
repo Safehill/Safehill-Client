@@ -110,9 +110,11 @@ public protocol SHRemoteServerAPI : SHServerAPI {
     /// Confirm a payment for collection access
     /// - Parameters:
     ///   - collectionId: the collection identifier
+    ///   - paymentIntentId: the Stripe payment intent ID
     ///   - completionHandler: the callback method
     func confirmPayment(
         collectionId: String,
+        paymentIntentId: String,
         completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
     )
 
