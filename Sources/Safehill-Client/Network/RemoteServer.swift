@@ -1854,4 +1854,33 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         self.post("collections/top-picks", parameters: nil, completionHandler: completionHandler)
     }
+
+    // MARK: Collections - Payments
+
+    func createPaymentIntent(
+        collectionId: String,
+        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
+    ) {
+        self.post("collections/payment-intent/\(collectionId)", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func confirmPayment(
+        collectionId: String,
+        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
+    ) {
+        self.post("collections/confirm-payment/\(collectionId)", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    ) {
+        self.route(
+            "collections/check-access/\(collectionId)",
+            method: "GET",
+            parameters: nil as [String: Any?]?,
+            requiresAuthentication: true,
+            completionHandler: completionHandler
+        )
+    }
 }

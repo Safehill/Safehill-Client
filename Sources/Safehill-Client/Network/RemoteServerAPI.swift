@@ -86,7 +86,7 @@ public protocol SHRemoteServerAPI : SHServerAPI {
     )
     
     // MARK: Web login
-    
+
     func sendEncryptedKeysToWebClient(
         sessionId: String,
         requestorIp: String,
@@ -95,4 +95,33 @@ public protocol SHRemoteServerAPI : SHServerAPI {
         encryptedPrivateSignatureData: Data,
         encryptedPrivateSignatureIvData: Data
     ) async throws -> Void
+
+    // MARK: Collections - Payments
+
+    /// Create a payment intent for accessing a collection
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - completionHandler: the callback method
+    func createPaymentIntent(
+        collectionId: String,
+        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
+    )
+
+    /// Confirm a payment for collection access
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - completionHandler: the callback method
+    func confirmPayment(
+        collectionId: String,
+        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
+    )
+
+    /// Check if the user has access to a collection
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - completionHandler: the callback method
+    func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    )
 }

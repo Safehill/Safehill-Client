@@ -271,5 +271,20 @@ internal protocol SHServerProxyProtocol {
         priceRange: PriceRangeDTO?,
         completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
     )
+
+    func createPaymentIntent(
+        collectionId: String,
+        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
+    )
+
+    func confirmPayment(
+        collectionId: String,
+        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
+    )
+
+    func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    )
 }
 
