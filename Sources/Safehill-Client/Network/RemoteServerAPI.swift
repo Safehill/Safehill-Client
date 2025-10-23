@@ -98,24 +98,13 @@ public protocol SHRemoteServerAPI : SHServerAPI {
 
     // MARK: Collections - Payments
 
-    /// Create a payment intent for accessing a collection
+    /// Create a Stripe Checkout Session for collection payment
     /// - Parameters:
     ///   - collectionId: the collection identifier
     ///   - completionHandler: the callback method
-    func createPaymentIntent(
+    func createCheckoutSession(
         collectionId: String,
-        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
-    )
-
-    /// Confirm a payment for collection access
-    /// - Parameters:
-    ///   - collectionId: the collection identifier
-    ///   - paymentIntentId: the Stripe payment intent ID
-    ///   - completionHandler: the callback method
-    func confirmPayment(
-        collectionId: String,
-        paymentIntentId: String,
-        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
     )
 
     /// Check if the user has access to a collection

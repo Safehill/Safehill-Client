@@ -2186,24 +2186,12 @@ extension SHServerProxy {
         self.remoteServer.topPickCollections(completionHandler: completionHandler)
     }
 
-    public func createPaymentIntent(
+    public func createCheckoutSession(
         collectionId: String,
-        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
     ) {
-        self.remoteServer.createPaymentIntent(
+        self.remoteServer.createCheckoutSession(
             collectionId: collectionId,
-            completionHandler: completionHandler
-        )
-    }
-
-    public func confirmPayment(
-        collectionId: String,
-        paymentIntentId: String,
-        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
-    ) {
-        self.remoteServer.confirmPayment(
-            collectionId: collectionId,
-            paymentIntentId: paymentIntentId,
             completionHandler: completionHandler
         )
     }

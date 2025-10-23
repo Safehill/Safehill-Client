@@ -290,11 +290,7 @@ class MockRemoteServer: SHRemoteServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 
-    func createPaymentIntent(collectionId: String, completionHandler: @escaping (Result<PaymentIntentDTO, any Error>) -> ()) {
-        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
-    }
-
-    func confirmPayment(collectionId: String, paymentIntentId: String, completionHandler: @escaping (Result<PaymentConfirmationDTO, any Error>) -> ()) {
+    func createCheckoutSession(collectionId: String, completionHandler: @escaping (Result<CheckoutSessionDTO, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 

@@ -272,15 +272,9 @@ internal protocol SHServerProxyProtocol {
         completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
     )
 
-    func createPaymentIntent(
+    func createCheckoutSession(
         collectionId: String,
-        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
-    )
-
-    func confirmPayment(
-        collectionId: String,
-        paymentIntentId: String,
-        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
     )
 
     func checkCollectionAccess(

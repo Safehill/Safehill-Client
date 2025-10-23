@@ -1857,23 +1857,11 @@ struct RemoteServer : SHRemoteServerAPI {
 
     // MARK: Collections - Payments
 
-    func createPaymentIntent(
+    func createCheckoutSession(
         collectionId: String,
-        completionHandler: @escaping (Result<PaymentIntentDTO, Error>) -> ()
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
     ) {
-        self.post("collections/payment-intent/\(collectionId)", parameters: nil, completionHandler: completionHandler)
-    }
-
-    func confirmPayment(
-        collectionId: String,
-        paymentIntentId: String,
-        completionHandler: @escaping (Result<PaymentConfirmationDTO, Error>) -> ()
-    ) {
-        self.post(
-            "collections/confirm-payment/\(collectionId)",
-            parameters: ["paymentIntentId": paymentIntentId],
-            completionHandler: completionHandler
-        )
+        self.post("collections/checkout-session/\(collectionId)", parameters: nil, completionHandler: completionHandler)
     }
 
     func checkCollectionAccess(
