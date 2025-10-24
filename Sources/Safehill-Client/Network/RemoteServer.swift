@@ -1861,7 +1861,11 @@ struct RemoteServer : SHRemoteServerAPI {
         collectionId: String,
         completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
     ) {
-        self.post("collections/checkout-session/\(collectionId)", parameters: nil, completionHandler: completionHandler)
+        let parameters: [String: Any?] = [
+            "ui_mode": "hosted"
+        ]
+        
+        self.post("collections/checkout-session/\(collectionId)", parameters: parameters, completionHandler: completionHandler)
     }
 
     func checkCollectionAccess(
