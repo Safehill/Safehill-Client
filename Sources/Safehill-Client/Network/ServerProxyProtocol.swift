@@ -281,5 +281,13 @@ internal protocol SHServerProxyProtocol {
         collectionId: String,
         completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
     )
+
+    func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    )
 }
 

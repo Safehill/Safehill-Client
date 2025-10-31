@@ -501,6 +501,10 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func checkCollectionAccess(collectionId: String, completionHandler: @escaping (Result<AccessCheckResultDTO, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+
+    func validateIAPReceipt(collectionId: String, jwsTransaction: String, productId: String, transactionId: String, completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 }
 
 

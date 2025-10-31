@@ -1880,4 +1880,20 @@ struct RemoteServer : SHRemoteServerAPI {
             completionHandler: completionHandler
         )
     }
+
+    func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "jws_transaction": jwsTransaction,
+            "product_id": productId,
+            "transaction_id": transactionId
+        ]
+
+        self.post("collections/validate-iap-receipt/\(collectionId)", parameters: parameters, completionHandler: completionHandler)
+    }
 }

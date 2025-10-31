@@ -115,4 +115,19 @@ public protocol SHRemoteServerAPI : SHServerAPI {
         collectionId: String,
         completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
     )
+
+    /// Validate Apple IAP transaction (StoreKit 2) for collection payment
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - jwsTransaction: the JWS transaction from StoreKit 2
+    ///   - productId: the product identifier
+    ///   - transactionId: the transaction identifier
+    ///   - completionHandler: the callback method
+    func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    )
 }

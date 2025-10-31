@@ -2205,4 +2205,20 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+
+    public func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    ) {
+        self.remoteServer.validateIAPReceipt(
+            collectionId: collectionId,
+            jwsTransaction: jwsTransaction,
+            productId: productId,
+            transactionId: transactionId,
+            completionHandler: completionHandler
+        )
+    }
 }
