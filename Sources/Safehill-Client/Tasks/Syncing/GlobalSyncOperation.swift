@@ -23,6 +23,7 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
     internal let interactionsSyncDelegates: [SHInteractionsSyncingDelegate]
     private let userConnectionsDelegates: [SHUserConnectionRequestDelegate]
     private let userConversionDelegates: [SHUserConversionDelegate]
+    private let collectionSyncingDelegates: [SHCollectionSyncingDelegate]
     
     private var retryDelay: UInt64 = 1
     private let maxRetryDelay: UInt64 = 8
@@ -35,7 +36,8 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         activitySyncingDelegates: [SHActivitySyncingDelegate],
         interactionsSyncDelegates: [SHInteractionsSyncingDelegate],
         userConnectionsDelegates: [SHUserConnectionRequestDelegate],
-        userConversionDelegates: [SHUserConversionDelegate]
+        userConversionDelegates: [SHUserConversionDelegate],
+        collectionSyncingDelegates: [SHCollectionSyncingDelegate]
     ) {
         self.user = user
         self.deviceId = deviceId
@@ -45,10 +47,11 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         self.interactionsSyncDelegates = interactionsSyncDelegates
         self.userConnectionsDelegates = userConnectionsDelegates
         self.userConversionDelegates = userConversionDelegates
+        self.collectionSyncingDelegates = collectionSyncingDelegates
         self.socket = WebSocketAPI()
-        
+
         super.init()
-        
+
         self.websocketConnectionDelegates.append(self)
     }
     
@@ -120,10 +123,11 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
             log.critical("[ws] unable to parse message content")
             return
         }
-        
+
         let interactionsSyncDelegates = self.interactionsSyncDelegates
         let userConnectionsDelegates = self.userConnectionsDelegates
-        
+        let collectionSyncingDelegates = self.collectionSyncingDelegates
+
         self.delegatesQueue.async {
             
             switch message.type {
@@ -358,10 +362,22 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
                     self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
                     return
                 }
-                
+
                 self.log.debug("[ws] DESCRIPTOR REFRESH for assets gids \(globalIdentifiers)")
-                
+
                 self.syncAssets(with: globalIdentifiers) { _ in }
+
+            case .collectionsChanged:
+                guard let collectionsChanged = try? JSONDecoder().decode(WebSocketMessage.CollectionsChanged.self, from: contentData) else {
+                    self.log.critical("[ws] server sent a \(message.type.rawValue) message via WebSockets that can't be parsed. This is not supposed to happen. \(message.content)")
+                    return
+                }
+
+                self.log.debug("[ws] COLLECTION CHANGED: collection id \(collectionsChanged.collectionId)")
+
+                collectionSyncingDelegates.forEach {
+                    $0.didChangeCollection(withId: collectionsChanged.collectionId)
+                }
             }
         }
     }
