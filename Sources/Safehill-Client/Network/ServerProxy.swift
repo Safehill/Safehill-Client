@@ -2134,7 +2134,7 @@ extension SHServerProxy {
         self.remoteServer.retrieveCollections(completionHandler: completionHandler)
     }
 
-    func retrieveCollection(
+    public func retrieveCollection(
         id: String,
         completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
     ) {
