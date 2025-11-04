@@ -5,6 +5,7 @@ public struct CollectionOutputDTO: Codable {
     public let name: String
     public let description: String
     public let isSystemCollection: Bool
+    public let isArchived: Bool
     public let assetCount: Int
     public let visibility: String
     public let pricing: Double
