@@ -86,7 +86,7 @@ public protocol SHRemoteServerAPI : SHServerAPI {
     )
     
     // MARK: Web login
-    
+
     func sendEncryptedKeysToWebClient(
         sessionId: String,
         requestorIp: String,
@@ -95,4 +95,39 @@ public protocol SHRemoteServerAPI : SHServerAPI {
         encryptedPrivateSignatureData: Data,
         encryptedPrivateSignatureIvData: Data
     ) async throws -> Void
+
+    // MARK: Collections - Payments
+
+    /// Create a Stripe Checkout Session for collection payment
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - completionHandler: the callback method
+    func createCheckoutSession(
+        collectionId: String,
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
+    )
+
+    /// Check if the user has access to a collection
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - completionHandler: the callback method
+    func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    )
+
+    /// Validate Apple IAP transaction (StoreKit 2) for collection payment
+    /// - Parameters:
+    ///   - collectionId: the collection identifier
+    ///   - jwsTransaction: the JWS transaction from StoreKit 2
+    ///   - productId: the product identifier
+    ///   - transactionId: the transaction identifier
+    ///   - completionHandler: the callback method
+    func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    )
 }

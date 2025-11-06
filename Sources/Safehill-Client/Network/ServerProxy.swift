@@ -2134,7 +2134,7 @@ extension SHServerProxy {
         self.remoteServer.retrieveCollections(completionHandler: completionHandler)
     }
 
-    func retrieveCollection(
+    public func retrieveCollection(
         id: String,
         completionHandler: @escaping (Result<CollectionOutputDTO, Error>) -> ()
     ) {
@@ -2184,5 +2184,41 @@ extension SHServerProxy {
         completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
     ) {
         self.remoteServer.topPickCollections(completionHandler: completionHandler)
+    }
+
+    public func createCheckoutSession(
+        collectionId: String,
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
+    ) {
+        self.remoteServer.createCheckoutSession(
+            collectionId: collectionId,
+            completionHandler: completionHandler
+        )
+    }
+
+    public func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    ) {
+        self.remoteServer.checkCollectionAccess(
+            collectionId: collectionId,
+            completionHandler: completionHandler
+        )
+    }
+
+    public func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    ) {
+        self.remoteServer.validateIAPReceipt(
+            collectionId: collectionId,
+            jwsTransaction: jwsTransaction,
+            productId: productId,
+            transactionId: transactionId,
+            completionHandler: completionHandler
+        )
     }
 }

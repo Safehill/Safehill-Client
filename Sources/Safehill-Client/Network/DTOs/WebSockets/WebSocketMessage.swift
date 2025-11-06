@@ -14,6 +14,7 @@ public struct WebSocketMessage: Codable {
         case userConversionManifest = "user-conversion-manifest"
         case threadUserConverted = "thread-user-converted"
         case assetsDescriptorsChanged = "assets-descriptors-changed"
+        case collectionsChanged = "collections-changed"
     }
     
     let type: MessageType
@@ -63,5 +64,9 @@ public struct WebSocketMessage: Codable {
         let newUser: SHRemoteUser
         let threadIds: [String]
         let assetIdsByGroupId: [String: [GlobalIdentifier]]
+    }
+
+    struct CollectionsChanged: Codable {
+        let collectionId: String
     }
 }

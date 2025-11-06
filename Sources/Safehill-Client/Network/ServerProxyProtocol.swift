@@ -271,5 +271,23 @@ internal protocol SHServerProxyProtocol {
         priceRange: PriceRangeDTO?,
         completionHandler: @escaping (Result<[CollectionOutputDTO], Error>) -> ()
     )
+
+    func createCheckoutSession(
+        collectionId: String,
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
+    )
+
+    func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    )
+
+    func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    )
 }
 

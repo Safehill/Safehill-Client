@@ -493,6 +493,18 @@ struct SHMockServerProxy: SHServerProxyProtocol {
     func searchCollections(query: String?, searchScope: String, visibility: String?, priceRange: PriceRangeDTO?, completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+
+    func createCheckoutSession(collectionId: String, completionHandler: @escaping (Result<CheckoutSessionDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func checkCollectionAccess(collectionId: String, completionHandler: @escaping (Result<AccessCheckResultDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func validateIAPReceipt(collectionId: String, jwsTransaction: String, productId: String, transactionId: String, completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 }
 
 

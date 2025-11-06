@@ -1854,4 +1854,46 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         self.post("collections/top-picks", parameters: nil, completionHandler: completionHandler)
     }
+
+    // MARK: Collections - Payments
+
+    func createCheckoutSession(
+        collectionId: String,
+        completionHandler: @escaping (Result<CheckoutSessionDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "ui_mode": "hosted"
+        ]
+        
+        self.post("collections/checkout-session/\(collectionId)", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    func checkCollectionAccess(
+        collectionId: String,
+        completionHandler: @escaping (Result<AccessCheckResultDTO, Error>) -> ()
+    ) {
+        self.route(
+            "collections/check-access/\(collectionId)",
+            method: "GET",
+            parameters: nil as [String: Any?]?,
+            requiresAuthentication: true,
+            completionHandler: completionHandler
+        )
+    }
+
+    func validateIAPReceipt(
+        collectionId: String,
+        jwsTransaction: String,
+        productId: String,
+        transactionId: String,
+        completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "jws_transaction": jwsTransaction,
+            "product_id": productId,
+            "transaction_id": transactionId
+        ]
+
+        self.post("collections/validate-iap-receipt/\(collectionId)", parameters: parameters, completionHandler: completionHandler)
+    }
 }
