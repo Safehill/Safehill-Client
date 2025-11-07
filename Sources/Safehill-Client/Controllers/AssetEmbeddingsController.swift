@@ -159,13 +159,16 @@ public actor SHAssetEmbeddingsController {
                 userInfo: [NSLocalizedDescriptionKey: "Failed to download model at \(url). HTTP \(httpResponse.statusCode)"])
         }
         
-        try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        
+        let parentDir = destination.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
+
+        // Remove existing destination to avoid conflicts
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+
         if url.pathExtension == "zip" {
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-            try fileManager.unzipItem(at: tempURL, to: destination.deletingLastPathComponent())
+            try fileManager.unzipItem(at: tempURL, to: parentDir)
         } else {
             try FileManager.default.copyItem(at: tempURL, to: destination)
         }
