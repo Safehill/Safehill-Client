@@ -183,13 +183,25 @@ public actor SHAssetEmbeddingsController {
             // Unzip to temporary directory
             try fileManager.unzipItem(at: tempURL, to: tempExtractDir)
 
-            // Find the extracted .mlpackage directory
+            // Check if ZIP contains the .mlpackage directory or just its contents
             let extractedItems = try fileManager.contentsOfDirectory(at: tempExtractDir, includingPropertiesForKeys: nil)
-            guard let extractedPackage = extractedItems.first(where: { $0.lastPathComponent == destination.lastPathComponent }) else {
-                throw NSError(
-                    domain: "TinyCLIP",
-                    code: 101,
-                    userInfo: [NSLocalizedDescriptionKey: "Extracted ZIP does not contain \(destination.lastPathComponent). Found: \(extractedItems.map { $0.lastPathComponent })"])
+
+            let packageToMove: URL
+            if let existingPackage = extractedItems.first(where: { $0.lastPathComponent == destination.lastPathComponent }) {
+                // ZIP contains the .mlpackage directory itself
+                packageToMove = existingPackage
+            } else {
+                // ZIP contains the contents of .mlpackage (Manifest.json, Data, etc.)
+                // Create the .mlpackage directory and move contents into it
+                let newPackage = tempExtractDir.appendingPathComponent(destination.lastPathComponent)
+                try fileManager.createDirectory(at: newPackage, withIntermediateDirectories: false)
+
+                for item in extractedItems {
+                    let destinationItem = newPackage.appendingPathComponent(item.lastPathComponent)
+                    try fileManager.moveItem(at: item, to: destinationItem)
+                }
+
+                packageToMove = newPackage
             }
 
             // Remove old model completely before moving new one into place
@@ -198,7 +210,7 @@ public actor SHAssetEmbeddingsController {
             }
 
             // Move extracted package to final destination (atomic replacement)
-            try fileManager.moveItem(at: extractedPackage, to: destination)
+            try fileManager.moveItem(at: packageToMove, to: destination)
 
         } else {
             // For non-zip files, remove old then copy new
