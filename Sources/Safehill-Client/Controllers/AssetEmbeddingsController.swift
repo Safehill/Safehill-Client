@@ -170,29 +170,42 @@ public actor SHAssetEmbeddingsController {
         let parentDir = destination.deletingLastPathComponent()
         try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-        // Remove existing destination to avoid conflicts during extraction
-        if fileManager.fileExists(atPath: destination.path) {
-            do {
-                try fileManager.removeItem(at: destination)
-            } catch {
-                log.error("Failed to remove existing model at \(destination.path): \(error)")
-                throw error
-            }
-        }
-
         if url.pathExtension == "zip" {
-            // Unzip to parent directory (which will create the .mlpackage directory)
-            try fileManager.unzipItem(at: tempURL, to: parentDir)
+            // Extract to a temporary subdirectory to avoid conflicts with existing files
+            let tempExtractDir = parentDir.appendingPathComponent("temp_extract_\(UUID().uuidString)")
+            try fileManager.createDirectory(at: tempExtractDir, withIntermediateDirectories: true)
 
-            // Verify the destination now exists after unzipping
-            guard fileManager.fileExists(atPath: destination.path) else {
+            defer {
+                // Clean up temp directory
+                try? fileManager.removeItem(at: tempExtractDir)
+            }
+
+            // Unzip to temporary directory
+            try fileManager.unzipItem(at: tempURL, to: tempExtractDir)
+
+            // Find the extracted .mlpackage directory
+            let extractedItems = try fileManager.contentsOfDirectory(at: tempExtractDir, includingPropertiesForKeys: nil)
+            guard let extractedPackage = extractedItems.first(where: { $0.lastPathComponent == destination.lastPathComponent }) else {
                 throw NSError(
                     domain: "TinyCLIP",
-                    code: 100,
-                    userInfo: [NSLocalizedDescriptionKey: "Model extraction failed: \(destination.lastPathComponent) not found after unzipping"])
+                    code: 101,
+                    userInfo: [NSLocalizedDescriptionKey: "Extracted ZIP does not contain \(destination.lastPathComponent). Found: \(extractedItems.map { $0.lastPathComponent })"])
             }
+
+            // Remove old model completely before moving new one into place
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+
+            // Move extracted package to final destination (atomic replacement)
+            try fileManager.moveItem(at: extractedPackage, to: destination)
+
         } else {
-            try FileManager.default.copyItem(at: tempURL, to: destination)
+            // For non-zip files, remove old then copy new
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.copyItem(at: tempURL, to: destination)
         }
     }
 
