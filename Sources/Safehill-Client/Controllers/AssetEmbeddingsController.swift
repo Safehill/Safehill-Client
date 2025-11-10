@@ -78,10 +78,15 @@ public actor SHAssetEmbeddingsController {
     // MARK: - Public methods
 
     public func loadModelIfNeeded() async throws {
+        // Skip if model is already loaded
+        guard self.model == nil else {
+            return
+        }
+
         let variant = ModelVariant.current()
         let fileManager = FileManager.default
         let localModelURL = variant.localURL
-        
+
         let needsDownload: Bool
 
         if fileManager.fileExists(atPath: localModelURL.path) {
@@ -99,7 +104,10 @@ public actor SHAssetEmbeddingsController {
         }
 
         if needsDownload {
-            try? fileManager.removeItem(atPath: localModelURL.path)
+            // Remove existing model and any partial downloads
+            if fileManager.fileExists(atPath: localModelURL.path) {
+                try fileManager.removeItem(at: localModelURL)
+            }
             try await downloadAndCacheModel(from: variant.s3URL, to: localModelURL)
         }
 
@@ -162,13 +170,27 @@ public actor SHAssetEmbeddingsController {
         let parentDir = destination.deletingLastPathComponent()
         try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-        // Remove existing destination to avoid conflicts
+        // Remove existing destination to avoid conflicts during extraction
         if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
+            do {
+                try fileManager.removeItem(at: destination)
+            } catch {
+                log.error("Failed to remove existing model at \(destination.path): \(error)")
+                throw error
+            }
         }
 
         if url.pathExtension == "zip" {
+            // Unzip to parent directory (which will create the .mlpackage directory)
             try fileManager.unzipItem(at: tempURL, to: parentDir)
+
+            // Verify the destination now exists after unzipping
+            guard fileManager.fileExists(atPath: destination.path) else {
+                throw NSError(
+                    domain: "TinyCLIP",
+                    code: 100,
+                    userInfo: [NSLocalizedDescriptionKey: "Model extraction failed: \(destination.lastPathComponent) not found after unzipping"])
+            }
         } else {
             try FileManager.default.copyItem(at: tempURL, to: destination)
         }
