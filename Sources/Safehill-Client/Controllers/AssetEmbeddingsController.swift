@@ -78,10 +78,15 @@ public actor SHAssetEmbeddingsController {
     // MARK: - Public methods
 
     public func loadModelIfNeeded() async throws {
+        // Skip if model is already loaded
+        guard self.model == nil else {
+            return
+        }
+
         let variant = ModelVariant.current()
         let fileManager = FileManager.default
         let localModelURL = variant.localURL
-        
+
         let needsDownload: Bool
 
         if fileManager.fileExists(atPath: localModelURL.path) {
@@ -99,7 +104,6 @@ public actor SHAssetEmbeddingsController {
         }
 
         if needsDownload {
-            try? fileManager.removeItem(atPath: localModelURL.path)
             try await downloadAndCacheModel(from: variant.s3URL, to: localModelURL)
         }
 
@@ -162,15 +166,54 @@ public actor SHAssetEmbeddingsController {
         let parentDir = destination.deletingLastPathComponent()
         try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-        // Remove existing destination to avoid conflicts
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-
         if url.pathExtension == "zip" {
-            try fileManager.unzipItem(at: tempURL, to: parentDir)
+            // Extract to a temporary subdirectory to avoid conflicts with existing files
+            let tempExtractDir = parentDir.appendingPathComponent("temp_extract_\(UUID().uuidString)")
+            try fileManager.createDirectory(at: tempExtractDir, withIntermediateDirectories: true)
+
+            defer {
+                // Clean up temp directory
+                try? fileManager.removeItem(at: tempExtractDir)
+            }
+
+            // Unzip to temporary directory
+            try fileManager.unzipItem(at: tempURL, to: tempExtractDir)
+
+            // Check if ZIP contains the .mlpackage directory or just its contents
+            let extractedItems = try fileManager.contentsOfDirectory(at: tempExtractDir, includingPropertiesForKeys: nil)
+
+            let packageToMove: URL
+            if let existingPackage = extractedItems.first(where: { $0.lastPathComponent == destination.lastPathComponent }) {
+                // ZIP contains the .mlpackage directory itself
+                packageToMove = existingPackage
+            } else {
+                // ZIP contains the contents of .mlpackage (Manifest.json, Data, etc.)
+                // Create the .mlpackage directory and move contents into it
+                let newPackage = tempExtractDir.appendingPathComponent(destination.lastPathComponent)
+                try fileManager.createDirectory(at: newPackage, withIntermediateDirectories: false)
+
+                for item in extractedItems {
+                    let destinationItem = newPackage.appendingPathComponent(item.lastPathComponent)
+                    try fileManager.moveItem(at: item, to: destinationItem)
+                }
+
+                packageToMove = newPackage
+            }
+
+            // Remove old model completely before moving new one into place
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+
+            // Move extracted package to final destination (atomic replacement)
+            try fileManager.moveItem(at: packageToMove, to: destination)
+
         } else {
-            try FileManager.default.copyItem(at: tempURL, to: destination)
+            // For non-zip files, remove old then copy new
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.copyItem(at: tempURL, to: destination)
         }
     }
 
