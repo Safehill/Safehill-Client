@@ -76,7 +76,7 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
         try await socket.connect(to: "ws/messages",
                                  as: self.user,
                                  from: self.deviceId,
-                                 keepAliveIntervalInSeconds: 5.0)
+                                 keepAliveIntervalInSeconds: nil)
         
         do {
             for try await message in await socket.receive() {

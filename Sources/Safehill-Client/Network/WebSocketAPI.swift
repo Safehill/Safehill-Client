@@ -47,7 +47,7 @@ public actor WebSocketAPI {
         to endpoint: String,
         as authedUser: SHAuthenticatedLocalUser,
         from deviceId: String,
-        keepAliveIntervalInSeconds: TimeInterval
+        keepAliveIntervalInSeconds: TimeInterval? = nil
     ) throws {
         guard webSocketTask == nil else {
             return
@@ -66,9 +66,11 @@ public actor WebSocketAPI {
         self.webSocketTask = self.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
         
-        Task { [weak self] in
-            try await Task.sleep(nanoseconds: UInt64(keepAliveIntervalInSeconds) * 1_000_000_000)
-            await self?.keepAlive(keepAliveIntervalInSeconds)
+        if let keepAliveIntervalInSeconds {
+            Task { [weak self] in
+                try await Task.sleep(nanoseconds: UInt64(keepAliveIntervalInSeconds) * 1_000_000_000)
+                await self?.keepAlive(keepAliveIntervalInSeconds)
+            }
         }
     }
     
