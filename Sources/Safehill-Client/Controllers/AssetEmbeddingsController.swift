@@ -104,10 +104,6 @@ public actor SHAssetEmbeddingsController {
         }
 
         if needsDownload {
-            // Remove existing model and any partial downloads
-            if fileManager.fileExists(atPath: localModelURL.path) {
-                try fileManager.removeItem(at: localModelURL)
-            }
             try await downloadAndCacheModel(from: variant.s3URL, to: localModelURL)
         }
 
