@@ -49,8 +49,8 @@ public actor WebSocketAPI {
         from deviceId: String,
         keepAliveIntervalInSeconds: TimeInterval? = nil
     ) throws {
-        guard webSocketTask == nil else {
-            log.warning("[ws] connect() called but webSocketTask already exists (state=\(webSocketTask?.state.rawValue ?? -1)). Ignoring duplicate connection attempt for deviceId=\(deviceId)")
+        guard self.webSocketTask == nil else {
+            log.warning("[ws] connect() called but webSocketTask already exists (state=\(self.webSocketTask?.state.rawValue ?? -1)). Ignoring duplicate connection attempt for deviceId=\(deviceId)")
             return
         }
 
