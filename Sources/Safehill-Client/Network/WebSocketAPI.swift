@@ -47,34 +47,44 @@ public actor WebSocketAPI {
         to endpoint: String,
         as authedUser: SHAuthenticatedLocalUser,
         from deviceId: String,
-        keepAliveIntervalInSeconds: TimeInterval
+        keepAliveIntervalInSeconds: TimeInterval? = nil
     ) throws {
-        guard webSocketTask == nil else {
+        guard self.webSocketTask == nil else {
+            log.warning("[ws] connect() called but webSocketTask already exists (state=\(self.webSocketTask?.state.rawValue ?? -1)). Ignoring duplicate connection attempt for deviceId=\(deviceId)")
             return
         }
-        
+
         var urlComponents = self.urlComponents
         let param = URLQueryItem(name: "deviceId", value: deviceId)
         urlComponents.queryItems = [param]
         guard let url = urlComponents.url else {
             throw WebSocketConnectionError.invalidURL
         }
-        
+
         var request = URLRequest(url: url.appendingPathComponent(endpoint))
         request.addValue("Bearer \(authedUser.authToken)", forHTTPHeaderField: "Authorization")
-        
+
+        log.info("[ws] connect() starting new connection: endpoint=\(endpoint), deviceId=\(deviceId), url=\(url.absoluteString)")
+
         self.webSocketTask = self.webSocketURLSession.webSocketTask(with: request)
         self.webSocketTask!.resume()
-        
-        Task { [weak self] in
-            try await Task.sleep(nanoseconds: UInt64(keepAliveIntervalInSeconds) * 1_000_000_000)
-            await self?.keepAlive(keepAliveIntervalInSeconds)
+
+        if let keepAliveIntervalInSeconds {
+            Task { [weak self] in
+                try await Task.sleep(nanoseconds: UInt64(keepAliveIntervalInSeconds) * 1_000_000_000)
+                await self?.keepAlive(keepAliveIntervalInSeconds)
+            }
         }
     }
     
     public func disconnect() {
-        self.webSocketTask?.cancel(with: .normalClosure, reason: nil)
-        self.webSocketTask = nil
+        if let task = self.webSocketTask {
+            log.info("[ws] disconnect() called: current state=\(task.state.rawValue), closeCode=\(task.closeCode.rawValue)")
+            task.cancel(with: .normalClosure, reason: nil)
+            self.webSocketTask = nil
+        } else {
+            log.debug("[ws] disconnect() called but webSocketTask is already nil")
+        }
     }
 }
 
@@ -189,12 +199,13 @@ extension WebSocketAPI {
 }
 
 class WebSocketAPIDelegate: NSObject, URLSessionWebSocketDelegate {
-    
+
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
-        log.info("[ws] task OPEN with protocol=\(`protocol` ?? "")")
+        log.info("[ws] task OPEN: protocol=\(`protocol` ?? "none"), state=\(webSocketTask.state.rawValue), taskId=\(webSocketTask.taskIdentifier)")
     }
-    
+
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        log.info("[ws] task CLOSED with code=\(closeCode.rawValue) reason=\(reason != nil ? String(data: reason!, encoding: .utf8) ?? "nil" : "")")
+        let reasonString = reason.flatMap { String(data: $0, encoding: .utf8) } ?? "none"
+        log.info("[ws] task CLOSED: code=\(closeCode.rawValue), reason=\(reasonString), state=\(webSocketTask.state.rawValue), taskId=\(webSocketTask.taskIdentifier)")
     }
 }

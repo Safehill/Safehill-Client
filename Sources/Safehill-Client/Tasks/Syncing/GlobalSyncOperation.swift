@@ -2,12 +2,13 @@ import Foundation
 import os
 
 public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
-    
+
     public typealias OperationResult = Result<Void, Error>
-    
+
     private static var isWebSocketConnected = false
+    private static var isWebSocketConnecting = false
     private static let memberAccessQueue = DispatchQueue(label: "WebsocketSyncOperation.memberAccessQueue")
-    
+
     public let log = Logger(subsystem: "com.safehill", category: "WS-SYNC")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.ws.delegates")
@@ -64,19 +65,36 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
     var serverProxy: SHServerProxy { self.user.serverProxy }
     
     private func startWebSocket() async throws {
-        var isAlreadyConnected = false
+        // Check-and-set atomically to prevent race conditions
+        var shouldConnect = false
         Self.memberAccessQueue.sync {
-            isAlreadyConnected = Self.isWebSocketConnected
+            if !Self.isWebSocketConnected && !Self.isWebSocketConnecting {
+                Self.isWebSocketConnecting = true
+                shouldConnect = true
+                log.debug("[ws] CONNECTING: setting isWebSocketConnecting=true")
+            } else {
+                log.warning("[ws] SKIP CONNECT: already connected=\(Self.isWebSocketConnected) or connecting=\(Self.isWebSocketConnecting)")
+            }
         }
-        
-        guard isAlreadyConnected == false else {
+
+        guard shouldConnect else {
             return
         }
-        
+
+        defer {
+            // Reset connecting flag if connection fails
+            Self.memberAccessQueue.sync {
+                if !Self.isWebSocketConnected {
+                    Self.isWebSocketConnecting = false
+                    log.debug("[ws] CONNECT FAILED: resetting isWebSocketConnecting=false")
+                }
+            }
+        }
+
         try await socket.connect(to: "ws/messages",
                                  as: self.user,
                                  from: self.deviceId,
-                                 keepAliveIntervalInSeconds: 5.0)
+                                 keepAliveIntervalInSeconds: nil)
         
         do {
             for try await message in await socket.receive() {
@@ -137,13 +155,15 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
                     return
                 }
                 self.log.debug("[ws] CONNECTED: userPublicId=\(encoded.userPublicIdentifier), deviceId=\(encoded.deviceId)")
-                
-                self.websocketConnectionDelegates.forEach {
-                    $0.didConnect()
-                }
-                
+
                 Self.memberAccessQueue.sync {
                     Self.isWebSocketConnected = true
+                    Self.isWebSocketConnecting = false
+                    self.log.debug("[ws] CONNECTION ACK: setting isWebSocketConnected=true, isWebSocketConnecting=false")
+                }
+
+                self.websocketConnectionDelegates.forEach {
+                    $0.didConnect()
                 }
                 
             case .userConversionManifest:
@@ -403,14 +423,15 @@ public class SHGlobalSyncOperation: Operation, @unchecked Sendable {
     
     public func stopSyncing(error: Error?) async {
         await self.socket.disconnect()
-        self.log.debug("[ws] DISCONNECTED")
-        
-        websocketConnectionDelegates.forEach {
-            $0.didDisconnect(error: error)
-        }
-        
+
         Self.memberAccessQueue.sync {
             Self.isWebSocketConnected = false
+            Self.isWebSocketConnecting = false
+            self.log.debug("[ws] DISCONNECTED: resetting isWebSocketConnected=false, isWebSocketConnecting=false, error=\(error?.localizedDescription ?? "nil")")
+        }
+
+        websocketConnectionDelegates.forEach {
+            $0.didDisconnect(error: error)
         }
     }
     
