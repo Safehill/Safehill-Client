@@ -51,6 +51,16 @@ public protocol SHLocalServerAPI : SHServerAPI {
     func removeAssetRecipients(basedOn userIdsToRemoveFromAssetGid: [GlobalIdentifier: [UserIdentifier]],
                                versions: [SHAssetQuality]?,
                                completionHandler: @escaping (Result<Void, Error>) -> ())
+
+    func updateCollectionInfo(
+        basedOn sharingInfoByAssetId: [GlobalIdentifier: any SHDescriptorSharingInfo],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+
+    func removeCollectionInfo(
+        forAssetGids collectionIdsByAssetGid: [GlobalIdentifier: Set<String>],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
     
     func runDataMigrations(
         currentBuild: String?,
@@ -100,4 +110,6 @@ public protocol SHLocalServerAPI : SHServerAPI {
         withId interactionIdentifier: String,
         completionHandler: @escaping (Result<InteractionsGroupDTO, Error>) -> ()
     )
+    
+    func saveServerEncryptionDetails(_ dto: ServerEncryptionKeysDTO, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
 }

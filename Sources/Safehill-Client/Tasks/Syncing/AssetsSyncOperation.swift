@@ -232,9 +232,10 @@ internal class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, 
                 versions: nil
             ) { [weak self] result in
                 guard let self = self else {
+                    dispatchGroup.leave()
                     return
                 }
-                
+
                 switch result {
                 case .success:
                     let assetsDelegates = self.assetsDelegates
@@ -254,7 +255,51 @@ internal class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, 
                 dispatchGroup.leave()
             }
         }
-        
+
+        ///
+        /// Update collection info in the local server
+        ///
+        if diff.collectionChangesByAssetGid.isEmpty == false {
+            dispatchGroup.enter()
+            self.serverProxy.localServer.updateCollectionInfo(
+                basedOn: diff.collectionChangesByAssetGid
+            ) { [weak self] result in
+
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+
+                if case .failure(let error) = result {
+                    self.log.error("[sync] collection info was updated on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                }
+
+                dispatchGroup.leave()
+            }
+        }
+
+        ///
+        /// Remove collection info from the local server
+        ///
+        if diff.collectionRemovalsByAssetGid.isEmpty == false {
+            dispatchGroup.enter()
+            self.serverProxy.localServer.removeCollectionInfo(
+                forAssetGids: diff.collectionRemovalsByAssetGid
+            ) { [weak self] result in
+
+                guard let self = self else {
+                    dispatchGroup.leave()
+                    return
+                }
+
+                if case .failure(let error) = result {
+                    self.log.error("[sync] collection info was removed on server but the local DB couldn't be updated. This operation will be attempted again, but for now the cache is out of sync. error=\(error.localizedDescription)")
+                }
+
+                dispatchGroup.leave()
+            }
+        }
+
         dispatchGroup.notify(queue: .global(qos: qos)) {
             completionHandler(.success(()))
         }

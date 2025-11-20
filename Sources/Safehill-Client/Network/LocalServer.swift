@@ -5,6 +5,7 @@ import Contacts
 public enum SHLocalServerError: Error, LocalizedError {
     case failedToCreateFile
     case threadNotPresent(String)
+    case serverEncryptionDetailsNotPresent
     
     public var errorDescription: String? {
         switch self {
@@ -12,6 +13,8 @@ public enum SHLocalServerError: Error, LocalizedError {
             "Failed to create asset file on disk"
         case .threadNotPresent(let threadId):
             "There is no such thread with id \(threadId)"
+        case .serverEncryptionDetailsNotPresent:
+            "Server encryption details not present"
         }
     }
 }
@@ -481,6 +484,80 @@ struct LocalServer : SHLocalServerAPI {
         }
     }
     
+    func getServerEncryptionDetails(
+        completionHandler: @escaping (Swift.Result<ServerEncryptionKeysDTO, Error>) -> ()
+    ) {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        userStore.values(
+            forKeysMatching: KBGenericCondition(
+                .equal,
+                value: "serverEncryptionDetails"
+            )
+        ) {
+            result in
+            switch result {
+            case .success(let values):
+                guard values.count > 0, let value = values.first else {
+                    completionHandler(.failure(SHLocalServerError.serverEncryptionDetailsNotPresent))
+                    return
+                }
+                
+                if values.count > 1 {
+                    try? userStore.removeValue(for: "serverEncryptionDetails")
+                    completionHandler(.failure(SHLocalServerError.serverEncryptionDetailsNotPresent))
+                    return
+                }
+                
+                guard let value,
+                      let deserialized = try? DBSecureSerializableServerEncryptionDetails.from(value)
+                else {
+                    try? userStore.removeValue(for: "serverEncryptionDetails")
+                    completionHandler(.failure(SHLocalServerError.serverEncryptionDetailsNotPresent))
+                    return
+                }
+                
+                let output = ServerEncryptionKeysDTO(
+                    publicKey: deserialized.publicKey,
+                    publicSignature: deserialized.publicSignature,
+                    encryptionProtocolSalt: deserialized.encryptionProtocolSalt
+                )
+                
+                completionHandler(.success(output))
+                
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+    
+    func saveServerEncryptionDetails(_ dto: ServerEncryptionKeysDTO, completionHandler: @escaping (Swift.Result<Void, Error>) -> ())
+    {
+        guard let userStore = SHDBManager.sharedInstance.userStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+        
+        let data = DBSecureSerializableServerEncryptionDetails(
+            publicKey: dto.publicKey,
+            publicSignature: dto.publicSignature,
+            encryptionProtocolSalt: dto.encryptionProtocolSalt
+        )
+        
+        do {
+            let serializedData = try NSKeyedArchiver.archivedData(
+                withRootObject: data,
+                requiringSecureCoding: true
+            )
+            userStore.set(value: serializedData, for: "serverEncryptionDetails", completionHandler: completionHandler)
+        } catch {
+            completionHandler(.failure(error))
+        }
+    }
+    
     func countUploaded(
         completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
     ) {
@@ -549,6 +626,7 @@ struct LocalServer : SHLocalServerAPI {
         var groupCreatorById = [String: UserIdentifier]()
         var groupInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetGroupInfo]]()
         var groupIdsByRecipientUserIdentifierByAssetId = [GlobalIdentifier: [UserIdentifier: [String]]]()
+        var collectionInfoByIdByAssetGid = [GlobalIdentifier: [String: SHAssetCollectionInfo]]()
         
         ///
         /// Retrieve all information from the asset store for all assets and `.lowResolution` versions.
@@ -632,7 +710,50 @@ struct LocalServer : SHLocalServerAPI {
             completionHandler(.failure(error))
             return
         }
-        
+
+        // Retrieve collection info for assets
+        do {
+            let collectionCondition = KBGenericCondition(
+                .beginsWith, value: "collection::"
+            ).and(gidsCondition)
+
+            let collectionDict = try assetStore.dictionaryRepresentation(forKeysMatching: collectionCondition)
+
+            for (key, rawValue) in collectionDict {
+                let components = key.components(separatedBy: "::")
+                // Key format: collection::{assetGid}::{collectionId}
+                guard components.count == 3 else {
+                    log.error("invalid collection info key in DB: \(key)")
+                    continue
+                }
+
+                let assetGid = components[1]
+                let collectionId = components[2]
+
+                do {
+                    let collectionInfo = try DBSecureSerializableAssetCollectionInfo.from(rawValue)
+                    let genericInfo = SHGenericAssetCollectionInfo(
+                        collectionId: collectionInfo.collectionId,
+                        collectionName: collectionInfo.collectionName,
+                        visibility: collectionInfo.visibility,
+                        accessType: collectionInfo.accessType,
+                        addedAt: collectionInfo.addedAt
+                    )
+
+                    if collectionInfoByIdByAssetGid[assetGid] == nil {
+                        collectionInfoByIdByAssetGid[assetGid] = [collectionId: genericInfo]
+                    } else {
+                        collectionInfoByIdByAssetGid[assetGid]![collectionId] = genericInfo
+                    }
+                } catch {
+                    log.error("failed to deserialize collection info for key \(key). \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            log.warning("error retrieving collection info. \(error.localizedDescription)")
+            // Continue without collection info - not critical
+        }
+
         for (key, value) in recipientDetailsDict {
             
             guard let value else {
@@ -773,7 +894,8 @@ struct LocalServer : SHLocalServerAPI {
             let sharingInfo = SHGenericDescriptorSharingInfo(
                 sharedByUserIdentifier: sharedBy,
                 groupIdsByRecipientUserIdentifier: sharedWithUsersInGroups,
-                groupInfoById: groupInfoById
+                groupInfoById: groupInfoById,
+                collectionInfoById: collectionInfoByIdByAssetGid[globalIdentifier] ?? [:]
             )
             
             
@@ -1458,7 +1580,8 @@ struct LocalServer : SHLocalServerAPI {
                             invitedUsersPhoneNumbers: nil,
                             permissions: permissions
                         )
-                    ]
+                    ],
+                    collectionInfoById: [:]
                 )
             )
             guard descriptorsByGlobalId[encryptedAsset.globalIdentifier] == nil else {
@@ -1681,14 +1804,41 @@ struct LocalServer : SHLocalServerAPI {
                 if let permissions = groupInfo.permissions {
                     writeBatch.set(value: permissions, for: "\(SHInteractionAnchor.group.rawValue)::\(groupId)::permissions")
                 }
-                
+
                 if let threadId = groupInfo.createdFromThreadId {
                     let key = "\(SHInteractionAnchor.thread.rawValue)::\(threadId)::\(groupId)::\(asset.globalIdentifier)::photoMessage"
                     writeBatch.set(value: true, for: key)
                 }
             }
+
+            // Store collection info (skip dropbox - only store non-dropbox collections)
+            for (collectionId, collectionInfo) in descriptor.sharingInfo.collectionInfoById {
+                // Skip dropbox collection
+                guard collectionInfo.collectionName != kSHDropboxCollectionName else {
+                    continue
+                }
+
+                let key = "collection::\(asset.globalIdentifier)::\(collectionId)"
+                let value = DBSecureSerializableAssetCollectionInfo(
+                    collectionId: collectionInfo.collectionId,
+                    collectionName: collectionInfo.collectionName,
+                    visibility: collectionInfo.visibility,
+                    accessType: collectionInfo.accessType,
+                    addedAt: collectionInfo.addedAt
+                )
+
+                do {
+                    let serializedData = try NSKeyedArchiver.archivedData(
+                        withRootObject: value,
+                        requiringSecureCoding: true
+                    )
+                    writeBatch.set(value: serializedData, for: key)
+                } catch {
+                    log.critical("failed to serialize collection info for key \(key): \(value). \(error.localizedDescription)")
+                }
+            }
         }
-        
+
         writeBatch.write { (result: Result) in
             switch result {
             case .success():
@@ -1835,7 +1985,77 @@ struct LocalServer : SHLocalServerAPI {
             }
         }
     }
-    
+
+    func updateCollectionInfo(
+        basedOn sharingInfoByAssetId: [GlobalIdentifier: any SHDescriptorSharingInfo],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+
+        let writeBatch = assetStore.writeBatch()
+
+        for (globalIdentifier, sharingInfo) in sharingInfoByAssetId {
+            for (collectionId, collectionInfo) in sharingInfo.collectionInfoById {
+                // Skip dropbox collection
+                guard collectionInfo.collectionName != kSHDropboxCollectionName else {
+                    continue
+                }
+
+                let key = "collection::\(globalIdentifier)::\(collectionId)"
+                let value = DBSecureSerializableAssetCollectionInfo(
+                    collectionId: collectionInfo.collectionId,
+                    collectionName: collectionInfo.collectionName,
+                    visibility: collectionInfo.visibility,
+                    accessType: collectionInfo.accessType,
+                    addedAt: collectionInfo.addedAt
+                )
+
+                do {
+                    let serializedData = try NSKeyedArchiver.archivedData(
+                        withRootObject: value,
+                        requiringSecureCoding: true
+                    )
+                    writeBatch.set(value: serializedData, for: key)
+                } catch {
+                    log.critical("failed to serialize collection info for key \(key): \(value). \(error.localizedDescription)")
+                }
+            }
+        }
+
+        writeBatch.write(completionHandler: completionHandler)
+    }
+
+    func removeCollectionInfo(
+        forAssetGids collectionIdsByAssetGid: [GlobalIdentifier: Set<String>],
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        guard let assetStore = SHDBManager.sharedInstance.assetStore else {
+            completionHandler(.failure(KBError.databaseNotReady))
+            return
+        }
+
+        var removeCondition = KBGenericCondition(value: false)
+
+        for (globalIdentifier, collectionIds) in collectionIdsByAssetGid {
+            for collectionId in collectionIds {
+                let key = "collection::\(globalIdentifier)::\(collectionId)"
+                removeCondition = removeCondition.or(KBGenericCondition(.equal, value: key))
+            }
+        }
+
+        assetStore.removeValues(forKeysMatching: removeCondition) { result in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
     func uploadAsset(
         with globalIdentifier: GlobalIdentifier,
         versionsDataManifest: [SHAssetQuality: (URL, Data)],

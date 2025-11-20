@@ -214,7 +214,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                                 sharingInfo: SHGenericDescriptorSharingInfo(
                                     sharedByUserIdentifier: desc.sharingInfo.sharedByUserIdentifier,
                                     groupIdsByRecipientUserIdentifier: newSharedWith,
-                                    groupInfoById: desc.sharingInfo.groupInfoById
+                                    groupInfoById: desc.sharingInfo.groupInfoById,
+                                    collectionInfoById: desc.sharingInfo.collectionInfoById
                                 )
                             )
                         }

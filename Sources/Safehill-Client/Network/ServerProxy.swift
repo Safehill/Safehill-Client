@@ -430,6 +430,24 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+    
+    public func getServerEncryptionDetails(completionHandler: @escaping (Swift.Result<ServerEncryptionKeysDTO, Error>) -> ()
+    ) {
+        self.remoteServer.getServerEncryptionDetails { remoteResult in
+            switch remoteResult {
+            case .failure(let error):
+                self.localServer.getServerEncryptionDetails(completionHandler: completionHandler)
+            case .success(let details):
+                self.localServer.saveServerEncryptionDetails(details) {
+                    r in
+                    if case .failure(let failure) = r {
+                        log.warning("failed to save local encryption details: \(failure)")
+                    }
+                }
+                completionHandler(.success(details))
+            }
+        }
+    }
 }
 
 extension SHServerProxy {

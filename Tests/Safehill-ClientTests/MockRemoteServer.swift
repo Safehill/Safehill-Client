@@ -50,6 +50,10 @@ class MockRemoteServer: SHRemoteServerAPI {
     func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+
+    func getServerEncryptionDetails(completionHandler: @escaping (Result<ServerEncryptionKeysDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
     
     func getUsers(withHashedPhoneNumbers hashedPhoneNumbers: [String], completionHandler: @escaping (Result<[String : any SHServerUser], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
