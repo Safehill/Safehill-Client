@@ -1701,6 +1701,7 @@ struct LocalServer : SHLocalServerAPI {
                     senderEncryptedSecret: encryptedVersion.encryptedSecret,
                     publicKey: encryptedVersion.publicKeyData,
                     publicSignature: encryptedVersion.publicSignatureData,
+                    verificationSignature: encryptedVersion.verificationSignatureData,
                     creationDate: asset.creationDate,
                     uploadState: uploadState
                 )
@@ -2128,6 +2129,7 @@ struct LocalServer : SHLocalServerAPI {
                     senderEncryptedSecret: value.senderEncryptedSecret,
                     publicKey: value.publicKey,
                     publicSignature: value.publicSignature,
+                    verificationSignature: value.verificationSignature,
                     creationDate: value.creationDate,
                     uploadState: state
                 )

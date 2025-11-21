@@ -78,7 +78,8 @@ internal class SHEncryptionOperation: Operation, SHBackgroundQueueBackedOperatio
                     encryptedData: encryptedPayloads[idx].encryptedData,
                     encryptedSecret: encryptedAssetSecret.cyphertext,
                     publicKeyData: encryptedAssetSecret.ephemeralPublicKeyData,
-                    publicSignatureData: encryptedAssetSecret.signature
+                    publicSignatureData: encryptedAssetSecret.signature,
+                    verificationSignatureData: self.user.publicSignatureData
                 )
             }
         }

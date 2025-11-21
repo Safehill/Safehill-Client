@@ -877,8 +877,7 @@ extension SHServerProxy {
             } else {
                 let decyptedAssetVersion = try self.remoteServer.requestor.decrypt(
                     asset,
-                    versions: [serverAssetVersionQuality],
-                    receivedFrom: self.remoteServer.requestor
+                    versions: [serverAssetVersionQuality]
                 ).decryptedVersions[serverAssetVersionQuality]
                 
                 guard let decyptedAssetVersion else {

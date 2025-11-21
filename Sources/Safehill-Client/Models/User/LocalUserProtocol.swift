@@ -119,31 +119,39 @@ extension SHLocalUserProtocol {
 extension SHLocalUserProtocol {
     func decrypt(
         _ asset: any SHEncryptedAsset,
-        versions: [SHAssetQuality],
-        receivedFrom user: SHServerUser
+        versions: [SHAssetQuality]
     ) throws -> any SHDecryptedAsset {
-        
+
         var decryptedVersions = [SHAssetQuality: Data]()
-        
+
         for version in versions {
             guard let encryptedVersion = asset.encryptedVersions[version] else {
                 throw SHBackgroundOperationError.fatalError("No such version \(version.rawValue) for asset=\(asset.globalIdentifier)")
             }
-            
+
             let sharedSecret = SHShareablePayload(
                 ephemeralPublicKeyData: encryptedVersion.publicKeyData,
                 cyphertext: encryptedVersion.encryptedSecret,
                 signature: encryptedVersion.publicSignatureData
             )
+
+            // Create a crypto user from the version's verification signature
+            // This signature is either the server's (for server-mediated re-encryption)
+            // or the sender's (for regular shares)
+            let verifier = try SHRemoteCryptoUser(
+                publicKeyData: Data(), // Not used for signature verification
+                publicSignatureData: encryptedVersion.verificationSignatureData
+            )
+
             let decryptedData = try self.decrypt(
                 data: encryptedVersion.encryptedData,
                 encryptedSecret: sharedSecret,
-                receivedFrom: user
+                receivedFrom: verifier
             )
-            
+
             decryptedVersions[version] = decryptedData
         }
-        
+
         return SHGenericDecryptedAsset(
             globalIdentifier: asset.globalIdentifier,
             localIdentifier: asset.localIdentifier,
