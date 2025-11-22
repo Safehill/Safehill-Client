@@ -7,6 +7,7 @@ public struct SHServerAssetVersion : Codable {
     let publicSignatureData: Data
     let encryptedSecret: Data
     let senderPublicSignatureData: Data
+    let serverPublicSignatureData: Data?
     let presignedURL: String
     let presignedURLExpiresInMinutes: Int
     let timeUploaded: String?
@@ -17,6 +18,7 @@ public struct SHServerAssetVersion : Codable {
         case publicSignatureData = "publicSignature"
         case encryptedSecret
         case senderPublicSignatureData = "senderPublicSignature"
+        case serverPublicSignatureData = "serverPublicSignature"
         case presignedURL
         case presignedURLExpiresInMinutes
         case timeUploaded
@@ -34,6 +36,11 @@ public struct SHServerAssetVersion : Codable {
         publicSignatureData = Data(base64Encoded: publicSignatureDataBase64)!
         let senderPublicSignatureDataBase64 = try container.decode(String.self, forKey: .senderPublicSignatureData)
         senderPublicSignatureData = Data(base64Encoded: senderPublicSignatureDataBase64)!
+        if let serverPublicSignatureDataBase64 = try container.decodeIfPresent(String.self, forKey: .serverPublicSignatureData) {
+            serverPublicSignatureData = Data(base64Encoded: serverPublicSignatureDataBase64)
+        } else {
+            serverPublicSignatureData = nil
+        }
         presignedURL = try container.decode(String.self, forKey: .presignedURL)
         presignedURLExpiresInMinutes = try container.decode(Int.self, forKey: .presignedURLExpiresInMinutes)
         timeUploaded = try container.decode(String.self, forKey: .timeUploaded)
@@ -45,6 +52,7 @@ public struct SHServerAssetVersion : Codable {
         publicSignatureData: Data,
         encryptedSecret: Data,
         senderPublicSignatureData: Data,
+        serverPublicSignatureData: Data? = nil,
         presignedURL: String,
         presignedURLExpiresInMinutes: Int,
         timeUploaded: String
@@ -54,6 +62,7 @@ public struct SHServerAssetVersion : Codable {
         self.publicSignatureData = publicSignatureData
         self.encryptedSecret = encryptedSecret
         self.senderPublicSignatureData = senderPublicSignatureData
+        self.serverPublicSignatureData = serverPublicSignatureData
         self.presignedURL = presignedURL
         self.presignedURLExpiresInMinutes = presignedURLExpiresInMinutes
         self.timeUploaded = timeUploaded

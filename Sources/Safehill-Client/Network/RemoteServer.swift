@@ -601,6 +601,12 @@ struct RemoteServer : SHRemoteServerAPI {
         }
     }
     
+    func getServerEncryptionDetails(
+        completionHandler: @escaping (Swift.Result<ServerEncryptionKeysDTO, Error>) -> ()
+    ) {
+        self.get("users/server-encryption-keys", parameters: nil, requiresAuthentication: false, completionHandler: completionHandler)
+    }
+    
     func countUploaded(
         completionHandler: @escaping (Swift.Result<Int, Error>) -> ()
     ) {

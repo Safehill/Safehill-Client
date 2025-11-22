@@ -63,50 +63,18 @@ public struct SHLocalAssetStoreController {
         descriptor: any SHAssetDescriptor,
         completionHandler: @escaping (Result<any SHDecryptedAsset, Error>) -> Void
     ) {
-        if descriptor.sharingInfo.sharedByUserIdentifier == self.user.identifier {
-            do {
-                let decryptedAsset = try self.user.decrypt(
-                    encryptedAsset,
-                    versions: versions,
-                    receivedFrom: self.user
-                )
-                log.debug("[\(type(of: self))] successfully decrypted asset \(descriptor.globalIdentifier)")
-                completionHandler(.success(decryptedAsset))
-            } catch {
-                log.error("[\(type(of: self))] failed decrypting asset \(descriptor.globalIdentifier): \(error.localizedDescription)")
-                completionHandler(.failure(error))
-            }
-        } else {
-            SHUsersController(localUser: self.user).getUsers(
-                withIdentifiers: [descriptor.sharingInfo.sharedByUserIdentifier]
-            ) { result in
-                switch result {
-                case .failure(let error):
-                    log.error("[\(type(of: self))] failed to fetch user \(descriptor.sharingInfo.sharedByUserIdentifier) details for decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")
-                    completionHandler(.failure(error))
-                case .success(let usersDict):
-                    guard usersDict.count == 1, let serverUser = usersDict.values.first,
-                          serverUser.identifier == descriptor.sharingInfo.sharedByUserIdentifier
-                    else {
-                        log.error("[\(type(of: self))] failed to fetch user details for decrypting asset \(encryptedAsset.globalIdentifier). No user \(descriptor.sharingInfo.sharedByUserIdentifier)")
-                        completionHandler(.failure(SHBackgroundOperationError.unexpectedData(usersDict)))
-                        return
-                    }
-                    
-                    do {
-                        let decryptedAsset = try self.user.decrypt(
-                            encryptedAsset,
-                            versions: versions,
-                            receivedFrom: serverUser
-                        )
-                        log.debug("[\(type(of: self))] successfully decrypted asset \(descriptor.globalIdentifier)")
-                        completionHandler(.success(decryptedAsset))
-                    } catch {
-                        log.error("[\(type(of: self))] failed decrypting asset \(encryptedAsset.globalIdentifier): \(error.localizedDescription)")
-                        completionHandler(.failure(error))
-                    }
-                }
-            }
+        // The verificationSignatureData in each encrypted version already contains
+        // the correct signature for verification (either server's or sender's)
+        do {
+            let decryptedAsset = try self.user.decrypt(
+                encryptedAsset,
+                versions: versions
+            )
+            log.debug("[\(type(of: self))] successfully decrypted asset \(descriptor.globalIdentifier)")
+            completionHandler(.success(decryptedAsset))
+        } catch {
+            log.error("[\(type(of: self))] failed decrypting asset \(descriptor.globalIdentifier): \(error.localizedDescription)")
+            completionHandler(.failure(error))
         }
     }
     
