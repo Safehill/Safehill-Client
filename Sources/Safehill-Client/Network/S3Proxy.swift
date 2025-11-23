@@ -224,7 +224,8 @@ struct S3Proxy {
                         encryptedData: data,
                         encryptedSecret: version.encryptedSecret,
                         publicKeyData: version.publicKeyData,
-                        publicSignatureData: version.publicSignatureData
+                        publicSignatureData: version.publicSignatureData,
+                        verificationSignatureData: version.serverPublicSignatureData ?? version.senderPublicSignatureData
                     )
                 ]
                 let encryptedAsset = SHGenericEncryptedAsset(

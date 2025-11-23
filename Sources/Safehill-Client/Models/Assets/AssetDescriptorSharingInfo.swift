@@ -5,6 +5,7 @@ public protocol SHDescriptorSharingInfo {
     /// Maps user public identifiers to asset group identifiers
     var groupIdsByRecipientUserIdentifier: [UserIdentifier: [String]] { get }
     var groupInfoById: [String: SHAssetGroupInfo] { get }
+    var collectionInfoById: [String: SHAssetCollectionInfo] { get }
 }
 
 public extension SHDescriptorSharingInfo {

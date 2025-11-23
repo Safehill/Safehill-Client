@@ -28,7 +28,8 @@ struct DummyDescriptor : SHAssetDescriptor {
             sharingInfo: SHGenericDescriptorSharingInfo(
                 sharedByUserIdentifier: "",
                 groupIdsByRecipientUserIdentifier: [:],
-                groupInfoById: [:]
+                groupInfoById: [:],
+                collectionInfoById: [:]
             )
         )
     }
@@ -41,7 +42,8 @@ struct DummyDescriptor : SHAssetDescriptor {
         self.sharingInfo = SHGenericDescriptorSharingInfo(
             sharedByUserIdentifier: "",
             groupIdsByRecipientUserIdentifier: [:],
-            groupInfoById: [:]
+            groupInfoById: [:],
+            collectionInfoById: [:]
         )
     }
 }

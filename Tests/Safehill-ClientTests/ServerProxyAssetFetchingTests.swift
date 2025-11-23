@@ -31,7 +31,8 @@ final class ServerProxyAssetFetchingTests: XCTestCase {
             encryptedData: Data(),
             encryptedSecret: Data(),
             publicKeyData: Data(),
-            publicSignatureData: Data()
+            publicSignatureData: Data(),
+            verificationSignatureData: Data()
         )
         let dummyAsset = DummyAsset(
             globalIdentifier: "id1",
@@ -62,7 +63,8 @@ final class ServerProxyAssetFetchingTests: XCTestCase {
             encryptedData: Data(),
             encryptedSecret: Data(),
             publicKeyData: Data(),
-            publicSignatureData: Data()
+            publicSignatureData: Data(),
+            verificationSignatureData: Data()
         )
         let dummyAsset = DummyAsset(
             globalIdentifier: "id1",
@@ -95,7 +97,8 @@ final class ServerProxyAssetFetchingTests: XCTestCase {
             encryptedData: Data(),
             encryptedSecret: Data(),
             publicKeyData: Data(),
-            publicSignatureData: Data()
+            publicSignatureData: Data(),
+            verificationSignatureData: Data()
         )
         let dummyAsset1 = DummyAsset(
             globalIdentifier: "id1",

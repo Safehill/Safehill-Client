@@ -61,7 +61,8 @@ public struct SHGenericAssetDescriptor : SHAssetDescriptor, Codable {
             sharingInfo: SHGenericDescriptorSharingInfo(
                 sharedByUserIdentifier: self.sharingInfo.sharedByUserIdentifier,
                 groupIdsByRecipientUserIdentifier: self.sharingInfo.groupIdsByRecipientUserIdentifier,
-                groupInfoById: self.sharingInfo.groupInfoById
+                groupInfoById: self.sharingInfo.groupInfoById,
+                collectionInfoById: self.sharingInfo.collectionInfoById
             )
         )
     }

@@ -58,6 +58,14 @@ class MockLocalServer: SHLocalServerAPI {
     func removeAssetRecipients(basedOn userIdsToRemoveFromAssetGid: [GlobalIdentifier : [UserIdentifier]], versions: [SHAssetQuality]?, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+
+    func updateCollectionInfo(basedOn sharingInfoByAssetId: [GlobalIdentifier : any SHDescriptorSharingInfo], completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func removeCollectionInfo(forAssetGids collectionIdsByAssetGid: [GlobalIdentifier : Set<String>], completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
     
     func runDataMigrations(currentBuild: String?, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
@@ -114,6 +122,14 @@ class MockLocalServer: SHLocalServerAPI {
     }
     
     func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+
+    func getServerEncryptionDetails(completionHandler: @escaping (Result<ServerEncryptionKeysDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func saveServerEncryptionDetails(_ dto: Safehill_Client.ServerEncryptionKeysDTO, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     

@@ -108,7 +108,8 @@ public struct SHGenericEncryptedAsset : SHEncryptedAsset {
                 encryptedData: data,
                 encryptedSecret: metadata.senderEncryptedSecret,
                 publicKeyData: metadata.publicKey,
-                publicSignatureData: metadata.publicSignature
+                publicSignatureData: metadata.publicSignature,
+                verificationSignatureData: metadata.verificationSignature
             )
             
             if let existing = encryptedAssetById[metadata.globalIdentifier] {

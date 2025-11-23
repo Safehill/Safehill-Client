@@ -26,6 +26,8 @@ struct AssetDescriptorsDiff {
     let groupInfoRemovedOnRemote: [String]
     let userGroupChangesByAssetGid: [GlobalIdentifier: any SHDescriptorSharingInfo]
     let userGroupRemovalsByAssetGid: [GlobalIdentifier: [UserIdentifier: [String]]]
+    let collectionChangesByAssetGid: [GlobalIdentifier: any SHDescriptorSharingInfo]
+    let collectionRemovalsByAssetGid: [GlobalIdentifier: Set<String>]
     
     
     ///
@@ -108,6 +110,8 @@ struct AssetDescriptorsDiff {
         
         var userGroupChangesByAssetGid = [GlobalIdentifier: any SHDescriptorSharingInfo]()
         var userGroupRemovalsByAssetGid = [GlobalIdentifier: [UserIdentifier: [String]]]()
+        var collectionChangesByAssetGid = [GlobalIdentifier: any SHDescriptorSharingInfo]()
+        var collectionRemovalsByAssetGid = [GlobalIdentifier: Set<String>]()
         var groupInfoToUpdate = [String: GroupInfoDiff]()
         var groupIdsToRemove = Set<String>()
         
@@ -141,7 +145,8 @@ struct AssetDescriptorsDiff {
                         userGroupChangesByAssetGid[remoteDescriptor.globalIdentifier] = SHGenericDescriptorSharingInfo(
                             sharedByUserIdentifier: remoteDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdsByRecipientUserIdentifier: [userId: groupIds],
-                            groupInfoById: remoteDescriptor.sharingInfo.groupInfoById
+                            groupInfoById: remoteDescriptor.sharingInfo.groupInfoById,
+                            collectionInfoById: remoteDescriptor.sharingInfo.collectionInfoById
                         )
                     } else {
                         var newSharingInfo = userGroupChangesByAssetGid[remoteDescriptor.globalIdentifier]!.groupIdsByRecipientUserIdentifier
@@ -149,7 +154,8 @@ struct AssetDescriptorsDiff {
                         userGroupChangesByAssetGid[remoteDescriptor.globalIdentifier] = SHGenericDescriptorSharingInfo(
                             sharedByUserIdentifier: remoteDescriptor.sharingInfo.sharedByUserIdentifier,
                             groupIdsByRecipientUserIdentifier: newSharingInfo,
-                            groupInfoById: remoteDescriptor.sharingInfo.groupInfoById
+                            groupInfoById: remoteDescriptor.sharingInfo.groupInfoById,
+                            collectionInfoById: remoteDescriptor.sharingInfo.collectionInfoById
                         )
                     }
                 }
@@ -187,12 +193,34 @@ struct AssetDescriptorsDiff {
                     }
                 }
             }
+            
+            for (collectionId, collectionInfo) in remoteDescriptor.sharingInfo.collectionInfoById {
+                // Skip dropbox collection - not stored locally
+                guard collectionInfo.collectionName != kSHDropboxCollectionName else {
+                    continue
+                }
+
+                if let localCollectionInfo = correspondingLocalDescriptor.sharingInfo.collectionInfoById[collectionId] {
+                    if Int(localCollectionInfo.addedAt.iso8601withFractionalSeconds?.timeIntervalSince1970 ?? 0) == Int(collectionInfo.addedAt.iso8601withFractionalSeconds?.timeIntervalSince1970 ?? 0),
+                       localCollectionInfo.collectionName == collectionInfo.collectionName,
+                       localCollectionInfo.visibility == collectionInfo.visibility,
+                       localCollectionInfo.accessType == collectionInfo.accessType
+                    {
+                        // They are the same
+                    } else {
+                        collectionChangesByAssetGid[remoteDescriptor.globalIdentifier] = remoteDescriptor.sharingInfo
+                    }
+                } else {
+                    collectionChangesByAssetGid[remoteDescriptor.globalIdentifier] = remoteDescriptor.sharingInfo
+                }
+            }
         }
         
         ///
         /// STEP 3
         /// - Determine all the groups that were removed on server
         /// - Determine all users removed from assets on server
+        /// - Determine all collections that were removed on server
         ///
         
         for localDescriptor in localDescriptors {
@@ -217,6 +245,16 @@ struct AssetDescriptorsDiff {
                     groupIdsToRemove.insert(groupId)
                 }
             }
+            
+            for collectionId in localDescriptor.sharingInfo.collectionInfoById.keys {
+                if remoteDescriptor.sharingInfo.collectionInfoById[collectionId] == nil {
+                    if collectionRemovalsByAssetGid[localDescriptor.globalIdentifier] != nil {
+                        collectionRemovalsByAssetGid[localDescriptor.globalIdentifier]!.insert(collectionId)
+                    } else {
+                        collectionRemovalsByAssetGid[localDescriptor.globalIdentifier] = Set([collectionId])
+                    }
+                }
+            }
         }
         
         // TODO: Handle missing cases
@@ -228,7 +266,9 @@ struct AssetDescriptorsDiff {
             groupInfoDifferentOnRemote: groupInfoToUpdate,
             groupInfoRemovedOnRemote: Array(groupIdsToRemove),
             userGroupChangesByAssetGid: userGroupChangesByAssetGid,
-            userGroupRemovalsByAssetGid: userGroupRemovalsByAssetGid
+            userGroupRemovalsByAssetGid: userGroupRemovalsByAssetGid,
+            collectionChangesByAssetGid: collectionChangesByAssetGid,
+            collectionRemovalsByAssetGid: collectionRemovalsByAssetGid
         )
     }
 }

@@ -41,6 +41,12 @@ public protocol SHServerAPI {
     ///   - completionHandler: the callback method
     func getUsers(withIdentifiers: [String]?, completionHandler: @escaping (Result<[any SHServerUser], Error>) -> ())
     
+    /// Get server encryption keys (public key, signature, protocol salt)
+    /// - Parameters:
+    ///   - completionHandler: the callback method
+    func getServerEncryptionDetails(completionHandler: @escaping (Result<ServerEncryptionKeysDTO, Error>) -> ())
+    
+    
     // MARK: Assets Management
     
     /// Count how many assets were created by this user

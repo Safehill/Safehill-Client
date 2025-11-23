@@ -11,6 +11,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
     let senderEncryptedSecret: Data
     let publicKey: Data
     let publicSignature: Data
+    let verificationSignature: Data
     let creationDate: Date?
     let uploadState: SHAssetUploadState
     
@@ -21,6 +22,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         case senderEncryptedSecret
         case publicKey
         case publicSignature
+        case verificationSignature
         case creationDate
         case uploadState
     }
@@ -32,6 +34,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         senderEncryptedSecret: Data,
         publicKey: Data,
         publicSignature: Data,
+        verificationSignature: Data,
         creationDate: Date?,
         uploadState: SHAssetUploadState
     ) {
@@ -41,6 +44,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         self.senderEncryptedSecret = senderEncryptedSecret
         self.publicKey = publicKey
         self.publicSignature = publicSignature
+        self.verificationSignature = verificationSignature
         self.creationDate = creationDate
         self.uploadState = uploadState
     }
@@ -52,6 +56,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         let senderEncryptedSecretBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.senderEncryptedSecret.rawValue) as? String
         let publicKeyBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicKey.rawValue) as? String
         let publicSignatureBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.publicSignature.rawValue) as? String
+        let verificationSignatureBase64 = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.verificationSignature.rawValue) as? String
         let creationDateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.creationDate.rawValue) as? String
         let uploadStateStr = decoder.decodeObject(of: NSString.self, forKey: CodingKeys.uploadState.rawValue) as? String
         
@@ -83,7 +88,13 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
             log.error("unexpected value for publicSignature when decoding DBSecureSerializableAssetVersionMetadata object")
             return nil
         }
-        
+
+        guard let verificationSignatureBase64,
+              let verificationSignature = Data(base64Encoded: verificationSignatureBase64) else {
+            log.error("unexpected value for verificationSignature when decoding DBSecureSerializableAssetVersionMetadata object. This is a breaking change - cached data must be re-fetched from server.")
+            return nil
+        }
+
         let creationDate: Date?
         if let creationDateStr {
             guard let date = creationDateStr.iso8601withFractionalSeconds else {
@@ -108,6 +119,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
             senderEncryptedSecret: senderEncryptedSecret,
             publicKey: publicKey,
             publicSignature: publicSignature,
+            verificationSignature: verificationSignature,
             creationDate: creationDate,
             uploadState: uploadState
         )
@@ -120,6 +132,7 @@ internal class DBSecureSerializableAssetVersionMetadata: NSObject, NSSecureCodin
         coder.encode(senderEncryptedSecret.base64EncodedString(), forKey: CodingKeys.senderEncryptedSecret.rawValue)
         coder.encode(publicKey.base64EncodedString(), forKey: CodingKeys.publicKey.rawValue)
         coder.encode(publicSignature.base64EncodedString(), forKey: CodingKeys.publicSignature.rawValue)
+        coder.encode(verificationSignature.base64EncodedString(), forKey: CodingKeys.verificationSignature.rawValue)
         coder.encode(creationDate?.iso8601withFractionalSeconds, forKey: CodingKeys.creationDate.rawValue)
         coder.encode(uploadState.rawValue, forKey: CodingKeys.uploadState.rawValue)
     }
