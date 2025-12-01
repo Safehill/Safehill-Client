@@ -2202,6 +2202,13 @@ extension SHServerProxy {
     ) {
         self.remoteServer.topPickCollections(completionHandler: completionHandler)
     }
+    
+    public func softRemoveCollection(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.softRemoveCollection(id: id, completionHandler: completionHandler)
+    }
 
     public func createCheckoutSession(
         collectionId: String,
