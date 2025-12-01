@@ -293,6 +293,10 @@ class MockRemoteServer: SHRemoteServerAPI {
     func topPickCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+    
+    func softRemoveCollection(id: String, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 
     func createCheckoutSession(collectionId: String, completionHandler: @escaping (Result<CheckoutSessionDTO, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))

@@ -1860,6 +1860,21 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         self.post("collections/top-picks", parameters: nil, completionHandler: completionHandler)
     }
+    
+    func softRemoveCollection(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("collections/soft-remove/\(id)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 
     // MARK: Collections - Payments
 
