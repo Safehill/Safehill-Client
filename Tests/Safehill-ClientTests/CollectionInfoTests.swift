@@ -61,6 +61,38 @@ final class CollectionInfoTests: XCTestCase {
         }
     }
 
+    func testSerializeAllAccessTypes() throws {
+        let accessTypes = [
+            ("owned", "Owned Collection", "User owns this collection"),
+            ("granted", "Granted Collection", "User has been granted access"),
+            ("accessed", "Accessed Collection", "User has accessed this public collection"),
+            ("payment", "Payment Collection", "User needs to pay for access")
+        ]
+
+        for (accessType, collectionName, _) in accessTypes {
+            let collectionInfo = DBSecureSerializableAssetCollectionInfo(
+                collectionId: "collection-\(accessType)",
+                collectionName: collectionName,
+                visibility: "public",
+                accessType: accessType,
+                addedAt: "2024-01-15T10:30:00Z"
+            )
+
+            // Serialize
+            let data = try NSKeyedArchiver.archivedData(withRootObject: collectionInfo, requiringSecureCoding: true)
+
+            // Deserialize
+            let deserialized = try DBSecureSerializableAssetCollectionInfo.from(data)
+
+            // Verify all fields including accessType
+            XCTAssertEqual(collectionInfo.collectionId, deserialized.collectionId)
+            XCTAssertEqual(collectionInfo.collectionName, deserialized.collectionName)
+            XCTAssertEqual(collectionInfo.visibility, deserialized.visibility)
+            XCTAssertEqual(collectionInfo.accessType, deserialized.accessType, "Failed to serialize/deserialize accessType: \(accessType)")
+            XCTAssertEqual(collectionInfo.addedAt, deserialized.addedAt)
+        }
+    }
+
     // MARK: - Diff Detection Tests
 
     func testDiffDetectsCollectionChanges() throws {
@@ -563,5 +595,182 @@ final class CollectionInfoTests: XCTestCase {
 
         // Recipient can save/share because they're in a shareable group
         XCTAssertTrue(descriptor.canBeSavedOrShared(by: recipientId))
+    }
+
+    func testDiffDetectsAccessTypeChanges() throws {
+        let user = SHLocalUser.create(keychainPrefix: "com.gf.safehill.test.diff.accesstype")
+        let authedUser = SHAuthenticatedLocalUser(
+            localUser: user,
+            name: "Test User",
+            phoneNumber: nil,
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: "token"
+        )
+
+        let assetGid = "asset-accesstype-test"
+
+        // Local descriptor with "granted" accessType
+        let localDescriptor = SHGenericAssetDescriptor(
+            globalIdentifier: assetGid,
+            localIdentifier: "local-accesstype",
+            creationDate: Date(),
+            uploadState: .completed,
+            sharingInfo: SHGenericDescriptorSharingInfo(
+                sharedByUserIdentifier: user.identifier,
+                groupIdsByRecipientUserIdentifier: [user.identifier: ["group-1"]],
+                groupInfoById: [
+                    "group-1": SHGenericAssetGroupInfo(
+                        encryptedTitle: nil,
+                        createdBy: user.identifier,
+                        createdAt: Date(),
+                        createdFromThreadId: nil,
+                        invitedUsersPhoneNumbers: nil,
+                        permissions: 0
+                    )
+                ],
+                collectionInfoById: [
+                    "collection-1": SHGenericAssetCollectionInfo(
+                        collectionId: "collection-1",
+                        collectionName: "Test Collection",
+                        visibility: "public",
+                        accessType: "granted",
+                        addedAt: "2024-01-15T10:30:00Z"
+                    )
+                ]
+            )
+        )
+
+        // Remote descriptor with "owned" accessType (user now owns the collection)
+        let remoteDescriptor = SHGenericAssetDescriptor(
+            globalIdentifier: assetGid,
+            localIdentifier: "local-accesstype",
+            creationDate: Date(),
+            uploadState: .completed,
+            sharingInfo: SHGenericDescriptorSharingInfo(
+                sharedByUserIdentifier: user.identifier,
+                groupIdsByRecipientUserIdentifier: [user.identifier: ["group-1"]],
+                groupInfoById: [
+                    "group-1": SHGenericAssetGroupInfo(
+                        encryptedTitle: nil,
+                        createdBy: user.identifier,
+                        createdAt: Date(),
+                        createdFromThreadId: nil,
+                        invitedUsersPhoneNumbers: nil,
+                        permissions: 0
+                    )
+                ],
+                collectionInfoById: [
+                    "collection-1": SHGenericAssetCollectionInfo(
+                        collectionId: "collection-1",
+                        collectionName: "Test Collection",
+                        visibility: "public",
+                        accessType: "owned",
+                        addedAt: "2024-01-15T10:30:00Z"
+                    )
+                ]
+            )
+        )
+
+        let diff = AssetDescriptorsDiff.generateUsing(
+            remote: [remoteDescriptor],
+            local: [localDescriptor],
+            for: authedUser
+        )
+
+        // Should detect the accessType change from "granted" to "owned"
+        XCTAssertFalse(diff.collectionChangesByAssetGid.isEmpty, "Should detect accessType change")
+        XCTAssertNotNil(diff.collectionChangesByAssetGid[assetGid])
+    }
+
+    func testDiffWithOwnedAndPaymentCollections() throws {
+        let user = SHLocalUser.create(keychainPrefix: "com.gf.safehill.test.diff.owned")
+        let authedUser = SHAuthenticatedLocalUser(
+            localUser: user,
+            name: "Test User",
+            phoneNumber: nil,
+            encryptionProtocolSalt: kTestStaticProtocolSalt,
+            authToken: "token"
+        )
+
+        let assetGid = "asset-owned-payment"
+
+        // Local descriptor with no collections
+        let localDescriptor = SHGenericAssetDescriptor(
+            globalIdentifier: assetGid,
+            localIdentifier: "local-owned",
+            creationDate: Date(),
+            uploadState: .completed,
+            sharingInfo: SHGenericDescriptorSharingInfo(
+                sharedByUserIdentifier: user.identifier,
+                groupIdsByRecipientUserIdentifier: [user.identifier: ["group-1"]],
+                groupInfoById: [
+                    "group-1": SHGenericAssetGroupInfo(
+                        encryptedTitle: nil,
+                        createdBy: user.identifier,
+                        createdAt: Date(),
+                        createdFromThreadId: nil,
+                        invitedUsersPhoneNumbers: nil,
+                        permissions: 0
+                    )
+                ],
+                collectionInfoById: [:]
+            )
+        )
+
+        // Remote descriptor with both "owned" and "payment" collections
+        let remoteDescriptor = SHGenericAssetDescriptor(
+            globalIdentifier: assetGid,
+            localIdentifier: "local-owned",
+            creationDate: Date(),
+            uploadState: .completed,
+            sharingInfo: SHGenericDescriptorSharingInfo(
+                sharedByUserIdentifier: user.identifier,
+                groupIdsByRecipientUserIdentifier: [user.identifier: ["group-1"]],
+                groupInfoById: [
+                    "group-1": SHGenericAssetGroupInfo(
+                        encryptedTitle: nil,
+                        createdBy: user.identifier,
+                        createdAt: Date(),
+                        createdFromThreadId: nil,
+                        invitedUsersPhoneNumbers: nil,
+                        permissions: 0
+                    )
+                ],
+                collectionInfoById: [
+                    "collection-owned": SHGenericAssetCollectionInfo(
+                        collectionId: "collection-owned",
+                        collectionName: "My Owned Collection",
+                        visibility: "public",
+                        accessType: "owned",
+                        addedAt: "2024-01-15T10:30:00Z"
+                    ),
+                    "collection-payment": SHGenericAssetCollectionInfo(
+                        collectionId: "collection-payment",
+                        collectionName: "Premium Collection",
+                        visibility: "public",
+                        accessType: "payment",
+                        addedAt: "2024-01-15T11:00:00Z"
+                    )
+                ]
+            )
+        )
+
+        let diff = AssetDescriptorsDiff.generateUsing(
+            remote: [remoteDescriptor],
+            local: [localDescriptor],
+            for: authedUser
+        )
+
+        // Should detect both new collections
+        XCTAssertFalse(diff.collectionChangesByAssetGid.isEmpty, "Should detect new collections")
+        XCTAssertNotNil(diff.collectionChangesByAssetGid[assetGid])
+
+        // Verify the collections are in the diff
+        let sharingInfo = diff.collectionChangesByAssetGid[assetGid]!
+        XCTAssertEqual(sharingInfo.collectionInfoById.count, 2, "Should have both collections")
+        XCTAssertNotNil(sharingInfo.collectionInfoById["collection-owned"], "Should have owned collection")
+        XCTAssertNotNil(sharingInfo.collectionInfoById["collection-payment"], "Should have payment collection")
+        XCTAssertEqual(sharingInfo.collectionInfoById["collection-owned"]?.accessType, "owned")
+        XCTAssertEqual(sharingInfo.collectionInfoById["collection-payment"]?.accessType, "payment")
     }
 }
