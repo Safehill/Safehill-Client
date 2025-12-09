@@ -215,33 +215,33 @@ public protocol SHRemoteServerAPI : SHServerAPI {
     )
     
     // MARK: Credential backup via Passkeys
-    
+
     func registerPasskeyStart(
         userIdentifier: UserIdentifier,
-        completionHandler: @escaping (Result<PasskeyRegistrationOptionsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<PasskeyCreationOptions, Error>) -> ()
     )
-    
+
     func registerPasskeyComplete(
-        registrationDetails: PasskeyRegistrationCompleteDTO,
-        completionHandler: @escaping (Result<PasskeyRegistrationResponseDTO, Error>) -> ()
+        registrationDetails: PasskeyRegistrationRequest,
+        completionHandler: @escaping (Result<PasskeyRegistrationResult, Error>) -> ()
     )
-    
+
     func listPasskeys(
-        completionHandler: @escaping (Result<[PasskeyCredentialInfoDTO], Error>) -> ()
+        completionHandler: @escaping (Result<[PasskeyCredentialInfo], Error>) -> ()
     )
-    
+
     func revokePasskey(
         credentialId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     )
-    
+
     func startPasskeyRecovery(
         userIdentifier: UserIdentifier,
-        completionHandler: @escaping (Result<PasskeyAuthenticationOptionsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
     )
-    
+
     func completePasskeyRecovery(
-        recoveryDetails: PasskeyRecoveryCompleteDTO,
-        completionHandler: @escaping (Result<PasskeyRecoveryResponseDTO, Error>) -> ()
+        recoveryDetails: PasskeyRecoveryRequest,
+        completionHandler: @escaping (Result<PasskeyRecoveryResult, Error>) -> ()
     )
 }

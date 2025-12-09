@@ -1922,33 +1922,58 @@ struct RemoteServer : SHRemoteServerAPI {
 
     func registerPasskeyStart(
         userIdentifier: UserIdentifier,
-        completionHandler: @escaping (Result<PasskeyRegistrationOptionsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<PasskeyCreationOptions, Error>) -> ()
     ) {
-        self.post("users/backup/passkey/register/start", parameters: nil, completionHandler: completionHandler)
+        self.post("users/backup/passkey/register/start", parameters: nil) {
+            (result: Result<PasskeyRegistrationOptionsDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
 
     func registerPasskeyComplete(
-        registrationDetails: PasskeyRegistrationCompleteDTO,
-        completionHandler: @escaping (Result<PasskeyRegistrationResponseDTO, Error>) -> ()
+        registrationDetails: PasskeyRegistrationRequest,
+        completionHandler: @escaping (Result<PasskeyRegistrationResult, Error>) -> ()
     ) {
+        let dto = registrationDetails.toDTO()
         let parameters: [String: Any?] = [
-            "userIdentifier": registrationDetails.userIdentifier,
-            "credentialId": registrationDetails.credentialId,
-            "clientDataJSON": registrationDetails.clientDataJSON,
-            "attestationObject": registrationDetails.attestationObject,
-            "transports": registrationDetails.transports,
-            "encryptedKeysBlob": registrationDetails.encryptedKeysBlob,
-            "encryptionProtocolSalt": registrationDetails.encryptionProtocolSalt,
-            "userAgent": registrationDetails.userAgent
+            "userIdentifier": dto.userIdentifier,
+            "credentialId": dto.credentialId,
+            "clientDataJSON": dto.clientDataJSON,
+            "attestationObject": dto.attestationObject,
+            "transports": dto.transports,
+            "encryptedKeysBlob": dto.encryptedKeysBlob,
+            "encryptionProtocolSalt": dto.encryptionProtocolSalt,
+            "userAgent": dto.userAgent
         ]
 
-        self.post("users/backup/passkey/register/complete", parameters: parameters, completionHandler: completionHandler)
+        self.post("users/backup/passkey/register/complete", parameters: parameters) {
+            (result: Result<PasskeyRegistrationResponseDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
 
     func listPasskeys(
-        completionHandler: @escaping (Result<[PasskeyCredentialInfoDTO], Error>) -> ()
+        completionHandler: @escaping (Result<[PasskeyCredentialInfo], Error>) -> ()
     ) {
-        self.get("users/backup/passkey/list", parameters: nil, completionHandler: completionHandler)
+        self.get("users/backup/passkey/list", parameters: nil) {
+            (result: Result<[PasskeyCredentialInfoDTO], Error>) in
+            switch result {
+            case .success(let dtos):
+                completionHandler(.success(dtos.map { $0.toPublicModel() }))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
 
     func revokePasskey(
@@ -1968,28 +1993,45 @@ struct RemoteServer : SHRemoteServerAPI {
 
     func startPasskeyRecovery(
         userIdentifier: UserIdentifier,
-        completionHandler: @escaping (Result<PasskeyAuthenticationOptionsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
     ) {
         let parameters: [String: Any?] = [
             "userIdentifier": userIdentifier
         ]
 
-        self.post("users/backup/passkey/recover/start", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+        self.post("users/backup/passkey/recover/start", parameters: parameters, requiresAuthentication: false) {
+            (result: Result<PasskeyAuthenticationOptionsDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
 
     func completePasskeyRecovery(
-        recoveryDetails: PasskeyRecoveryCompleteDTO,
-        completionHandler: @escaping (Result<PasskeyRecoveryResponseDTO, Error>) -> ()
+        recoveryDetails: PasskeyRecoveryRequest,
+        completionHandler: @escaping (Result<PasskeyRecoveryResult, Error>) -> ()
     ) {
+        let dto = recoveryDetails.toDTO()
         let parameters: [String: Any?] = [
-            "userIdentifier": recoveryDetails.userIdentifier,
-            "credentialId": recoveryDetails.credentialId,
-            "authenticatorData": recoveryDetails.authenticatorData,
-            "clientDataJSON": recoveryDetails.clientDataJSON,
-            "signature": recoveryDetails.signature,
-            "userHandle": recoveryDetails.userHandle
+            "userIdentifier": dto.userIdentifier,
+            "credentialId": dto.credentialId,
+            "authenticatorData": dto.authenticatorData,
+            "clientDataJSON": dto.clientDataJSON,
+            "signature": dto.signature,
+            "userHandle": dto.userHandle
         ]
 
-        self.post("users/backup/passkey/recover/complete", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+        self.post("users/backup/passkey/recover/complete", parameters: parameters, requiresAuthentication: false) {
+            (result: Result<PasskeyRecoveryResponseDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
 }

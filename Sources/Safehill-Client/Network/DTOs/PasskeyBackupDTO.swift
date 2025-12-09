@@ -1,9 +1,9 @@
 import Foundation
 
 
-// MARK: - Registration DTOs
+// MARK: - Registration DTOs (Internal wire format)
 
-public struct PasskeyRegistrationOptionsDTO: Codable {
+struct PasskeyRegistrationOptionsDTO: Codable {
     var challenge: String  // base64url-encoded
     var rp: RelyingPartyDTO
     var user: UserEntityDTO
@@ -13,29 +13,29 @@ public struct PasskeyRegistrationOptionsDTO: Codable {
     var authenticatorSelection: AuthenticatorSelectionDTO?
     var attestation: String?  // "none", "indirect", "direct", "enterprise"
 
-    public struct RelyingPartyDTO: Codable {
+    struct RelyingPartyDTO: Codable {
         var id: String
         var name: String
     }
 
-    public struct UserEntityDTO: Codable {
+    struct UserEntityDTO: Codable {
         var id: String  // base64url-encoded
         var name: String
         var displayName: String
     }
 
-    public struct PublicKeyCredentialParametersDTO: Codable {
+    struct PublicKeyCredentialParametersDTO: Codable {
         var type: String  // "public-key"
         var alg: Int  // COSE algorithm identifier (e.g., -7 for ES256)
     }
 
-    public struct PublicKeyCredentialDescriptorDTO: Codable {
+    struct PublicKeyCredentialDescriptorDTO: Codable {
         var type: String  // "public-key"
         var id: String  // base64url-encoded credential ID
         var transports: [String]?  // ["internal", "hybrid", "usb", "nfc", "ble"]
     }
 
-    public struct AuthenticatorSelectionDTO: Codable {
+    struct AuthenticatorSelectionDTO: Codable {
         var authenticatorAttachment: String?  // "platform", "cross-platform"
         var residentKey: String?  // "discouraged", "preferred", "required"
         var requireResidentKey: Bool?
@@ -43,7 +43,7 @@ public struct PasskeyRegistrationOptionsDTO: Codable {
     }
 }
 
-public struct PasskeyRegistrationCompleteDTO: Codable {
+struct PasskeyRegistrationCompleteDTO: Codable {
     var userIdentifier: String
 
     // WebAuthn credential data
@@ -60,19 +60,19 @@ public struct PasskeyRegistrationCompleteDTO: Codable {
     var userAgent: String?
 }
 
-public struct PasskeyRegistrationResponseDTO: Codable {
+struct PasskeyRegistrationResponseDTO: Codable {
     var success: Bool
     var credentialId: String
     var message: String
 }
 
-// MARK: - Recovery DTOs
+// MARK: - Recovery DTOs (Internal wire format)
 
-public struct PasskeyRecoveryStartDTO: Codable {
+struct PasskeyRecoveryStartDTO: Codable {
     var userIdentifier: String
 }
 
-public struct PasskeyAuthenticationOptionsDTO: Codable {
+struct PasskeyAuthenticationOptionsDTO: Codable {
     var challenge: String  // base64url-encoded
     var timeout: Int?
     var rpId: String?
@@ -80,7 +80,7 @@ public struct PasskeyAuthenticationOptionsDTO: Codable {
     var userVerification: String?  // "required", "preferred", "discouraged"
 }
 
-public struct PasskeyRecoveryCompleteDTO: Codable {
+struct PasskeyRecoveryCompleteDTO: Codable {
     var userIdentifier: String
     
     // WebAuthn assertion data
@@ -91,7 +91,7 @@ public struct PasskeyRecoveryCompleteDTO: Codable {
     var userHandle: String?
 }
 
-public struct PasskeyRecoveryResponseDTO: Codable {
+struct PasskeyRecoveryResponseDTO: Codable {
     var success: Bool
     var encryptedKeysBlob: String
     var encryptionProtocolSalt: String
@@ -99,13 +99,108 @@ public struct PasskeyRecoveryResponseDTO: Codable {
     var user: SHRemoteUser?
 }
 
-// MARK: - Management DTOs
+// MARK: - Management DTOs (Internal wire format)
 
-public struct PasskeyCredentialInfoDTO: Codable {
+struct PasskeyCredentialInfoDTO: Codable {
     var credentialId: String
     var createdAt: Date
     var lastUsedAt: Date?
     var isActive: Bool
     var userAgent: String?
     var transports: [String]?
+}
+
+// MARK: - Conversion Extensions (Internal)
+
+extension PasskeyRegistrationOptionsDTO {
+    func toPublicModel() -> PasskeyCreationOptions {
+        PasskeyCreationOptions(
+            challenge: challenge,
+            rpId: rp.id,
+            rpName: rp.name,
+            userId: user.id,
+            userName: user.name,
+            userDisplayName: user.displayName,
+            timeout: timeout ?? 60000,
+            excludedCredentialIds: excludeCredentials?.map { $0.id } ?? [],
+            authenticatorAttachment: authenticatorSelection?.authenticatorAttachment,
+            requireResidentKey: authenticatorSelection?.requireResidentKey ?? true,
+            userVerification: authenticatorSelection?.userVerification ?? "required"
+        )
+    }
+}
+
+extension PasskeyRegistrationRequest {
+    func toDTO() -> PasskeyRegistrationCompleteDTO {
+        PasskeyRegistrationCompleteDTO(
+            userIdentifier: userIdentifier,
+            credentialId: credentialId,
+            clientDataJSON: clientDataJSON,
+            attestationObject: attestationObject,
+            transports: transports,
+            encryptedKeysBlob: encryptedKeysBlob,
+            encryptionProtocolSalt: encryptionProtocolSalt,
+            userAgent: userAgent
+        )
+    }
+}
+
+extension PasskeyRegistrationResponseDTO {
+    func toPublicModel() -> PasskeyRegistrationResult {
+        PasskeyRegistrationResult(
+            success: success,
+            credentialId: credentialId,
+            message: message
+        )
+    }
+}
+
+extension PasskeyAuthenticationOptionsDTO {
+    func toPublicModel() -> PasskeyAuthenticationOptions {
+        PasskeyAuthenticationOptions(
+            challenge: challenge,
+            rpId: rpId,
+            timeout: timeout ?? 60000,
+            allowedCredentialIds: allowCredentials?.map { $0.id } ?? [],
+            userVerification: userVerification ?? "required"
+        )
+    }
+}
+
+extension PasskeyRecoveryRequest {
+    func toDTO() -> PasskeyRecoveryCompleteDTO {
+        PasskeyRecoveryCompleteDTO(
+            userIdentifier: userIdentifier,
+            credentialId: credentialId,
+            authenticatorData: authenticatorData,
+            clientDataJSON: clientDataJSON,
+            signature: signature,
+            userHandle: userHandle
+        )
+    }
+}
+
+extension PasskeyRecoveryResponseDTO {
+    func toPublicModel() -> PasskeyRecoveryResult {
+        PasskeyRecoveryResult(
+            success: success,
+            encryptedKeysBlob: encryptedKeysBlob,
+            encryptionProtocolSalt: encryptionProtocolSalt,
+            bearerToken: bearerToken,
+            user: user
+        )
+    }
+}
+
+extension PasskeyCredentialInfoDTO {
+    func toPublicModel() -> PasskeyCredentialInfo {
+        PasskeyCredentialInfo(
+            credentialId: credentialId,
+            createdAt: createdAt,
+            lastUsedAt: lastUsedAt,
+            isActive: isActive,
+            userAgent: userAgent,
+            transports: transports
+        )
+    }
 }

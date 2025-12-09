@@ -2247,44 +2247,44 @@ extension SHServerProxy {
     }
     
     // MARK: Credential backup via Passkeys
-    
+
     public func registerPasskeyStart(
         userIdentifier: UserIdentifier,
-        completionHandler: @escaping (Result<PasskeyRegistrationOptionsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<PasskeyCreationOptions, Error>) -> ()
     ) {
         self.remoteServer.registerPasskeyStart(userIdentifier: userIdentifier, completionHandler: completionHandler)
     }
-    
+
     public func registerPasskeyComplete(
-        registrationDetails: PasskeyRegistrationCompleteDTO,
-        completionHandler: @escaping (Result<PasskeyRegistrationResponseDTO, Error>) -> ()
+        registrationDetails: PasskeyRegistrationRequest,
+        completionHandler: @escaping (Result<PasskeyRegistrationResult, Error>) -> ()
     ) {
         self.remoteServer.registerPasskeyComplete(registrationDetails: registrationDetails, completionHandler: completionHandler)
     }
-    
+
     public func listPasskeys(
-        completionHandler: @escaping (Result<[PasskeyCredentialInfoDTO], Error>) -> ()
+        completionHandler: @escaping (Result<[PasskeyCredentialInfo], Error>) -> ()
     ) {
         self.remoteServer.listPasskeys(completionHandler: completionHandler)
     }
-    
+
     public func revokePasskey(
         credentialId: String,
         completionHandler: @escaping (Result<Void, Error>) -> ()
     ) {
         self.remoteServer.revokePasskey(credentialId: credentialId, completionHandler: completionHandler)
     }
-    
+
     public func startPasskeyRecovery(
         userIdentifier: UserIdentifier,
-        completionHandler: @escaping (Result<PasskeyAuthenticationOptionsDTO, Error>) -> ()
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
     ) {
         self.remoteServer.startPasskeyRecovery(userIdentifier: userIdentifier, completionHandler: completionHandler)
     }
-    
+
     public func completePasskeyRecovery(
-        recoveryDetails: PasskeyRecoveryCompleteDTO,
-        completionHandler: @escaping (Result<PasskeyRecoveryResponseDTO, Error>) -> ()
+        recoveryDetails: PasskeyRecoveryRequest,
+        completionHandler: @escaping (Result<PasskeyRecoveryResult, Error>) -> ()
     ) {
         self.remoteServer.completePasskeyRecovery(recoveryDetails: recoveryDetails, completionHandler: completionHandler)
     }
