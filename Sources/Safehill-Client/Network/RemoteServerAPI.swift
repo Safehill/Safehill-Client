@@ -213,4 +213,35 @@ public protocol SHRemoteServerAPI : SHServerAPI {
         transactionId: String,
         completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, Error>) -> ()
     )
+    
+    // MARK: Credential backup via Passkeys
+    
+    func registerPasskeyStart(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyRegistrationOptionsDTO, Error>) -> ()
+    )
+    
+    func registerPasskeyComplete(
+        registrationDetails: PasskeyRegistrationCompleteDTO,
+        completionHandler: @escaping (Result<PasskeyRegistrationResponseDTO, Error>) -> ()
+    )
+    
+    func listPasskeys(
+        completionHandler: @escaping (Result<[PasskeyCredentialInfoDTO], Error>) -> ()
+    )
+    
+    func revokePasskey(
+        credentialId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    )
+    
+    func startPasskeyRecovery(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptionsDTO, Error>) -> ()
+    )
+    
+    func completePasskeyRecovery(
+        recoveryDetails: PasskeyRecoveryCompleteDTO,
+        completionHandler: @escaping (Result<PasskeyRecoveryResponseDTO, Error>) -> ()
+    )
 }

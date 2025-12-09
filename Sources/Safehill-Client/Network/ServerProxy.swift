@@ -2245,4 +2245,47 @@ extension SHServerProxy {
             completionHandler: completionHandler
         )
     }
+    
+    // MARK: Credential backup via Passkeys
+    
+    public func registerPasskeyStart(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyRegistrationOptionsDTO, Error>) -> ()
+    ) {
+        self.remoteServer.registerPasskeyStart(userIdentifier: userIdentifier, completionHandler: completionHandler)
+    }
+    
+    public func registerPasskeyComplete(
+        registrationDetails: PasskeyRegistrationCompleteDTO,
+        completionHandler: @escaping (Result<PasskeyRegistrationResponseDTO, Error>) -> ()
+    ) {
+        self.remoteServer.registerPasskeyComplete(registrationDetails: registrationDetails, completionHandler: completionHandler)
+    }
+    
+    public func listPasskeys(
+        completionHandler: @escaping (Result<[PasskeyCredentialInfoDTO], Error>) -> ()
+    ) {
+        self.remoteServer.listPasskeys(completionHandler: completionHandler)
+    }
+    
+    public func revokePasskey(
+        credentialId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.revokePasskey(credentialId: credentialId, completionHandler: completionHandler)
+    }
+    
+    public func startPasskeyRecovery(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptionsDTO, Error>) -> ()
+    ) {
+        self.remoteServer.startPasskeyRecovery(userIdentifier: userIdentifier, completionHandler: completionHandler)
+    }
+    
+    public func completePasskeyRecovery(
+        recoveryDetails: PasskeyRecoveryCompleteDTO,
+        completionHandler: @escaping (Result<PasskeyRecoveryResponseDTO, Error>) -> ()
+    ) {
+        self.remoteServer.completePasskeyRecovery(recoveryDetails: recoveryDetails, completionHandler: completionHandler)
+    }
 }

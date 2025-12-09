@@ -1917,4 +1917,79 @@ struct RemoteServer : SHRemoteServerAPI {
 
         self.post("collections/validate-iap-receipt/\(collectionId)", parameters: parameters, completionHandler: completionHandler)
     }
+
+    // MARK: - Credential backup via Passkeys
+
+    func registerPasskeyStart(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyRegistrationOptionsDTO, Error>) -> ()
+    ) {
+        self.post("users/backup/passkey/register/start", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func registerPasskeyComplete(
+        registrationDetails: PasskeyRegistrationCompleteDTO,
+        completionHandler: @escaping (Result<PasskeyRegistrationResponseDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "userIdentifier": registrationDetails.userIdentifier,
+            "credentialId": registrationDetails.credentialId,
+            "clientDataJSON": registrationDetails.clientDataJSON,
+            "attestationObject": registrationDetails.attestationObject,
+            "transports": registrationDetails.transports,
+            "encryptedKeysBlob": registrationDetails.encryptedKeysBlob,
+            "encryptionProtocolSalt": registrationDetails.encryptionProtocolSalt,
+            "userAgent": registrationDetails.userAgent
+        ]
+
+        self.post("users/backup/passkey/register/complete", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    func listPasskeys(
+        completionHandler: @escaping (Result<[PasskeyCredentialInfoDTO], Error>) -> ()
+    ) {
+        self.get("users/backup/passkey/list", parameters: nil, completionHandler: completionHandler)
+    }
+
+    func revokePasskey(
+        credentialId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.delete("users/backup/passkey/\(credentialId)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func startPasskeyRecovery(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptionsDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "userIdentifier": userIdentifier
+        ]
+
+        self.post("users/backup/passkey/recover/start", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+    }
+
+    func completePasskeyRecovery(
+        recoveryDetails: PasskeyRecoveryCompleteDTO,
+        completionHandler: @escaping (Result<PasskeyRecoveryResponseDTO, Error>) -> ()
+    ) {
+        let parameters: [String: Any?] = [
+            "userIdentifier": recoveryDetails.userIdentifier,
+            "credentialId": recoveryDetails.credentialId,
+            "authenticatorData": recoveryDetails.authenticatorData,
+            "clientDataJSON": recoveryDetails.clientDataJSON,
+            "signature": recoveryDetails.signature,
+            "userHandle": recoveryDetails.userHandle
+        ]
+
+        self.post("users/backup/passkey/recover/complete", parameters: parameters, requiresAuthentication: false, completionHandler: completionHandler)
+    }
 }
