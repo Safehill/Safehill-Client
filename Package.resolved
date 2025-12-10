@@ -32,8 +32,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Safehill/Safehill-Crypto",
       "state" : {
-        "branch" : "feat/passkeys-backup",
-        "revision" : "d96172d172d318bee261a532225d7926f4b89b41"
+        "revision" : "efaf46d768b1413de703a64b5391ebdd4d7f1f64",
+        "version" : "1.1.31"
       }
     },
     {
