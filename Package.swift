@@ -16,7 +16,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/Safehill/Safehill-Crypto", exact: "1.1.26"),
+        .package(url: "https://github.com/Safehill/Safehill-Crypto", branch: "feat/passkeys-backup"),
         .package(url: "https://github.com/gennarinoos/KnowledgeBase.git", exact: "0.9.29"),
         .package(url: "https://github.com/marmelroy/PhoneNumberKit", .upToNextMajor(from: "3.4.5")),
         .package(url: "https://github.com/adielgur/opencv-spm-with-contrib.git", .upToNextMajor(from: "4.10.0")),
