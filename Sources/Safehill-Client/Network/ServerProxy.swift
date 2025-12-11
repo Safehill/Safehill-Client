@@ -727,22 +727,39 @@ extension SHServerProxy {
 
                                 let threadSafeRemoteOnly = ThreadSafeDictionary<GlobalIdentifier, any SHEncryptedAsset>()
 
-                                for (assetId, versions) in toFetch {
-                                    do {
-                                        let remoteAssets = try await self.getRemoteAssets(
-                                            withGlobalIdentifiers: [assetId],
-                                            versions: versions
-                                        )
+#if DEBUG
+                                let chunkSize = 1  // ngrok has connection limits, use sequential processing in DEBUG
+#else
+                                let chunkSize = 3  // production can handle parallel requests
+#endif
+                                for chunk in Array(toFetch).chunked(into: chunkSize) {
+                                    try await withThrowingTaskGroup(of: (GlobalIdentifier, any SHEncryptedAsset)?.self) { group in
+                                        for (assetId, versions) in chunk {
+                                            group.addTask {
+                                                do {
+                                                    let remoteAssets = try await self.getRemoteAssets(
+                                                        withGlobalIdentifiers: [assetId],
+                                                        versions: versions
+                                                    )
 
-                                        if let fetched = remoteAssets[assetId] {
-                                            await threadSafeRemoteOnly.set(fetched, for: assetId)
-
-                                        } else {
-                                            log.warning("[asset-data] Remote fetch missing for \(assetId) versions \(versions)")
+                                                    if let fetched = remoteAssets[assetId] {
+                                                        return (assetId, fetched)
+                                                    } else {
+                                                        log.warning("[asset-data] Remote fetch missing for \(assetId) versions \(versions)")
+                                                        return nil
+                                                    }
+                                                } catch {
+                                                    log.warning("[asset-data] Remote fetch failed for \(assetId) versions \(versions): \(error.localizedDescription)")
+                                                    return nil
+                                                }
+                                            }
                                         }
 
-                                    } catch {
-                                        log.warning("[asset-data] Remote fetch failed for \(assetId) versions \(versions): \(error.localizedDescription)")
+                                        for try await result in group {
+                                            if let (assetId, asset) = result {
+                                                await threadSafeRemoteOnly.set(asset, for: assetId)
+                                            }
+                                        }
                                     }
                                 }
 
@@ -761,6 +778,8 @@ extension SHServerProxy {
                                         ) { localCachingResult in
                                             if case .failure(let error) = localCachingResult {
                                                 log.warning("[asset-data] caching failed for \(remoteOnlyAssets): \(error.localizedDescription)")
+                                            } else {
+                                                log.info("[asset-data] cached \(remoteOnlyAssets)")
                                             }
                                         }
                                     }

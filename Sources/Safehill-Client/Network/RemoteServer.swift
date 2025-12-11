@@ -733,23 +733,39 @@ struct RemoteServer : SHRemoteServerAPI {
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
-                
-                let dispatchGroup = DispatchGroup()
-                
+
+                /// Flatten all asset-version combinations
+                var downloads: [(asset: SHServerAsset, version: SHServerAssetVersion)] = []
                 for asset in assets {
                     for version in asset.versions {
-                        dispatchGroup.enter()
-                        log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
-                        S3Proxy.retrieve(asset, version) { result in
-                            Task {
-                                switch result {
-                                case .success(let encryptedAsset):
-                                    await manifest.add(encryptedAsset)
-                                case .failure(let err):
-                                    await errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
-                                }
-                                dispatchGroup.leave()
+                        downloads.append((asset, version))
+                    }
+                }
+
+#if DEBUG
+                let maxConcurrentS3Downloads = 1  // Sequential in DEBUG to avoid overwhelming ngrok
+#else
+                let maxConcurrentS3Downloads = 5  // Allow more parallelism in production
+#endif
+
+                let dispatchGroup = DispatchGroup()
+                let semaphore = DispatchSemaphore(value: maxConcurrentS3Downloads)
+
+                for (asset, version) in downloads {
+                    dispatchGroup.enter()
+                    semaphore.wait()  // Wait for available slot
+
+                    log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
+                    S3Proxy.retrieve(asset, version) { result in
+                        Task {
+                            switch result {
+                            case .success(let encryptedAsset):
+                                await manifest.add(encryptedAsset)
+                            case .failure(let err):
+                                await errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
                             }
+                            semaphore.signal()  // Release slot
+                            dispatchGroup.leave()
                         }
                     }
                 }
