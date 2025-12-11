@@ -107,13 +107,18 @@ internal var CDNServerDefaultURLSessionConfiguration: URLSessionConfiguration {
     /// How long (in seconds) to wait for the entire download to complete
     configuration.timeoutIntervalForResource = Double(SHDownloadTimeoutInMilliseconds * 2 / 1000)
 
-    /// S3 downloads can be cached to improve performance
+#if !DEBUG
+    /// S3 downloads can be cached to improve performance (disabled in DEBUG for LocalStack)
     configuration.requestCachePolicy = .returnCacheDataElseLoad
     configuration.urlCache = URLCache(
         memoryCapacity: 50 * 1024 * 1024,  // 50 MB memory cache
         diskCapacity: 200 * 1024 * 1024,   // 200 MB disk cache
         diskPath: "s3_cache"
     )
+#else
+    /// In DEBUG, use default cache behavior for LocalStack compatibility
+    configuration.requestCachePolicy = .useProtocolCachePolicy
+#endif
 
 #if DEBUG
     /// Very conservative limits for ngrok - only 1 connection at a time
