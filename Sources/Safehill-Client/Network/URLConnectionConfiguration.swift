@@ -80,10 +80,13 @@ internal var SafehillServerDefaultURLSessionConfiguration: URLSessionConfigurati
     /// Indicates whether connections may use the network when the user has specified Low Data Mode.
     configuration.allowsConstrainedNetworkAccess = true
 
+#if !DEBUG
     /// Use Wi-Fi and cellular simultaneously for better connectivity
+    /// Disabled in DEBUG because multipath doesn't work with localhost/LocalStack
     if #available(iOS 11.0, *) {
         configuration.multipathServiceType = .handover
     }
+#endif
 
     return configuration
 }
@@ -127,10 +130,13 @@ internal var CDNServerDefaultURLSessionConfiguration: URLSessionConfiguration {
     /// Indicates whether connections may use the network when the user has specified Low Data Mode.
     configuration.allowsConstrainedNetworkAccess = true
 
+#if !DEBUG
     /// Use Wi-Fi and cellular simultaneously for better connectivity
+    /// Disabled in DEBUG because multipath doesn't work with localhost/LocalStack
     if #available(iOS 11.0, *) {
         configuration.multipathServiceType = .handover
     }
+#endif
 
     return configuration
 }
@@ -166,10 +172,13 @@ internal func CDNServerDefaultBackgroundURLSessionConfiguration(with sessionIden
     /// Indicates whether connections may use the network when the user has specified Low Data Mode.
     configuration.allowsConstrainedNetworkAccess = true
 
+#if !DEBUG
     /// Use Wi-Fi and cellular simultaneously for better connectivity
+    /// Disabled in DEBUG because multipath doesn't work with localhost/LocalStack
     if #available(iOS 11.0, *) {
         configuration.multipathServiceType = .handover
     }
+#endif
 
     return configuration
 }
