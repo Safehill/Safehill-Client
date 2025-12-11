@@ -17,8 +17,6 @@ import os
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
     
-    internal static var lastFetchDate: Date? = nil
-    
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
     let delegatesQueue = DispatchQueue(label: "com.safehill.download.delegates")
@@ -48,8 +46,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        let afterDate = date ?? SHRemoteDownloadOperation.lastFetchDate
-        
         self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(afterDate?.iso8601withFractionalSeconds ?? "nil")")
         ///
         /// Get all asset descriptors associated with this user from the server.
@@ -57,7 +53,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         ///
         self.serverProxy.getRemoteAssetDescriptors(
             for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
-            after: afterDate,
+            after: date,
             filteringGroups: groupIds
         ) { remoteResult in
             switch remoteResult {
@@ -340,17 +336,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
-        let fetchStartedAt = Date()
-        
-        let handleResult = { (result: Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) in
-            if case .success = result {
-                SHRemoteDownloadOperation.lastFetchDate = fetchStartedAt
-            }
-            completionHandler(result)
-        }
         
         guard self.user is SHAuthenticatedLocalUser else {
-            handleResult(.failure(SHLocalUserError.notAuthenticated))
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
         }
         
@@ -366,10 +354,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     self.process(
                         remoteOnlyDescriptors,
                         qos: qos,
-                        completionHandler: handleResult
+                        completionHandler: completionHandler
                     )
                 case .failure(let error):
-                    handleResult(.failure(error))
+                    completionHandler(.failure(error))
                 }
             }
         }

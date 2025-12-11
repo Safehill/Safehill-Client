@@ -101,7 +101,7 @@ extension SHGlobalSyncOperation {
         assetsDownloadOperation.run(
             for: nil,                   /// All assets
             filteringGroups: [groupId], /// in group `groupId`
-            startingFrom: .distantPast,
+            startingFrom: nil,
             qos: qos
         ) { result in
             switch result {
