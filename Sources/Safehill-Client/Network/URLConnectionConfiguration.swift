@@ -16,8 +16,7 @@ public let SafehillServerURLComponents: URLComponents = {
     components.port = 8080
 #elseif DEBUG
     components.scheme = "https"
-    components.host = "079bad5ce6d0.ngrok-free.app"
-//    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
+    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #else
     components.scheme = "https"
@@ -37,8 +36,7 @@ public let SafehillServerURLComponentsForWebsockets: URLComponents = {
     components.port = 8080
 #elseif DEBUG
     components.scheme = "wss"
-    components.host = "079bad5ce6d0.ngrok-free.app"
-//    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
+    components.host = "safehill-stage-1-ec0cd53b3592.herokuapp.com"
     components.port = 443
 #else
     components.scheme = "wss"
@@ -113,7 +111,7 @@ internal var CDNServerDefaultURLSessionConfiguration: URLSessionConfiguration {
     configuration.urlCache = URLCache(
         memoryCapacity: 50 * 1024 * 1024,  // 50 MB memory cache
         diskCapacity: 200 * 1024 * 1024,   // 200 MB disk cache
-        diskPath: "s3_cache"
+        diskPath: "safehill_s3_cache"
     )
 #else
     /// In DEBUG, use default cache behavior for LocalStack compatibility
