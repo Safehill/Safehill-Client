@@ -11,9 +11,10 @@ import os
 /// The steps are:
 /// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote.
 /// 2. Convert descriptors into `AssetActivity` objects and calling the `SHActivitySyncingDelegate`
-/// 3. `processDescriptors(_:fromRemote:qos:completionHandler:)` : all user referenced in the descriptor that can't be retrived from server are filtered out. If sender can't be retrieved the whole descriptor is filtered out
-/// 4. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
-///     - local server assets and queue items are created when missing, and the restoration delegate is called
+/// 3. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered our if
+///     - the referenced asset is blacklisted (attemtped to download too many times),
+///     - the sender referenced in the descriptor is not "retrievabile" (all user referenced in the descriptor will be removed from the descriptor too), or
+///     - the asset hasn't finished uploafing (upload status is neither `.notStarted` nor `.failed`)
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
     
@@ -107,9 +108,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///
     ///
     /// Filters out
-    /// - the ones referencing blacklisted assets (items that have been tried to download too many times),
-    /// - the ones where any of the users referenced can't be retrieved
-    /// - the ones for which the upload hasn't started
+    /// - the ones where any of the sender/owner can't be retrieved
+    /// - the ones for which the upload hasn't started or failed
     ///
     /// Call the delegate with the full manifest of assets shared by OTHER users.
     /// Returns the full set of descriptors fetched from the server, keyed by global identifier.
@@ -125,12 +125,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
-        ///
-        /// Filter out the ones:
-        /// - whose assets were blacklisted
-        /// - whose users were blacklisted
-        /// - haven't started upload
-        ///
         Task(priority: qos.toTaskPriority()) {
             guard !self.isCancelled else {
                 log.info("[\(type(of: self))] download task cancelled. Finishing")
@@ -317,13 +311,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 completionHandler(.failure(err))
                 
             case .success(let processedDescriptorsByGid):
-                
 #if DEBUG
                 let delta = Set(remoteOnlyDescriptors.map({ $0.globalIdentifier })).subtracting(processedDescriptorsByGid.keys)
                 self.log.debug("[\(type(of: self))] after processing: \(processedDescriptorsByGid.count). delta=\(delta)")
 #endif
-                
-                let processedDescriptors = Array(processedDescriptorsByGid.values)
                 completionHandler(.success(processedDescriptorsByGid))
             }
         }
