@@ -236,7 +236,6 @@ public protocol SHRemoteServerAPI : SHServerAPI {
     )
 
     func startPasskeyRecovery(
-        userIdentifier: UserIdentifier,
         completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
     )
 

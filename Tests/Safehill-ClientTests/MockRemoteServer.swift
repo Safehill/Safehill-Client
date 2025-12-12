@@ -326,7 +326,7 @@ class MockRemoteServer: SHRemoteServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
-    func startPasskeyRecovery(userIdentifier: Safehill_Client.UserIdentifier, completionHandler: @escaping (Result<Safehill_Client.PasskeyAuthenticationOptions, any Error>) -> ()) {
+    func startPasskeyRecovery(completionHandler: @escaping (Result<Safehill_Client.PasskeyAuthenticationOptions, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     

@@ -2295,10 +2295,9 @@ extension SHServerProxy {
     }
 
     public func startPasskeyRecovery(
-        userIdentifier: UserIdentifier,
         completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
     ) {
-        self.remoteServer.startPasskeyRecovery(userIdentifier: userIdentifier, completionHandler: completionHandler)
+        self.remoteServer.startPasskeyRecovery(completionHandler: completionHandler)
     }
 
     public func completePasskeyRecovery(
