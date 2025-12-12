@@ -70,6 +70,15 @@ public struct SHLocalUser: SHLocalUserProtocol {
         )
     }
     
+    public static func restore(from: SHLocalCryptoUser, keychainPrefix: String) -> SHLocalUser {
+        return SHLocalUser(
+            shUser: from,
+            authToken: nil,
+            maybeEncryptionProtocolSalt: nil,
+            keychainPrefix: keychainPrefix
+        )
+    }
+    
     /// Initializes a SHLocalUser and the corresponding keychain element.
     /// Creates a key pair if none exists in the keychain with label `keysKeychainLabel`,
     /// and pulls the authToken from the keychain with label `authKeychainLabel` if a value exists
