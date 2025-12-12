@@ -90,6 +90,7 @@ public struct PasskeyRegistrationResult {
 
 /// Options for authenticating with a passkey
 public struct PasskeyAuthenticationOptions {
+    public let sessionId: String
     public let challenge: String
     public let rpId: String?
     public let timeout: Int
@@ -97,12 +98,14 @@ public struct PasskeyAuthenticationOptions {
     public let userVerification: String
 
     public init(
+        sessionId: String,
         challenge: String,
         rpId: String? = nil,
         timeout: Int,
         allowedCredentialIds: [String] = [],
         userVerification: String = "required"
     ) {
+        self.sessionId = sessionId
         self.challenge = challenge
         self.rpId = rpId
         self.timeout = timeout
@@ -113,7 +116,7 @@ public struct PasskeyAuthenticationOptions {
 
 /// Data required to complete passkey recovery
 public struct PasskeyRecoveryRequest {
-    public let userIdentifier: String
+    public let sessionId: String
     public let credentialId: String
     public let authenticatorData: String
     public let clientDataJSON: String
@@ -121,14 +124,14 @@ public struct PasskeyRecoveryRequest {
     public let userHandle: String?
 
     public init(
-        userIdentifier: String,
+        sessionId: String,
         credentialId: String,
         authenticatorData: String,
         clientDataJSON: String,
         signature: String,
         userHandle: String? = nil
     ) {
-        self.userIdentifier = userIdentifier
+        self.sessionId = sessionId
         self.credentialId = credentialId
         self.authenticatorData = authenticatorData
         self.clientDataJSON = clientDataJSON

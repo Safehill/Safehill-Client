@@ -2008,14 +2008,9 @@ struct RemoteServer : SHRemoteServerAPI {
     }
 
     func startPasskeyRecovery(
-        userIdentifier: UserIdentifier,
         completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
     ) {
-        let parameters: [String: Any?] = [
-            "userIdentifier": userIdentifier
-        ]
-
-        self.post("users/backup/passkey/recover/start", parameters: parameters, requiresAuthentication: false) {
+        self.post("users/backup/passkey/recover/start", parameters: nil, requiresAuthentication: false) {
             (result: Result<PasskeyAuthenticationOptionsDTO, Error>) in
             switch result {
             case .success(let dto):
@@ -2032,7 +2027,7 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         let dto = recoveryDetails.toDTO()
         let parameters: [String: Any?] = [
-            "userIdentifier": dto.userIdentifier,
+            "sessionId": dto.sessionId,
             "credentialId": dto.credentialId,
             "authenticatorData": dto.authenticatorData,
             "clientDataJSON": dto.clientDataJSON,

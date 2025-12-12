@@ -73,6 +73,7 @@ struct PasskeyRecoveryStartDTO: Codable {
 }
 
 struct PasskeyAuthenticationOptionsDTO: Codable {
+    var sessionId: String  // Session identifier for this recovery flow
     var challenge: String  // base64url-encoded
     var timeout: Int?
     var rpId: String?
@@ -81,7 +82,7 @@ struct PasskeyAuthenticationOptionsDTO: Codable {
 }
 
 struct PasskeyRecoveryCompleteDTO: Codable {
-    var userIdentifier: String
+    var sessionId: String  // Session identifier from /recover/start
     
     // WebAuthn assertion data
     var credentialId: String
@@ -158,6 +159,7 @@ extension PasskeyRegistrationResponseDTO {
 extension PasskeyAuthenticationOptionsDTO {
     func toPublicModel() -> PasskeyAuthenticationOptions {
         PasskeyAuthenticationOptions(
+            sessionId: sessionId,
             challenge: challenge,
             rpId: rpId,
             timeout: timeout ?? 60000,
@@ -170,7 +172,7 @@ extension PasskeyAuthenticationOptionsDTO {
 extension PasskeyRecoveryRequest {
     func toDTO() -> PasskeyRecoveryCompleteDTO {
         PasskeyRecoveryCompleteDTO(
-            userIdentifier: userIdentifier,
+            sessionId: sessionId,
             credentialId: credentialId,
             authenticatorData: authenticatorData,
             clientDataJSON: clientDataJSON,
