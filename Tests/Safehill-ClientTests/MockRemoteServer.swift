@@ -293,6 +293,10 @@ class MockRemoteServer: SHRemoteServerAPI {
     func topPickCollections(completionHandler: @escaping (Result<[CollectionOutputDTO], any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
+    
+    func softRemoveCollection(id: String, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
 
     func createCheckoutSession(collectionId: String, completionHandler: @escaping (Result<CheckoutSessionDTO, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
@@ -303,6 +307,30 @@ class MockRemoteServer: SHRemoteServerAPI {
     }
 
     func validateIAPReceipt(collectionId: String, jwsTransaction: String, productId: String, transactionId: String, completionHandler: @escaping (Result<IAPReceiptValidationResponseDTO, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func registerPasskeyStart(userIdentifier: Safehill_Client.UserIdentifier, completionHandler: @escaping (Result<Safehill_Client.PasskeyCreationOptions, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func registerPasskeyComplete(registrationDetails: Safehill_Client.PasskeyRegistrationRequest, completionHandler: @escaping (Result<Safehill_Client.PasskeyRegistrationResult, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func listPasskeys(completionHandler: @escaping (Result<[Safehill_Client.PasskeyCredentialInfo], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func revokePasskey(credentialId: String, completionHandler: @escaping (Result<Void, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func startPasskeyRecovery(completionHandler: @escaping (Result<Safehill_Client.PasskeyAuthenticationOptions, any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
+    func completePasskeyRecovery(recoveryDetails: Safehill_Client.PasskeyRecoveryRequest, completionHandler: @escaping (Result<Safehill_Client.PasskeyRecoveryResult, any Error>) -> ()) {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
 }

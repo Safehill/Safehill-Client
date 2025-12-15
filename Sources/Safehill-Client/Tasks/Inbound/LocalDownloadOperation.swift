@@ -17,8 +17,6 @@ import os
 ///     - the referenced asset is blacklisted (attemtped to download too many times),
 ///     - any user referenced in the descriptor is not "retrievabile", or
 ///     - the asset hasn't finished uploaing (upload status is neither `.notStarted` nor `.failed`)
-/// 4. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
-///     - the assets shared by from _other_ users are returned so they can be decrypted
 ///
 /// Ideally in the lifecycle of the application, the decryption of the low resolution happens only once.
 /// The delegate is responsible for keeping these decrypted assets in memory, or call the `SHServerProxy` to retrieve them again if they are disposed.

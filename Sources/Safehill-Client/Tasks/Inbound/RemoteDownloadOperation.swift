@@ -9,15 +9,14 @@ import os
 ///
 ///
 /// The steps are:
-/// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote. The incompletes (with upload state `.notStarted`) are carried over in each iteration, otherwise they would be filtered out by the  `afterDate` filter and missed forever
+/// 1. `fetchDescriptors(filteringAssets:filteringGroups:after:completionHandler:)` : the descriptors are fetched from both the remote and local servers to determine the ones to operate on, namely the ones ONLY on remote.
 /// 2. Convert descriptors into `AssetActivity` objects and calling the `SHActivitySyncingDelegate`
-/// 3. `processDescriptors(_:fromRemote:qos:completionHandler:)` : all user referenced in the descriptor that can't be retrived from server are filtered out. If sender can't be retrieved the whole descriptor is filtered out
-/// 4. `processAssetsInDescriptors(descriptorsByGlobalIdentifier:qos:completionHandler:)` :
-///     - local server assets and queue items are created when missing, and the restoration delegate is called
+/// 3. `processDescriptors(_:fromRemote:qos:completionHandler:)` : descriptors are filtered our if
+///     - the referenced asset is blacklisted (attemtped to download too many times),
+///     - the sender referenced in the descriptor is not "retrievabile" (all user referenced in the descriptor will be removed from the descriptor too), or
+///     - the asset hasn't finished uploafing (upload status is neither `.notStarted` nor `.failed`)
 ///
 public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol, SHDownloadOperation, @unchecked Sendable {
-    
-    internal static var lastFetchDate: Date? = nil
     
     public let log = Logger(subsystem: "com.safehill", category: "BG-DOWNLOAD")
     
@@ -48,16 +47,14 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         after date: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> Void
     ) {
-        let afterDate = date ?? SHRemoteDownloadOperation.lastFetchDate
-        
-        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(afterDate?.iso8601withFractionalSeconds ?? "nil")")
+        self.log.debug("[\(type(of: self))] fetchDescriptors for \(globalIdentifiers ?? []) filteringGroups=\(groupIds ?? []) after \(date?.iso8601withFractionalSeconds ?? "nil")")
         ///
         /// Get all asset descriptors associated with this user from the server.
         /// Descriptors serve as a manifest to determine what to download.
         ///
         self.serverProxy.getRemoteAssetDescriptors(
             for: (globalIdentifiers?.isEmpty ?? true) ? nil : globalIdentifiers!,
-            after: afterDate,
+            after: date,
             filteringGroups: groupIds
         ) { remoteResult in
             switch remoteResult {
@@ -111,9 +108,8 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
     ///
     ///
     /// Filters out
-    /// - the ones referencing blacklisted assets (items that have been tried to download too many times),
-    /// - the ones where any of the users referenced can't be retrieved
-    /// - the ones for which the upload hasn't started
+    /// - the ones where any of the sender/owner can't be retrieved
+    /// - the ones for which the upload hasn't started or failed
     ///
     /// Call the delegate with the full manifest of assets shared by OTHER users.
     /// Returns the full set of descriptors fetched from the server, keyed by global identifier.
@@ -129,12 +125,6 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
-        ///
-        /// Filter out the ones:
-        /// - whose assets were blacklisted
-        /// - whose users were blacklisted
-        /// - haven't started upload
-        ///
         Task(priority: qos.toTaskPriority()) {
             guard !self.isCancelled else {
                 log.info("[\(type(of: self))] download task cancelled. Finishing")
@@ -149,7 +139,7 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
 #if DEBUG
             if filteredDescriptors.count != descriptors.count {
                 let incomplete = descriptors.filter {
-                    $0.uploadState == .notStarted || $0.uploadState == .failed
+                    $0.uploadState == .failed || $0.uploadState == .notStarted
                 }
                 if incomplete.isEmpty == false {
                     log.debug("[\(type(of: self))] filtering out incomplete gids \(incomplete.map({ $0.globalIdentifier }))")
@@ -321,13 +311,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                 completionHandler(.failure(err))
                 
             case .success(let processedDescriptorsByGid):
-                
 #if DEBUG
                 let delta = Set(remoteOnlyDescriptors.map({ $0.globalIdentifier })).subtracting(processedDescriptorsByGid.keys)
                 self.log.debug("[\(type(of: self))] after processing: \(processedDescriptorsByGid.count). delta=\(delta)")
 #endif
-                
-                let processedDescriptors = Array(processedDescriptorsByGid.values)
                 completionHandler(.success(processedDescriptorsByGid))
             }
         }
@@ -340,17 +327,9 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
         qos: DispatchQoS.QoSClass,
         completionHandler: @escaping (Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) -> Void
     ) {
-        let fetchStartedAt = Date()
-        
-        let handleResult = { (result: Result<[GlobalIdentifier: any SHAssetDescriptor], Error>) in
-            if case .success = result {
-                SHRemoteDownloadOperation.lastFetchDate = fetchStartedAt
-            }
-            completionHandler(result)
-        }
         
         guard self.user is SHAuthenticatedLocalUser else {
-            handleResult(.failure(SHLocalUserError.notAuthenticated))
+            completionHandler(.failure(SHLocalUserError.notAuthenticated))
             return
         }
         
@@ -366,10 +345,10 @@ public class SHRemoteDownloadOperation: Operation, SHBackgroundOperationProtocol
                     self.process(
                         remoteOnlyDescriptors,
                         qos: qos,
-                        completionHandler: handleResult
+                        completionHandler: completionHandler
                     )
                 case .failure(let error):
-                    handleResult(.failure(error))
+                    completionHandler(.failure(error))
                 }
             }
         }

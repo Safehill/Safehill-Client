@@ -4,6 +4,7 @@ public enum SHHTTPError {
     public enum ClientError : Error, LocalizedError {
         case badRequest(String)
         case unauthorized
+        case forbidden
         case paymentRequired
         case notFound
         case methodNotAllowed
@@ -15,6 +16,8 @@ public enum SHHTTPError {
                 return 401
             case .paymentRequired:
                 return 402
+            case .forbidden:
+                return 403
             case .notFound:
                 return 404
             case .methodNotAllowed:
@@ -32,10 +35,14 @@ public enum SHHTTPError {
                 return message
             case .unauthorized:
                 return "401 Unauthorized"
-            case .conflict:
-                return "409 Conflict"
             case .paymentRequired:
                 return "402 PaymentRequired"
+            case .forbidden:
+                return "403 Forbidden"
+            case .methodNotAllowed:
+                return "405 MethodNotAllowed"
+            case .conflict:
+                return "409 Conflict"
             default:
                 return "Error \(self.toCode())"
             }

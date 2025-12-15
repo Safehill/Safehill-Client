@@ -733,23 +733,39 @@ struct RemoteServer : SHRemoteServerAPI {
         self.post("assets/retrieve", parameters: parameters) { (result: Result<[SHServerAsset], Error>) in
             switch result {
             case .success(let assets):
-                
-                let dispatchGroup = DispatchGroup()
-                
+
+                /// Flatten all asset-version combinations
+                var downloads: [(asset: SHServerAsset, version: SHServerAssetVersion)] = []
                 for asset in assets {
                     for version in asset.versions {
-                        dispatchGroup.enter()
-                        log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
-                        S3Proxy.retrieve(asset, version) { result in
-                            Task {
-                                switch result {
-                                case .success(let encryptedAsset):
-                                    await manifest.add(encryptedAsset)
-                                case .failure(let err):
-                                    await errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
-                                }
-                                dispatchGroup.leave()
+                        downloads.append((asset, version))
+                    }
+                }
+
+#if DEBUG
+                let maxConcurrentS3Downloads = 1  // Sequential in DEBUG to avoid overwhelming ngrok
+#else
+                let maxConcurrentS3Downloads = 5  // Allow more parallelism in production
+#endif
+
+                let dispatchGroup = DispatchGroup()
+                let semaphore = DispatchSemaphore(value: maxConcurrentS3Downloads)
+
+                for (asset, version) in downloads {
+                    dispatchGroup.enter()
+                    semaphore.wait()  // Wait for available slot
+
+                    log.info("retrieving asset \(asset.globalIdentifier) version \(version.versionName)")
+                    S3Proxy.retrieve(asset, version) { result in
+                        Task {
+                            switch result {
+                            case .success(let encryptedAsset):
+                                await manifest.add(encryptedAsset)
+                            case .failure(let err):
+                                await errors.set(err, forKey: asset.globalIdentifier + "::" + version.versionName)
                             }
+                            semaphore.signal()  // Release slot
+                            dispatchGroup.leave()
                         }
                     }
                 }
@@ -1860,6 +1876,21 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         self.post("collections/top-picks", parameters: nil, completionHandler: completionHandler)
     }
+    
+    func softRemoveCollection(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.post("collections/soft-remove/\(id)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
 
     // MARK: Collections - Payments
 
@@ -1901,5 +1932,117 @@ struct RemoteServer : SHRemoteServerAPI {
         ]
 
         self.post("collections/validate-iap-receipt/\(collectionId)", parameters: parameters, completionHandler: completionHandler)
+    }
+
+    // MARK: - Credential backup via Passkeys
+
+    func registerPasskeyStart(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyCreationOptions, Error>) -> ()
+    ) {
+        self.post("users/backup/passkey/register/start", parameters: nil) {
+            (result: Result<PasskeyRegistrationOptionsDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func registerPasskeyComplete(
+        registrationDetails: PasskeyRegistrationRequest,
+        completionHandler: @escaping (Result<PasskeyRegistrationResult, Error>) -> ()
+    ) {
+        let dto = registrationDetails.toDTO()
+        let parameters: [String: Any?] = [
+            "userIdentifier": dto.userIdentifier,
+            "credentialId": dto.credentialId,
+            "clientDataJSON": dto.clientDataJSON,
+            "attestationObject": dto.attestationObject,
+            "transports": dto.transports,
+            "encryptedKeysBlob": dto.encryptedKeysBlob,
+            "encryptionProtocolSalt": dto.encryptionProtocolSalt,
+            "userAgent": dto.userAgent
+        ]
+
+        self.post("users/backup/passkey/register/complete", parameters: parameters) {
+            (result: Result<PasskeyRegistrationResponseDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func listPasskeys(
+        completionHandler: @escaping (Result<[PasskeyCredentialInfo], Error>) -> ()
+    ) {
+        self.get("users/backup/passkey/list", parameters: nil) {
+            (result: Result<[PasskeyCredentialInfoDTO], Error>) in
+            switch result {
+            case .success(let dtos):
+                completionHandler(.success(dtos.map { $0.toPublicModel() }))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func revokePasskey(
+        credentialId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.delete("users/backup/passkey/\(credentialId)", parameters: nil) {
+            (result: Result<NoReply, Error>) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func startPasskeyRecovery(
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
+    ) {
+        self.post("users/backup/passkey/recover/start", parameters: nil, requiresAuthentication: false) {
+            (result: Result<PasskeyAuthenticationOptionsDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
+
+    func completePasskeyRecovery(
+        recoveryDetails: PasskeyRecoveryRequest,
+        completionHandler: @escaping (Result<PasskeyRecoveryResult, Error>) -> ()
+    ) {
+        let dto = recoveryDetails.toDTO()
+        let parameters: [String: Any?] = [
+            "sessionId": dto.sessionId,
+            "credentialId": dto.credentialId,
+            "authenticatorData": dto.authenticatorData,
+            "clientDataJSON": dto.clientDataJSON,
+            "signature": dto.signature,
+            "userHandle": dto.userHandle
+        ]
+
+        self.post("users/backup/passkey/recover/complete", parameters: parameters, requiresAuthentication: false) {
+            (result: Result<PasskeyRecoveryResponseDTO, Error>) in
+            switch result {
+            case .success(let dto):
+                completionHandler(.success(dto.toPublicModel()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
     }
 }

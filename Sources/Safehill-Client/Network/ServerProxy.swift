@@ -727,22 +727,39 @@ extension SHServerProxy {
 
                                 let threadSafeRemoteOnly = ThreadSafeDictionary<GlobalIdentifier, any SHEncryptedAsset>()
 
-                                for (assetId, versions) in toFetch {
-                                    do {
-                                        let remoteAssets = try await self.getRemoteAssets(
-                                            withGlobalIdentifiers: [assetId],
-                                            versions: versions
-                                        )
+#if DEBUG
+                                let chunkSize = 1  // ngrok has connection limits, use sequential processing in DEBUG
+#else
+                                let chunkSize = 3  // production can handle parallel requests
+#endif
+                                for chunk in Array(toFetch).chunked(into: chunkSize) {
+                                    try await withThrowingTaskGroup(of: (GlobalIdentifier, any SHEncryptedAsset)?.self) { group in
+                                        for (assetId, versions) in chunk {
+                                            group.addTask {
+                                                do {
+                                                    let remoteAssets = try await self.getRemoteAssets(
+                                                        withGlobalIdentifiers: [assetId],
+                                                        versions: versions
+                                                    )
 
-                                        if let fetched = remoteAssets[assetId] {
-                                            await threadSafeRemoteOnly.set(fetched, for: assetId)
-
-                                        } else {
-                                            log.warning("[asset-data] Remote fetch missing for \(assetId) versions \(versions)")
+                                                    if let fetched = remoteAssets[assetId] {
+                                                        return (assetId, fetched)
+                                                    } else {
+                                                        log.warning("[asset-data] Remote fetch missing for \(assetId) versions \(versions)")
+                                                        return nil
+                                                    }
+                                                } catch {
+                                                    log.warning("[asset-data] Remote fetch failed for \(assetId) versions \(versions): \(error.localizedDescription)")
+                                                    return nil
+                                                }
+                                            }
                                         }
 
-                                    } catch {
-                                        log.warning("[asset-data] Remote fetch failed for \(assetId) versions \(versions): \(error.localizedDescription)")
+                                        for try await result in group {
+                                            if let (assetId, asset) = result {
+                                                await threadSafeRemoteOnly.set(asset, for: assetId)
+                                            }
+                                        }
                                     }
                                 }
 
@@ -761,6 +778,8 @@ extension SHServerProxy {
                                         ) { localCachingResult in
                                             if case .failure(let error) = localCachingResult {
                                                 log.warning("[asset-data] caching failed for \(remoteOnlyAssets): \(error.localizedDescription)")
+                                            } else {
+                                                log.info("[asset-data] cached \(remoteOnlyAssets)")
                                             }
                                         }
                                     }
@@ -2202,6 +2221,13 @@ extension SHServerProxy {
     ) {
         self.remoteServer.topPickCollections(completionHandler: completionHandler)
     }
+    
+    public func softRemoveCollection(
+        id: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.softRemoveCollection(id: id, completionHandler: completionHandler)
+    }
 
     public func createCheckoutSession(
         collectionId: String,
@@ -2237,5 +2263,47 @@ extension SHServerProxy {
             transactionId: transactionId,
             completionHandler: completionHandler
         )
+    }
+    
+    // MARK: Credential backup via Passkeys
+
+    public func registerPasskeyStart(
+        userIdentifier: UserIdentifier,
+        completionHandler: @escaping (Result<PasskeyCreationOptions, Error>) -> ()
+    ) {
+        self.remoteServer.registerPasskeyStart(userIdentifier: userIdentifier, completionHandler: completionHandler)
+    }
+
+    public func registerPasskeyComplete(
+        registrationDetails: PasskeyRegistrationRequest,
+        completionHandler: @escaping (Result<PasskeyRegistrationResult, Error>) -> ()
+    ) {
+        self.remoteServer.registerPasskeyComplete(registrationDetails: registrationDetails, completionHandler: completionHandler)
+    }
+
+    public func listPasskeys(
+        completionHandler: @escaping (Result<[PasskeyCredentialInfo], Error>) -> ()
+    ) {
+        self.remoteServer.listPasskeys(completionHandler: completionHandler)
+    }
+
+    public func revokePasskey(
+        credentialId: String,
+        completionHandler: @escaping (Result<Void, Error>) -> ()
+    ) {
+        self.remoteServer.revokePasskey(credentialId: credentialId, completionHandler: completionHandler)
+    }
+
+    public func startPasskeyRecovery(
+        completionHandler: @escaping (Result<PasskeyAuthenticationOptions, Error>) -> ()
+    ) {
+        self.remoteServer.startPasskeyRecovery(completionHandler: completionHandler)
+    }
+
+    public func completePasskeyRecovery(
+        recoveryDetails: PasskeyRecoveryRequest,
+        completionHandler: @escaping (Result<PasskeyRecoveryResult, Error>) -> ()
+    ) {
+        self.remoteServer.completePasskeyRecovery(recoveryDetails: recoveryDetails, completionHandler: completionHandler)
     }
 }

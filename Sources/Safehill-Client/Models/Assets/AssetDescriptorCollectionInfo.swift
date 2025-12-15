@@ -7,7 +7,7 @@ public protocol SHAssetCollectionInfo {
     var collectionId: String { get }
     var collectionName: String { get }
     var visibility: String { get } // "public", "confidential", "not-shared"
-    var accessType: String { get } // "granted", "accessed", "payment"
+    var accessType: String { get } // "owned", "granted", "accessed", "payment"
     var addedAt: String { get } // ISO8601 - when the asset was added to this collection
 }
 

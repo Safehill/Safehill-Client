@@ -12,4 +12,5 @@ public struct CollectionOutputDTO: Codable {
     public let lastUpdated: String // ISO string timestamp
     public let createdBy: String
     public let assets: [SHServerAsset]
+    public let accessType: String? // "owned", "granted", "accessed", "payment", or nil if not in user's list
 }
