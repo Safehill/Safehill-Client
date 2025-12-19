@@ -49,6 +49,9 @@ struct RemoteServer : SHRemoteServerAPI {
     let requestor: SHLocalUserProtocol
     static let safehillURLSession = URLSession(configuration: SafehillServerDefaultURLSessionConfiguration)
     
+    /// A local in-memory cache for POST requests to reduce server load, only cached for 5s by default
+    let remoteApiCaches: ThreadSafeCache<String, AnyObject>
+    
     /// The caches shared between the Local and the Remote Server
     let sharedCaches: ThreadSafeCache<String, AnyObject>
     
@@ -58,6 +61,10 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         self.requestor = requestor
         self.sharedCaches = sharedCaches
+        self.remoteApiCaches = ThreadSafeCache<String, AnyObject>(
+            expirationInterval: 5, // Cache for 5s
+            evictionInterval: 0
+        )
     }
     
     func requestURL(route: String, urlParameters: [String: String]? = nil) -> URL {
@@ -437,6 +444,7 @@ struct RemoteServer : SHRemoteServerAPI {
         self.post("users/safe-delete", parameters: nil, requiresAuthentication: true) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
+                self.remoteApiCaches.removeAll()
                 self.sharedCaches.removeAll()
                 return completionHandler(.success(()))
             case .failure(let error):
@@ -456,6 +464,7 @@ struct RemoteServer : SHRemoteServerAPI {
         ], requiresAuthentication: false) { (result: Result<NoReply, Error>) in
             switch result {
             case .success(_):
+                self.remoteApiCaches.removeAll()
                 self.sharedCaches.removeAll()
                 return completionHandler(.success(()))
             case .failure(let error):
@@ -659,13 +668,37 @@ struct RemoteServer : SHRemoteServerAPI {
     ) {
         self.post("users/authorization-status", parameters: nil, completionHandler: completionHandler)
     }
-
+    
     func getAssetDescriptors(
         forAssetGlobalIdentifiers: [GlobalIdentifier],
         filteringGroupIds: [String]?,
         after: Date?,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
+        self.getAssetDescriptors(
+            forAssetGlobalIdentifiers: forAssetGlobalIdentifiers,
+            filteringGroupIds: filteringGroupIds,
+            after: after,
+            ignoreCached: false,
+            completionHandler: completionHandler
+        )
+    }
+
+    func getAssetDescriptors(
+        forAssetGlobalIdentifiers: [GlobalIdentifier],
+        filteringGroupIds: [String]?,
+        after: Date?,
+        ignoreCached: Bool = false,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    ) {
+        let cacheKey = "/assets/descriptors/retrieve?globalIdentifiers=[\(forAssetGlobalIdentifiers.joined(separator: "+"))]&groupIds=[\(filteringGroupIds?.joined(separator: "+") ?? "")]&after=\(after?.iso8601withFractionalSeconds ?? "")"
+        
+        if !ignoreCached,
+           let cached = self.remoteApiCaches.value(forKey: cacheKey, ignoreExpiration: false) as? CacheBox<[SHGenericAssetDescriptor]> {
+            completionHandler(.success(cached.value))
+            return
+        }
+        
         var parameters = [
             "globalIdentifiers": forAssetGlobalIdentifiers,
             "groupIds": filteringGroupIds ?? []
@@ -681,6 +714,7 @@ struct RemoteServer : SHRemoteServerAPI {
             switch result {
             case .success(let descriptors):
                 log.debug("[rest-api] REMOTE retrieved \(descriptors.count) asset descriptors for gids \(forAssetGlobalIdentifiers) filtering groups \(filteringGroupIds ?? [])")
+                self.remoteApiCaches.set(CacheBox(descriptors), forKey: cacheKey)
                 completionHandler(.success(descriptors))
             case .failure(let error):
                 log.error("[rest-api] REMOTE error retrieving asset descriptors. \(error.localizedDescription)")
@@ -1298,6 +1332,7 @@ struct RemoteServer : SHRemoteServerAPI {
             requiresAuthentication: true
         ) { (result: Result<SharedAssetsLibraryDTO, Error>) in
             if case .success(let dto) = result {
+                /// Cache the result in memory so that it can be used by the LocalServer via the `sharedCaches`
                 self.sharedCaches.set(CacheBox(dto), forKey: urlString)
             }
             completionHandler(result)

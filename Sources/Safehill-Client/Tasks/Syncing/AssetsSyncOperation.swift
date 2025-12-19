@@ -319,7 +319,8 @@ internal class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, 
             case .success(let localDescriptors):
                 self.serverProxy.getRemoteAssetDescriptors(
                     for: globalIdentifiers,
-                    after: nil
+                    after: nil,
+                    ignoreCaches: true
                 ) { remoteResult in
                     switch remoteResult {
                     case .success(let remoteDescriptors):
@@ -355,7 +356,8 @@ internal class SHAssetsSyncOperation: Operation, SHBackgroundOperationProtocol, 
                 ///
                 self.serverProxy.getRemoteAssetDescriptors(
                     for: localDescriptorsGids,
-                    after: nil
+                    after: nil,
+                    ignoreCaches: true
                 ) { remoteResult in
                     switch remoteResult {
                     case .success(let remoteAndLocalDescriptors):

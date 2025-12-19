@@ -83,6 +83,10 @@ class MockRemoteServer: SHRemoteServerAPI {
         completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
     }
     
+    func getAssetDescriptors(forAssetGlobalIdentifiers: [GlobalIdentifier], filteringGroupIds: [String]?, after: Date?, ignoreCached: Bool, completionHandler: @escaping (Result<[any SHAssetDescriptor], any Error>) -> ()) {
+        completionHandler(.failure(SHHTTPError.ServerError.notImplemented))
+    }
+    
     func getAssets(withGlobalIdentifiers: [String], versions: [SHAssetQuality]?, completionHandler: @escaping (Result<[GlobalIdentifier : any SHEncryptedAsset], any Error>) -> ()) {
         completionHandler(.success(stubbedAssets))
     }

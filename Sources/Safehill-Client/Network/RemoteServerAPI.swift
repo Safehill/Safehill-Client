@@ -2,6 +2,14 @@ import Foundation
 
 public protocol SHRemoteServerAPI : SHServerAPI {
     
+    func getAssetDescriptors(
+        forAssetGlobalIdentifiers: [GlobalIdentifier],
+        filteringGroupIds: [String]?,
+        after: Date?,
+        ignoreCached: Bool,
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
+    )
+    
     // MARK: Asset embeddings
     
     func updateAssetFingerprint(for: GlobalIdentifier, _ fingerprint: AssetFingerprint) async throws

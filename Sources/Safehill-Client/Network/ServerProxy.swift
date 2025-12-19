@@ -9,12 +9,22 @@ public struct SHServerProxy: SHServerProxyProtocol {
     let remoteServer: SHRemoteServerAPI
     
     public init(user: SHLocalUserProtocol) {
-        let sharedAPICaches = ThreadSafeCache<String, AnyObject>(
-            evictionInterval: 172800 /// 2 days after expired, so that the `LocalServer` can pick up these values even if expired
+        //
+        // Keep a cache of server fetched by HTTP request URL
+        // These are generally set by the RemoteServer and used by LocalServer
+        // Expire cache items quickly, but keep them (as 'expired', aka invalidated) in memory for as long as possible,
+        //  so that we can fall back to last known response if there are connectivity issues.
+        // The pattern in ServerProxy should be:
+        // 1. Query RemoteServer first (which can decide whether or not to use the cache, adhering to invalidation policy)
+        // 2. Query LocalServer if that fails (which will use the cached value, even if invalidated)
+        //
+        let localRemoteAPISharedCache = ThreadSafeCache<String, AnyObject>(
+            expirationInterval: 1 * 60, /// 1 minute expiration
+            evictionInterval: 2 * 24 * 60 * 60 /// 2 days after expired, so that the `LocalServer` can pick up these values even if expired
         )
         
-        self.remoteServer = RemoteServer(requestor: user, sharedCaches: sharedAPICaches)
-        self.localServer = LocalServer(requestor: user, sharedCaches: sharedAPICaches)
+        self.remoteServer = RemoteServer(requestor: user, sharedCaches: localRemoteAPISharedCache)
+        self.localServer = LocalServer(requestor: user, sharedCaches: localRemoteAPISharedCache)
     }
     
     // Useful for testing
@@ -492,30 +502,44 @@ extension SHServerProxy {
         }
     }
     
-    public func getAssetDescriptor(
-        for globalIdentifier: GlobalIdentifier,
+    public func getAssetDescriptors(
+        for globalIdentifiers: [GlobalIdentifier],
         filteringGroups: [String]? = nil,
-        completionHandler: @escaping (Result<(any SHAssetDescriptor)?, Error>) -> ()
+        completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         self.getLocalAssetDescriptors(
-            for: [globalIdentifier],
+            for: globalIdentifiers,
             after: nil,
             filteringGroups: filteringGroups
         ) { result in
             switch result {
             case .failure(let err):
-                log.warning("no local asset descriptor for asset \(globalIdentifier) in local server. Trying remote. \(err.localizedDescription)")
+                log.warning("no local asset descriptors for assets \(globalIdentifiers) in local server. Trying remote. \(err.localizedDescription)")
                 self.getRemoteAssetDescriptors(
-                    for: [globalIdentifier],
+                    for: globalIdentifiers,
                     after: nil
                 ) { remoteResult in
-                    switch remoteResult {
-                    case .success(let descriptors):
-                        completionHandler(.success(descriptors.first))
-                    case .failure(let error):
-                        completionHandler(.failure(error))
-                    }
+                    completionHandler(remoteResult)
                 }
+            case .success(let descriptors):
+                if descriptors.count < Set(globalIdentifiers).count {
+                    self.getRemoteAssetDescriptors(
+                        for: globalIdentifiers,
+                        after: nil,
+                        completionHandler: completionHandler
+                    )
+                }
+            }
+        }
+    }
+    
+    public func getAssetDescriptor(
+        for globalIdentifier: GlobalIdentifier,
+        filteringGroups: [String]? = nil,
+        completionHandler: @escaping (Result<(any SHAssetDescriptor)?, Error>) -> ()
+    ) {
+        self.getAssetDescriptors(for: [globalIdentifier], filteringGroups: filteringGroups) { result in
+            switch result {
             case .success(let descriptors):
                 if let descriptor = descriptors.first {
                     completionHandler(.success(descriptor))
@@ -532,6 +556,8 @@ extension SHServerProxy {
                         }
                     }
                 }
+            case .failure(let error):
+                completionHandler(.failure(error))
             }
         }
     }
@@ -572,6 +598,7 @@ extension SHServerProxy {
         for globalIdentifiers: [GlobalIdentifier]? = nil,
         after: Date?,
         filteringGroups: [String]? = nil,
+        ignoreCaches: Bool = false,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
         let handleServerResult = { (serverResult: Result<[any SHAssetDescriptor], Error>) in
@@ -587,7 +614,8 @@ extension SHServerProxy {
             self.remoteServer.getAssetDescriptors(
                 forAssetGlobalIdentifiers: globalIdentifiers,
                 filteringGroupIds: filteringGroups,
-                after: after
+                after: after,
+                ignoreCached: ignoreCaches
             ) {
                 handleServerResult($0)
             }
