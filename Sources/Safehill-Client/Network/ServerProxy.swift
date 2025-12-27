@@ -507,7 +507,7 @@ extension SHServerProxy {
         filteringGroups: [String]? = nil,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        self.getLocalAssetDescriptors(
+        self.getRemoteAssetDescriptors(
             for: globalIdentifiers,
             after: nil,
             filteringGroups: filteringGroups
@@ -515,17 +515,19 @@ extension SHServerProxy {
             switch result {
             case .failure(let err):
                 log.warning("no local asset descriptors for assets \(globalIdentifiers) in local server. Trying remote. \(err.localizedDescription)")
-                self.getRemoteAssetDescriptors(
+                self.getLocalAssetDescriptors(
                     for: globalIdentifiers,
-                    after: nil
+                    after: nil,
+                    filteringGroups: filteringGroups
                 ) { remoteResult in
                     completionHandler(remoteResult)
                 }
             case .success(let descriptors):
                 if descriptors.count < Set(globalIdentifiers).count {
-                    self.getRemoteAssetDescriptors(
+                    self.getLocalAssetDescriptors(
                         for: globalIdentifiers,
                         after: nil,
+                        filteringGroups: filteringGroups,
                         completionHandler: completionHandler
                     )
                 }
@@ -541,21 +543,7 @@ extension SHServerProxy {
         self.getAssetDescriptors(for: [globalIdentifier], filteringGroups: filteringGroups) { result in
             switch result {
             case .success(let descriptors):
-                if let descriptor = descriptors.first {
-                    completionHandler(.success(descriptor))
-                } else {
-                    self.getRemoteAssetDescriptors(
-                        for: [globalIdentifier],
-                        after: nil
-                    ) { remoteResult in
-                        switch remoteResult {
-                        case .success(let descriptors):
-                            completionHandler(.success(descriptors.first))
-                        case .failure(let error):
-                            completionHandler(.failure(error))
-                        }
-                    }
-                }
+                completionHandler(.success(descriptors.first))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
