@@ -691,7 +691,7 @@ struct RemoteServer : SHRemoteServerAPI {
         ignoreCached: Bool = false,
         completionHandler: @escaping (Result<[any SHAssetDescriptor], Error>) -> ()
     ) {
-        let cacheKey = "/assets/descriptors/retrieve?globalIdentifiers=[\(forAssetGlobalIdentifiers.joined(separator: "+"))]&groupIds=[\(filteringGroupIds?.joined(separator: "+") ?? "")]&after=\(after?.iso8601withFractionalSeconds ?? "")"
+        let cacheKey = "/assets/descriptors/retrieve?globalIdentifiers=[\(forAssetGlobalIdentifiers.sorted().joined(separator: "+"))]&groupIds=[\((filteringGroupIds ?? []).sorted().joined(separator: "+"))]&after=\(after?.iso8601withFractionalSeconds ?? "")"
         
         if !ignoreCached,
            let cached = self.remoteApiCaches.value(forKey: cacheKey, ignoreExpiration: false) as? CacheBox<[SHGenericAssetDescriptor]> {
