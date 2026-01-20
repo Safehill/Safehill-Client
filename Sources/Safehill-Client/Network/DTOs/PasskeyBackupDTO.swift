@@ -104,8 +104,8 @@ struct PasskeyRecoveryResponseDTO: Codable {
 
 struct PasskeyCredentialInfoDTO: Codable {
     var credentialId: String
-    var createdAt: Date
-    var lastUsedAt: Date?
+    var createdAt: String  // ISO8601 formatted datetime
+    var lastUsedAt: String?  // ISO8601 formatted datetime
     var isActive: Bool
     var userAgent: String?
     var transports: [String]?
@@ -195,11 +195,17 @@ extension PasskeyRecoveryResponseDTO {
 }
 
 extension PasskeyCredentialInfoDTO {
-    func toPublicModel() -> PasskeyCredentialInfo {
-        PasskeyCredentialInfo(
+    func toPublicModel() -> PasskeyCredentialInfo? {
+        // Parse ISO8601 date strings
+        guard let createdAtDate = createdAt.iso8601withFractionalSeconds else {
+            return nil
+        }
+        let lastUsedAtDate = lastUsedAt?.iso8601withFractionalSeconds
+
+        return PasskeyCredentialInfo(
             credentialId: credentialId,
-            createdAt: createdAt,
-            lastUsedAt: lastUsedAt,
+            createdAt: createdAtDate,
+            lastUsedAt: lastUsedAtDate,
             isActive: isActive,
             userAgent: userAgent,
             transports: transports

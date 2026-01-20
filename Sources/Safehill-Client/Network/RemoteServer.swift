@@ -2020,7 +2020,7 @@ struct RemoteServer : SHRemoteServerAPI {
             (result: Result<[PasskeyCredentialInfoDTO], Error>) in
             switch result {
             case .success(let dtos):
-                completionHandler(.success(dtos.map { $0.toPublicModel() }))
+                completionHandler(.success(dtos.compactMap { $0.toPublicModel() }))
             case .failure(let error):
                 completionHandler(.failure(error))
             }
